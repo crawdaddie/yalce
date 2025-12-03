@@ -379,6 +379,7 @@ Type create_str_fmt_scheme() {
   return (Type){T_SCHEME,
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
+Type typeof_scheme;
 
 Type coroutine_prototype = {T_CONS, {.T_CONS = {.name = "Coroutine"}}};
 
@@ -755,6 +756,10 @@ void initialize_builtin_types() {
 
   asbytes_scheme = create_asbytes_scheme();
   add_builtin("asbytes", &asbytes_scheme);
+
+  typeof_scheme = create_str_fmt_scheme();
+  add_builtin("asbytes", &typeof_scheme);
+
   // print_builtin_types();
 }
 

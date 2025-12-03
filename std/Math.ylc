@@ -25,6 +25,7 @@ let tanh = extern fn Double -> Double;
 let ilog2 = extern fn Int -> Int;
 let u64pow = extern fn Uint64 -> Uint64 -> Uint64;
 
+let sqrt = extern fn Double -> Double;
 
 let max = fn a b ->
 match a > b with 
