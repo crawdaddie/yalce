@@ -698,6 +698,7 @@ _String char_to_hex_string(char byte) {
 
   unsigned char ubyte =
       (unsigned char)byte; // Treat as unsigned for correct hex conversion
+  //
   result[0] = hex_chars[(ubyte >> 4) & 0x0F]; // High nibble
   result[1] = hex_chars[ubyte & 0x0F];        // Low nibble
   result[2] = '\0';

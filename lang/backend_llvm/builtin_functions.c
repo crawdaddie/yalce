@@ -1364,6 +1364,12 @@ LLVMValueRef SizeOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return LLVMConstInt(LLVMInt32Type(), size, 0);
 }
 
+LLVMValueRef TypeOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  // return NULLL
+  // print_type(ast->type);
+}
+
 LLVMValueRef AsBytesHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
 
@@ -1591,5 +1597,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("cor_try_opt", &cor_try_opt_scheme, CorUnwrapOrEndHandler);
 
   GENERIC_FN_SYMBOL("asbytes", &asbytes_scheme, AsBytesHandler);
+
+  GENERIC_FN_SYMBOL("typeof", &typeof_scheme, TypeOfHandler);
   return ctx->env;
 }
