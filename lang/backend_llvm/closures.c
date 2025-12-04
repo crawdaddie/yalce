@@ -259,6 +259,8 @@ LLVMValueRef expr_to_closure_rec(Ast *expr, Type *clos_type, JITLangCtx *ctx,
     rec_storage = LLVMBuildAlloca(builder, rec_type, "closure_obj_alloc_stacc");
   } else {
     rec_storage = LLVMBuildMalloc(builder, rec_type, "closure_obj_alloc_heap");
+    LLVMBuildMemSet(builder, rec_storage, LLVMConstInt(LLVMInt8Type(), 0, 0),
+                    LLVMSizeOf(rec_type), 0);
   }
 
   if (expr->tag == AST_APPLICATION) {
@@ -423,7 +425,7 @@ LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
       closure_fn_type(fn_type, rec_type, ctx, module);
 
   char name[32];
-  print_ast(ast);
+  // print_ast(ast);
   snprintf(name, 32, "lambda.closure.\\%s",
            ast->data.AST_LAMBDA.fn_name.chars
                ? ast->data.AST_LAMBDA.fn_name.chars
@@ -488,6 +490,8 @@ LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
     rec_storage = LLVMBuildAlloca(builder, rec_type, "closure_obj_alloc_stacc");
   } else {
     rec_storage = LLVMBuildMalloc(builder, rec_type, "closure_obj_alloc_heap");
+    LLVMBuildMemSet(builder, rec_storage, LLVMConstInt(LLVMInt8Type(), 0, 0),
+                    LLVMSizeOf(rec_type), 0);
   }
 
   // LLVMValueRef vals[size];
@@ -618,11 +622,11 @@ void add_recursive_closure_ref(ObjString fn_name, LLVMValueRef func,
 LLVMValueRef call_closure_obj(LLVMValueRef rec, Type *closure_type, Ast *app,
                               JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
-  printf("CALL closure obj\n");
-  print_ast(app);
+  // printf("CALL closure obj\n");
+  // print_ast(app);
 
   int num_args = fn_type_args_len(closure_type);
-  printf("num args %d\n", num_args);
+  // printf("num args %d\n", num_args);
 
   LLVMTypeRef env_type = closure_record_type(closure_type, ctx, module);
   LLVMTypeRef clos_fn_type =

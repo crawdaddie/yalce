@@ -236,8 +236,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     break;
   }
   case AST_VOID: {
-    // return LLVMGetUndef(LLVMVoidType());
-    return NULL;
+    res = LLVMGetUndef(LLVMVoidType());
+    break;
   }
 
   case AST_RECORD_ACCESS: {

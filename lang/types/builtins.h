@@ -66,4 +66,6 @@ extern Type dlopen_type;
 
 extern Type sizeof_scheme;
 extern Type asbytes_scheme;
+
+extern Type typeof_scheme;
 #endif

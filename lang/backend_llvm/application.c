@@ -116,6 +116,32 @@ LLVMValueRef call_callable_rec(int num_args_processed,
                                LLVMValueRef callable, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
+  // Check if callable is already a closure struct value (not a function returning a closure)
+  // This happens when we have a closure bound to a variable and we're calling it
+  if (is_closure(callable_type) && num_args_processed == 0 &&
+      LLVMGetTypeKind(LLVMTypeOf(callable)) == LLVMStructTypeKind) {
+    // callable is the closure struct { ptr, ptr }
+    // Extract function and environment, then continue processing
+    LLVMValueRef closure_fn = LLVMBuildExtractValue(
+        builder, callable, 0, "closure_fn_value");
+
+    LLVMValueRef closure_env = LLVMBuildExtractValue(
+        builder, callable, 1, "closure_env_value");
+
+    LLVMTypeRef llvm_rec_type = closure_record_type(callable_type, ctx, module);
+    ArgValList argl = {.val = closure_env,
+                       .llvm_type = LLVMPointerType(llvm_rec_type, 0),
+                       .next = NULL};
+
+    Type _ct = *callable_type;
+    _ct.closure_meta = NULL;
+
+    return call_callable_rec(
+        1, &argl, ast, &_ct,
+        closure_fn_type(callable_type, llvm_rec_type, ctx, module),
+        closure_fn, ctx, module, builder);
+  }
+
   if (ast->data.AST_APPLICATION.len == 0) {
     LLVMValueRef arg_vals[num_args_processed];
     ArgValList *avl = args_processed;

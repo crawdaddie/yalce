@@ -563,7 +563,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       codegen(ast->data.AST_MATCH.expr, ctx, module, builder);
 
   if (!test_val) {
-    print_ast(ast);
+    print_ast_err(ast);
     fprintf(stderr, "could not compile test expression\n");
     return NULL;
   }
