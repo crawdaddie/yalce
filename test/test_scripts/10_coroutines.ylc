@@ -14,6 +14,8 @@ let test_iter_all_void =
   && co () == None
   && co () == None
 ;
+
+
 let test_embed_seq = fn () ->
 
   let ne = fn () ->
@@ -30,144 +32,119 @@ let test_embed_seq = fn () ->
 
   let co = co_void ();
      co () == Some 1
-  # && co () == Some 2
-  # && co () == Some 300
-  # && co () == Some 400
-  # && co () == Some 3
+  && co () == Some 2
+  && co () == Some 300
+  && co () == Some 400
+  && co () == Some 3
 ;;
 
-#
-#
-# #
-# let test_rec = fn () ->
-#   let co_void_rec = fn () ->
-#     yield 1;
-#     yield 2;
-#     yield (co_void_rec ())
-#   ;;
-#
-#
-#   let co = co_void_rec ();
-#
-#      co () == Some 1
-#   && co () == Some 2
-#   && co () == Some 1
-# ;;
-# #
-# let test_fib_cor = fn () ->
-#
-#   let fib = fn a b ->
-#     yield a;
-#     yield fib b (a + b)
-#   ;;
-#
-#   let co = fib 0 1 in
-#      co () == Some 0
-#   && co () == Some 1
-#   && co () == Some 1
-#   && co () == Some 2
-#   && co () == Some 3
-#   && co () == Some 5
-#   && co () == Some 8
-# ;;
-# #
-# let test_geo = fn () ->
-#   let geo = fn a ->
-#     yield a;
-#     yield geo (a * 2.0)
-#   ;;
-#
-#   let co = geo 1. in
-#      co () == Some 1.
-#   && co () == Some 2.
-#   && co () == Some 4.
-#   && co () == Some 8.
-#   && co () == Some 16.
-# ;;
-# #
-# let test_iter_all_arg = fn () ->
-#
-#   let co_void_arg = fn a ->
-#     yield 1;
-#     yield a;
-#     yield 3
-#   ;;
-#
-#   let co = co_void_arg 2 in
-#      (co () == Some 1)
-#   && (co () == Some 2)
-#   && (co () == Some 3)
-#   && (co () == None)
-# ;;
-# let test_fib_ser = fn () ->
-#   let fib = fn a b ->
-#     yield a;
-#     yield fib b (a + b)
-#   ;;
-#
-#   let c = fib 0 1 in
-#      c () == Some 0
-#   && c () == Some 1
-#   && c () == Some 1
-#   && c () == Some 2
-#   && c () == Some 3 
-#   && c () == Some 5
-#   && c () == Some 8
-#   && c () == Some 13
-#   && c () == Some 21
-#   && c () == Some 34
-#
-# ;;
-
-#
-# let test_nested_coroutines = fn () ->
-#   let cor1 = fn () ->
-#     yield 1
-#   ;;
-#
-#   let cor2 = fn () ->
-#     yield cor1 ();
-#     yield 2
-#   ;;
-#
-#   let cor3 = fn () ->
-#     yield cor2 ();
-#     yield 3
-#   ;;
-#
-#   let cor = fn () ->
-#     yield cor3 ();
-#     yield 4 
-#   ;;
-#
-#   let x = cor () in
-#
-#      x () == Some 1 
-#   && x () == Some 2 
-#   && x () == Some 3 
-#   && x () == Some 4
-#   && x () == None
-# ;;
+let test_rec = fn () ->
+  let co_void_rec = fn () ->
+    yield 1;
+    yield 2;
+    yield (co_void_rec ())
+  ;;
 
 
-# let test_embed_seq = fn () ->
-#
-#   let ne = fn () ->
-#     yield 300;
-#     yield 400
-#   ;;
-#
-#   let co_void = fn () ->
-#     yield 1;
-#     yield 2;
-#     yield ne ();
-#     yield 3
-#   ;;
-#
-#   let co = co_void ();
-#      co () == Some 1
-#   && co () == Some 2
-#   && co () == Some 300
-#   && co () == Some 400
-#   && co () == Some 3
-# ;;
+  let co = co_void_rec ();
+
+     co () == Some 1
+  && co () == Some 2
+  && co () == Some 1
+;;
+
+let test_fib_cor = fn () ->
+
+  let fib = fn a b ->
+    yield a;
+    yield fib b (a + b)
+  ;;
+
+  let co = fib 0 1 in
+     co () == Some 0
+  && co () == Some 1
+  && co () == Some 1
+  && co () == Some 2
+  && co () == Some 3
+  && co () == Some 5
+  && co () == Some 8
+;;
+
+let test_geo = fn () ->
+  let geo = fn a ->
+    yield a;
+    yield geo (a * 2.0)
+  ;;
+
+  let co = geo 1. in
+     co () == Some 1.
+  && co () == Some 2.
+  && co () == Some 4.
+  && co () == Some 8.
+  && co () == Some 16.
+;;
+
+let test_iter_all_arg = fn () ->
+
+  let co_void_arg = fn a ->
+    yield 1;
+    yield a;
+    yield 3
+  ;;
+
+  let co = co_void_arg 2 in
+     (co () == Some 1)
+  && (co () == Some 2)
+  && (co () == Some 3)
+  && (co () == None)
+;;
+let test_fib_ser = fn () ->
+  let fib = fn a b ->
+    yield a;
+    yield fib b (a + b)
+  ;;
+
+  let c = fib 0 1 in
+     c () == Some 0
+  && c () == Some 1
+  && c () == Some 1
+  && c () == Some 2
+  && c () == Some 3 
+  && c () == Some 5
+  && c () == Some 8
+  && c () == Some 13
+  && c () == Some 21
+  && c () == Some 34
+
+;;
+
+
+let test_nested_coroutines = fn () ->
+  let cor1 = fn () ->
+    yield 1
+  ;;
+
+  let cor2 = fn () ->
+    yield cor1 ();
+    yield 2
+  ;;
+
+  let cor3 = fn () ->
+    yield cor2 ();
+    yield 3
+  ;;
+
+  let cor = fn () ->
+    yield cor3 ();
+    yield 4 
+  ;;
+
+  let x = cor () in
+
+     x () == Some 1 
+  && x () == Some 2 
+  && x () == Some 3 
+  && x () == Some 4
+  && x () == None
+;;
+
