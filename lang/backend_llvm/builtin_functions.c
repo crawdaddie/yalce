@@ -1,10 +1,10 @@
 #include "backend_llvm/builtin_functions.h"
 #include "adt.h"
 #include "application.h"
+
+#include "./coroutines/coroutines.h"
 #include "backend_llvm/array.h"
 #include "backend_llvm/common.h"
-#include "backend_llvm/coroutine_extensions.h"
-#include "backend_llvm/coroutine_scheduling.h"
 #include "function.h"
 #include "input.h"
 #include "list.h"
@@ -1567,14 +1567,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("print", &t_builtin_print, PrintHandler);
   // GENERIC_FN_SYMBOL("Coroutine", &cor_scheme, CorConsHandler);
 
-  GENERIC_FN_SYMBOL("cor_loop", &cor_loop_scheme, CorLoopHandler);
-  GENERIC_FN_SYMBOL("cor_map", &cor_map_scheme, CorMapHandler);
-  GENERIC_FN_SYMBOL("cor_stop", &cor_stop_scheme, CorStopHandler);
-  GENERIC_FN_SYMBOL("iter_of_list", &iter_of_list_scheme, CorOfListHandler);
-  GENERIC_FN_SYMBOL("iter_of_array", &iter_of_array_scheme, CorOfArrayHandler);
-  GENERIC_FN_SYMBOL("play_routine", &play_routine_scheme, PlayRoutineHandler);
-  // GENERIC_FN_SYMBOL("cor_combine", &cor_combine_scheme, CorCombineHandler);
-
   GENERIC_FN_SYMBOL("list_empty", NULL, ListEmptyHandler);
 
   GENERIC_FN_SYMBOL("dlopen", &dlopen_type, DlOpenHandler);
@@ -1593,6 +1585,12 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   // GENERIC_FN_SYMBOL("cor_status", &t_cor_status_fn_sig, CorStatusHandler);
   // GENERIC_FN_SYMBOL("cor_promise", NULL, CorGetPromiseValHandler);
   GENERIC_FN_SYMBOL("cor_last_val", NULL, CorGetLastValHandler);
+  GENERIC_FN_SYMBOL("cor_loop", &cor_loop_scheme, CorLoopHandler);
+  GENERIC_FN_SYMBOL("cor_map", &cor_map_scheme, CorMapHandler);
+  GENERIC_FN_SYMBOL("cor_stop", &cor_stop_scheme, CorStopHandler);
+  GENERIC_FN_SYMBOL("iter_of_list", &iter_of_list_scheme, CorOfListHandler);
+  GENERIC_FN_SYMBOL("iter_of_array", &iter_of_array_scheme, CorOfArrayHandler);
+  GENERIC_FN_SYMBOL("play_routine", &play_routine_scheme, PlayRoutineHandler);
   GENERIC_FN_SYMBOL("cor_current", &cor_current_scheme, CurrentCorHandler);
   GENERIC_FN_SYMBOL("cor_try_opt", &cor_try_opt_scheme, CorUnwrapOrEndHandler);
 

@@ -5,6 +5,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <regex.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -288,7 +289,7 @@ struct sockaddr *create_server_addr(int af_inet, int inaddr_any, int port) {
   struct sockaddr_in *_server_addr = malloc(sizeof(struct sockaddr_in));
 
   struct sockaddr_in servaddr;
-  explicit_bzero(&servaddr, sizeof(servaddr));
+  bzero(&servaddr, sizeof(servaddr));
 
   // assign IP, PORT
   servaddr.sin_family = af_inet;
@@ -698,7 +699,6 @@ _String char_to_hex_string(char byte) {
 
   unsigned char ubyte =
       (unsigned char)byte; // Treat as unsigned for correct hex conversion
-  //
   result[0] = hex_chars[(ubyte >> 4) & 0x0F]; // High nibble
   result[1] = hex_chars[ubyte & 0x0F];        // Low nibble
   result[2] = '\0';

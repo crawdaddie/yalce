@@ -1,6 +1,6 @@
 #ifndef _LANG_BACKEND_LLVM_COROUTINES_H
 #define _LANG_BACKEND_LLVM_COROUTINES_H
-#include "common.h"
+#include "../common.h"
 #include "coroutines_private.h"
 
 LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -57,4 +57,27 @@ LLVMValueRef coro_jump_to_next_block(LLVMValueRef coro, LLVMValueRef next_coro,
                    (LLVMTypeRef[]){LLVMPointerType(obj, 0)}, 1, 0)
 #define COR_END_KW "cor_end"
 
+LLVMValueRef CorGetLastValHandler(Ast *ast, JITLangCtx *ctx,
+                                  LLVMModuleRef module, LLVMBuilderRef builder);
+LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder);
+LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder);
+LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder);
+LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder);
+LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder);
+LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder);
+LLVMValueRef CurrentCorHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder);
+LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder);
+
+LLVMValueRef create_coroutine_symbol(Ast *binding, Ast *expr, Type *expr_type,
+                                     JITLangCtx *ctx, LLVMModuleRef module,
+                                     LLVMBuilderRef builder);
 #endif

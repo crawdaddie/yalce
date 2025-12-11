@@ -20,7 +20,11 @@ LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wi
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
+LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/coroutines/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/runtime/*.c)
+
+# C++ sources for coroutine pass integration
+LANG_CPP_SRCS := $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.cpp)
 CFLAGS := -I./lang 
 CFLAGS += -I./gui -I${SDL2_PATH}/include -I${SDL2_PATH}/include/SDL2 -I${SDL2_TTF_PATH}/include
 
@@ -35,8 +39,15 @@ LANG_CC := clang $(CFLAGS)
 LANG_CC += -g
 LANG_CC += -Wall
 
+# C++ compiler for coroutine passes
+LANG_CXX := clang++ $(CFLAGS)
+LANG_CXX += -g
+LANG_CXX += -Wall
+LANG_CXX += -std=c++17
+
 LANG_LD_FLAGS := -lm
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
+LANG_LD_FLAGS += -lc++  # C++ standard library
 
 LANG_CC += -DLLVM_BACKEND
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
@@ -55,6 +66,8 @@ $(LANG_OBJS): $(YACC_OUTPUT) $(LEX_OUTPUT)
 
 LANG_OBJS := $(LANG_SRCS:$(LANG_SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
+LANG_CPP_OBJS := $(LANG_CPP_SRCS:$(LANG_SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
+LANG_OBJS += $(LANG_CPP_OBJS)
 
 .PHONY: all clean engine test wasm serve_docs engine_bindings gui cor
 
@@ -73,6 +86,7 @@ gui:
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 	mkdir -p $(BUILD_DIR)/backend_llvm
+	mkdir -p $(BUILD_DIR)/backend_llvm/coroutines
 	mkdir -p $(BUILD_DIR)/types
 	mkdir -p $(BUILD_DIR)/runtime
 
@@ -93,9 +107,13 @@ $(LEX_OUTPUT): $(LEX_FILE)
 $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
 	$(LANG_CC) -c -o $@ $<
 
-# Build the final executable
+# Build C++ object files for coroutine passes
+$(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.cpp | $(BUILD_DIR)
+	$(LANG_CXX) -c -o $@ $<
+
+# Build the final executable (use C++ linker since we have C++ objects)
 $(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui
-	$(LANG_CC) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
+	$(LANG_CXX) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
 ifeq ($(shell uname -s),Darwin)
 	otool -L $(BUILD_DIR)/ylc
 else

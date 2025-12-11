@@ -1,4 +1,5 @@
 #include "backend_llvm/codegen.h"
+#include "./coroutines/coroutines.h"
 #include "adt.h"
 #include "backend_llvm/application.h"
 #include "backend_llvm/array.h"
@@ -11,7 +12,6 @@
 #include "backend_llvm/tuple.h"
 #include "backend_llvm/types.h"
 #include "builtin_functions.h"
-#include "coroutines.h"
 #include "debugging.h"
 #include "loop.h"
 #include "module.h"

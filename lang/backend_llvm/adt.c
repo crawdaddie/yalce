@@ -324,7 +324,6 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
 LLVMValueRef opt_to_string(LLVMValueRef opt_value, Type *val_type,
                            JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
-
   LLVMValueRef tag = LLVMBuildExtractValue(builder, opt_value, 0, "tag_val");
   LLVMValueRef is_none = LLVMBuildICmp(builder, LLVMIntEQ, tag,
                                        LLVMConstInt(OPTION_TAG_TYPE, 1, 0), "");

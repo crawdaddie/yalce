@@ -1,11 +1,11 @@
 #include "backend_llvm/symbols.h"
 
+#include "./coroutines/coroutines.h"
 #include "adt.h"
 #include "application.h"
 #include "binding.h"
 #include "closures.h"
 #include "codegen.h"
-#include "coroutines.h"
 #include "function.h"
 #include "function_extern.h"
 #include "globals.h"
@@ -297,18 +297,8 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, JITLangCtx *ctx,
   }
 
   if (is_coroutine_constructor_type(expr_type)) {
-    // if (expr_type->kind == T_FN &&
-    // is_coroutine_constructor_type(expr_type))
-    // {
-    if (is_generic(expr_type)) {
-      expr_val = create_generic_fn_binding(binding, expr, ctx);
-    } else {
-      expr_val = compile_coroutine(expr, ctx, module, builder);
-      expr_val =
-          create_fn_binding(binding, expr_type, expr_val, ctx, module, builder);
-    }
-
-    return expr_val;
+    return create_coroutine_symbol(binding, expr, expr_type, ctx, module,
+                                   builder);
   }
 
   if (expr_type->kind == T_FN && is_generic(expr_type)) {

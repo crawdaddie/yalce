@@ -2,6 +2,7 @@
 #include "../modules.h"
 #include "./codegen.h"
 #include "./common.h"
+#include "./coroutine_passes.h"
 #include "./globals.h"
 #include "builtin_functions.h"
 #include "config.h"
@@ -231,21 +232,26 @@ void dump_assembly(LLVMModuleRef module) {
 }
 
 void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine) {
-  char *error = NULL;
-
   LLVMPassBuilderOptionsRef options = LLVMCreatePassBuilderOptions();
 
-  const char *opt_level;
+  const char *opt_passes;
   if (config.debug_symbols) {
-    opt_level = "default<O0>";
+    opt_passes = "default<O0>";
   } else {
-    opt_level = config.opt_level ? config.opt_level : "default<O3>";
+    opt_passes = config.opt_level ? config.opt_level : "default<O3>";
   }
-  LLVMErrorRef err = LLVMRunPasses(module, opt_level, target_machine, options);
+  // const char opts[512];
+  // // sprintf(opts, "%s,%s", "coro-early,coro-elide,coro-split,coro-cleanup",
+  // //         opt_passes);
+  //
+  // sprintf(opts, "%s", "coro-early,coro-elide,coro-split,coro-cleanup");
+  // const char *opts = "coro-early,coro-elide,coro-split,coro-cleanup";
+  // opt_passes = "coro-early,coro-elide,coro-split,coro-cleanup";
 
+  LLVMErrorRef err = LLVMRunPasses(module, opt_passes, target_machine, options);
   if (err) {
     char *msg = LLVMGetErrorMessage(err);
-    fprintf(stderr, "Pass manager error: %s\n", msg);
+    fprintf(stderr, "ERROR: Optimization failed: %s\n", msg);
     LLVMDisposeErrorMessage(msg);
     LLVMConsumeError(err);
   }
