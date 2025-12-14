@@ -631,15 +631,19 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
 
   // 1. Determine types
   Type *fn_type = expr->type;
-  if (is_coroutine_constructor_type(fn_type)) {
-    fn_type = fn_type->data.T_CONS.args[0];
+  if (!is_coroutine_constructor_type(fn_type)) {
+    fprintf(stderr, "Error: invalid coroutine constructor type\n");
+    return NULL;
   }
+  fn_type = fn_type->data.T_CONS.args[0];
 
   Type *yield_type = fn_return_type(fn_type);
 
-  if (is_coroutine_type(yield_type)) {
-    yield_type = yield_type->data.T_CONS.args[0];
+  if (!is_coroutine_type(yield_type)) {
+    fprintf(stderr, "Error: invalid coroutine constructor type\n");
+    return NULL;
   }
+  yield_type = yield_type->data.T_CONS.args[0];
 
   // we support one level of coroutine nesting in the yield type - meaning
   // let f = fn a b -> yield a; yield b;; - if a & b are coroutine instances,
@@ -880,7 +884,6 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildRet(builder, handle);
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
-  // LLVMDumpValue(coro_fn);
 
   destroy_ctx(&coro_lang_ctx);
   return coro_fn;
