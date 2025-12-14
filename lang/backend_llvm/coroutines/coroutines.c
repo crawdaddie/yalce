@@ -433,6 +433,10 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // 2. Handle nested coroutine chaining (if yielded value is a coroutine)
   Type *yield_val_type = ast->data.AST_YIELD.expr->type;
   if (is_coroutine_type(yield_val_type)) {
+    printf("YIELD FROM\n");
+    print_ast(ast);
+    print_type(yield_val_type);
+    printf("\n");
     // ===== YIELD FROM: Drain the entire inner coroutine =====
 
     LLVMValueRef inner_handle = yield_value;

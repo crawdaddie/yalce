@@ -235,8 +235,15 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_input_type = type_to_llvm_type(input_type, ctx, module);
   LLVMTypeRef llvm_output_type = type_to_llvm_type(output_type, ctx, module);
 
-  // Create wrapper coroutine function
-  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(GENERIC_PTR, NULL, 0, 0);
+  // IMPORTANT: Evaluate arguments in CALLER's scope BEFORE creating coroutine
+  LLVMValueRef map_fn = codegen(map_fn_ast, ctx, module, builder);
+  LLVMValueRef inner_handle = codegen(coro_ast, ctx, module, builder);
+
+  // Create wrapper coroutine function that TAKES map function and coroutine as parameters
+  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(
+      GENERIC_PTR,
+      (LLVMTypeRef[]){LLVMTypeOf(map_fn), GENERIC_PTR},
+      2, 0);
 
   static int counter = 0;
   char wrapper_name[64];
@@ -299,27 +306,17 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // === START BLOCK ===
   LLVMPositionBuilderAtEnd(builder, start_bb);
-  Type map_type;
-  map_type = *((Type *)ast->data.AST_APPLICATION.args->type);
 
-  // if (is_generic(&map_type)) {
-  //   Type *f = fn_return_type();
-  //   f = type_of_option(f);
-  //   Type *t = fn_return_type(out_cor_type);
-  //   t = type_of_option(t);
-  //   map_type = (Type){T_FN, {.T_FN = {.from = f, .to = t}}};
-  //   ast->data.AST_APPLICATION.args->type = &map_type;
-  // }
+  // Get the parameters (map function and inner coroutine handle)
+  LLVMValueRef map_fn_param = LLVMGetParam(wrapper_fn, 0);
+  LLVMSetValueName(map_fn_param, "map_fn.param");
+  LLVMValueRef inner_handle_param = LLVMGetParam(wrapper_fn, 1);
+  LLVMSetValueName(inner_handle_param, "inner_handle.param");
 
-  // Evaluate map function and coroutine expressions
-  LLVMValueRef map_fn = codegen(map_fn_ast, ctx, module, builder);
-
-  LLVMValueRef inner_handle = codegen(coro_ast, ctx, module, builder);
-
-  // Store map function in frame (alloca after coro.begin)
+  // Store map function in frame for repeated use
   LLVMValueRef map_fn_alloca =
-      LLVMBuildAlloca(builder, LLVMTypeOf(map_fn), "map_fn");
-  LLVMBuildStore(builder, map_fn, map_fn_alloca);
+      LLVMBuildAlloca(builder, LLVMTypeOf(map_fn_param), "map_fn");
+  LLVMBuildStore(builder, map_fn_param, map_fn_alloca);
 
   // === YIELD-FROM LOOP with mapping ===
   LLVMBasicBlockRef loop_check_bb =
@@ -337,7 +334,7 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, loop_check_bb);
   LLVMValueRef is_done_before = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
-      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle}, 1,
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle_param}, 1,
       "inner.is_done_before");
   LLVMBuildCondBr(builder, is_done_before, loop_exit_bb, loop_body_bb);
 
@@ -345,11 +342,11 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, loop_body_bb);
   LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
-      get_coro_resume_intrinsic(module), (LLVMValueRef[]){inner_handle}, 1, "");
+      get_coro_resume_intrinsic(module), (LLVMValueRef[]){inner_handle_param}, 1, "");
 
   LLVMValueRef is_done_after = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
-      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle}, 1,
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle_param}, 1,
       "inner.is_done_after");
   LLVMBuildCondBr(builder, is_done_after, loop_exit_bb, get_value_bb);
 
@@ -359,7 +356,7 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef inner_promise_raw = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),
       get_coro_promise_intrinsic(module),
-      (LLVMValueRef[]){inner_handle, LLVMConstInt(LLVMInt32Type(), 0, 0),
+      (LLVMValueRef[]){inner_handle_param, LLVMConstInt(LLVMInt32Type(), 0, 0),
                        LLVMConstInt(LLVMInt1Type(), 0, 0)},
       3, "inner.promise.raw");
 
@@ -372,7 +369,7 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Load and call map function
   LLVMValueRef loaded_map_fn =
-      LLVMBuildLoad2(builder, LLVMTypeOf(map_fn), map_fn_alloca, "map_fn");
+      LLVMBuildLoad2(builder, LLVMTypeOf(map_fn_param), map_fn_alloca, "map_fn");
 
   LLVMTypeRef map_fn_llvm_type = LLVMFunctionType(
       llvm_output_type, (LLVMTypeRef[]){llvm_input_type}, 1, 0);
@@ -459,8 +456,10 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
-  LLVMValueRef map_handle = LLVMBuildCall2(builder, wrapper_fn_type, wrapper_fn,
-                                           NULL, 0, "map.handle");
+  // Call the wrapper function, passing map function and inner coroutine as arguments
+  LLVMValueRef map_handle = LLVMBuildCall2(
+      builder, wrapper_fn_type, wrapper_fn,
+      (LLVMValueRef[]){map_fn, inner_handle}, 2, "map.handle");
 
   return map_handle;
 }
@@ -482,8 +481,14 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_elem_type = type_to_llvm_type(elem_type, ctx, module);
   LLVMTypeRef llvm_list_type = type_to_llvm_type(list_type, ctx, module);
 
-  // Create wrapper coroutine function
-  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(GENERIC_PTR, NULL, 0, 0);
+  // IMPORTANT: Evaluate list expression in CALLER's scope BEFORE creating coroutine
+  LLVMValueRef list_ptr = codegen(list_ast, ctx, module, builder);
+
+  // Create wrapper coroutine function that TAKES the list as a parameter
+  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(
+      GENERIC_PTR,
+      (LLVMTypeRef[]){llvm_list_type},
+      1, 0);
 
   static int counter = 0;
   char wrapper_name[64];
@@ -560,9 +565,12 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // === START BLOCK ===
   LLVMPositionBuilderAtEnd(builder, start_bb);
 
-  // Evaluate list expression - returns pointer to first node
-  LLVMValueRef list_ptr = codegen(list_ast, ctx, module, builder);
-  LLVMBuildStore(builder, list_ptr, current_alloca);
+  // Get the list parameter (first argument to the wrapper function)
+  LLVMValueRef list_param = LLVMGetParam(wrapper_fn, 0);
+  LLVMSetValueName(list_param, "list.param");
+
+  // Initialize current with the list parameter
+  LLVMBuildStore(builder, list_param, current_alloca);
   LLVMBuildBr(builder, loop_bb);
 
   // === LOOP BLOCK ===
@@ -672,8 +680,10 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
+  // Call the wrapper function, passing the list as an argument
   LLVMValueRef coro_handle = LLVMBuildCall2(
-      builder, wrapper_fn_type, wrapper_fn, NULL, 0, "list.coro.handle");
+      builder, wrapper_fn_type, wrapper_fn,
+      (LLVMValueRef[]){list_ptr}, 1, "list.coro.handle");
 
   return coro_handle;
 }
@@ -689,8 +699,14 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_elem_type = type_to_llvm_type(elem_type, ctx, module);
   LLVMTypeRef llvm_array_type = type_to_llvm_type(array_type, ctx, module);
 
-  // Create wrapper coroutine function
-  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(GENERIC_PTR, NULL, 0, 0);
+  // IMPORTANT: Evaluate array expression in CALLER's scope BEFORE creating coroutine
+  LLVMValueRef array_val = codegen(array_ast, ctx, module, builder);
+
+  // Create wrapper coroutine function that TAKES the array as a parameter
+  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(
+      GENERIC_PTR,
+      (LLVMTypeRef[]){llvm_array_type},
+      1, 0);
 
   static int counter = 0;
   char wrapper_name[64];
@@ -763,8 +779,12 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // === START BLOCK ===
   LLVMPositionBuilderAtEnd(builder, start_bb);
 
-  LLVMValueRef array_val = codegen(array_ast, ctx, module, builder);
-  LLVMBuildStore(builder, array_val, array_alloca);
+  // Get the array parameter (first argument to the wrapper function)
+  LLVMValueRef array_param = LLVMGetParam(wrapper_fn, 0);
+  LLVMSetValueName(array_param, "array.param");
+
+  // Store the array parameter in the frame
+  LLVMBuildStore(builder, array_param, array_alloca);
   LLVMBuildBr(builder, loop_bb);
 
   // === LOOP BLOCK ===
@@ -874,8 +894,10 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
+  // Call the wrapper function, passing the array as an argument
   LLVMValueRef coro_handle = LLVMBuildCall2(
-      builder, wrapper_fn_type, wrapper_fn, NULL, 0, "array.coro.handle");
+      builder, wrapper_fn_type, wrapper_fn,
+      (LLVMValueRef[]){array_val}, 1, "array.coro.handle");
 
   return coro_handle;
 }
