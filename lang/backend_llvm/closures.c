@@ -537,7 +537,7 @@ LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
   Type *fn_type = ast->type;
 
   int fn_len = fn_type_args_len(fn_type);
-  LLVMTypeRef prototype = codegen_fn_type(fn_type, fn_len, ctx, module);
+  LLVMTypeRef prototype = codegen_fn_type(NULL, fn_type, fn_len, ctx, module);
 
   if (!prototype) {
     return NULL;

@@ -22,8 +22,8 @@
 #define LLVM_TYPE_char LLVMInt8Type()
 #define LLVM_TYPE_ptr(type) LLVMPointerType(LLVM_TYPE_##type, 0)
 
-LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
-                            LLVMModuleRef module);
+LLVMTypeRef codegen_fn_type(LLVMTypeRef _ret_type, Type *fn_type, int fn_len,
+                            JITLangCtx *ctx, LLVMModuleRef module);
 
 // Function to create an LLVM tuple type
 LLVMTypeRef tuple_type(Type *tuple_type, JITLangCtx *ctx,
@@ -231,7 +231,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
          t = t->data.T_FN.to, fn_len++) {
     }
 
-    return codegen_fn_type(type, fn_len, ctx, module);
+    return codegen_fn_type(NULL, type, fn_len, ctx, module);
   }
 
   default: {

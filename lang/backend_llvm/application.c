@@ -55,7 +55,7 @@ LLVMValueRef handle_constructor_module_conversion(
     return NULL;
   }
 
-  LLVMTypeRef fn_type = codegen_fn_type(exp_type, 1, ctx, module);
+  LLVMTypeRef fn_type = codegen_fn_type(NULL, exp_type, 1, ctx, module);
 
   return LLVMBuildCall2(builder, fn_type, callable, (LLVMValueRef[]){val}, 1,
                         "convert_arg_via_cons");

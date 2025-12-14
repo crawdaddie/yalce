@@ -22,8 +22,8 @@ LLVMValueRef build_ret(LLVMValueRef val, Type *type, LLVMBuilderRef builder);
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
-LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
-                            LLVMModuleRef module);
+LLVMTypeRef codegen_fn_type(LLVMTypeRef ret_type, Type *fn_type, int fn_len,
+                            JITLangCtx *ctx, LLVMModuleRef module);
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder);
@@ -54,6 +54,10 @@ void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
                    JITLangCtx *ctx, JITLangCtx *fn_ctx, LLVMModuleRef module,
                    LLVMBuilderRef builder);
 
+void bind_fn_param_with_storage(LLVMValueRef param_val, LLVMValueRef storage,
+                                Type *param_type, Ast *param_ast,
+                                JITLangCtx *ctx, JITLangCtx *fn_ctx,
+                                LLVMModuleRef module, LLVMBuilderRef builder);
 TypeEnv *codegen_bind_in_env(TypeEnv *env, Type *f, Type *t);
 
 #endif

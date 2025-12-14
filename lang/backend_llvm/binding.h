@@ -10,4 +10,10 @@ LLVMValueRef codegen_pattern_binding(Ast *binding, LLVMValueRef val,
 LLVMValueRef bind_value(Ast *id, LLVMValueRef val, Type *val_type,
                         JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder);
+
+LLVMValueRef bind_local_value_with_storage(Ast *id, LLVMValueRef val,
+                                           LLVMValueRef storage, Type *val_type,
+                                           JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder);
 #endif

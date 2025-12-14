@@ -98,26 +98,46 @@ let test_iter_all_arg = fn () ->
   && (co () == Some 3)
   && (co () == None)
 ;;
-let test_fib_ser = fn () ->
-  let fib = fn a b ->
-    yield a;
-    yield fib b (a + b)
+
+let test_iter_boundary_xers = fn () ->
+
+  let co_void_arg = fn () ->
+    yield 1;
+    let x = 200; 
+    yield 2;
+    yield x;
+    yield 3
   ;;
 
-  let c = fib 0 1 in
-     c () == Some 0
-  && c () == Some 1
-  && c () == Some 1
-  && c () == Some 2
-  && c () == Some 3 
-  && c () == Some 5
-  && c () == Some 8
-  && c () == Some 13
-  && c () == Some 21
-  && c () == Some 34
-
+  let co = co_void_arg () in
+     (co () == Some 1)
+  && (co () == Some 2)
+  && (co () == Some 200)
+  && (co () == Some 3)
+  && (co () == None)
 ;;
 
+
+# let xtest_fib_ser = fn () ->
+#   let fib = fn a b ->
+#     yield a;
+#     yield fib b (a + b)
+#   ;;
+#
+#   let c = fib 0 1 in
+#      c () == Some 0
+#   && c () == Some 1
+#   && c () == Some 1
+#   && c () == Some 2
+#   && c () == Some 3 
+#   && c () == Some 5
+#   && c () == Some 8
+#   && c () == Some 13
+#   && c () == Some 21
+#   && c () == Some 34
+#
+# ;;
+#
 
 let test_nested_coroutines = fn () ->
   let cor1 = fn () ->

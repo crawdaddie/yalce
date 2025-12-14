@@ -215,7 +215,6 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
 
   for (int i = 0; i < num_args; i++) {
     arg_types[i] = infer(args + i, ctx);
-
     if (!arg_types[i]) {
       return type_error(ast, "Cannot infer argument %d type", i + 1);
     }
@@ -252,6 +251,13 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
   }
 
   expected_type = apply_substitution(solution, expected_type);
+  for (int i = 0; i < num_args; i++) {
+    Ast *arg_ast = args + i;
+    if (arg_ast->tag == AST_LAMBDA ||
+        arg_ast->tag == AST_APPLICATION && arg_ast->type->kind == T_FN) {
+      apply_substitution_to_lambda_body(arg_ast, solution);
+    }
+  }
 
   // if (CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
   //              ">")) {

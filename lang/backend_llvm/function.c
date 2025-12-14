@@ -15,8 +15,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMTypeRef cor_inst_struct_type();
 
-LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
-                            LLVMModuleRef module) {
+LLVMTypeRef codegen_fn_type(LLVMTypeRef opt_ret_type, Type *fn_type, int fn_len,
+                            JITLangCtx *ctx, LLVMModuleRef module) {
 
   LLVMTypeRef llvm_param_types[fn_len];
   LLVMTypeRef llvm_fn_type;
@@ -24,7 +24,8 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
   if (fn_type->data.T_FN.from->kind == T_VOID) {
 
     LLVMTypeRef ret_type =
-        type_to_llvm_type(fn_type->data.T_FN.to, ctx, module);
+        opt_ret_type ? opt_ret_type
+                     : type_to_llvm_type(fn_type->data.T_FN.to, ctx, module);
 
     return LLVMFunctionType(ret_type, NULL, 0, false);
   }
@@ -32,8 +33,10 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
   LLVMTypeRef llvm_return_type_ref;
   Type *f = fn_type;
   int i = 0;
+
   for (f = fn_type; f->kind == T_FN && !is_closure(f);
        f = f->data.T_FN.to, i++) {
+
     Type *t = f->data.T_FN.from;
     if (t->kind == T_FN) {
       llvm_param_types[i] = GENERIC_PTR;
@@ -61,7 +64,8 @@ LLVMTypeRef codegen_fn_type(Type *fn_type, int fn_len, JITLangCtx *ctx,
 
   Type *return_type = f;
 
-  llvm_return_type_ref = type_to_llvm_type(return_type, ctx, module);
+  llvm_return_type_ref =
+      opt_ret_type ? opt_ret_type : type_to_llvm_type(return_type, ctx, module);
 
   if (!llvm_return_type_ref) {
     return NULL;
@@ -109,7 +113,12 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
     Ast *stmt = ast->data.AST_LAMBDA.body;
+    // printf("stmt ??\n");
+    // print_ast(stmt);
+    // print_type(stmt->type);
+    // print_type_env(fn_ctx->env);
     body = codegen(stmt, fn_ctx, module, builder);
+    // LLVMDumpValue(body);
 
   } else {
     int len = ast->data.AST_LAMBDA.body->data.AST_BODY.len;
@@ -167,6 +176,52 @@ void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
                             builder);
   }
 }
+
+void bind_fn_param_with_storage(LLVMValueRef param_val, LLVMValueRef storage,
+                                Type *param_type, Ast *param_ast,
+                                JITLangCtx *ctx, JITLangCtx *fn_ctx,
+                                LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  if (param_type->kind == T_VAR) {
+    param_type = resolve_type_in_env(param_type, ctx->env);
+  }
+
+  if (param_type->kind == T_FN && is_closure(param_type)) {
+
+    const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
+    int id_len = param_ast->data.AST_IDENTIFIER.length;
+
+    LLVMTypeRef rec_type =
+        LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR}, 2, 0);
+
+    JITSymbol *sym =
+        new_symbol(STYPE_FUNCTION, param_type, param_val, rec_type);
+
+    ht_set_hash(fn_ctx->frame->table, id_chars, hash_string(id_chars, id_len),
+                sym);
+
+  } else if (param_type->kind == T_FN) {
+    const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
+    int id_len = param_ast->data.AST_IDENTIFIER.length;
+    LLVMTypeRef llvm_type = type_to_llvm_type(param_type, ctx, module);
+
+    JITSymbol *sym =
+        new_symbol(STYPE_FUNCTION, param_type, param_val, llvm_type);
+
+    ht_set_hash(fn_ctx->frame->table, id_chars, hash_string(id_chars, id_len),
+                sym);
+
+  } else {
+    switch (param_ast->tag) {
+    case AST_IDENTIFIER: {
+      bind_local_value_with_storage(param_ast, param_val, storage, param_type,
+                                    fn_ctx, module, builder);
+      break;
+    }
+    }
+  }
+}
+
 LLVMValueRef build_ret(LLVMValueRef val, Type *type, LLVMBuilderRef builder) {
 
   if (type->kind == T_VOID) {
@@ -203,7 +258,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int num_closure_vars = ast->data.AST_LAMBDA.num_closure_free_vars;
 
   LLVMTypeRef prototype =
-      codegen_fn_type(fn_type, fn_len + num_closure_vars, ctx, module);
+      codegen_fn_type(NULL, fn_type, fn_len + num_closure_vars, ctx, module);
 
   if (!prototype) {
     return NULL;
@@ -231,6 +286,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
 
+  // printf("\n\n");
   // Check if the current block already has a terminator
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   if (current_block && !LLVMGetBasicBlockTerminator(current_block)) {
@@ -309,7 +365,8 @@ LLVMValueRef create_builtin_func_wrapper(Type *specific_type, JITSymbol *sym,
                                          LLVMBuilderRef builder) {
   int args_len = fn_type_args_len(specific_type);
 
-  LLVMTypeRef fn_type = codegen_fn_type(specific_type, args_len, ctx, module);
+  LLVMTypeRef fn_type =
+      codegen_fn_type(NULL, specific_type, args_len, ctx, module);
 
   Type *ft = specific_type;
   Ast args[args_len];

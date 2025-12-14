@@ -2,7 +2,7 @@
 #include "adt.h"
 #include "application.h"
 
-#include "./coroutines/coroutines.h"
+#include "./coroutines/coroutine_extensions.h"
 #include "backend_llvm/array.h"
 #include "backend_llvm/common.h"
 #include "function.h"

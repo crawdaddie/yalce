@@ -67,6 +67,28 @@ void set_var_bindings(BindList *bl, JITLangCtx *ctx, LLVMModuleRef module,
   }
 }
 
+LLVMValueRef bind_local_value_with_storage(Ast *id, LLVMValueRef val,
+                                           LLVMValueRef storage, Type *val_type,
+                                           JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
+
+  if (ast_is_placeholder_id(id)) {
+    return val;
+  }
+
+  const char *chars = id->data.AST_IDENTIFIER.value;
+  uint64_t id_hash = hash_string(chars, id->data.AST_IDENTIFIER.length);
+
+  LLVMTypeRef llvm_type = type_to_llvm_type(val_type, ctx, module);
+
+  JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, val_type, val, llvm_type);
+  sym->storage = storage;
+  ht_set_hash(ctx->frame->table, chars, id_hash, sym);
+
+  return val;
+}
+
 LLVMValueRef bind_value(Ast *id, LLVMValueRef val, Type *val_type,
                         JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
