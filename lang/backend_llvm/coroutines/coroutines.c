@@ -435,16 +435,8 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (is_generic(yield_val_type)) {
     yield_val_type = resolve_type_in_env(yield_val_type, ctx->env);
   }
-  printf("handle nested????\n");
-  print_ast(ast);
-  print_type(yield_val_type);
-  print_type_env(ctx->env);
 
   if (is_coroutine_type(yield_val_type)) {
-    printf("YIELD FROM\n");
-    print_ast(ast);
-    print_type(yield_val_type);
-    printf("\n");
     // ===== YIELD FROM: Drain the entire inner coroutine =====
 
     LLVMValueRef inner_handle = yield_value;
@@ -644,11 +636,22 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   Type *yield_type = fn_return_type(fn_type);
+
   if (is_coroutine_type(yield_type)) {
     yield_type = yield_type->data.T_CONS.args[0];
   }
-  if (is_coroutine_type(yield_type)) {
 
+  // we support one level of coroutine nesting in the yield type - meaning
+  // let f = fn a b -> yield a; yield b;; - if a & b are coroutine instances,
+  // then we nest a and then b
+  //
+  // therefore instead of f having type:
+  //
+  // Coroutine of T -> Coroutine of T -> Coroutine of Coroutine of T, it is
+  // flattened to
+  //
+  // Coroutine of T -> Coroutine of T -> Coroutine of T
+  if (is_coroutine_type(yield_type)) {
     yield_type = yield_type->data.T_CONS.args[0];
   }
 
