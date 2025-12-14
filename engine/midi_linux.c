@@ -1,3 +1,4 @@
+#ifndef __APPLE__
 #include "midi.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -658,3 +659,4 @@ void send_data(midi_endpoint_t destination, size_t size, char *data) {
 
   snd_seq_drain_output(seq_handle);
 }
+#endif
