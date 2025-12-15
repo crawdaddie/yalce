@@ -84,31 +84,31 @@ let iter_all_arg = fn () ->
 ;; 
 iter_all_arg ();
 
-# let map_cor = fn () ->
-#   "map each value of a coroutine Int -> String";
-#   let co_void = fn () ->
-#     yield 1;
-#     yield 2;
-#     yield 3;
-#     yield 4;
-#     yield 5;
-#     yield 6;
-#     yield 7 
-#   ;;
-#   let co = co_void () |> cor_map (fn x -> `[str {x}]`)
-#   ;
-#
-#   print `## coroutine mapped [str 1] -> [str 2] -> [str 3] -> ...
-#   {co ()}
-#   {co ()}
-#   {co ()}
-#   {co ()}
-#   {co ()}
-#   {co ()}
-# `
-# ;;
-# map_cor ();
-# #
+let map_cor = fn () ->
+  "map each value of a coroutine Int -> String";
+  let co_void = fn () ->
+    yield 1;
+    yield 2;
+    yield 3;
+    yield 4;
+    yield 5;
+    yield 6;
+    yield 7 
+  ;;
+  let co = co_void () |> cor_map (fn x -> `[str {x}]`)
+  ;
+
+  print `## coroutine mapped [str 1] -> [str 2] -> [str 3] -> ...
+  {co ()}
+  {co ()}
+  {co ()}
+  {co ()}
+  {co ()}
+  {co ()}
+`
+;;
+map_cor ();
+
 let cor_list = fn () -> 
   let l = [1, 2, 3] in
   let c = iter_of_list l in
@@ -281,8 +281,52 @@ let fib_ser = fn () ->
   {c ()}
 `
 ;;
-
 fib_ser ();
+
+# let chained_cors = fn () ->
+#   let cor_chain = fn cors ->
+#     let h::rest = cors;
+#     yield h;
+#     yield cor_chain rest
+#   ;;
+#
+#   let ff = fn () -> 
+#     yield 200;
+#     yield 300;
+#     yield 400
+#   ;;
+#
+#   let x = cor_chain [
+#     iter_of_list [1,2,3],
+#     iter_of_list [5,6,7],
+#     ff (),
+#     iter_of_list [1000, 2000, 3000],
+#     iter_of_list [3,2,1]
+#   ];
+#
+#
+#   print `## separate coroutines chained together in sequence
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   {x ()}
+#   `
+#
+# ;;
+#
+# chained_cors ();
 
 let x = (fn () -> 
   let a = 2;
@@ -315,23 +359,4 @@ let x = (fn aa ->
   {xx ()}
   {xx ()}
   {xx ()}
-`;
-
-let (+>) = fn a b -> yield a; yield b;;
-
-let z = ([ 1,2,3 ] |> iter_of_list)
-  +> ([| 6,5,4 |] |> iter_of_array |> cor_loop) in
-
-print `## combine coroutines after one another (1 2 3 -> loop 6 5 4)
-{z ()}
-{z ()}
-{z ()}
-{z ()}
-{z ()}
-{z ()}
-{z ()}
-{z ()}
-{z ()}
-{z ()}
-{z ()}
-`
+  `;
