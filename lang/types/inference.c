@@ -1455,8 +1455,13 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
     return type_ref->type;
   }
 
-  if (type_ref->md.type == BT_VAR || type_ref->md.type == BT_FN_PARAM) {
+  if (type_ref->md.type == BT_VAR) {
     handle_yield_boundary_crossing(type_ref->md, ast, ctx);
+    handle_closed_over_value(type_ref->md, ast, ctx);
+  }
+
+  if (type_ref->md.type == BT_FN_PARAM) {
+    // handle_yield_boundary_crossing(type_ref->md, ast, ctx);
     handle_closed_over_value(type_ref->md, ast, ctx);
   }
 

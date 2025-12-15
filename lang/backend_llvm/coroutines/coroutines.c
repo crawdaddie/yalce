@@ -753,6 +753,7 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
   if (expr->data.AST_LAMBDA.num_yield_boundary_crossers > 0) {
     AST_LIST_ITER(expr->data.AST_LAMBDA.yield_boundary_crossers, ({
                     Ast *bx = l->ast;
+
                     Type *bxt = bx->type;
 
                     if (is_generic(bxt)) {
@@ -886,6 +887,7 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
   destroy_ctx(&coro_lang_ctx);
+  // LLVMDumpValue(coro_fn);
   return coro_fn;
 }
 
