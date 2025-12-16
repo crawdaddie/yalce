@@ -246,3 +246,9 @@ let test_cor_loop_and_map = fn () ->
   && (let xx = x () in let yy = y () in xx == yy && xx == Some 6)
 
 ;;
+
+let test_cor_stop = fn () ->
+  let c = fn () -> yield 1; yield 2; yield 3;;
+  let x = c () in
+  (x () == Some 1) && (cor_stop x; x () == None)
+;;

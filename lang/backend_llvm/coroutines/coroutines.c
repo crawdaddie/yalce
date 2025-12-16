@@ -1,12 +1,12 @@
 #include "./coroutines.h"
+#include "../../types/type.h"
+#include "../../types/type_ser.h"
+#include "../adt.h"
 #include "../binding.h"
+#include "../common.h"
 #include "../function.h"
 #include "../symbols.h"
-#include "adt.h"
-#include "common.h"
-#include "types.h"
-#include "types/type.h"
-#include "types/type_ser.h"
+#include "../types.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/Types.h"
 #include <stdio.h>
@@ -781,32 +781,11 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
   // LLVMDumpValue(coro_fn);
   return coro_fn;
 }
+LLVMValueRef coro_is_done(LLVMValueRef handle, LLVMTypeRef yield_type,
+                          LLVMModuleRef module, LLVMBuilderRef builder) {
 
-LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
-                         LLVMBuilderRef builder) {
-
-  LLVMValueRef handle = sym->val;
-
-  // Extract yield type from coroutine type
-  // symbol_type should be something like: () -> Option<T>
-  Type *coro_fn_type = sym->symbol_type;
-  Type *yield_type = coro_fn_type->data.T_CONS.args[0];
-
-  LLVMTypeRef llvm_yield_type = type_to_llvm_type(yield_type, ctx, module);
-  LLVMTypeRef llvm_option_type =
-      type_to_llvm_type(create_option_type(yield_type), ctx, module);
-
-  // Create basic blocks for control flow
-  LLVMBasicBlockRef current_bb = LLVMGetInsertBlock(builder);
-  LLVMValueRef current_fn = LLVMGetBasicBlockParent(current_bb);
-
-  LLVMBasicBlockRef done_bb = LLVMAppendBasicBlock(current_fn, "coro.done");
-  LLVMBasicBlockRef resume_bb = LLVMAppendBasicBlock(current_fn, "coro.resume");
-  LLVMBasicBlockRef merge_bb = LLVMAppendBasicBlock(current_fn, "coro.merge");
-
-  // Signature: i8* @llvm.coro.promise(i8* handle, i32 align, i1 from_promise)
   LLVMTypeRef full_prom_type =
-      LLVMStructType((LLVMTypeRef[]){llvm_yield_type, LLVMInt1Type()}, 2, 0);
+      LLVMStructType((LLVMTypeRef[]){yield_type, LLVMInt1Type()}, 2, 0);
 
   LLVMValueRef promise_ptr_raw = GET_PROMISE_PTR_RAW(handle);
 
@@ -824,6 +803,41 @@ LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_done), coro_done,
                      (LLVMValueRef[]){handle}, 1, "is_done");
   is_done = LLVMBuildOr(builder, is_done_flag, is_done, "");
+  return is_done;
+}
+
+LLVMValueRef codegen_coro_resume(JITSymbol *sym, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  LLVMValueRef handle = sym->val;
+
+  // Extract yield type from coroutine type
+  // symbol_type should be something like: () -> Option<T>
+  Type *coro_fn_type = sym->symbol_type;
+  Type *yield_type = coro_fn_type->data.T_CONS.args[0];
+
+  LLVMTypeRef llvm_yield_type = type_to_llvm_type(yield_type, ctx, module);
+  return codegen_handle_resume(handle, llvm_yield_type, ctx, module, builder);
+}
+
+LLVMValueRef codegen_handle_resume(LLVMValueRef handle,
+                                   LLVMTypeRef llvm_yield_type, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+
+  // Extract yield type from coroutine type
+  // symbol_type should be something like: () -> Option<T>
+  LLVMTypeRef llvm_option_type = codegen_option_struct_type(llvm_yield_type);
+
+  // Create basic blocks for control flow
+  LLVMBasicBlockRef current_bb = LLVMGetInsertBlock(builder);
+  LLVMValueRef current_fn = LLVMGetBasicBlockParent(current_bb);
+
+  LLVMBasicBlockRef done_bb = LLVMAppendBasicBlock(current_fn, "coro.done");
+  LLVMBasicBlockRef resume_bb = LLVMAppendBasicBlock(current_fn, "coro.resume");
+  LLVMBasicBlockRef merge_bb = LLVMAppendBasicBlock(current_fn, "coro.merge");
+
+  LLVMValueRef is_done = coro_is_done(handle, llvm_yield_type, module, builder);
 
   LLVMBuildCondBr(builder, is_done, done_bb, resume_bb);
 
@@ -846,6 +860,7 @@ LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBasicBlockRef after_resume_not_done_bb =
       LLVMAppendBasicBlock(current_fn, "coro.after_resume_not_done");
 
+  LLVMValueRef coro_done = get_coro_done_intrinsic(module);
   LLVMValueRef is_done_after_resume =
       LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_done), coro_done,
                      (LLVMValueRef[]){handle}, 1, "is_done_after_resume");
@@ -861,19 +876,7 @@ LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
   // After resume, if not done: read promise and return Some(value)
   LLVMPositionBuilderAtEnd(builder, after_resume_not_done_bb);
 
-  // Get promise pointer using coro.promise intrinsic
-  // Signature: i8* @llvm.coro.promise(i8* handle, i32 align, i1 from_promise)
-  // LLVMBuildCall2(
-  //     builder, LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),
-  //     get_coro_promise_intrinsic(module),
-  //     (LLVMValueRef[]){
-  //         handle, LLVMConstInt(LLVMInt32Type(), 0, 0), // align = 0
-  //         LLVMConstInt(LLVMInt1Type(), 0, 0)           // from_promise =
-  //         false
-  //     },
-  //     3, "promise.raw");
-
-  // Cast to correct type
+  LLVMValueRef promise_ptr_raw = GET_PROMISE_PTR_RAW(handle);
   LLVMValueRef yield_ptr =
       LLVMBuildBitCast(builder, promise_ptr_raw,
                        LLVMPointerType(llvm_yield_type, 0), "promise.ptr");

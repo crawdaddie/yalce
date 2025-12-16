@@ -45,8 +45,8 @@ LLVMValueRef coro_create(JITSymbol *sym, Type *expected_fn_type, Ast *app,
                          JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder);
 
-LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
-                         LLVMBuilderRef builder);
+LLVMValueRef codegen_coro_resume(JITSymbol *sym, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder);
 
 LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder);
@@ -227,4 +227,12 @@ LLVMBasicBlockRef coro_emit_yield_from_loop(
                  (LLVMValueRef[]){handle, LLVMConstInt(LLVMInt32Type(), 0, 0), \
                                   LLVMConstInt(LLVMInt1Type(), 0, 0)},         \
                  3, "promise.raw");
+
+LLVMValueRef coro_is_done(LLVMValueRef handle, LLVMTypeRef yield_type,
+                          LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef codegen_handle_resume(LLVMValueRef handle,
+                                   LLVMTypeRef llvm_yield_type, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder);
 #endif

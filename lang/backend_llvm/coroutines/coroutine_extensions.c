@@ -1,7 +1,8 @@
 #include "./coroutine_extensions.h"
-#include "coroutines/coroutines.h"
-#include "types.h"
-#include "types/type_ser.h"
+#include "../../types/type_ser.h"
+#include "../adt.h"
+#include "../types.h"
+#include "./coroutines/coroutines.h"
 #include "llvm-c/Core.h"
 
 // ============================================================================
@@ -957,9 +958,151 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
-  fprintf(stderr, "TODO: PlayRoutineHandler not yet implemented\n");
-  return NULL;
+  Ast *time_ast = ast->data.AST_APPLICATION.args;
+  Ast *schedule_event_ast = ast->data.AST_APPLICATION.args + 1;
+  Ast *cor_ast = ast->data.AST_APPLICATION.args + 2;
+
+  LLVMValueRef handle = codegen(cor_ast, ctx, module, builder);
+  if (!handle) {
+    return NULL;
+  }
+
+  LLVMValueRef schedule_event =
+      codegen(schedule_event_ast, ctx, module, builder);
+
+  if (!schedule_event) {
+    return NULL;
+  }
+
+  LLVMValueRef u64ts = codegen(time_ast, ctx, module, builder);
+
+  if (!u64ts) {
+    return NULL;
+  }
+
+  LLVMValueRef func = LLVMAddFunction(
+      module, "schedule_event_wrapper",
+      LLVMFunctionType(LLVMVoidType(),
+                       (LLVMTypeRef[]){GENERIC_PTR, LLVMInt64Type()}, 2, 0));
+
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+
+  LLVMTypeRef schedule_event_type =
+      LLVMFunctionType(GENERIC_PTR,
+                       (LLVMTypeRef[]){LLVMInt64Type(), LLVMDoubleType(),
+                                       GENERIC_PTR, GENERIC_PTR},
+                       4, 0);
+
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+
+  LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef finished =
+      LLVMAppendBasicBlock(func, "coro.is_finished_block");
+  LLVMBasicBlockRef not_finished =
+      LLVMAppendBasicBlock(func, "coro.resume_block");
+
+  LLVMPositionBuilderAtEnd(builder, entry);
+
+  LLVMValueRef _handle = LLVMGetParam(func, 0);
+  LLVMValueRef _u64ts = LLVMGetParam(func, 1);
+  LLVMTypeRef yield_type = LLVMDoubleType();
+
+  LLVMValueRef resume_result =
+      codegen_handle_resume(handle, yield_type, ctx, module, builder);
+
+  LLVMValueRef is_done = coro_is_done(handle, yield_type, module, builder);
+
+  LLVMBuildCondBr(builder, is_done, finished, not_finished);
+
+  // coroutine not finished - take yielded double and schedule next to happen at
+  // u64ts + yielded
+  LLVMPositionBuilderAtEnd(builder, not_finished);
+  LLVMValueRef promise_ptr_raw = GET_PROMISE_PTR_RAW(handle);
+  LLVMValueRef yield_ptr = LLVMBuildBitCast(
+      builder, promise_ptr_raw, LLVMPointerType(yield_type, 0), "promise.ptr");
+
+  // Load the yielded value
+  LLVMValueRef yielded_value =
+      LLVMBuildLoad2(builder, yield_type, yield_ptr, "yielded");
+
+  LLVMValueRef scheduler_call =
+      LLVMBuildCall2(builder, schedule_event_type, schedule_event,
+                     (LLVMValueRef[]){
+                         _u64ts,
+                         yielded_value,
+                         func,
+                         handle,
+                     },
+                     4, "schedule_next");
+  LLVMBuildRetVoid(builder);
+
+  // coroutine finished - don't continue to schedule and you can ignore the
+  // yielded val
+  LLVMPositionBuilderAtEnd(builder, finished);
+  LLVMBuildRetVoid(builder);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  LLVMBuildCall2(builder, schedule_event_type, schedule_event,
+                 (LLVMValueRef[]){
+                     u64ts,
+                     LLVMConstReal(LLVMDoubleType(), 0.),
+                     func,
+                     handle,
+                 },
+                 4, "call.schedule_event.now");
+  return handle;
 }
+// static LLVMValueRef __build_scheduled_cor_wrapper(LLVMTypeRef promise_type,
+//                                                   LLVMValueRef scheduler,
+//                                                   LLVMTypeRef scheduler_type,
+//                                                   LLVMModuleRef module,
+//                                                   LLVMBuilderRef builder) {
+// LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
+
+// LLVMTypeRef wrapper_fn_type =
+//     LLVMFunctionType(LLVMVoidType(),
+//                      (LLVMTypeRef[]){
+//                          // LLVMPointerType(coro_obj_type, 0),
+//                          LLVMInt64Type(),
+//                      },
+//                      2, 0);
+// LLVMValueRef func =
+//     LLVMAddFunction(module, "scheduler_wrapper", wrapper_fn_type);
+
+// LLVMSetLinkage(func, LLVMExternalLinkage);
+// LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
+//
+// LLVMBasicBlockRef finished =
+//     LLVMAppendBasicBlock(func, "coro.is_finished_block");
+// LLVMBasicBlockRef not_finished =
+//     LLVMAppendBasicBlock(func, "coro.resume_block");
+//
+// LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+// LLVMPositionBuilderAtEnd(builder, entry);
+// LLVMValueRef coro = LLVMGetParam(func, 0);
+// LLVMValueRef timestamp = LLVMGetParam(func, 1);
+// LLVMTypeRef val_type = LLVMDoubleType();
+// CoroutineCtx coro_ctx = {.coro_obj_type = coro_obj_type,
+//                          .promise_type = promise_type};
+//
+// coro = coro_advance(coro, &coro_ctx, builder);
+//
+// LLVMValueRef is_finished = coro_is_finished(coro, &coro_ctx, builder);
+// LLVMBuildCondBr(builder, is_finished, finished, not_finished);
+// LLVMPositionBuilderAtEnd(builder, not_finished);
+// LLVMValueRef promise =
+//     coro_promise(coro, coro_obj_type, promise_type, builder);
+// LLVMValueRef val = LLVMBuildExtractValue(builder, promise, 1, "");
+//
+
+//
+// LLVMPositionBuilderAtEnd(builder, finished);
+// LLVMBuildRetVoid(builder);
+//
+// LLVMPositionBuilderAtEnd(builder, prev_block);
+// return func;
+// }
 
 LLVMValueRef CurrentCorHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {

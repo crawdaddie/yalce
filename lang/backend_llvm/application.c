@@ -352,7 +352,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
         coro_create(sym, callable_type, ast, ctx, module, builder);
     return instance_ptr;
   } else if (is_coroutine_type(symbol_type)) {
-    return coro_resume(sym, ctx, module, builder);
+    return codegen_coro_resume(sym, ctx, module, builder);
   }
 
   if (sym->type == STYPE_GENERIC_FUNCTION && !is_closure(sym->symbol_type)) {
