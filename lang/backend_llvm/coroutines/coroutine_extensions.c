@@ -239,11 +239,10 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef map_fn = codegen(map_fn_ast, ctx, module, builder);
   LLVMValueRef inner_handle = codegen(coro_ast, ctx, module, builder);
 
-  // Create wrapper coroutine function that TAKES map function and coroutine as parameters
+  // Create wrapper coroutine function that TAKES map function and coroutine as
+  // parameters
   LLVMTypeRef wrapper_fn_type = LLVMFunctionType(
-      GENERIC_PTR,
-      (LLVMTypeRef[]){LLVMTypeOf(map_fn), GENERIC_PTR},
-      2, 0);
+      GENERIC_PTR, (LLVMTypeRef[]){LLVMTypeOf(map_fn), GENERIC_PTR}, 2, 0);
 
   static int counter = 0;
   char wrapper_name[64];
@@ -340,9 +339,10 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Resume inner
   LLVMPositionBuilderAtEnd(builder, loop_body_bb);
-  LLVMBuildCall2(
-      builder, LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
-      get_coro_resume_intrinsic(module), (LLVMValueRef[]){inner_handle_param}, 1, "");
+  LLVMBuildCall2(builder,
+                 LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
+                 get_coro_resume_intrinsic(module),
+                 (LLVMValueRef[]){inner_handle_param}, 1, "");
 
   LLVMValueRef is_done_after = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
@@ -368,8 +368,8 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                             inner_promise_ptr, "inner.value");
 
   // Load and call map function
-  LLVMValueRef loaded_map_fn =
-      LLVMBuildLoad2(builder, LLVMTypeOf(map_fn_param), map_fn_alloca, "map_fn");
+  LLVMValueRef loaded_map_fn = LLVMBuildLoad2(builder, LLVMTypeOf(map_fn_param),
+                                              map_fn_alloca, "map_fn");
 
   LLVMTypeRef map_fn_llvm_type = LLVMFunctionType(
       llvm_output_type, (LLVMTypeRef[]){llvm_input_type}, 1, 0);
@@ -456,18 +456,26 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
-  // Call the wrapper function, passing map function and inner coroutine as arguments
-  LLVMValueRef map_handle = LLVMBuildCall2(
-      builder, wrapper_fn_type, wrapper_fn,
-      (LLVMValueRef[]){map_fn, inner_handle}, 2, "map.handle");
+  // Call the wrapper function, passing map function and inner coroutine as
+  // arguments
+  LLVMValueRef map_handle =
+      LLVMBuildCall2(builder, wrapper_fn_type, wrapper_fn,
+                     (LLVMValueRef[]){map_fn, inner_handle}, 2, "map.handle");
 
   return map_handle;
 }
 
 LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
-  fprintf(stderr, "TODO: CorStopHandler not yet implemented\n");
-  return NULL;
+  LLVMValueRef handle =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  LLVMValueRef coro_destroy = get_coro_destroy_intrinsic(module);
+
+  LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_destroy),
+                 coro_destroy, (LLVMValueRef[]){handle}, 1, "");
+
+  // cor_stop returns unit/void
+  return LLVMGetUndef(LLVMVoidType());
 }
 
 LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -481,14 +489,13 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_elem_type = type_to_llvm_type(elem_type, ctx, module);
   LLVMTypeRef llvm_list_type = type_to_llvm_type(list_type, ctx, module);
 
-  // IMPORTANT: Evaluate list expression in CALLER's scope BEFORE creating coroutine
+  // IMPORTANT: Evaluate list expression in CALLER's scope BEFORE creating
+  // coroutine
   LLVMValueRef list_ptr = codegen(list_ast, ctx, module, builder);
 
   // Create wrapper coroutine function that TAKES the list as a parameter
-  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(
-      GENERIC_PTR,
-      (LLVMTypeRef[]){llvm_list_type},
-      1, 0);
+  LLVMTypeRef wrapper_fn_type =
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){llvm_list_type}, 1, 0);
 
   static int counter = 0;
   char wrapper_name[64];
@@ -681,9 +688,9 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
   // Call the wrapper function, passing the list as an argument
-  LLVMValueRef coro_handle = LLVMBuildCall2(
-      builder, wrapper_fn_type, wrapper_fn,
-      (LLVMValueRef[]){list_ptr}, 1, "list.coro.handle");
+  LLVMValueRef coro_handle =
+      LLVMBuildCall2(builder, wrapper_fn_type, wrapper_fn,
+                     (LLVMValueRef[]){list_ptr}, 1, "list.coro.handle");
 
   return coro_handle;
 }
@@ -699,14 +706,13 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_elem_type = type_to_llvm_type(elem_type, ctx, module);
   LLVMTypeRef llvm_array_type = type_to_llvm_type(array_type, ctx, module);
 
-  // IMPORTANT: Evaluate array expression in CALLER's scope BEFORE creating coroutine
+  // IMPORTANT: Evaluate array expression in CALLER's scope BEFORE creating
+  // coroutine
   LLVMValueRef array_val = codegen(array_ast, ctx, module, builder);
 
   // Create wrapper coroutine function that TAKES the array as a parameter
-  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(
-      GENERIC_PTR,
-      (LLVMTypeRef[]){llvm_array_type},
-      1, 0);
+  LLVMTypeRef wrapper_fn_type =
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){llvm_array_type}, 1, 0);
 
   static int counter = 0;
   char wrapper_name[64];
@@ -895,9 +901,9 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
   // Call the wrapper function, passing the array as an argument
-  LLVMValueRef coro_handle = LLVMBuildCall2(
-      builder, wrapper_fn_type, wrapper_fn,
-      (LLVMValueRef[]){array_val}, 1, "array.coro.handle");
+  LLVMValueRef coro_handle =
+      LLVMBuildCall2(builder, wrapper_fn_type, wrapper_fn,
+                     (LLVMValueRef[]){array_val}, 1, "array.coro.handle");
 
   return coro_handle;
 }

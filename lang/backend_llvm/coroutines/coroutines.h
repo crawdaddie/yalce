@@ -110,6 +110,8 @@ LLVMValueRef get_coro_done_intrinsic(LLVMModuleRef module);
  */
 LLVMValueRef get_coro_promise_intrinsic(LLVMModuleRef module);
 
+LLVMValueRef get_coro_destroy_intrinsic(LLVMModuleRef module);
+
 #define COROUTINE_BASIC_BLOCKS(coro_fn)                                        \
   LLVMBasicBlockRef entry_bb = LLVMAppendBasicBlock(coro_fn, "entry");         \
   LLVMBasicBlockRef cleanup_bb = LLVMAppendBasicBlock(coro_fn, "cleanup");     \
@@ -123,5 +125,99 @@ LLVMValueRef get_coro_promise_intrinsic(LLVMModuleRef module);
   LLVMAttributeRef attr =                                                      \
       LLVMCreateEnumAttribute(llvm_ctx, PRESPLIT_COROUTINE_KIND_ID, 0);        \
   LLVMAddAttributeAtIndex(coro_fn, LLVMAttributeFunctionIndex, attr);
+
+/**
+ * Result of coroutine setup initialization
+ */
+typedef struct {
+  LLVMValueRef promise_alloca;
+  LLVMValueRef coro_id;
+  LLVMValueRef handle;
+} CoroSetupResult;
+
+/**
+ * Setup coroutine entry block with standard boilerplate
+ * - Allocates promise
+ * - Calls coro.id, coro.size, malloc, coro.begin
+ * - Returns the initialized values
+ *
+ * Requires: Builder positioned at entry_bb
+ */
+CoroSetupResult coro_emit_setup(JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder,
+                                LLVMTypeRef promise_type);
+
+/**
+ * Emit initial suspend boilerplate
+ * - Must be positioned at entry block after setup
+ * - Emits coro.save + coro.suspend + switch
+ * - Positions builder at start_bb when done
+ *
+ * Uses basic blocks from standard COROUTINE_BASIC_BLOCKS macro
+ */
+void coro_emit_initial_suspend(JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder, LLVMValueRef handle,
+                               LLVMBasicBlockRef cleanup_bb,
+                               LLVMBasicBlockRef suspend_bb,
+                               LLVMBasicBlockRef initial_return_bb,
+                               LLVMBasicBlockRef start_bb);
+
+/**
+ * Emit a yield point
+ * - Stores value to promise
+ * - Emits save + suspend + switch
+ * - Creates yield.return and yield.resume blocks
+ * - Positions builder at resume block when done
+ *
+ * Can work with CoroutineCtx if provided, or standalone
+ *
+ * Returns: The resume block where execution continues
+ */
+LLVMBasicBlockRef
+coro_emit_yield(JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder,
+                CoroutineCtx *coro_ctx, // Can be NULL for standalone use
+                LLVMValueRef value);
+
+/**
+ * Emit final suspend (marks end of coroutine)
+ * - Emits save + suspend(final=true) + switch
+ * - Creates final.return block
+ * - Connects to suspend_bb
+ */
+void coro_emit_final_suspend(JITLangCtx *ctx, LLVMModuleRef module,
+                             LLVMBuilderRef builder, LLVMValueRef handle,
+                             LLVMValueRef function,
+                             LLVMBasicBlockRef cleanup_bb,
+                             LLVMBasicBlockRef suspend_bb);
+
+/**
+ * Emit cleanup and suspend blocks
+ * - Cleanup: calls coro.free and free()
+ * - Suspend: calls coro.end and returns handle
+ */
+void coro_emit_cleanup_and_suspend(JITLangCtx *ctx, LLVMModuleRef module,
+                                   LLVMBuilderRef builder, LLVMValueRef coro_id,
+                                   LLVMValueRef handle,
+                                   LLVMBasicBlockRef cleanup_bb,
+                                   LLVMBasicBlockRef suspend_bb);
+
+/**
+ * Emit a yield-from loop (for nested coroutines)
+ * - Creates loop_check, loop_body, loop_resume, loop_exit blocks
+ * - Emits: check if inner done → resume inner → read promise → yield value →
+ * loop
+ * - Positions builder at loop_exit when inner exhausted
+ *
+ * For use in cor_loop, cor_map, user yield-from, etc.
+ *
+ * Returns: The loop_exit block
+ */
+LLVMBasicBlockRef coro_emit_yield_from_loop(
+    JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder,
+    LLVMValueRef wrapper_handle, LLVMValueRef inner_handle,
+    LLVMValueRef promise_alloca, LLVMTypeRef yield_type,
+    LLVMBasicBlockRef cleanup_bb, LLVMBasicBlockRef suspend_bb,
+    const char *label_prefix // "loop", "map", etc.
+);
 
 #endif

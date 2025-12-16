@@ -175,6 +175,16 @@ LLVMValueRef get_coro_promise_intrinsic(LLVMModuleRef module) {
   return fn;
 }
 
+LLVMValueRef get_coro_destroy_intrinsic(LLVMModuleRef module) {
+  LLVMValueRef fn = LLVMGetNamedFunction(module, "llvm.coro.destroy");
+  if (!fn) {
+    LLVMTypeRef fn_type =
+        LLVMFunctionType(LLVMVoidType(), (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+    fn = LLVMAddFunction(module, "llvm.coro.destroy", fn_type);
+  }
+  return fn;
+}
+
 // #define GET_STRUCTURED_PROMISE(yield_type) \
 //   LLVMStructType( \
 //       (LLVMTypeRef[]){ \
@@ -559,55 +569,10 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return LLVMGetUndef(LLVMVoidType());
   }
 
-  // 3. Store raw value in promise (not wrapped in Option)
-  // The resume wrapper will construct Some(value) when reading
-  LLVMBuildStore(builder, yield_value, coro_ctx->promise_alloca);
+  // Use helper for regular yield point
+  coro_emit_yield(ctx, module, builder, coro_ctx, yield_value);
+  // Now positioned at resume block, ready for next statement
 
-  // 4. Create suspension point
-  LLVMValueRef save_token = LLVMBuildCall2(
-      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
-      get_coro_save_intrinsic(module), (LLVMValueRef[]){coro_ctx->coro_handle},
-      1, "coro.save");
-
-  LLVMValueRef suspend_result = LLVMBuildCall2(
-      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
-      get_coro_suspend_intrinsic(module),
-      (LLVMValueRef[]){
-          save_token, LLVMConstInt(LLVMInt1Type(), 0, 0) // not final suspend
-      },
-      2, "coro.suspend");
-
-  // 5. Switch on suspension result (CORRECTED)
-  //     0 = coroutine RESUMED → continue execution
-  //     1 = coroutine destroyed → cleanup
-  //     default = coroutine SUSPENDED → return to caller
-
-  // Create blocks for the different suspend outcomes
-  LLVMBasicBlockRef return_bb = LLVMAppendBasicBlock(
-      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)), "yield.return");
-  LLVMBasicBlockRef resume_bb = LLVMAppendBasicBlock(
-      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)), "yield.resume");
-
-  // Build the switch - DEFAULT returns to caller (suspended)
-  // case 0: coroutine resumed → continue to next yield
-  // case 1: coroutine destroyed → cleanup
-  // default: coroutine suspended → return to caller
-  LLVMValueRef switch_inst =
-      LLVMBuildSwitch(builder, suspend_result, return_bb, 2);
-  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 0, 0), resume_bb);
-  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 1, 0),
-              coro_ctx->cleanup_bb);
-
-  // 6. Return block - suspend: exits coroutine and returns to caller
-  LLVMPositionBuilderAtEnd(builder, return_bb);
-  LLVMBuildBr(builder, coro_ctx->suspend_bb);
-
-  // 7. Resume block - case 0: execution continues after resume
-  LLVMPositionBuilderAtEnd(builder, resume_bb);
-
-  coro_ctx->yield_count++;
-
-  // Yield expression has type void in the coroutine body
   return LLVMGetUndef(LLVMVoidType());
 }
 
@@ -680,21 +645,17 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMSetLinkage(coro_fn, LLVMExternalLinkage);
 
   COROUTINE_ATTR_MARKING(coro_fn)
-
-  // 3. Create basic blocks
   COROUTINE_BASIC_BLOCKS(coro_fn)
 
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
 
   LLVMPositionBuilderAtEnd(builder, entry_bb);
 
-  // 4. Allocate promise inside the coroutine frame
   LLVMTypeRef prom_struct_type = llvm_yield_type;
 
   LLVMValueRef frame_alloca =
       LLVMBuildAlloca(builder, llvm_yield_type, "promise");
 
-  // Call coro.id with promise pointer
   LLVMValueRef get_coro_id = get_coro_id_intrinsic(module);
   LLVMValueRef id =
       LLVMBuildCall2(builder, LLVMGlobalGetValueType(get_coro_id), get_coro_id,
@@ -777,16 +738,11 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
                   }));
   }
 
-  // INITIAL SUSPEND: Create basic blocks for suspend flow
-  // This ensures the coroutine suspends on creation and only executes when
-  // first resumed
-  // Call coro.begin
   LLVMValueRef coro_begin = get_coro_begin_intrinsic(module);
   LLVMValueRef handle =
       LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_begin), coro_begin,
                      (LLVMValueRef[]){id, frame}, 2, "coro.handle");
 
-  // 6. Set up coroutine context
   CoroutineCtx coro_ctx = {0}; // Zero-initialize all fields
   coro_ctx.coro_id = id;
   coro_ctx.promise_alloca = frame_alloca;   // Allocated above
@@ -805,84 +761,20 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMPositionBuilderAtEnd(builder, entry_bb);
 
-  // Save coroutine state before initial suspend
-  LLVMValueRef coro_save = get_coro_save_intrinsic(module);
-  LLVMValueRef initial_save =
-      LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_save), coro_save,
-                     (LLVMValueRef[]){handle}, 1, "initial.save");
+  coro_emit_initial_suspend(ctx, module, builder, handle, cleanup_bb,
+                            suspend_bb, initial_return_bb, start_bb);
 
-  // Initial suspend (false = normal suspend, not final)
   LLVMValueRef coro_suspend = get_coro_suspend_intrinsic(module);
-  LLVMValueRef initial_suspend = LLVMBuildCall2(
-      builder, LLVMGlobalGetValueType(coro_suspend), coro_suspend,
-      (LLVMValueRef[]){initial_save, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2,
-      "initial.suspend");
-
-  // Switch on suspend result during coroutine initialization:
-  // -1 (default) = first time through during init - return to caller without
-  // executing body 0 = resumed - continue to start block where body executes 1
-  // = destroy - go to cleanup
-  LLVMValueRef init_switch =
-      LLVMBuildSwitch(builder, initial_suspend, initial_return_bb, 2);
-  LLVMAddCase(init_switch, LLVMConstInt(LLVMInt8Type(), 0, 0),
-              start_bb); // Resume case (0) goes to start!
-  LLVMAddCase(init_switch, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
-
-  // Initial return block - returns to caller during initialization (default
-  // case -1)
-  LLVMPositionBuilderAtEnd(builder, initial_return_bb);
-  LLVMBuildBr(builder, suspend_bb);
-
-  // Position builder at start of actual coroutine body (resumed execution)
-  LLVMPositionBuilderAtEnd(builder, start_bb);
-
+  LLVMValueRef coro_save = get_coro_save_intrinsic(module);
   LLVMValueRef body_result =
       codegen_lambda_body(expr, &coro_lang_ctx, module, builder);
 
-  // 8. Function end - FINAL suspend
-  LLVMValueRef final_save =
-      LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_save), coro_save,
-                     (LLVMValueRef[]){handle}, 1, "final.save");
+  coro_emit_final_suspend(ctx, module, builder, handle, coro_fn, cleanup_bb,
+                          suspend_bb);
 
-  LLVMValueRef final_suspend = LLVMBuildCall2(
-      builder, LLVMGlobalGetValueType(coro_suspend), coro_suspend,
-      (LLVMValueRef[]){final_save,
-                       LLVMConstInt(LLVMInt1Type(), 1, 0)}, // true = FINAL
-      2, "final.suspend");
-
-  // Switch on final suspend result
-  LLVMBasicBlockRef final_return_bb =
-      LLVMAppendBasicBlock(coro_fn, "final.return");
-  LLVMValueRef final_switch =
-      LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
-  LLVMAddCase(final_switch, LLVMConstInt(LLVMInt8Type(), 0, 0),
-              final_return_bb);
-  LLVMAddCase(final_switch, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
-
-  LLVMPositionBuilderAtEnd(builder, final_return_bb);
-  LLVMBuildBr(builder, suspend_bb);
-
-  // 9. Cleanup block
-  LLVMPositionBuilderAtEnd(builder, cleanup_bb);
-
-  // Free the coroutine frame
-  LLVMValueRef coro_free = get_coro_free_intrinsic(module);
-  LLVMValueRef mem =
-      LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_free), coro_free,
-                     (LLVMValueRef[]){id, handle}, 2, "coro.free");
-
-  LLVMBuildFree(builder, mem);
-  LLVMBuildBr(builder, suspend_bb);
-
-  // 10. Suspend block - return just the handle
-  LLVMPositionBuilderAtEnd(builder, suspend_bb);
-
-  LLVMValueRef coro_end = get_coro_end_intrinsic(module);
-  LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_end), coro_end,
-                 (LLVMValueRef[]){handle, LLVMConstInt(LLVMInt1Type(), 0, 0)},
-                 2, "");
-
-  LLVMBuildRet(builder, handle);
+  // Use helper for cleanup and suspend blocks
+  coro_emit_cleanup_and_suspend(ctx, module, builder, id, handle, cleanup_bb,
+                                suspend_bb);
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
@@ -993,4 +885,332 @@ LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
                   3);
 
   return result_phi;
+}
+
+// ============================================================================
+// Helper: Setup
+// ============================================================================
+
+CoroSetupResult coro_emit_setup(JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder,
+                                LLVMTypeRef promise_type) {
+  CoroSetupResult result = {0};
+
+  // Allocate promise
+  result.promise_alloca = LLVMBuildAlloca(builder, promise_type, "promise");
+
+  // Call coro.id
+  result.coro_id = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
+      get_coro_id_intrinsic(module),
+      (LLVMValueRef[]){LLVMConstInt(LLVMInt32Type(), 0, 0),
+                       result.promise_alloca, LLVMConstNull(GENERIC_PTR),
+                       LLVMConstNull(GENERIC_PTR)},
+      4, "coro.id");
+
+  // Call coro.size
+  LLVMValueRef size = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_size_intrinsic(module)),
+      get_coro_size_intrinsic(module), NULL, 0, "coro.size");
+
+  // Allocate frame
+  LLVMValueRef frame =
+      LLVMBuildArrayMalloc(builder, LLVMInt8Type(), size, "coro.frame");
+
+  // Call coro.begin
+  result.handle = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_begin_intrinsic(module)),
+      get_coro_begin_intrinsic(module), (LLVMValueRef[]){result.coro_id, frame},
+      2, "coro.handle");
+
+  return result;
+}
+
+// ============================================================================
+// Helper: Initial Suspend
+// ============================================================================
+
+void coro_emit_initial_suspend(JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder, LLVMValueRef handle,
+                               LLVMBasicBlockRef cleanup_bb,
+                               LLVMBasicBlockRef suspend_bb,
+                               LLVMBasicBlockRef initial_return_bb,
+                               LLVMBasicBlockRef start_bb) {
+  // Save coroutine state before initial suspend
+  LLVMValueRef initial_save = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "initial.save");
+
+  // Initial suspend (false = normal suspend, not final)
+  LLVMValueRef initial_suspend = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){initial_save, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2,
+      "initial.suspend");
+
+  // Switch on suspend result during coroutine initialization:
+  // -1 (default) = first time through during init - return to caller without
+  // executing body
+  // 0 = resumed - continue to start block where body executes
+  // 1 = destroy - go to cleanup
+  LLVMValueRef init_switch =
+      LLVMBuildSwitch(builder, initial_suspend, initial_return_bb, 2);
+  LLVMAddCase(init_switch, LLVMConstInt(LLVMInt8Type(), 0, 0), start_bb);
+  LLVMAddCase(init_switch, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  // Initial return block - returns to caller during initialization (default
+  // case -1)
+  LLVMPositionBuilderAtEnd(builder, initial_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // Position builder at start of actual coroutine body (resumed execution)
+  LLVMPositionBuilderAtEnd(builder, start_bb);
+}
+
+// ============================================================================
+// Helper: Yield Point
+// ============================================================================
+
+LLVMBasicBlockRef coro_emit_yield(JITLangCtx *ctx, LLVMModuleRef module,
+                                  LLVMBuilderRef builder,
+                                  CoroutineCtx *coro_ctx, LLVMValueRef value) {
+  // If we have a coro_ctx, use its fields. Otherwise, caller must ensure
+  // they're using this in a standalone context
+  LLVMValueRef handle =
+      coro_ctx ? coro_ctx->coro_handle : LLVMConstNull(GENERIC_PTR);
+  LLVMValueRef promise_alloca =
+      coro_ctx ? coro_ctx->promise_alloca : LLVMConstNull(GENERIC_PTR);
+  LLVMBasicBlockRef cleanup_bb = coro_ctx ? coro_ctx->cleanup_bb : NULL;
+  LLVMBasicBlockRef suspend_bb = coro_ctx ? coro_ctx->suspend_bb : NULL;
+
+  // Store value in promise (not wrapped in Option)
+  // The resume wrapper will construct Some(value) when reading
+  LLVMBuildStore(builder, value, promise_alloca);
+
+  // Create suspension point
+  LLVMValueRef save_token = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "coro.save");
+
+  LLVMValueRef suspend_result = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){save_token, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2,
+      "coro.suspend");
+
+  // Switch on suspension result
+  //     0 = coroutine RESUMED → continue execution
+  //     1 = coroutine destroyed → cleanup
+  //     default = coroutine SUSPENDED → return to caller
+
+  // Create blocks for the different suspend outcomes
+  LLVMBasicBlockRef current_fn =
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+  LLVMBasicBlockRef return_bb =
+      LLVMAppendBasicBlock(current_fn, "yield.return");
+  LLVMBasicBlockRef resume_bb =
+      LLVMAppendBasicBlock(current_fn, "yield.resume");
+
+  // Build the switch - DEFAULT returns to caller (suspended)
+  // case 0: coroutine resumed → continue to next yield
+  // case 1: coroutine destroyed → cleanup
+  // default: coroutine suspended → return to caller
+  LLVMValueRef switch_inst =
+      LLVMBuildSwitch(builder, suspend_result, return_bb, 2);
+  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 0, 0), resume_bb);
+  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  // Return block - suspend: exits coroutine and returns to caller
+  LLVMPositionBuilderAtEnd(builder, return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // Resume block - when resumed, continue execution here
+  LLVMPositionBuilderAtEnd(builder, resume_bb);
+
+  // Increment yield count if we have a context
+  if (coro_ctx) {
+    coro_ctx->yield_count++;
+  }
+
+  return resume_bb;
+}
+
+// ============================================================================
+// Helper: Final Suspend
+// ============================================================================
+
+void coro_emit_final_suspend(JITLangCtx *ctx, LLVMModuleRef module,
+                             LLVMBuilderRef builder, LLVMValueRef handle,
+                             LLVMValueRef function,
+                             LLVMBasicBlockRef cleanup_bb,
+                             LLVMBasicBlockRef suspend_bb) {
+  // Save state before final suspend
+  LLVMValueRef final_save = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "final.save");
+
+  // Final suspend (true = FINAL)
+  LLVMValueRef final_suspend = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){final_save, LLVMConstInt(LLVMInt1Type(), 1, 0)}, 2,
+      "final.suspend");
+
+  // Switch on final suspend result
+  LLVMBasicBlockRef final_return_bb =
+      LLVMAppendBasicBlock(function, "final.return");
+  LLVMValueRef final_switch =
+      LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
+  LLVMAddCase(final_switch, LLVMConstInt(LLVMInt8Type(), 0, 0),
+              final_return_bb);
+  LLVMAddCase(final_switch, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, final_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+}
+
+// ============================================================================
+// Helper: Cleanup and Suspend
+// ============================================================================
+
+void coro_emit_cleanup_and_suspend(JITLangCtx *ctx, LLVMModuleRef module,
+                                   LLVMBuilderRef builder, LLVMValueRef coro_id,
+                                   LLVMValueRef handle,
+                                   LLVMBasicBlockRef cleanup_bb,
+                                   LLVMBasicBlockRef suspend_bb) {
+  // Cleanup block
+  LLVMPositionBuilderAtEnd(builder, cleanup_bb);
+
+  // Free the coroutine frame
+  LLVMValueRef mem = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_free_intrinsic(module)),
+      get_coro_free_intrinsic(module), (LLVMValueRef[]){coro_id, handle}, 2,
+      "coro.free");
+
+  LLVMBuildFree(builder, mem);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // Suspend block - return just the handle
+  LLVMPositionBuilderAtEnd(builder, suspend_bb);
+
+  LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
+      get_coro_end_intrinsic(module),
+      (LLVMValueRef[]){handle, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2, "");
+
+  LLVMBuildRet(builder, handle);
+}
+
+// ============================================================================
+// Helper: Yield-From Loop
+// ============================================================================
+
+LLVMBasicBlockRef coro_emit_yield_from_loop(
+    JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder,
+    LLVMValueRef wrapper_handle, LLVMValueRef inner_handle,
+    LLVMValueRef promise_alloca, LLVMTypeRef yield_type,
+    LLVMBasicBlockRef cleanup_bb, LLVMBasicBlockRef suspend_bb,
+    const char *label_prefix) {
+
+  // Get current function for creating blocks
+  LLVMBasicBlockRef current_bb = LLVMGetInsertBlock(builder);
+  LLVMValueRef current_fn = LLVMGetBasicBlockParent(current_bb);
+
+  // Create blocks for the yield-from loop
+  char block_name[128];
+
+  snprintf(block_name, sizeof(block_name), "%s.check", label_prefix);
+  LLVMBasicBlockRef loop_check_bb =
+      LLVMAppendBasicBlock(current_fn, block_name);
+
+  snprintf(block_name, sizeof(block_name), "%s.body", label_prefix);
+  LLVMBasicBlockRef loop_body_bb = LLVMAppendBasicBlock(current_fn, block_name);
+
+  snprintf(block_name, sizeof(block_name), "%s.resume", label_prefix);
+  LLVMBasicBlockRef loop_resume_bb =
+      LLVMAppendBasicBlock(current_fn, block_name);
+
+  snprintf(block_name, sizeof(block_name), "%s.exit", label_prefix);
+  LLVMBasicBlockRef loop_exit_bb = LLVMAppendBasicBlock(current_fn, block_name);
+
+  // Branch to loop check
+  LLVMBuildBr(builder, loop_check_bb);
+
+  // === LOOP CHECK: Is inner coroutine done? ===
+  LLVMPositionBuilderAtEnd(builder, loop_check_bb);
+  LLVMValueRef is_done_before = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle}, 1,
+      "inner.is_done_before");
+  LLVMBuildCondBr(builder, is_done_before, loop_exit_bb, loop_body_bb);
+
+  // === LOOP BODY: Resume inner and read value ===
+  LLVMPositionBuilderAtEnd(builder, loop_body_bb);
+
+  // Resume inner coroutine
+  LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
+      get_coro_resume_intrinsic(module), (LLVMValueRef[]){inner_handle}, 1, "");
+
+  // Check if done after resume
+  LLVMValueRef is_done_after = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle}, 1,
+      "inner.is_done_after");
+  LLVMBuildCondBr(builder, is_done_after, loop_exit_bb, loop_body_bb);
+
+  // If not done, read promise value from inner coroutine
+  LLVMValueRef promise_ptr = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),
+      get_coro_promise_intrinsic(module),
+      (LLVMValueRef[]){inner_handle, LLVMConstInt(LLVMInt32Type(), 0, 0),
+                       LLVMConstInt(LLVMInt1Type(), 0, 0)},
+      3, "inner.promise.raw");
+
+  LLVMValueRef inner_promise_type_ptr =
+      LLVMBuildBitCast(builder, promise_ptr, LLVMPointerType(yield_type, 0),
+                       "inner.promise.typed");
+  LLVMValueRef inner_value = LLVMBuildLoad2(
+      builder, yield_type, inner_promise_type_ptr, "inner.value");
+
+  // Store to our promise
+  LLVMBuildStore(builder, inner_value, promise_alloca);
+
+  // Suspend (yield this value to our caller)
+  LLVMValueRef save_token = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){wrapper_handle}, 1,
+      "coro.save");
+
+  LLVMValueRef suspend_result = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){save_token, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2,
+      "coro.suspend");
+
+  // Switch on suspend result
+  snprintf(block_name, sizeof(block_name), "%s.suspend_return", label_prefix);
+  LLVMBasicBlockRef suspend_return_bb =
+      LLVMAppendBasicBlock(current_fn, block_name);
+
+  LLVMValueRef switch_inst =
+      LLVMBuildSwitch(builder, suspend_result, suspend_return_bb, 2);
+  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 0, 0), loop_resume_bb);
+  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  // Suspend return - return to caller
+  LLVMPositionBuilderAtEnd(builder, suspend_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // Resume block - when we're resumed, loop back to check for more values
+  LLVMPositionBuilderAtEnd(builder, loop_resume_bb);
+  LLVMBuildBr(builder, loop_check_bb);
+
+  // === LOOP EXIT: Inner exhausted, continue outer ===
+  LLVMPositionBuilderAtEnd(builder, loop_exit_bb);
+
+  return loop_exit_bb;
 }
