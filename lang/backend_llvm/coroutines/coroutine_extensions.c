@@ -50,8 +50,15 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // === ENTRY BLOCK ===
   LLVMPositionBuilderAtEnd(builder, entry_bb);
 
+  LLVMTypeRef promise_type =
+      LLVMStructType((LLVMTypeRef[]){llvm_yield_type, LLVMInt1Type()}, 2, 0);
   LLVMValueRef promise_alloca =
-      LLVMBuildAlloca(builder, llvm_yield_type, "promise");
+      LLVMBuildAlloca(builder, promise_type, "promise");
+
+  // Initialize is_done flag to false
+  LLVMValueRef is_done_gep = LLVMBuildStructGEP2(
+      builder, promise_type, promise_alloca, 1, "is_done_ptr");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_done_gep);
 
   LLVMValueRef id = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
@@ -261,8 +268,16 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, entry_bb);
 
   // Promise stores output type U
+  LLVMTypeRef promise_type =
+      LLVMStructType((LLVMTypeRef[]){llvm_output_type, LLVMInt1Type()}, 2, 0);
+
   LLVMValueRef promise_alloca =
-      LLVMBuildAlloca(builder, llvm_output_type, "promise");
+      LLVMBuildAlloca(builder, promise_type, "promise");
+
+  // Initialize is_done flag to false
+  LLVMValueRef is_done_gep = LLVMBuildStructGEP2(
+      builder, promise_type, promise_alloca, 1, "is_done_ptr");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_done_gep);
 
   LLVMValueRef id = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
@@ -469,10 +484,26 @@ LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
   LLVMValueRef handle =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-  LLVMValueRef coro_destroy = get_coro_destroy_intrinsic(module);
 
-  LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_destroy),
-                 coro_destroy, (LLVMValueRef[]){handle}, 1, "");
+  LLVMValueRef promise_ptr_raw = GET_PROMISE_PTR_RAW(handle);
+  Type *cor_type = ast->type;
+  Type *yield_type = cor_type->data.T_CONS.args[0];
+  LLVMTypeRef llvm_yield_type = type_to_llvm_type(yield_type, ctx, module);
+
+  LLVMTypeRef full_prom_type =
+      LLVMStructType((LLVMTypeRef[]){llvm_yield_type, LLVMInt1Type()}, 2, 0);
+
+  LLVMValueRef full_prom_ptr = LLVMBuildBitCast(
+      builder, promise_ptr_raw, LLVMPointerType(full_prom_type, 0), "");
+
+  LLVMValueRef is_done_flag_ptr = LLVMBuildStructGEP2(
+      builder, full_prom_type, full_prom_ptr, 1, "get_is_done_flag");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 1, 0), is_done_flag_ptr);
+
+  // LLVMValueRef coro_destroy = get_coro_destroy_intrinsic(module);
+  //
+  // LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_destroy), coro_destroy,
+  //                (LLVMValueRef[]){handle}, 1, "");
 
   // cor_stop returns unit/void
   return LLVMGetUndef(LLVMVoidType());
@@ -519,8 +550,15 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // === ENTRY BLOCK ===
   LLVMPositionBuilderAtEnd(builder, entry_bb);
 
+  LLVMTypeRef promise_type =
+      LLVMStructType((LLVMTypeRef[]){llvm_elem_type, LLVMInt1Type()}, 2, 0);
   LLVMValueRef promise_alloca =
-      LLVMBuildAlloca(builder, llvm_elem_type, "promise");
+      LLVMBuildAlloca(builder, promise_type, "promise");
+
+  // Initialize is_done flag to false
+  LLVMValueRef is_done_gep = LLVMBuildStructGEP2(
+      builder, promise_type, promise_alloca, 1, "is_done_ptr");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_done_gep);
 
   // Get the actual node type {T, void*}
   LLVMTypeRef node_type = LLVMStructType(
@@ -736,10 +774,19 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // === ENTRY BLOCK ===
   LLVMPositionBuilderAtEnd(builder, entry_bb);
 
+  LLVMTypeRef promise_struct_type =
+      LLVMStructType((LLVMTypeRef[]){llvm_elem_type, LLVMInt1Type()}, 2, 0);
   LLVMValueRef promise_alloca =
-      LLVMBuildAlloca(builder, llvm_elem_type, "promise");
+      LLVMBuildAlloca(builder, promise_struct_type, "promise");
+
+  // Initialize is_done flag to false
+  LLVMValueRef is_done_gep = LLVMBuildStructGEP2(
+      builder, promise_struct_type, promise_alloca, 1, "is_done_ptr");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_done_gep);
+
   LLVMValueRef array_alloca =
       LLVMBuildAlloca(builder, llvm_array_type, "array.alloca");
+
   LLVMValueRef counter_alloca =
       LLVMBuildAlloca(builder, LLVMInt32Type(), "counter");
   LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0), counter_alloca);

@@ -194,14 +194,6 @@ LLVMValueRef get_coro_destroy_intrinsic(LLVMModuleRef module) {
 //
 #define GET_STRUCTURED_PROMISE(yield_type) yield_type
 
-#define GET_PROMISE_PTR_RAW(handle)                                            \
-  LLVMBuildCall2(builder,                                                      \
-                 LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),   \
-                 get_coro_promise_intrinsic(module),                           \
-                 (LLVMValueRef[]){handle, LLVMConstInt(LLVMInt32Type(), 0, 0), \
-                                  LLVMConstInt(LLVMInt1Type(), 0, 0)},         \
-                 3, "promise.raw");
-
 static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
                                              Type *expected_fn_type, Ast *ast,
                                              JITLangCtx *ctx,
@@ -651,17 +643,24 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMPositionBuilderAtEnd(builder, entry_bb);
 
-  LLVMTypeRef prom_struct_type = llvm_yield_type;
+  // LLVMTypeRef prom_struct_type = llvm_yield_type;
+  LLVMTypeRef prom_struct_type =
+      LLVMStructType((LLVMTypeRef[]){llvm_yield_type, LLVMInt1Type()}, 2, 0);
 
-  LLVMValueRef frame_alloca =
-      LLVMBuildAlloca(builder, llvm_yield_type, "promise");
+  LLVMValueRef promise_alloca =
+      LLVMBuildAlloca(builder, prom_struct_type, "promise");
+
+  // Initialize is_done flag to false
+  LLVMValueRef is_done_gep = LLVMBuildStructGEP2(
+      builder, prom_struct_type, promise_alloca, 1, "is_done_ptr");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_done_gep);
 
   LLVMValueRef get_coro_id = get_coro_id_intrinsic(module);
   LLVMValueRef id =
       LLVMBuildCall2(builder, LLVMGlobalGetValueType(get_coro_id), get_coro_id,
                      (LLVMValueRef[]){
                          LLVMConstInt(LLVMInt32Type(), 0, 0), // align = 0
-                         frame_alloca, // promise (owned by coroutine)
+                         promise_alloca, // promise (owned by coroutine)
                          LLVMConstNull(GENERIC_PTR), // coroaddr
                          LLVMConstNull(GENERIC_PTR)  // fnaddr
                      },
@@ -745,7 +744,7 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
 
   CoroutineCtx coro_ctx = {0}; // Zero-initialize all fields
   coro_ctx.coro_id = id;
-  coro_ctx.promise_alloca = frame_alloca;   // Allocated above
+  coro_ctx.promise_alloca = promise_alloca; // Allocated above
   coro_ctx.promise_type = prom_struct_type; // Raw T type
   coro_ctx.yield_type = yield_type;
   coro_ctx.llvm_yield_type = llvm_yield_type; // Raw T type
@@ -805,10 +804,26 @@ LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBasicBlockRef resume_bb = LLVMAppendBasicBlock(current_fn, "coro.resume");
   LLVMBasicBlockRef merge_bb = LLVMAppendBasicBlock(current_fn, "coro.merge");
 
+  // Signature: i8* @llvm.coro.promise(i8* handle, i32 align, i1 from_promise)
+  LLVMTypeRef full_prom_type =
+      LLVMStructType((LLVMTypeRef[]){llvm_yield_type, LLVMInt1Type()}, 2, 0);
+
+  LLVMValueRef promise_ptr_raw = GET_PROMISE_PTR_RAW(handle);
+
   // 1. Check if coroutine is done
-  LLVMValueRef is_done = LLVMBuildCall2(
-      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
-      get_coro_done_intrinsic(module), (LLVMValueRef[]){handle}, 1, "is_done");
+  LLVMValueRef full_prom_ptr = LLVMBuildBitCast(
+      builder, promise_ptr_raw, LLVMPointerType(full_prom_type, 0), "");
+
+  LLVMValueRef is_done_flag_ptr = LLVMBuildStructGEP2(
+      builder, full_prom_type, full_prom_ptr, 1, "get_is_done_flag");
+  LLVMValueRef is_done_flag =
+      LLVMBuildLoad2(builder, LLVMInt1Type(), is_done_flag_ptr, "");
+
+  LLVMValueRef coro_done = get_coro_done_intrinsic(module);
+  LLVMValueRef is_done =
+      LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_done), coro_done,
+                     (LLVMValueRef[]){handle}, 1, "is_done");
+  is_done = LLVMBuildOr(builder, is_done_flag, is_done, "");
 
   LLVMBuildCondBr(builder, is_done, done_bb, resume_bb);
 
@@ -821,9 +836,9 @@ LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, resume_bb);
 
   // Resume the coroutine
-  LLVMBuildCall2(
-      builder, LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
-      get_coro_resume_intrinsic(module), (LLVMValueRef[]){handle}, 1, "");
+  LLVMValueRef coro_resume = get_coro_resume_intrinsic(module);
+  LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_resume), coro_resume,
+                 (LLVMValueRef[]){handle}, 1, "");
 
   // Check AGAIN if done (might have hit final suspend during resume)
   LLVMBasicBlockRef after_resume_done_bb =
@@ -831,10 +846,9 @@ LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBasicBlockRef after_resume_not_done_bb =
       LLVMAppendBasicBlock(current_fn, "coro.after_resume_not_done");
 
-  LLVMValueRef is_done_after_resume = LLVMBuildCall2(
-      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
-      get_coro_done_intrinsic(module), (LLVMValueRef[]){handle}, 1,
-      "is_done_after_resume");
+  LLVMValueRef is_done_after_resume =
+      LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_done), coro_done,
+                     (LLVMValueRef[]){handle}, 1, "is_done_after_resume");
 
   LLVMBuildCondBr(builder, is_done_after_resume, after_resume_done_bb,
                   after_resume_not_done_bb);
@@ -849,7 +863,6 @@ LLVMValueRef coro_resume(JITSymbol *sym, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Get promise pointer using coro.promise intrinsic
   // Signature: i8* @llvm.coro.promise(i8* handle, i32 align, i1 from_promise)
-  LLVMValueRef promise_ptr_raw = GET_PROMISE_PTR_RAW(handle);
   // LLVMBuildCall2(
   //     builder, LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),
   //     get_coro_promise_intrinsic(module),

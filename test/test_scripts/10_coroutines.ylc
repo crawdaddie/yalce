@@ -203,6 +203,22 @@ let test_cor_loop = fn () ->
 
 ;;
 
+
+let test_chaining = fn () ->
+  let (+>) = fn a b -> yield a; yield b;;
+  let z = ([ 1,2,3 ] |> iter_of_list)
+    +> ([| 6,5,4 |] |> iter_of_array |> cor_loop);
+     z () == Some 1
+  && z () == Some 2
+  && z () == Some 3
+  && z () == Some 6
+  && z () == Some 5 
+  && z () == Some 4 
+  && z () == Some 6
+  && z () == Some 5
+
+;;
+
 let test_cor_map = fn () ->
   let c = fn () -> yield 1; yield 2; yield 3;;
   let x = c () |> cor_map ((*) 2.) in 
@@ -228,20 +244,5 @@ let test_cor_loop_and_map = fn () ->
   && (let xx = x () in let yy = y () in xx == yy && xx == Some 2)
   && (let xx = x () in let yy = y () in xx == yy && xx == Some 4)
   && (let xx = x () in let yy = y () in xx == yy && xx == Some 6)
-
-;;
-
-let test_chaining = fn () ->
-  let (+>) = fn a b -> yield a; yield b;;
-  let z = ([ 1,2,3 ] |> iter_of_list)
-    +> ([| 6,5,4 |] |> iter_of_array |> cor_loop);
-     z () == Some 1
-  && z () == Some 2
-  && z () == Some 3
-  && z () == Some 6
-  && z () == Some 5 
-  && z () == Some 4 
-  && z () == Some 6
-  && z () == Some 5
 
 ;;

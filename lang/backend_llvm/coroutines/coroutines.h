@@ -220,4 +220,11 @@ LLVMBasicBlockRef coro_emit_yield_from_loop(
     const char *label_prefix // "loop", "map", etc.
 );
 
+#define GET_PROMISE_PTR_RAW(handle)                                            \
+  LLVMBuildCall2(builder,                                                      \
+                 LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),   \
+                 get_coro_promise_intrinsic(module),                           \
+                 (LLVMValueRef[]){handle, LLVMConstInt(LLVMInt32Type(), 0, 0), \
+                                  LLVMConstInt(LLVMInt1Type(), 0, 0)},         \
+                 3, "promise.raw");
 #endif
