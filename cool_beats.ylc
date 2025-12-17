@@ -159,6 +159,7 @@ defer_quant (q * 1) (fn t ->
   |> cor_loop
   |> cor_map ((*) (q * 0.25))
   |> cor_map (fn d -> Kick.trig (); d)
+
   |> Kick.set_pattern t
   ;
   #

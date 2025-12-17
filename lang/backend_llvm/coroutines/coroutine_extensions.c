@@ -962,8 +962,8 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Ast *schedule_event_ast = ast->data.AST_APPLICATION.args + 1;
   Ast *cor_ast = ast->data.AST_APPLICATION.args + 2;
 
-  LLVMValueRef handle = codegen(cor_ast, ctx, module, builder);
-  if (!handle) {
+  LLVMValueRef outer_handle = codegen(cor_ast, ctx, module, builder);
+  if (!outer_handle) {
     return NULL;
   }
 
@@ -1008,16 +1008,21 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef yield_type = LLVMDoubleType();
 
   LLVMValueRef resume_result =
-      codegen_handle_resume(handle, yield_type, ctx, module, builder);
+      codegen_handle_resume(_handle, yield_type, ctx, module, builder);
 
-  LLVMValueRef is_done = coro_is_done(handle, yield_type, module, builder);
+  LLVMValueRef result_tag =
+      LLVMBuildExtractValue(builder, resume_result, 0, "tag");
+
+  LLVMValueRef is_done =
+      LLVMBuildICmp(builder, LLVMIntEQ, result_tag,
+                    LLVMConstInt(LLVMInt8Type(), 1, 0), "tag_eq_1");
 
   LLVMBuildCondBr(builder, is_done, finished, not_finished);
 
   // coroutine not finished - take yielded double and schedule next to happen at
   // u64ts + yielded
   LLVMPositionBuilderAtEnd(builder, not_finished);
-  LLVMValueRef promise_ptr_raw = GET_PROMISE_PTR_RAW(handle);
+  LLVMValueRef promise_ptr_raw = GET_PROMISE_PTR_RAW(_handle);
   LLVMValueRef yield_ptr = LLVMBuildBitCast(
       builder, promise_ptr_raw, LLVMPointerType(yield_type, 0), "promise.ptr");
 
@@ -1031,7 +1036,7 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                          _u64ts,
                          yielded_value,
                          func,
-                         handle,
+                         _handle,
                      },
                      4, "schedule_next");
   LLVMBuildRetVoid(builder);
@@ -1043,15 +1048,18 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
+  LLVMDumpValue(func);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
   LLVMBuildCall2(builder, schedule_event_type, schedule_event,
                  (LLVMValueRef[]){
                      u64ts,
                      LLVMConstReal(LLVMDoubleType(), 0.),
                      func,
-                     handle,
+                     outer_handle,
                  },
                  4, "call.schedule_event.now");
-  return handle;
+  return outer_handle;
 }
 // static LLVMValueRef __build_scheduled_cor_wrapper(LLVMTypeRef promise_type,
 //                                                   LLVMValueRef scheduler,
