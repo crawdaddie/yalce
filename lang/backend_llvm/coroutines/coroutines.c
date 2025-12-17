@@ -806,8 +806,8 @@ LLVMValueRef coro_is_done(LLVMValueRef handle, LLVMTypeRef yield_type,
   return is_done;
 }
 
-LLVMValueRef codegen_coro_resume(JITSymbol *sym, JITLangCtx *ctx,
-                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+LLVMValueRef coro_symbol_resume(JITSymbol *sym, JITLangCtx *ctx,
+                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
   LLVMValueRef handle = sym->val;
 
