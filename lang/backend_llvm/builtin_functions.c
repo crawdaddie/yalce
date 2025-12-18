@@ -1593,6 +1593,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("play_routine", &play_routine_scheme, PlayRoutineHandler);
   GENERIC_FN_SYMBOL("cor_current", &cor_current_scheme, CurrentCorHandler);
   GENERIC_FN_SYMBOL("cor_try_opt", &cor_try_opt_scheme, CorUnwrapOrEndHandler);
+  // GENERIC_FN_SYMBOL("null_coroutine", &null_coroutine,
+  //                   codegen_dummy_coroutine_ref);
 
   GENERIC_FN_SYMBOL("asbytes", &asbytes_scheme, AsBytesHandler);
 

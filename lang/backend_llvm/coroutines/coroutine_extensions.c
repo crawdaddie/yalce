@@ -483,9 +483,53 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
-  LLVMValueRef handle =
+  LLVMValueRef handle_raw =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
+  LLVMBasicBlockRef current_bb = LLVMGetInsertBlock(builder);
+  LLVMValueRef current_fn = LLVMGetBasicBlockParent(current_bb);
+
+  LLVMBasicBlockRef check_resume_bb =
+      LLVMAppendBasicBlock(current_fn, "check_resume");
+  LLVMBasicBlockRef set_flag_bb =
+      LLVMAppendBasicBlock(current_fn, "set_done_flag");
+  LLVMBasicBlockRef done_bb = LLVMAppendBasicBlock(current_fn, "cor_stop_done");
+
+  // Check if the handle is an integer or pointer type
+  LLVMTypeRef handle_type = LLVMTypeOf(handle_raw);
+  LLVMTypeKind type_kind = LLVMGetTypeKind(handle_type);
+
+  LLVMValueRef handle;
+  LLVMValueRef is_null_or_zero;
+
+  if (type_kind == LLVMIntegerTypeKind) {
+    // Handle is an integer (e.g., i64 from Uint64 0)
+    // Check if it's 0
+    is_null_or_zero = LLVMBuildICmp(builder, LLVMIntEQ, handle_raw,
+                                    LLVMConstInt(handle_type, 0, 0), "is_zero");
+    // Cast to pointer for further use
+    handle = LLVMBuildIntToPtr(builder, handle_raw, GENERIC_PTR, "handle_ptr");
+  } else {
+    // Handle is already a pointer type
+    handle = handle_raw;
+    is_null_or_zero = LLVMBuildIsNull(builder, handle, "handle_is_null");
+  }
+
+  // If handle is null/zero, skip to done
+  LLVMBuildCondBr(builder, is_null_or_zero, done_bb, check_resume_bb);
+
+  // Check if resume function pointer is null
+  LLVMPositionBuilderAtEnd(builder, check_resume_bb);
+  LLVMValueRef resume_fn_ptr =
+      LLVMBuildLoad2(builder, GENERIC_PTR, handle, "resume_fn");
+  LLVMValueRef resume_is_null =
+      LLVMBuildIsNull(builder, resume_fn_ptr, "resume_is_null");
+
+  // If resume is null, skip to done, otherwise set the flag
+  LLVMBuildCondBr(builder, resume_is_null, done_bb, set_flag_bb);
+
+  // Set the is_done flag
+  LLVMPositionBuilderAtEnd(builder, set_flag_bb);
   LLVMValueRef promise_ptr_raw = GET_PROMISE_PTR_RAW(handle);
   Type *cor_type = ast->type;
   Type *yield_type = cor_type->data.T_CONS.args[0];
@@ -500,6 +544,11 @@ LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef is_done_flag_ptr = LLVMBuildStructGEP2(
       builder, full_prom_type, full_prom_ptr, 1, "get_is_done_flag");
   LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 1, 0), is_done_flag_ptr);
+
+  LLVMBuildBr(builder, done_bb);
+
+  // Done
+  LLVMPositionBuilderAtEnd(builder, done_bb);
 
   // LLVMValueRef coro_destroy = get_coro_destroy_intrinsic(module);
   //
@@ -1029,6 +1078,8 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // Load the yielded value
   LLVMValueRef yielded_value =
       LLVMBuildLoad2(builder, yield_type, yield_ptr, "yielded");
+
+  INSERT_PRINTF(1, "yielded val: %f\n", yielded_value);
 
   LLVMValueRef scheduler_call =
       LLVMBuildCall2(builder, schedule_event_type, schedule_event,

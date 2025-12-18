@@ -24,4 +24,8 @@ LLVMValueRef CurrentCorHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder);
+
+LLVMValueRef codegen_dummy_coroutine_ref(Ast *ast, JITLangCtx *ctx,
+                                         LLVMModuleRef module,
+                                         LLVMBuilderRef builder);
 #endif

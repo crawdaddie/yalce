@@ -99,6 +99,7 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
     //                head->output.layout, head->output.buf, 1,
     //                frame_count - head->frame_offset);
     // } else
+    printf("perform graph %d %d\n", frame_count, head->output.layout);
     if (head->write_to_output) {
       write_to_dac(layout, dac_buf + (head->frame_offset * layout),
                    head->output.layout, head->output.buf, output_num,

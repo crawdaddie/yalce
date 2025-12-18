@@ -247,7 +247,16 @@ static void write_callback(struct SoundIoOutStream *outstream,
 
     frames_left -= frame_count;
 
-    atomic_fetch_add(&global_sample_position, frame_count);
+    static int debug_counter = 0;
+    if (debug_counter++ % 100 == 0) {
+      uint64_t before = atomic_load(&global_sample_position);
+      atomic_fetch_add(&global_sample_position, frame_count);
+      uint64_t after = atomic_load(&global_sample_position);
+      // fprintf(stderr, "Audio callback: frame_count=%d, pos %llu -> %llu\n",
+      //         frame_count, before, after);
+    } else {
+      atomic_fetch_add(&global_sample_position, frame_count);
+    }
     if (frames_left <= 0)
       break;
   }
@@ -265,6 +274,7 @@ struct SoundIoDevice *get_input_device(struct SoundIo *soundio,
 
     for (int i = 0; i < soundio_input_device_count(soundio); i += 1) {
       struct SoundIoDevice *device = soundio_get_input_device(soundio, i);
+      // printf("nae: %s %s\n", device->name, preferred_input_device_name);
       if (strcmp(device->name, preferred_input_device_name) == 0) {
         return device;
       }
@@ -310,7 +320,17 @@ struct SoundIoDevice *get_output_device(struct SoundIo *soundio,
   bool out_raw = false;
 
   int default_out_device_index = soundio_default_output_device_index(soundio);
-  // int default_out_device_index = 1;
+
+  // // Prefer Scarlett if available
+  // for (int i = 0; i < soundio_output_device_count(soundio); i++) {
+  //   struct SoundIoDevice *device = soundio_get_output_device(soundio, i);
+  //   if (strstr(device->name, "Scarlett") != NULL) {
+  //     default_out_device_index = i;
+  //     soundio_device_unref(device);
+  //     break;
+  //   }
+  //   soundio_device_unref(device);
+  // }
 
   if (default_out_device_index < 0)
     panic("no output device found");
@@ -481,6 +501,7 @@ int start_audio() {
   outstream->layout = out_layout;
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;
+  outstream->software_latency = 0.0107; // 10ms latency for low-latency audio
 
   set_out_format(out_device, outstream, &write_sample);
 
@@ -532,11 +553,13 @@ int start_audio() {
 
   fprintf(stderr, "\nStarting streams...\n");
 
-  if (instream && (err = soundio_instream_start(instream)))
+  if (instream && (err = soundio_instream_start(instream))) {
     panic("unable to start input device: %s", soundio_strerror(err));
+  }
 
-  if ((err = soundio_outstream_start(outstream)))
+  if ((err = soundio_outstream_start(outstream))) {
     panic("unable to start output device: %s", soundio_strerror(err));
+  }
 
   ctx.sample_rate = outstream->sample_rate;
   ctx.spf = 1.0 / outstream->sample_rate;
