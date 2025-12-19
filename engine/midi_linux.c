@@ -1,3 +1,4 @@
+#include "common.h"
 #ifndef __APPLE__
 #include "midi.h"
 #include <stdio.h>
@@ -305,7 +306,7 @@ int send_note_off_ts(midi_endpoint_t destination, uint8_t channel, uint8_t note,
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_source(&ev, output_port_id);
   snd_seq_ev_set_subs(&ev);
-  snd_seq_ev_schedule_tick(&ev, SND_SEQ_QUEUE_DIRECT, 0, ts - 512);
+  snd_seq_ev_schedule_tick(&ev, SND_SEQ_QUEUE_DIRECT, 0, ts - BUF_SIZE);
   snd_seq_ev_set_noteoff(&ev, channel, note, velocity);
 
   int result = snd_seq_event_output(seq_handle, &ev);

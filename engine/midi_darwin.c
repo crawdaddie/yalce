@@ -324,7 +324,7 @@ int send_note_on_ts(midi_endpoint_t destination, char channel, char note,
 
 int send_note_off_ts(midi_endpoint_t destination, uint8_t channel, uint8_t note,
                      uint8_t velocity, uint64_t ts) {
-  MIDITimeStamp t = sample_to_midi_timestamp(ts - 512);
+  MIDITimeStamp t = sample_to_midi_timestamp(ts - BUF_SIZE);
   Byte buffer[1024];
   MIDIPacketList *packet_list = (MIDIPacketList *)buffer;
   MIDIPacket *current_packet = MIDIPacketListInit(packet_list);
@@ -339,7 +339,7 @@ int send_note_off_ts(midi_endpoint_t destination, uint8_t channel, uint8_t note,
 
 int send_note_on_dur_ts(midi_endpoint_t destination, char channel, char note,
                         char velocity, double dur, uint64_t ts) {
-  MIDITimeStamp t = sample_to_midi_timestamp(ts - 512);
+  MIDITimeStamp t = sample_to_midi_timestamp(ts - BUF_SIZE);
   Byte buffer[1024];
   MIDIPacketList *packetList = (MIDIPacketList *)buffer;
   MIDIPacket *currentPacket = MIDIPacketListInit(packetList);

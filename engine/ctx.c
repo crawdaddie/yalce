@@ -239,7 +239,7 @@ int process_msg_queue_pre(uint64_t current_tick, msg_queue *queue) {
   int num_moved = 0;
   while (read_ptr != queue->write_ptr) {
     msg = queue->buffer + read_ptr;
-    if (msg->tick - current_tick >= 512) {
+    if (msg->tick - current_tick >= BUF_SIZE) {
       // msg is too early
       // TODO: if msg->tick - current_tick > 512 - push message to write_ptr
       // printf("push msg to overflow queue\n");
@@ -266,7 +266,7 @@ void process_msg_queue_post(uint64_t current_tick, msg_queue *queue,
   scheduler_msg msg;
   while (consumed--) {
     msg = pop_msg(queue);
-    if (msg.tick - current_tick >= 512) {
+    if (msg.tick - current_tick >= BUF_SIZE) {
       // printf("msg post skipped\n");
       // print_msg(&msg);
       // skip

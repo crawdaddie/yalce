@@ -47,12 +47,14 @@ void write_to_dac(int dac_layout, double *dac_buf, int layout, double *buf,
   } else {
     while (nframes--) {
       for (int c = 0; c < dac_layout; c++) {
-        *(dac_buf + c) = *(buf + (c < layout ? c : 0));
+        *(dac_buf + c) = *(buf + ((c < layout) ? c : 0));
       }
       buf += layout;
       dac_buf += dac_layout;
     }
   }
+  // printf("nframes %d dac_buf_val: %f %f\n", nframes, *dac_buf, *(dac_buf +
+  // 1));
 }
 
 void __node_get_inputs_raw(Node *node, Node *inputs[]) {
@@ -99,7 +101,7 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
     //                head->output.layout, head->output.buf, 1,
     //                frame_count - head->frame_offset);
     // } else
-    printf("perform graph %d %d\n", frame_count, head->output.layout);
+    // printf("perform graph %d %d\n", frame_count, head->output.layout);
     if (head->write_to_output) {
       write_to_dac(layout, dac_buf + (head->frame_offset * layout),
                    head->output.layout, head->output.buf, output_num,
@@ -427,7 +429,8 @@ Node *play_node_offset(uint64_t tick, Node *s) {
   // add_to_dac(group);
 
   push_msg(&ctx.msg_queue,
-           (scheduler_msg){NODE_ADD, tick, {.NODE_ADD = {.target = s}}}, 512);
+           (scheduler_msg){NODE_ADD, tick, {.NODE_ADD = {.target = s}}},
+           BUF_SIZE);
 
   return s;
 }
@@ -442,7 +445,7 @@ Node *play_node_offset_in_group(uint64_t tick, Node *s, Node *group) {
   push_msg(&ctx.msg_queue,
            (scheduler_msg){
                NODE_ADD, tick, {.NODE_ADD = {.target = s, .group = group}}},
-           512);
+           BUF_SIZE);
 
   return s;
 }
@@ -461,7 +464,7 @@ void close_gate(close_payload *p, int offset) {
           NODE_SET_SCALAR,
           offset,
           {.NODE_SET_SCALAR = {.target = target, .input = input, .value = 0.}}},
-      512);
+      BUF_SIZE);
   free(p);
 }
 
@@ -475,7 +478,7 @@ NodeRef play_node_dur(uint64_t tick, double dur, int gate_in, NodeRef s) {
           NODE_SET_SCALAR,
           tick + dur * ctx_sample_rate(),
           {.NODE_SET_SCALAR = {.target = s, .input = gate_in, .value = 0.}}},
-      512);
+      BUF_SIZE);
 
   // close_payload *cp = malloc(sizeof(close_payload));
   // *cp = (close_payload){
@@ -499,7 +502,7 @@ NodeRef play_node_dur_in_group(uint64_t tick, double dur, int gate_in,
           NODE_SET_SCALAR,
           tick + dur * ctx_sample_rate(),
           {.NODE_SET_SCALAR = {.target = s, .input = gate_in, .value = 0.}}},
-      512);
+      BUF_SIZE);
 
   // close_payload *cp = malloc(sizeof(close_payload));
   // *cp = (close_payload){
@@ -524,7 +527,7 @@ NodeRef trigger_gate(uint64_t tick, double dur, int gate_in, NodeRef s) {
           NODE_SET_SCALAR,
           tick,
           {.NODE_SET_SCALAR = {.target = s, .input = gate_in, .value = 1.}}},
-      512);
+      BUF_SIZE);
 
   close_payload *cp = malloc(sizeof(close_payload));
   *cp = (close_payload){
@@ -631,7 +634,7 @@ NodeRef set_input_scalar(NodeRef node, int input, double value) {
            (scheduler_msg){NODE_SET_SCALAR,
                            get_frame_offset(),
                            {.NODE_SET_SCALAR = {node, input, value}}},
-           512);
+           BUF_SIZE);
   return node;
 }
 
@@ -640,7 +643,7 @@ NodeRef set_input_buf(int input, NodeRef buf, NodeRef node) {
            (scheduler_msg){NODE_SET_INPUT,
                            get_frame_offset(),
                            {.NODE_SET_INPUT = {node, input, buf}}},
-           512);
+           BUF_SIZE);
   return node;
 }
 
@@ -672,7 +675,7 @@ NodeRef set_input_scalar_offset(NodeRef node, int input, uint64_t tick,
            (scheduler_msg){NODE_SET_SCALAR,
                            tick,
                            {.NODE_SET_SCALAR = {node, input, value}}},
-           512);
+           BUF_SIZE);
   return node;
 }
 
@@ -680,7 +683,7 @@ NodeRef set_input_trig(NodeRef node, int input) {
   push_msg(&ctx.msg_queue,
            (scheduler_msg){
                NODE_SET_TRIG, get_tl_tick(), {.NODE_SET_TRIG = {node, input}}},
-           512);
+           BUF_SIZE);
   return node;
 }
 
@@ -688,7 +691,7 @@ NodeRef set_input_trig_offset(NodeRef node, int input, uint64_t tick) {
   push_msg(
       &ctx.msg_queue,
       (scheduler_msg){NODE_SET_TRIG, tick, {.NODE_SET_TRIG = {node, input}}},
-      512);
+      BUF_SIZE);
   return node;
 }
 

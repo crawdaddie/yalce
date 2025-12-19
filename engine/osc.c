@@ -116,6 +116,7 @@ void *sin_perform(Node *node, sin_state *state, Node *inputs[], int nframes,
     sample = (1.0 - frac) * a + (frac * b);
 
     for (int i = 0; i < out_layout; i++) {
+      // printf("sin_val %f\n", sample);
       *out = sample;
       out++;
     }
