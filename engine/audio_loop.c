@@ -247,16 +247,17 @@ static void write_callback(struct SoundIoOutStream *outstream,
 
     frames_left -= frame_count;
 
-    static int debug_counter = 0;
-    if (debug_counter++ % 100 == 0) {
-      uint64_t before = atomic_load(&global_sample_position);
-      atomic_fetch_add(&global_sample_position, frame_count);
-      uint64_t after = atomic_load(&global_sample_position);
-      // fprintf(stderr, "Audio callback: frame_count=%d, pos %llu -> %llu\n",
-      //         frame_count, before, after);
-    } else {
-      atomic_fetch_add(&global_sample_position, frame_count);
-    }
+    // static int debug_counter = 0;
+    // if (debug_counter++ % 100 == 0) {
+    //   uint64_t before = atomic_load(&global_sample_position);
+    //   atomic_fetch_add(&global_sample_position, frame_count);
+    //   uint64_t after = atomic_load(&global_sample_position);
+    //   // fprintf(stderr, "Audio callback: frame_count=%d, pos %llu ->
+    //   %llu\n",
+    //   //         frame_count, before, after);
+    // } else {
+    // }
+    atomic_fetch_add(&global_sample_position, frame_count);
     if (frames_left <= 0)
       break;
   }
@@ -501,7 +502,7 @@ int start_audio() {
   outstream->layout = out_layout;
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;
-  outstream->software_latency = 0.0107; // 10ms latency for low-latency audio
+  outstream->software_latency = 0.006;
 
   set_out_format(out_device, outstream, &write_sample);
 
@@ -560,7 +561,6 @@ int start_audio() {
   if ((err = soundio_outstream_start(outstream))) {
     panic("unable to start output device: %s", soundio_strerror(err));
   }
-
   ctx.sample_rate = outstream->sample_rate;
   ctx.spf = 1.0 / outstream->sample_rate;
 

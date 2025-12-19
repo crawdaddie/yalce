@@ -142,8 +142,6 @@ void process_scheduler_events(uint64_t current_sample) {
          scheduler_queue.events[0].tick <= current_sample) {
 
     SchedulerEvent event = pop_event(&scheduler_queue);
-    printf("Processing event: tick=%lu, current=%lu\n", event.tick,
-           current_sample); // ADD THIS
     if (event.userdata == NULL) {
 
       void (*cb)(uint64_t) = (void (*)(uint64_t))event.callback;
@@ -187,8 +185,6 @@ int scheduler_event_loop() {
 void *schedule_event(uint64_t now, double delay_seconds,
                      SchedulerCallback callback, void *userdata) {
 
-  printf("schedule event %llu %f %p\n", now, delay_seconds, userdata);
-
   if (userdata == NULL) {
     return userdata;
   }
@@ -203,7 +199,11 @@ void *schedule_event(uint64_t now, double delay_seconds,
 }
 
 void defer_quant(double quant, DeferQuantCallback callback) {
-  uint64_t quant_samps = quant * ctx_sample_rate();
+  double sr = ctx_sample_rate();
+  if (sr == 0) {
+    sr = 48000;
+  }
+  uint64_t quant_samps = quant * sr;
   uint64_t current_sample = get_current_sample();
 
   uint64_t offset_in_cycle = current_sample % quant_samps;

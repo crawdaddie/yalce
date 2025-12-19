@@ -4,8 +4,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __APPLE__
 // #define BUF_SIZE 512
+#endif
+#ifndef __APPLE__
 #define BUF_SIZE 128
+#endif
 #define PI M_PI
 #define EPSILON 2.220446e-16
 #define LAYOUT 2

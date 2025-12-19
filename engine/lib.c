@@ -128,6 +128,7 @@ static void write_null_to_output_buf(double *out, int nframes, int layout) {
 
 void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int frame_count,
                        double spf) {
+  // printf("frame count %d\n", frame_count);
 
   int consumed = process_msg_queue_pre(current_tick, &ctx->msg_queue);
   node_group_state graph = ctx->graph;

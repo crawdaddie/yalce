@@ -1079,8 +1079,6 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef yielded_value =
       LLVMBuildLoad2(builder, yield_type, yield_ptr, "yielded");
 
-  INSERT_PRINTF(1, "yielded val: %f\n", yielded_value);
-
   LLVMValueRef scheduler_call =
       LLVMBuildCall2(builder, schedule_event_type, schedule_event,
                      (LLVMValueRef[]){
