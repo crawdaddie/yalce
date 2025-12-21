@@ -502,7 +502,10 @@ int start_audio() {
   outstream->layout = out_layout;
   outstream->write_callback = write_callback;
   outstream->underflow_callback = underflow_callback;
+
+#ifndef __APPLE__
   outstream->software_latency = 0.006;
+#endif
 
   set_out_format(out_device, outstream, &write_sample);
 

@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #ifdef __APPLE__
-// #define BUF_SIZE 512
+#define BUF_SIZE 512
 #endif
 #ifndef __APPLE__
 #define BUF_SIZE 256
