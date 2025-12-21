@@ -248,38 +248,40 @@ LLVMValueRef test_list_cons_pattern(Ast *pattern, LLVMValueRef val,
 
   LLVMPositionBuilderAtEnd(builder, test_elements_block);
 
-  LLVMValueRef elements_test_result = _TRUE;
+  // Extract head and tail values but don't test patterns yet
+  LLVMValueRef head_val = ll_get_head_val(val, llvm_list_el_type, builder);
+  LLVMValueRef tail_val = ll_get_next(val, llvm_list_el_type, builder);
 
-  Ast *head_pattern = pattern->data.AST_APPLICATION.args;
-  LLVMValueRef tv = test_pattern(
-      head_pattern, ll_get_head_val(val, llvm_list_el_type, builder),
-      list_el_type, ctx, module, builder);
-
-  Ast *tail_pattern = pattern->data.AST_APPLICATION.args + 1;
-
-  LLVMValueRef tpv =
-      test_pattern(tail_pattern, ll_get_next(val, llvm_list_el_type, builder),
-                   val_type, ctx, module, builder);
-
+  LLVMBasicBlockRef test_elements_end = LLVMGetInsertBlock(builder);
   LLVMBuildBr(builder, merge_block);
 
   LLVMPositionBuilderAtEnd(builder, merge_block);
 
-  // Create phi to merge results
-  // If we came from the empty branch: result is false
-  // If we came from test_elements_block: result is elements_test_result
-  LLVMValueRef phi = LLVMBuildPhi(builder, LLVMInt1Type(), "list_cons_result");
-
+  // Create phi nodes for extracted values
   LLVMBasicBlockRef incoming_blocks[2];
-  LLVMValueRef incoming_values[2];
-
   incoming_blocks[0] = pre_branch_block;
-  incoming_values[0] = LLVMConstInt(LLVMInt1Type(), 0, 0);
+  incoming_blocks[1] = test_elements_end;
 
-  incoming_blocks[1] = test_elements_block;
-  incoming_values[1] = elements_test_result;
+  // Phi for head value
+  LLVMValueRef head_phi = LLVMBuildPhi(builder, llvm_list_el_type, "head_val");
+  LLVMValueRef head_values[2] = {LLVMGetUndef(llvm_list_el_type), head_val};
+  LLVMAddIncoming(head_phi, head_values, incoming_blocks, 2);
 
-  LLVMAddIncoming(phi, incoming_values, incoming_blocks, 2);
+  // Phi for tail value (same type as input list - pointer to node)
+  LLVMTypeRef list_ptr_type = LLVMTypeOf(val);
+  LLVMValueRef tail_phi = LLVMBuildPhi(builder, list_ptr_type, "tail_val");
+  LLVMValueRef tail_values[2] = {LLVMGetUndef(list_ptr_type), tail_val};
+  LLVMAddIncoming(tail_phi, tail_values, incoming_blocks, 2);
+
+  // Now test patterns using the phi values
+  Ast *head_pattern = pattern->data.AST_APPLICATION.args;
+  LLVMValueRef tv = test_pattern(head_pattern, head_phi, list_el_type, ctx,
+                                 module, builder);
+
+  Ast *tail_pattern = pattern->data.AST_APPLICATION.args + 1;
+  LLVMValueRef tpv =
+      test_pattern(tail_pattern, tail_phi, val_type, ctx, module, builder);
+
   return LLVMBuildAnd(builder, tv, tpv, "");
 }
 
