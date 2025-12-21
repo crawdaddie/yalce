@@ -7,13 +7,16 @@ let print_list = fn a: (List of T) ->
 ;;
 
 let fold = fn f: (R -> T -> R) res: (R) a: (List of T) ->
-  let res_ref = [| res |];
-  for v = iter a in (
-    let r = res_ref[0];
-    res_ref[0] := (f r v)  
-  );
-  res_ref[0]
+  match a with
+  | [] -> res
+  | x::rest -> fold f (f res x) rest
 ;;
+
+# let last = fn l ->
+#   match l with
+#   | [x] -> x
+#   | x::rest -> last rest
+# ;;
 
 
 let map = fn f l ->
@@ -44,3 +47,10 @@ let rev = fn l: (List of T) ->
 #   );
 #   res_ref[0]
 # ;;
+let test = module () ->
+  let test_sum_doubles = fold (+) 0. [1., 2., 3.] == 6.;
+  let test_sum_ints = fold (+) 0 [1, 2, 3] == 6
+  # ;
+
+  # let test_last = last [1, 2, 3 ] == 3
+;;

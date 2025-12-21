@@ -141,6 +141,12 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
                    JITLangCtx *ctx, JITLangCtx *fn_ctx, LLVMModuleRef module,
                    LLVMBuilderRef builder) {
+  if (param_ast->tag == AST_LET) {
+    // TODO: param which is a let binding should be lowered to a default value
+    // or closure object member
+    return bind_fn_param(param_val, param_type, param_ast->data.AST_LET.binding,
+                         ctx, fn_ctx, module, builder);
+  }
 
   if (param_type->kind == T_VAR) {
     param_type = resolve_type_in_env(param_type, ctx->env);

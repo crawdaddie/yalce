@@ -373,6 +373,13 @@ LLVMValueRef test_pattern(Ast *pattern,
 
     return test_result;
   }
+  case AST_LET: {
+    // TODO: let parameters in function bindings correspond to default params
+    // and should lower to closure object members
+    return test_pattern(pattern->data.AST_LET.binding, val, val_type, ctx,
+                        module, builder);
+    // return _FALSE;
+  }
 
   default: {
     fprintf(stderr, "Error: pattern type not supported\n");
