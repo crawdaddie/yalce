@@ -1,0 +1,63 @@
+import libs/patterns/PatternsBytecode;
+open byte_array;
+
+
+
+let rshift = extern fn Int -> Int -> Int;
+let lshift = extern fn Int -> Int -> Int;
+let bit_and = extern fn Int -> Int -> Int;
+let char_to_hex_string = extern fn Char -> String;
+
+
+import std/Arrays;
+let s = PatternsBytecode.parse "1 <7 8 9> c2 4 {80 200} 200";
+
+s |> PatternsBytecode.print_seq_helper true;
+print "\n";
+
+# let ltype_str = fn i ->
+#   match i with
+#   | 3 -> "List"
+#   | 4 -> "Choose"
+#   | 5 -> "Alt"
+# ;;
+#
+# let compile_bytecode = fn is_first seq ba ->
+#   match seq with
+#   | PatternsBytecode.SeqInt i -> (print `{i}, `; ba)
+#   | PatternsBytecode.SeqNum n -> (print `{n}, `; ba)
+#   | PatternsBytecode.SeqKey k -> (print `{k}, `; ba)
+#   | PatternsBytecode.SeqList (_, 0, []) -> (print "] "; ba)
+#   | PatternsBytecode.SeqList (t, len, x::rest) -> ( 
+#
+#     if is_first then (print `{ltype_str t} [({len}) `) else ();
+#
+#     ba
+#     |> compile_bytecode true x
+#     |> compile_bytecode false (PatternsBytecode.SeqList (t, (len - 1), rest))
+#   )
+#   | _ -> ba
+#   ;;
+#
+# compile_bytecode true s (ByteArray.create 32);
+#
+#
+# let encode_double_as_float_bytes = extern fn Double-> Ptr -> ();
+# let float_bytes_to_double = extern fn Ptr -> Double;
+#
+# let encode_int32_as_bytes = extern fn Int -> Ptr -> ();
+# let int32_bytes_to_int = extern fn Ptr -> Int;
+#
+# let double_to_float_bytes = fn d ->
+#   let b = [|'\0','\0','\0','\0',|];
+#   encode_double_as_float_bytes d (cstr b);
+#   b
+# ;;
+#
+# 3.14159 |> double_to_float_bytes |> Arrays.map char_to_hex_string |> Arrays.print_arr;
+#
+# let db = 3.14159 |> double_to_float_bytes ;
+# print `back to double: {cstr db |> float_bytes_to_double}`;
+#
+#
+#
