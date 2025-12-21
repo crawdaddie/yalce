@@ -40,6 +40,8 @@ LLVMValueRef sum_type_eq(Type *type, LLVMValueRef tuple1, LLVMValueRef tuple2,
                          JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder);
 
+LLVMValueRef _codegen_string(const char *chars, int length, JITLangCtx *ctx,
+                             LLVMModuleRef module, LLVMBuilderRef builder);
 bool type_contains_recursive_ref(Type *type, const char *target_name);
 #define OPTION_TAG_TYPE LLVMInt8Type()
 #endif

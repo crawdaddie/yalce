@@ -486,6 +486,19 @@ Type create_iter_of_list_scheme() {
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
+Type iter_cor_list_scheme;
+Type create_iter_cor_list_scheme() {
+  Type *a = tvar("a");
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+  vars_mem[0] = vlist_of_typevar(a);
+
+  Type *f = create_coroutine_instance_type(a);
+  f = type_fn(create_list_type_of_type(f), f);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
+}
+
 Type iter_of_array_scheme;
 Type create_iter_of_array_scheme() {
   Type *a = tvar("a");
@@ -722,6 +735,9 @@ void initialize_builtin_types() {
 
   iter_of_list_scheme = create_iter_of_list_scheme();
   add_builtin("iter_of_list", &iter_of_list_scheme);
+
+  iter_cor_list_scheme = create_iter_cor_list_scheme();
+  add_builtin("iter_cor_list", &iter_cor_list_scheme);
 
   iter_of_array_scheme = create_iter_of_array_scheme();
   add_builtin("iter_of_array", &iter_of_array_scheme);

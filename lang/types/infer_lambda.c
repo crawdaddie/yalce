@@ -419,8 +419,8 @@ Type *apply_substitutions_rec(Subst *subst, Type *t) {
 //            Γ ⊢ λ x₁ x₂ ... xₙ. e : α₁ → α₂ → ... → αₙ → τ
 //
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
-  printf("## LAMBDA????\n");
-  print_ast(ast);
+  // printf("## LAMBDA????\n");
+  // print_ast(ast);
   Ast *body = ast->data.AST_LAMBDA.body;
   int num_params = ast->data.AST_LAMBDA.len;
 

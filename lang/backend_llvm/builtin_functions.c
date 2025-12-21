@@ -1366,8 +1366,10 @@ LLVMValueRef SizeOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef TypeOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
-  // return NULLL
-  // print_type(ast->type);
+  char *type_str = type_to_string_dynamic(ast->data.AST_APPLICATION.args->type);
+  int len = strlen(type_str);
+
+  return _codegen_string(type_str, len, ctx, module, builder);
 }
 
 LLVMValueRef AsBytesHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -1589,6 +1591,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("cor_map", &cor_map_scheme, CorMapHandler);
   GENERIC_FN_SYMBOL("cor_stop", &cor_stop_scheme, CorStopHandler);
   GENERIC_FN_SYMBOL("iter_of_list", &iter_of_list_scheme, CorOfListHandler);
+  GENERIC_FN_SYMBOL("iter_cor_list", &iter_cor_list_scheme,
+                    CorOfCorListHandler);
   GENERIC_FN_SYMBOL("iter_of_array", &iter_of_array_scheme, CorOfArrayHandler);
   GENERIC_FN_SYMBOL("play_routine", &play_routine_scheme, PlayRoutineHandler);
   GENERIC_FN_SYMBOL("cor_current", &cor_current_scheme, CurrentCorHandler);
