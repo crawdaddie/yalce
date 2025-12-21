@@ -47,6 +47,7 @@ LANG_CXX += -std=c++17
 
 LANG_LD_FLAGS := -lm
 LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
+LANG_LD_FLAGS += -rdynamic
 
 LANG_CC += -DLLVM_BACKEND
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`

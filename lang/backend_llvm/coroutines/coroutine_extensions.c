@@ -1097,7 +1097,7 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
-  LLVMDumpValue(func);
+  // LLVMDumpValue(func);
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
   LLVMBuildCall2(builder, schedule_event_type, schedule_event,

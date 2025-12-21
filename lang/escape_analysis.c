@@ -271,17 +271,35 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
     Allocation *found_alloc = ctx_find_allocation(ctx, varname);
     return found_alloc;
   }
+  // if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
+  //   // Single statement - create a temporary AstList node
+  //   AstList *single_stmt = t_alloc(sizeof(AstList));
+  //   single_stmt->ast = ast->data.AST_LAMBDA.body;
+  //   single_stmt->next = NULL;
+  //   stmt_list = single_stmt;
+  //   len = 1;
+  // } else {
+  //   body_ast = ast->data.AST_LAMBDA.body;
+  //   stmt_list = body_ast->data.AST_BODY.stmts;
+  //   len = body_ast->data.AST_BODY.len;
+  // }
   case AST_MODULE: {
 
     Ast *body = ast->data.AST_LAMBDA.body;
+
     Ast *stmt;
 
     EACtx lambda_ctx = *ctx;
     lambda_ctx.allocations = NULL;
-    AST_LIST_ITER(body->data.AST_BODY.stmts, ({
-                    stmt = l->ast;
-                    ea(stmt, &lambda_ctx);
-                  }));
+    if (body->tag == AST_BODY) {
+      AST_LIST_ITER(body->data.AST_BODY.stmts, ({
+                      stmt = l->ast;
+                      ea(stmt, &lambda_ctx);
+                    }));
+    } else {
+
+      ea(body, &lambda_ctx);
+    }
   }
 
   default: {

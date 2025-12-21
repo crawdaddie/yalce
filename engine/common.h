@@ -8,7 +8,7 @@
 // #define BUF_SIZE 512
 #endif
 #ifndef __APPLE__
-#define BUF_SIZE 128
+#define BUF_SIZE 256
 #endif
 #define PI M_PI
 #define EPSILON 2.220446e-16

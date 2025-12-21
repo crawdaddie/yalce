@@ -1,6 +1,7 @@
 #include "./module.h"
 #include "function.h"
 #include "function_extern.h"
+#include "globals.h"
 #include "modules.h"
 #include "serde.h"
 #include "symbols.h"
@@ -269,6 +270,11 @@ LLVMValueRef codegen_module_access(Ast *record_ast, Type *record_type,
 
   if (sym->type == STYPE_LAZY_EXTERN_FUNCTION) {
     return instantiate_extern_fn_sym(sym, ctx, llvm_module_ref, builder);
+  }
+
+  if (sym->type == STYPE_TOP_LEVEL_VAR) {
+    const char *member_name = member->data.AST_IDENTIFIER.value;
+    return codegen_get_global(member_name, sym, llvm_module_ref, builder);
   }
 
   return sym->val;
