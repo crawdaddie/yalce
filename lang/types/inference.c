@@ -1094,6 +1094,7 @@ bool is_list_cons_operator(Ast *ast) {
 
 int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
                      TICtx *ctx) {
+
   switch (binding->tag) {
   case AST_INT:
   case AST_DOUBLE:
@@ -1321,6 +1322,10 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
     // }
 
     binding->type = from->type;
+    return 0;
+  }
+  case AST_LET: {
+    print_ast(binding);
     return 0;
   }
 

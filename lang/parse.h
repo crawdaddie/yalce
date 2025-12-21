@@ -358,6 +358,7 @@ Ast *ast_lambda(Ast *args, Ast *body);
 Ast *ast_void_lambda(Ast *body);
 Ast *ast_arg_list(Ast *arg_id, Ast *def);
 Ast *ast_arg_list_push(Ast *arg_list, Ast *arg_id, Ast *def);
+Ast *ast_arg_list_push_default(Ast *arg_id, Ast *def);
 Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
 Ast *parse_input(char *input, const char *dirname);
 Ast *parse_input_script(const char *filename);

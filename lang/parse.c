@@ -469,6 +469,15 @@ Ast *ast_arg_list_push(Ast *lambda, Ast *arg_id, Ast *def) {
       lambda->data.AST_LAMBDA.type_annotations, def ? def : NULL);
   return lambda;
 }
+Ast *ast_arg_list_default_push(Ast *arg_id, Ast *def) {
+  Ast *lambda = Ast_new(AST_LAMBDA);
+
+  lambda->data.AST_LAMBDA.len = 1;
+  lambda->data.AST_LAMBDA.params = ast_list_extend_right(NULL, arg_id);
+  lambda->data.AST_LAMBDA.type_annotations = ast_list_extend_right(NULL, def);
+
+  return lambda;
+}
 
 // Ast *ast_extern_declaration(ObjString extern_name, Ast *lambda,
 //                             ObjString return_type) {

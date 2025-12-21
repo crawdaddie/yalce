@@ -25,6 +25,12 @@ void initial_lambda_signature(int num_params, Type **param_types,
       continue;
     }
 
+    if (param_ast->tag == AST_LET) {
+      Type *dtype = infer(param_ast, ctx);
+      param_types[i] = dtype;
+      continue;
+    }
+
     Ast *type_annotation =
         type_annotation_list ? type_annotation_list->ast : NULL;
 
@@ -38,6 +44,9 @@ void bind_lambda_params(Ast *ast, Type **param_types, TICtx *ctx) {
   int i = 0;
   for (AstList *pl = ast->data.AST_LAMBDA.params; pl; pl = pl->next, i++) {
     Ast *param_pattern = pl->ast;
+    if (param_pattern->tag == AST_LET) {
+      param_pattern = param_pattern->data.AST_LET.binding;
+    }
     Type *param_type = param_types[i];
 
     if (bind_type_in_ctx(
@@ -410,6 +419,8 @@ Type *apply_substitutions_rec(Subst *subst, Type *t) {
 //            Γ ⊢ λ x₁ x₂ ... xₙ. e : α₁ → α₂ → ... → αₙ → τ
 //
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
+  printf("## LAMBDA????\n");
+  print_ast(ast);
   Ast *body = ast->data.AST_LAMBDA.body;
   int num_params = ast->data.AST_LAMBDA.len;
 

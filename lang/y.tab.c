@@ -2370,7 +2370,7 @@ yyreduce:
 
   case 94: /* lambda_args: lambda_arg '=' expr  */
 #line 281 "lang/parser.y"
-                                                 { (yyval.ast_node_ptr) = ast_arg_list((yyvsp[-2].ast_node_ptr), (yyvsp[0].ast_node_ptr)); }
+                                                 { (yyval.ast_node_ptr) = ast_arg_list(ast_let((yyvsp[-2].ast_node_ptr), (yyvsp[0].ast_node_ptr), NULL), NULL); }
 #line 2375 "lang/y.tab.c"
     break;
 
@@ -2388,7 +2388,7 @@ yyreduce:
 
   case 97: /* lambda_args: lambda_args lambda_arg '=' expr  */
 #line 284 "lang/parser.y"
-                                                 { (yyval.ast_node_ptr) = ast_arg_list_push((yyvsp[-3].ast_node_ptr), (yyvsp[-2].ast_node_ptr), (yyvsp[0].ast_node_ptr)); }
+                                                 { (yyval.ast_node_ptr) = ast_arg_list_push((yyvsp[-3].ast_node_ptr), ast_let((yyvsp[-2].ast_node_ptr), (yyvsp[0].ast_node_ptr), NULL), NULL); }
 #line 2393 "lang/y.tab.c"
     break;
 
