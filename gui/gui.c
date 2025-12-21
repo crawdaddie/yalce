@@ -60,7 +60,13 @@ int init_gui() {
     fprintf(stderr, "Failed to initialize SDL_image: %s\n", IMG_GetError());
     return -1;
   }
-  DEFAULT_FONT = TTF_OpenFont("/System/Library/Fonts/Menlo.ttc", 16);
+
+#ifdef __APPLE__
+  // DEFAULT_FONT = TTF_OpenFont("/System/Library/Fonts/Menlo.ttc", 16);
+#endif
+#ifndef __APPLE__
+  DEFAULT_FONT = TTF_OpenFont("/usr/share/fonts/TTF/DejaVuSansMono.ttf", 16);
+#endif
   if (!DEFAULT_FONT) {
     fprintf(stderr, "Failed to load font: %s\n", TTF_GetError());
     return 1;

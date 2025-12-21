@@ -112,10 +112,10 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return null_node(node_type);
   }
 
-  LLVMValueRef total_size = LLVMConstInt(LLVMInt32Type(), len, 0);
-  LLVMValueRef node_size = LLVMSizeOf(node_type);
-  LLVMValueRef alloc_size =
-      LLVMBuildMul(builder, total_size, node_size, "alloc_size");
+  // LLVMValueRef total_size = LLVMConstInt(LLVMInt64Type(), len, 0);
+  // LLVMValueRef node_size = LLVMSizeOf(node_type);
+  // LLVMValueRef alloc_size =
+  //     LLVMBuildMul(builder, total_size, node_size, "alloc_size");
 
   // Allocate memory for all nodes at once???
   // LLVMValueRef memory_block;

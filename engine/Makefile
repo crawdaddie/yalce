@@ -1,5 +1,5 @@
-include ../.env
 # engine/Makefile
+include ../.env
 
 BUILD_DIR := ./build
 SRCS := $(wildcard *.c)
