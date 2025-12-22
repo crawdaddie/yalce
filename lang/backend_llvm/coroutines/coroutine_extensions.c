@@ -584,7 +584,8 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
 
   static int counter = 0;
   char wrapper_name[64];
-  snprintf(wrapper_name, sizeof(wrapper_name), "coro_of_cor_list_%d", counter++);
+  snprintf(wrapper_name, sizeof(wrapper_name), "coro_of_cor_list_%d",
+           counter++);
 
   LLVMValueRef wrapper_fn =
       LLVMAddFunction(module, wrapper_name, wrapper_fn_type);
@@ -594,16 +595,24 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   COROUTINE_BASIC_BLOCKS(wrapper_fn)
 
   // Outer loop blocks - iterate through list
-  LLVMBasicBlockRef outer_loop_bb = LLVMAppendBasicBlock(wrapper_fn, "outer.loop");
-  LLVMBasicBlockRef outer_loop_body_bb = LLVMAppendBasicBlock(wrapper_fn, "outer.loop.body");
-  LLVMBasicBlockRef outer_loop_exit_bb = LLVMAppendBasicBlock(wrapper_fn, "outer.loop.exit");
+  LLVMBasicBlockRef outer_loop_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "outer.loop");
+  LLVMBasicBlockRef outer_loop_body_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "outer.loop.body");
+  LLVMBasicBlockRef outer_loop_exit_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "outer.loop.exit");
 
   // Inner loop blocks - yield from current coroutine
-  LLVMBasicBlockRef inner_check_bb = LLVMAppendBasicBlock(wrapper_fn, "inner.check");
-  LLVMBasicBlockRef inner_body_bb = LLVMAppendBasicBlock(wrapper_fn, "inner.body");
-  LLVMBasicBlockRef inner_get_value_bb = LLVMAppendBasicBlock(wrapper_fn, "inner.get_value");
-  LLVMBasicBlockRef inner_resume_bb = LLVMAppendBasicBlock(wrapper_fn, "inner.resume");
-  LLVMBasicBlockRef inner_exit_bb = LLVMAppendBasicBlock(wrapper_fn, "inner.exit");
+  LLVMBasicBlockRef inner_check_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "inner.check");
+  LLVMBasicBlockRef inner_body_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "inner.body");
+  LLVMBasicBlockRef inner_get_value_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "inner.get_value");
+  LLVMBasicBlockRef inner_resume_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "inner.resume");
+  LLVMBasicBlockRef inner_exit_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "inner.exit");
 
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
 
@@ -617,7 +626,8 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
 
   // Get the actual node type {Coroutine<T>, void*}
   LLVMTypeRef node_type = LLVMStructType(
-      (LLVMTypeRef[]){llvm_coro_type, LLVMPointerType(LLVMVoidType(), 0)}, 2, 0);
+      (LLVMTypeRef[]){llvm_coro_type, LLVMPointerType(LLVMVoidType(), 0)}, 2,
+      0);
 
   // Current list node pointer - llvm_list_type is already ptr to node
   LLVMValueRef current_alloca =
@@ -703,8 +713,8 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   // === INNER LOOP CHECK: Check if inner coroutine is done ===
   LLVMPositionBuilderAtEnd(builder, inner_check_bb);
 
-  LLVMValueRef inner_handle_loaded =
-      LLVMBuildLoad2(builder, llvm_coro_type, inner_handle_alloca, "inner.handle.loaded");
+  LLVMValueRef inner_handle_loaded = LLVMBuildLoad2(
+      builder, llvm_coro_type, inner_handle_alloca, "inner.handle.loaded");
 
   // Check if inner is done BEFORE resuming
   LLVMValueRef is_done_before = LLVMBuildCall2(
@@ -717,8 +727,8 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   // === INNER LOOP BODY: Resume inner coroutine ===
   LLVMPositionBuilderAtEnd(builder, inner_body_bb);
 
-  LLVMValueRef inner_handle_for_resume =
-      LLVMBuildLoad2(builder, llvm_coro_type, inner_handle_alloca, "inner.handle.for_resume");
+  LLVMValueRef inner_handle_for_resume = LLVMBuildLoad2(
+      builder, llvm_coro_type, inner_handle_alloca, "inner.handle.for_resume");
 
   // Resume the inner coroutine
   LLVMBuildCall2(builder,
@@ -729,8 +739,8 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   // Check if done AFTER resume
   LLVMValueRef is_done_after = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
-      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle_for_resume}, 1,
-      "inner.is_done_after");
+      get_coro_done_intrinsic(module),
+      (LLVMValueRef[]){inner_handle_for_resume}, 1, "inner.is_done_after");
 
   // If done after resume, exit the inner loop (move to next list element)
   LLVMBuildCondBr(builder, is_done_after, inner_exit_bb, inner_get_value_bb);
@@ -738,25 +748,26 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   // === INNER GET VALUE: Read inner's promise and yield it ===
   LLVMPositionBuilderAtEnd(builder, inner_get_value_bb);
 
-  LLVMValueRef inner_handle_for_promise =
-      LLVMBuildLoad2(builder, llvm_coro_type, inner_handle_alloca, "inner.handle.for_promise");
+  LLVMValueRef inner_handle_for_promise = LLVMBuildLoad2(
+      builder, llvm_coro_type, inner_handle_alloca, "inner.handle.for_promise");
 
   // Get inner coroutine's promise
   LLVMValueRef inner_promise_raw = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),
       get_coro_promise_intrinsic(module),
-      (LLVMValueRef[]){inner_handle_for_promise, LLVMConstInt(LLVMInt32Type(), 0, 0),
+      (LLVMValueRef[]){inner_handle_for_promise,
+                       LLVMConstInt(LLVMInt32Type(), 0, 0),
                        LLVMConstInt(LLVMInt1Type(), 0, 0)},
       3, "inner.promise.raw");
 
   // Cast to correct type
-  LLVMValueRef inner_promise_ptr = LLVMBuildBitCast(
-      builder, inner_promise_raw, LLVMPointerType(llvm_elem_type, 0),
-      "inner.promise.ptr");
+  LLVMValueRef inner_promise_ptr =
+      LLVMBuildBitCast(builder, inner_promise_raw,
+                       LLVMPointerType(llvm_elem_type, 0), "inner.promise.ptr");
 
   // Load the value from inner's promise
-  LLVMValueRef inner_value = LLVMBuildLoad2(builder, llvm_elem_type,
-                                            inner_promise_ptr, "inner.value");
+  LLVMValueRef inner_value =
+      LLVMBuildLoad2(builder, llvm_elem_type, inner_promise_ptr, "inner.value");
 
   // Store it in OUR promise (we're yielding this value)
   LLVMBuildStore(builder, inner_value, promise_alloca);
@@ -764,8 +775,8 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   // Suspend (yield this value to our caller)
   LLVMValueRef save_token = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
-      get_coro_save_intrinsic(module),
-      (LLVMValueRef[]){handle}, 1, "coro.save");
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "coro.save");
 
   LLVMValueRef suspend_result = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
@@ -784,7 +795,8 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   LLVMPositionBuilderAtEnd(builder, suspend_return_bb);
   LLVMBuildBr(builder, suspend_bb);
 
-  // === INNER RESUME: When we're resumed, loop back to check for more values ===
+  // === INNER RESUME: When we're resumed, loop back to check for more values
+  // ===
   LLVMPositionBuilderAtEnd(builder, inner_resume_bb);
   LLVMBuildBr(builder, inner_check_bb); // Loop back to inner check!
 
@@ -792,12 +804,12 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   LLVMPositionBuilderAtEnd(builder, inner_exit_bb);
 
   // Load the current list node
-  LLVMValueRef current_for_next =
-      LLVMBuildLoad2(builder, llvm_list_type, current_alloca, "current.for_next");
+  LLVMValueRef current_for_next = LLVMBuildLoad2(
+      builder, llvm_list_type, current_alloca, "current.for_next");
 
   // GEP to next field (field 1) and load
-  LLVMValueRef next_ptr_ptr =
-      LLVMBuildStructGEP2(builder, node_type, current_for_next, 1, "next.ptr.ptr");
+  LLVMValueRef next_ptr_ptr = LLVMBuildStructGEP2(
+      builder, node_type, current_for_next, 1, "next.ptr.ptr");
   LLVMValueRef next_ptr = LLVMBuildLoad2(
       builder, LLVMPointerType(LLVMVoidType(), 0), next_ptr_ptr, "next.ptr");
 
@@ -806,7 +818,8 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
       LLVMBuildBitCast(builder, next_ptr, llvm_list_type, "next.typed");
   LLVMBuildStore(builder, next_typed, current_alloca);
 
-  LLVMBuildBr(builder, outer_loop_bb); // Back to outer loop to get next coroutine
+  LLVMBuildBr(builder,
+              outer_loop_bb); // Back to outer loop to get next coroutine
 
   // === OUTER LOOP EXIT: All list elements exhausted ===
   LLVMPositionBuilderAtEnd(builder, outer_loop_exit_bb);
@@ -1475,6 +1488,36 @@ LLVMValueRef CurrentCorHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
-  fprintf(stderr, "TODO: CorUnwrapOrEndHandler not yet implemented\n");
-  return NULL;
+  CoroutineCtx *coro_ctx = (CoroutineCtx *)ctx->coro_ctx;
+
+  if (!coro_ctx) {
+    fprintf(stderr,
+            "Error: cor_unwrap_or_end used outside of coroutine context\n");
+    return NULL;
+  }
+
+  LLVMValueRef opt_val =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  LLVMBasicBlockRef current_bb = LLVMGetInsertBlock(builder);
+  LLVMValueRef current_fn = LLVMGetBasicBlockParent(current_bb);
+
+  LLVMBasicBlockRef is_none_bb =
+      LLVMAppendBasicBlock(current_fn, "opt_is_none");
+  LLVMBasicBlockRef is_some_bb =
+      LLVMAppendBasicBlock(current_fn, "opt_is_some");
+
+  LLVMValueRef is_none = codegen_option_is_none(opt_val, builder);
+  LLVMBuildCondBr(builder, is_none, is_none_bb, is_some_bb);
+
+  LLVMPositionBuilderAtEnd(builder, is_none_bb);
+  coro_emit_final_suspend(ctx, module, builder, coro_ctx->coro_handle,
+                          current_fn, coro_ctx->cleanup_bb,
+                          coro_ctx->suspend_bb);
+
+  LLVMPositionBuilderAtEnd(builder, is_some_bb);
+  LLVMValueRef inner_value =
+      LLVMBuildExtractValue(builder, opt_val, 1, "unwrapped_value");
+
+  return inner_value;
 }
