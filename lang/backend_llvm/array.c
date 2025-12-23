@@ -514,3 +514,5 @@ LLVMValueRef ArrayConstructorHandler(Ast *ast, JITLangCtx *ctx,
   v = LLVMBuildInsertValue(builder, v, data_ptr, 1, "insert_arr_data");
   return v;
 }
+LLVMValueRef ArrayOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {}

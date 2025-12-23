@@ -47,6 +47,15 @@ let last = fn x: (Array of T) ->
   let len = array_size x in
   x [len - 1]
 ;;
+
+import std/Lists;
+let of_list = fn len l ->
+  let h::rest = l;
+  let arr = array_fill_const len h;
+
+  let (_, res) = Lists.fold (fn (i, r) x -> (r[i] := x; (i + 1, r))) (1, arr) rest;
+  res
+;;
   
 
 let test = module () ->
@@ -62,4 +71,6 @@ let test = module () ->
     let s = map ((+) 3.) [|1,2,3|] in
     s == [| 4., 5., 6.|]
   ;
+
+  let test_of_list = (of_list 3 [1,2,3]) == [|1,2,3|];
 ;

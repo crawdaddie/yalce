@@ -12,10 +12,20 @@ let fold = fn f: (R -> T -> R) res: (R) a: (List of T) ->
   | x::rest -> fold f (f res x) rest
 ;;
 
+# let foldi = fn f: (Int -> R -> T -> R) res: (R) a: (List of T) ->
+#   fold (fn (i, r) x -> (i+1, f i r x)) (0, res) a
+# ;;
+
 let last = fn l ->
   match l with
   | x::[] -> x
   | _::rest -> last rest
+;;
+
+let head = fn l ->
+  match l with
+  | x::rest -> x
+  | x::[] -> x 
 ;;
 
 
@@ -51,6 +61,7 @@ let test = module () ->
   let test_sum_doubles = fold (+) 0. [1., 2., 3.] == 6.;
   let test_sum_ints = fold (+) 0 [1, 2, 3] == 6;
   let test_last = last [1, 2, 3 ] == 3;
-  let test_map_plus = (map ((+) 1) [0,1,2,3]) == [1,2,3,4];
-  let test_map_to_double = (map (fn x -> Double x) [0,1,2,3]) == [0.,1.,2.,3.];
+  let test_map_plus = map ((+) 1) [0,1,2,3] == [1,2,3,4];
+  let test_map_to_double = map (fn x -> Double x) [0,1,2,3] == [0.,1.,2.,3.];
+  # let test_foldi = foldi (fn i s x -> i + s + x) 0 [0,0,0] == 3
 ;

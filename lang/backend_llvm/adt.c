@@ -473,11 +473,13 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
 
       Type *container = find_recursive_type_container(
           member_type->data.T_CONS.args[0], name, type);
-      if (!(is_list_type(container) || is_array_type(container))) {
+
+      if (!(is_list_type(container) || is_array_type(container) || is_coroutine_type(container))) {
         fprintf(stderr,
                 "Error: type %s cannot hold a recursive reference without a "
                 "List or Array container\n",
                 name);
+
         return NULL;
       }
     }

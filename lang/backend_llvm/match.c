@@ -227,6 +227,13 @@ LLVMValueRef test_list_cons_pattern(Ast *pattern, LLVMValueRef val,
                                     Type *val_type, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
+  // print_ast(pattern);
+  // print_location(pattern);
+  // print_type(val_type);
+  // print_type_env(ctx->env);
+  if (is_generic(val_type)) {
+    val_type = resolve_type_in_env(val_type, ctx->env);
+  }
 
   Type *list_el_type = val_type->data.T_CONS.args[0];
   LLVMTypeRef llvm_list_el_type = type_to_llvm_type(list_el_type, ctx, module);
@@ -275,8 +282,8 @@ LLVMValueRef test_list_cons_pattern(Ast *pattern, LLVMValueRef val,
 
   // Now test patterns using the phi values
   Ast *head_pattern = pattern->data.AST_APPLICATION.args;
-  LLVMValueRef tv = test_pattern(head_pattern, head_phi, list_el_type, ctx,
-                                 module, builder);
+  LLVMValueRef tv =
+      test_pattern(head_pattern, head_phi, list_el_type, ctx, module, builder);
 
   Ast *tail_pattern = pattern->data.AST_APPLICATION.args + 1;
   LLVMValueRef tpv =
