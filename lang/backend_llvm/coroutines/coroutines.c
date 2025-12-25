@@ -285,8 +285,6 @@ LLVMValueRef coro_create(JITSymbol *sym, Type *expected_fn_type, Ast *app,
   }
 
   if (sym->type == STYPE_GENERIC_FUNCTION) {
-    printf("generic coroutine???\n");
-    print_type(expected_fn_type);
     LLVMValueRef coro_fn = coro_create_from_generic(sym, expected_fn_type, app,
                                                     ctx, module, builder);
     LLVMValueRef args[app->data.AST_APPLICATION.len];
@@ -317,6 +315,8 @@ LLVMValueRef create_coroutine_symbol(Ast *binding, Ast *expr, Type *expr_type,
   if (is_generic(expr_type)) {
     expr_val = create_generic_fn_binding(binding, expr, ctx);
   } else {
+    printf("sym\n");
+    print_type(expr_type);
     expr_val = compile_coroutine(expr, ctx, module, builder);
     expr_val =
         create_fn_binding(binding, expr_type, expr_val, ctx, module, builder);
@@ -815,6 +815,11 @@ LLVMValueRef coro_symbol_resume(JITSymbol *sym, JITLangCtx *ctx,
   // symbol_type should be something like: () -> Option<T>
   Type *coro_fn_type = sym->symbol_type;
   Type *yield_type = coro_fn_type->data.T_CONS.args[0];
+  printf("coro resume\n");
+  print_type(yield_type);
+  // if (yield_type->kind == T_VAR && yield_type->is_recursive_type_ref) {
+  //   yield_type = env_lookup(ctx->env, yield_type->data.T_VAR);
+  // }
 
   LLVMTypeRef llvm_yield_type = type_to_llvm_type(yield_type, ctx, module);
   return codegen_handle_resume(handle, llvm_yield_type, ctx, module, builder);

@@ -1,8 +1,5 @@
 import Patterns;
 
-let s = Patterns.parse "1 <7 8 9> c2 4 {80 200} 200";
-
-
 type CorSeq = 
 | CorInt of Int
 | CorNum of Double
@@ -13,33 +10,19 @@ type CorSeq =
 ;
 
 print @@ typeof CorSeq;
-print "\n";
-import std/Lists;
+print "\n\n";
 
-let array_of_list = fn len l ->
-  let x = Lists.head l in
-  let storage = array_fill_const len x in
+# let s = Patterns.parse "1 <7 8 9> c2 4 {80 200} 200";
+let s = Patterns.parse "1 c2 4 200";
 
-  let aux = (fn i li -> 
-    match li with
-    | [] -> storage
-    | x::rest -> (
-      storage[i] := x;
-      aux (i + 1) rest
-    )
-  ) in
-  aux 0 l
-;;
 
-let x = array_of_list 3 [1,2,3];
-for i = 0 .. array_size x in (
-  print `{x[i]}\n`
-)
-
-# let pat_to_coroutine = fn p ->
-#
-# ;;
-
-# s |> Patterns.print_seq_helper true;
-# print "\n";
+let x = Patterns.pat_to_coroutine s;
+x ();
+# print `
+# {x ()}
+# {x ()}
+# {x ()}
+# {x ()}
+# {x ()}
+# `
 

@@ -200,12 +200,25 @@ let print_seq_helper = fn is_first seq ->
   | SeqKey k -> print `{k}, `
   | SeqList (_, 0, []) -> print "], "
   | SeqList (t, len, x::rest) -> (
-
     if is_first then (print `{ltype_str t}:(#{len})[ `) else ();
-
     print_seq_helper true x;
     print_seq_helper false (SeqList (t, (len - 1), rest))
   )
   | _ -> ()
   ;;
 
+
+import std/Arrays;
+
+# let dummy = fn () ->
+#   yield (SeqInt 0)
+# ;;
+
+let pat_to_coroutine = fn p: (Seq) ->
+  match p with
+  | SeqList (1, len, l) -> (
+    let c = iter_of_array (Arrays.of_list len l);
+    cor_loop c
+  )
+  # | _ -> (dummy ())
+;;

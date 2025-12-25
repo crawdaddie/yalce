@@ -345,6 +345,28 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, JITLangCtx *ctx,
     print_codegen_location();
     return NULL;
   }
+  // if (is_coroutine_type(expr_type)) {
+  //   expr_type = deep_copy_type(expr_type);
+  //
+  //   Type *yield_type = expr_type->data.T_CONS.args[0];
+  //   // if (yield_type->kind == T_VAR && yield_type->is_recursive_type_ref) {
+  //   //   print_type_env(ctx->env);
+  //   //   yield_type = env_lookup(ctx->env, yield_type->data.T_VAR);
+  //   // }
+  //
+  //   expr_type->data.T_CONS.args[0] = yield_type;
+  //
+  //   LLVMValueRef match_result = codegen_pattern_binding(
+  //       binding, expr_val, expr_type, ctx, module, builder);
+  //
+  //   if (match_result == NULL) {
+  //     fprintf(stderr, "Error: codegen for pattern binding in let expression "
+  //                     "failed\n");
+  //     print_codegen_location();
+  //     return NULL;
+  //   }
+  //   return expr_val;
+  // }
 
   LLVMValueRef match_result = codegen_pattern_binding(
       binding, expr_val, expr_type, ctx, module, builder);

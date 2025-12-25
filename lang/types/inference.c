@@ -131,12 +131,15 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) {
   switch (r->kind) {
   case T_VAR: {
 
-    if (r->is_recursive_type_ref) {
-      // TODO??? wtf
-      return r;
-    }
+    // if (r->is_recursive_type_ref) {
+    //   // TODO??? wtf
+    //   return r;
+    // }
 
     Type *rr = env_lookup(env, r->data.T_VAR);
+    if (r->is_recursive_type_ref) {
+      return rr;
+    }
 
     if (rr && rr->kind == T_VAR) {
       return resolve_type_in_env(rr, env);
@@ -1094,6 +1097,18 @@ bool is_list_cons_operator(Ast *ast) {
 
 int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
                      TICtx *ctx) {
+  if (is_coroutine_type(type) && type->data.T_CONS.args[0]->kind == T_VAR &&
+      type->data.T_CONS.args[0]->is_recursive_type_ref) {
+    Type *yield_type = type->data.T_CONS.args[0];
+    print_ast(binding);
+    print_type(yield_type);
+    print_type(env_lookup(ctx->env, yield_type->data.T_VAR));
+
+    yield_type = env_lookup(ctx->env, yield_type->data.T_VAR);
+    if (!yield_type) {
+      print_type_env(ctx->env);
+    }
+  }
 
   switch (binding->tag) {
   case AST_INT:
