@@ -410,6 +410,19 @@ Type *apply_substitutions_rec(Subst *subst, Type *t) {
   return t;
 }
 
+Type *lower_recursive_ref(Type *t, TypeEnv *env) {
+  if (t->kind == T_CONS && t->data.T_CONS.num_args &&
+      t->data.T_CONS.args[0]->is_recursive_type_ref) {
+    Type *x = t->data.T_CONS.args[0];
+    TypeEnv *ye = lookup_type_ref(env, x->data.T_VAR);
+    if (ye) {
+      t->data.T_CONS.args[0] = ye->type;
+      return t;
+    }
+  }
+  return t;
+}
+
 // T-Lambda:  Γ, x₁ : α₁, x₂ : α₂, ..., xₙ : αₙ ⊢ e : τ    (α₁, α₂, ..., α
 // esh)
 //
@@ -492,8 +505,12 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   if (closure) {
     return closure;
   }
-  // printf("final lambda type\n");
-  // print_type(result_type);
+
+  const char *fn_name = ast->data.AST_LAMBDA.fn_name.chars;
+
+  // printf("final lambda type [%s]\n", fn_name);
+  // print_type(fn_return_type(result_type));
+  lower_recursive_ref(fn_return_type(result_type), ctx->env);
 
   return result_type;
 }

@@ -3,6 +3,10 @@ import std/Regex;
 let int32_parse = extern fn String -> Int;
 let double_parse = extern fn String -> Double;
 
+let SEQ_LIST_TYPE = 3;
+let SEQ_CHOOSE_TYPE = 4;
+let SEQ_ALT_TYPE = 5;
+
 
 type Seq =
   | SeqInt of Int
@@ -13,11 +17,11 @@ type Seq =
 
 let seq_extend = fn seq new ->
   match seq with
-  | SeqInt i -> SeqList (3, 2, [seq, new])       # Wrap int in a list
-  | SeqNum n -> SeqList (3, 2, [seq, new])       # Wrap int in a list
-  | SeqKey k -> SeqList (3, 2, [seq, new])         # Wrap int in a list
+  | SeqInt i -> SeqList (SEQ_LIST_TYPE, 2, [seq, new])       # Wrap int in a list
+  | SeqNum n -> SeqList (SEQ_LIST_TYPE, 2, [seq, new])       # Wrap int in a list
+  | SeqKey k -> SeqList (SEQ_LIST_TYPE, 2, [seq, new])       # Wrap int in a list
 
-  | SeqList (t, 0, []) -> SeqList (t, 1, [new,])               # Empty list
+  | SeqList (t, 0, []) -> SeqList (t, 1, [new,])       # Empty list
   | SeqList (t, n, x) -> SeqList (t, (n + 1), new::x)  # Non-empty list
   ;;
 
@@ -71,9 +75,6 @@ let copy_str_slice = fn s: (String) ->
   c[len] := '\0';
   c
 ;;
-let SEQ_LIST_TYPE = 3;
-let SEQ_CHOOSE_TYPE = 4;
-let SEQ_ALT_TYPE = 5;
 
 let parse_seq = fn x current stack ->
   if (array_size x > 0) then (
@@ -170,15 +171,17 @@ let parse_seq = fn x current stack ->
       | None -> ("", current, stack)
 
     in
-
-
     parse_seq next curr new_stack
   )
   else current
 ;;
 
+let empty_seq = fn () ->
+  SeqList (SEQ_LIST_TYPE, 0, [])
+;;
+
 let parse = fn input ->
-  parse_seq input (SeqList (3, 0, [])) (SeqList (3, 0, []))
+  parse_seq input (empty_seq ()) (empty_seq ())
   |> seq_reverse
 ;;
 

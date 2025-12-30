@@ -1,16 +1,16 @@
 import Patterns;
 
-type CorSeq = 
-| CorInt of Int
-| CorNum of Double
-| CorKey of String
-| CorList of Array of CorSeq
-| CorChoose of Array of CorSeq
-| CorAlt of Coroutine of CorSeq
-;
-
-print @@ typeof CorSeq;
-print "\n\n";
+# type CorSeq = 
+# | CorInt of Int
+# | CorNum of Double
+# | CorKey of String
+# | CorList of Array of CorSeq
+# | CorChoose of Array of CorSeq
+# | CorAlt of Coroutine of CorSeq
+# ;
+#
+# print @@ typeof CorSeq;
+# print "\n\n";
 
 # let s = Patterns.parse "1 <7 8 9> c2 4 {80 200} 200";
 let s = Patterns.parse "1 c2 4 200";
