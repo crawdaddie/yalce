@@ -92,9 +92,6 @@ LLVMValueRef bind_local_value_with_storage(Ast *id, LLVMValueRef val,
 LLVMValueRef bind_value(Ast *id, LLVMValueRef val, Type *val_type,
                         JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
-  // printf("BIND VALUE\n");
-  // print_ast(id);
-  // LLVMDumpValue(val);
 
   if (ast_is_placeholder_id(id)) {
     return val;
@@ -150,6 +147,7 @@ LLVMValueRef codegen_pattern_binding(Ast *pattern, LLVMValueRef val,
   if (pattern->tag == AST_VOID) {
     return val;
   }
+
   test_pattern(pattern, val, val_type, ctx, module, builder);
 
   // BindList *bl = NULL;

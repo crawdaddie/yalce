@@ -227,10 +227,7 @@ LLVMValueRef test_list_cons_pattern(Ast *pattern, LLVMValueRef val,
                                     Type *val_type, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-  // print_ast(pattern);
-  // print_location(pattern);
-  // print_type(val_type);
-  // print_type_env(ctx->env);
+
   if (is_generic(val_type)) {
     val_type = resolve_type_in_env(val_type, ctx->env);
     print_type(val_type);

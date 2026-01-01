@@ -17,7 +17,9 @@ let s = Patterns.parse "1 c2 4 200";
 
 
 let x = Patterns.pat_to_coroutine s;
-x ();
+print `
+{x ()}
+`;
 # print `
 # {x ()}
 # {x ()}

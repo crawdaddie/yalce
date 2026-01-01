@@ -131,10 +131,10 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) {
   switch (r->kind) {
   case T_VAR: {
 
-    // if (r->is_recursive_type_ref) {
-    //   // TODO??? wtf
-    //   return r;
-    // }
+    if (r->is_recursive_type_ref) {
+      // TODO??? wtf
+      return r;
+    }
 
     Type *rr = env_lookup(env, r->data.T_VAR);
     if (r->is_recursive_type_ref) {
@@ -166,6 +166,16 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) {
     return r;
   }
   case T_CONS: {
+
+    // if (r->kind == T_CONS && r->data.T_CONS.num_args &&
+    //     r->data.T_CONS.args[0]->is_recursive_type_ref) {
+    //   Type *x = lower_recursive_cons_ref(r, env);
+    //
+    //   // printf("lowered??\n");
+    //   // print_type(x);
+    //   return x;
+    // }
+
     for (int i = 0; i < r->data.T_CONS.num_args; i++) {
       r->data.T_CONS.args[i] = resolve_type_in_env(r->data.T_CONS.args[i], env);
     }
@@ -263,6 +273,10 @@ bool occurs_check(const char *var, Type *ty) {
     return false;
   }
 
+  // printf("??%s is in ", var);
+  // print_type(ty);
+  // printf("\n");
+
   switch (ty->kind) {
   case T_VAR: {
     bool chars_eq = CHARS_EQ(ty->data.T_VAR, var);
@@ -277,8 +291,16 @@ bool occurs_check(const char *var, Type *ty) {
   }
   case T_TYPECLASS_RESOLVE:
   case T_CONS: {
+
     for (int i = 0; i < ty->data.T_CONS.num_args; i++) {
-      if (occurs_check(var, ty->data.T_CONS.args[i])) {
+      Type *ctype = ty->data.T_CONS.args[i];
+
+      if (is_recursive_ref_container(ctype)) {
+        print_type(ctype);
+        continue;
+      }
+
+      if (occurs_check(var, ctype)) {
         return true;
       }
     }
@@ -1115,6 +1137,11 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
   }
 
   case AST_IDENTIFIER: {
+    // if (CHARS_EQ(binding->data.AST_IDENTIFIER.value, "l")) {
+    //   printf("BIND TYPE???\n");
+    //   print_ast(binding);
+    //   print_type(type);
+    // }
 
     if (ast_is_placeholder_id(binding)) {
       binding->type = type;
@@ -1155,7 +1182,8 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
 
     if (type->kind == T_CONS &&
         binding->data.AST_LIST.len != type->data.T_CONS.num_args) {
-      // error - can't have mismatched tuple arity!
+      fprintf(stderr, "error - can't have mismatched tuple arity!");
+      print_ast_err(binding);
       return 1;
     }
 
@@ -1166,7 +1194,11 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
 
       for (int i = 0; i < binding->data.AST_LIST.len; i++) {
         Ast *mem = binding->data.AST_LIST.items + i;
-        bind_type_in_ctx(mem, type->data.T_CONS.args[i], bmd_type, ctx);
+        Type *ctype = type->data.T_CONS.args[i];
+
+        ctype = lower_recursive_ref(ctype, ctx->env);
+
+        bind_type_in_ctx(mem, ctype, bmd_type, ctx);
       }
       return 0;
     }
@@ -1176,7 +1208,11 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       int len = binding->data.AST_LIST.len;
       for (int i = 0; i < len; i++) {
         Ast *mem = binding->data.AST_LIST.items + i;
-        bind_type_in_ctx(mem, pattern_type->data.T_CONS.args[i], bmd_type, ctx);
+
+        Type *ctype = pattern_type->data.T_CONS.args[i];
+
+        ctype = lower_recursive_ref(ctype, ctx->env);
+        bind_type_in_ctx(mem, ctype, bmd_type, ctx);
       }
 
       unify(type, pattern_type, ctx);
@@ -1190,6 +1226,17 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
   case AST_APPLICATION: {
 
     if (is_list_cons_operator(binding)) {
+      // print_ast(binding);
+      // print_type(type);
+      //
+      // if (type->kind == T_CONS && type->data.T_CONS.num_args &&
+      //     type->data.T_CONS.args[0]->is_recursive_type_ref) {
+      //   print_ast(binding);
+      //
+      //   // type = lower_recursive_cons_ref(type, ctx->env);
+      //   print_type(type);
+      // }
+
       Ast *head = binding->data.AST_APPLICATION.args;
       Ast *rest = binding->data.AST_APPLICATION.args + 1;
 
@@ -1231,6 +1278,10 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
 
       if (btype->kind == T_CONS && binding->data.AST_APPLICATION.len == 1 &&
           (binding->data.AST_APPLICATION.args->tag == AST_TUPLE)) {
+
+        print_ast(binding);
+        print_type(btype);
+
         bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
                          ctx);
 
@@ -1241,9 +1292,12 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
                          ctx);
 
       } else if (btype->kind == T_CONS) {
+
         for (int i = 0; i < binding->data.AST_APPLICATION.len; i++) {
-          bind_type_in_ctx(binding->data.AST_APPLICATION.args + i,
-                           btype->data.T_CONS.args[i], bmd_type, ctx);
+          Type *ctype = btype->data.T_CONS.args[i];
+
+          bind_type_in_ctx(binding->data.AST_APPLICATION.args + i, ctype,
+                           bmd_type, ctx);
         }
       } else {
 

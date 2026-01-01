@@ -1,7 +1,6 @@
 #include "backend_llvm/list.h"
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
-#include "serde.h"
 #include "types/inference.h"
 #include "llvm-c/Core.h"
 
@@ -66,6 +65,12 @@ LLVMValueRef ll_create_list_node(LLVMValueRef mem, LLVMTypeRef node_type,
 
 LLVMValueRef ll_is_null(LLVMValueRef list, LLVMTypeRef list_el_type,
                         LLVMBuilderRef builder) {
+
+  if (!list_el_type) {
+    LLVMValueRef null_list = LLVMConstNull(GENERIC_PTR);
+    return LLVMBuildICmp(builder, LLVMIntEQ, list, null_list, "is_null");
+  }
+
   LLVMTypeRef node_type = llnode_type(list_el_type);
   LLVMValueRef null_list = LLVMConstNull(LLVMPointerType(node_type, 0));
   return LLVMBuildICmp(builder, LLVMIntEQ, list, null_list, "is_null");
@@ -73,6 +78,12 @@ LLVMValueRef ll_is_null(LLVMValueRef list, LLVMTypeRef list_el_type,
 
 LLVMValueRef ll_is_not_null(LLVMValueRef list, LLVMTypeRef list_el_type,
                             LLVMBuilderRef builder) {
+
+  if (!list_el_type) {
+    LLVMValueRef null_list = LLVMConstNull(GENERIC_PTR);
+    return LLVMBuildICmp(builder, LLVMIntNE, list, null_list, "is_null");
+  }
+
   LLVMTypeRef node_type = llnode_type(list_el_type);
   LLVMValueRef null_list = LLVMConstNull(LLVMPointerType(node_type, 0));
   return LLVMBuildICmp(builder, LLVMIntNE, list, null_list, "is_not_null");

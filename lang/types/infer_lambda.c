@@ -391,6 +391,7 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
   }
   ast->type = t;
 }
+
 Type *apply_substitutions_rec(Subst *subst, Type *t) {
 
   t = apply_substitution(subst, t);
@@ -410,9 +411,23 @@ Type *apply_substitutions_rec(Subst *subst, Type *t) {
   return t;
 }
 
+Type *lower_recursive_cons_ref(Type *t, TypeEnv *env) {
+  Type *x = t->data.T_CONS.args[0];
+  TypeEnv *ye = lookup_type_ref(env, x->data.T_VAR);
+  if (ye) {
+    t = deep_copy_type(t);
+    t->data.T_CONS.args[0] = ye->type;
+    return t;
+  }
+  return t;
+}
+bool is_recursive_ref_container(Type *t) {
+  return (t->kind == T_CONS) && (t->data.T_CONS.num_args > 0) &&
+         (t->data.T_CONS.args[0]->is_recursive_type_ref);
+}
+
 Type *lower_recursive_ref(Type *t, TypeEnv *env) {
-  if (t->kind == T_CONS && t->data.T_CONS.num_args &&
-      t->data.T_CONS.args[0]->is_recursive_type_ref) {
+  if (is_recursive_ref_container(t)) {
     Type *x = t->data.T_CONS.args[0];
     TypeEnv *ye = lookup_type_ref(env, x->data.T_VAR);
     if (ye) {

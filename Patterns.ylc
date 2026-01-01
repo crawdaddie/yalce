@@ -213,15 +213,15 @@ let print_seq_helper = fn is_first seq ->
 
 import std/Arrays;
 
-# let dummy = fn () ->
-#   yield (SeqInt 0)
-# ;;
+let dummy = fn () ->
+  yield (SeqInt 0)
+;;
 
-let pat_to_coroutine = fn p: (Seq) ->
+let pat_to_coroutine = fn p ->
   match p with
-  | SeqList (1, len, l) -> (
+  | SeqList (3, len, l) -> (
     let c = iter_of_array (Arrays.of_list len l);
     cor_loop c
   )
-  # | _ -> (dummy ())
+  | _ -> (dummy ())
 ;;
