@@ -273,6 +273,10 @@ bool occurs_check(const char *var, Type *ty) {
     return false;
   }
 
+  if (is_recursive_ref_container(ty)) {
+    return false;
+  }
+
   // printf("??%s is in ", var);
   // print_type(ty);
   // printf("\n");
@@ -294,11 +298,6 @@ bool occurs_check(const char *var, Type *ty) {
 
     for (int i = 0; i < ty->data.T_CONS.num_args; i++) {
       Type *ctype = ty->data.T_CONS.args[i];
-
-      if (is_recursive_ref_container(ctype)) {
-        print_type(ctype);
-        continue;
-      }
 
       if (occurs_check(var, ctype)) {
         return true;
