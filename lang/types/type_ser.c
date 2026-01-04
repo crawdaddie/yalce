@@ -1,5 +1,6 @@
 #include "./type_ser.h"
 #include "./type.h"
+#include "infer_lambda.h"
 #include <string.h>
 
 static char *type_name_mapping[] = {
@@ -87,11 +88,16 @@ void print_type_to_stream(Type *t, FILE *stream) {
       break;
     }
 
+    if (is_recursive_ref_container(t)) {
+      break;
+    }
+
     if (is_list_type(t)) {
       print_type_to_stream(t->data.T_CONS.args[0], stream);
       fprintf(stream, "[]");
       break;
     }
+
     if (strcmp(t->data.T_CONS.name, "Module") == 0) {
 
       // print_type_to_stream(t->data.T_CONS.args[0], stream);
@@ -132,13 +138,24 @@ void print_type_to_stream(Type *t, FILE *stream) {
         CHARS_EQ(t->data.T_CONS.args[0]->data.T_CONS.name, "Some")) {
 
       fprintf(stream, "Option of ");
-      print_type_to_stream(t->data.T_CONS.args[0]->data.T_CONS.args[0], stream);
+      if (t->data.T_CONS.args[0]->kind == T_CONS) {
+        print_type_to_stream(t->data.T_CONS.args[0]->data.T_CONS.args[0],
+                             stream);
+      } else {
+        print_type_to_stream(t->data.T_CONS.args[0], stream);
+      }
       break;
     }
 
     if (t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, "Some")) {
       fprintf(stream, "Option of ");
-      print_type_to_stream(t->data.T_CONS.args[0]->data.T_CONS.args[0], stream);
+
+      if (t->data.T_CONS.args[0]->kind == T_CONS) {
+        print_type_to_stream(t->data.T_CONS.args[0]->data.T_CONS.args[0],
+                             stream);
+      } else {
+        print_type_to_stream(t->data.T_CONS.args[0], stream);
+      }
       break;
     }
 

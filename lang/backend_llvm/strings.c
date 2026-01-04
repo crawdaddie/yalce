@@ -320,9 +320,13 @@ static LLVMValueRef _cons_to_string_rec(LLVMValueRef val, Type *val_type,
   StringList *current_list = str_list;
 
   for (int i = 0; i < val_type->data.T_CONS.num_args; i++) {
+    Type *field_type = val_type->data.T_CONS.args[i];
+    printf("%d ???\n", i);
+    print_type(field_type);
+    LLVMDumpValue(val);
+
     // Extract the field value
     LLVMValueRef field_val = LLVMBuildExtractValue(builder, val, i, "");
-    Type *field_type = val_type->data.T_CONS.args[i];
 
     /*
      * TODO: This breaks serialization - fix

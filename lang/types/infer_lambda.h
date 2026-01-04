@@ -11,4 +11,6 @@ Type *lower_recursive_cons_ref(Type *t, TypeEnv *env);
 Type *lower_recursive_ref(Type *t, TypeEnv *env);
 
 bool is_recursive_ref_container(Type *t);
+
+Type *hydrate_recursive_ref(Type *t, TypeEnv *env);
 #endif

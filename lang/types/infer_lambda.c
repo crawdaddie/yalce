@@ -410,6 +410,17 @@ Type *apply_substitutions_rec(Subst *subst, Type *t) {
   t = n;
   return t;
 }
+Type *hydrate_recursive_ref(Type *t, TypeEnv *env) {
+  if (!t->is_recursive_type_ref && t->kind != T_VAR) {
+    return t;
+  }
+
+  TypeEnv *ye = lookup_type_ref(env, t->data.T_VAR);
+  if (!ye) {
+    return t;
+  }
+  return ye->type;
+}
 
 Type *lower_recursive_cons_ref(Type *t, TypeEnv *env) {
   Type *x = t->data.T_CONS.args[0];
@@ -421,6 +432,7 @@ Type *lower_recursive_cons_ref(Type *t, TypeEnv *env) {
   }
   return t;
 }
+
 bool is_recursive_ref_container(Type *t) {
   return (t->kind == T_CONS) && (t->data.T_CONS.num_args > 0) &&
          (t->data.T_CONS.args[0]->is_recursive_type_ref);
@@ -432,6 +444,7 @@ Type *lower_recursive_ref(Type *t, TypeEnv *env) {
     TypeEnv *ye = lookup_type_ref(env, x->data.T_VAR);
     if (ye) {
       t->data.T_CONS.args[0] = ye->type;
+      t->data.T_CONS.args[0]->is_recursive_type_ref = true;
       return t;
     }
   }

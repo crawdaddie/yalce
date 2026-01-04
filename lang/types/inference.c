@@ -273,10 +273,6 @@ bool occurs_check(const char *var, Type *ty) {
     return false;
   }
 
-  if (is_recursive_ref_container(ty)) {
-    return false;
-  }
-
   // printf("??%s is in ", var);
   // print_type(ty);
   // printf("\n");
@@ -298,7 +294,6 @@ bool occurs_check(const char *var, Type *ty) {
 
     for (int i = 0; i < ty->data.T_CONS.num_args; i++) {
       Type *ctype = ty->data.T_CONS.args[i];
-
       if (occurs_check(var, ctype)) {
         return true;
       }
@@ -1195,7 +1190,13 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
         Ast *mem = binding->data.AST_LIST.items + i;
         Type *ctype = type->data.T_CONS.args[i];
 
-        ctype = lower_recursive_ref(ctype, ctx->env);
+        if (is_recursive_ref_container(ctype)) {
+          ctype = deep_copy_type(ctype);
+          ctype->data.T_CONS.args[0] =
+              hydrate_recursive_ref(ctype->data.T_CONS.args[0], ctx->env);
+
+          ctype->data.T_CONS.args[0]->is_recursive_type_ref = true;
+        }
 
         bind_type_in_ctx(mem, ctype, bmd_type, ctx);
       }
@@ -1210,7 +1211,6 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
 
         Type *ctype = pattern_type->data.T_CONS.args[i];
 
-        ctype = lower_recursive_ref(ctype, ctx->env);
         bind_type_in_ctx(mem, ctype, bmd_type, ctx);
       }
 
