@@ -20,6 +20,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
+  printf("?????\n");
+  print_ast(ast);
   // Get the inner coroutine expression
   Ast *coro_ast = ast->data.AST_APPLICATION.args;
   Type *coro_type = coro_ast->type; // Type is Coroutine<T>
@@ -29,7 +31,8 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_yield_type = type_to_llvm_type(yield_type, ctx, module);
 
   // Create wrapper coroutine function
-  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(GENERIC_PTR, NULL, 0, 0);
+  LLVMTypeRef wrapper_fn_type =
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
 
   static int loop_counter = 0;
   char wrapper_name[64];
@@ -56,6 +59,13 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef promise_alloca =
       LLVMBuildAlloca(builder, promise_type, "promise");
 
+  // Allocate a snapshot buffer to save the initial state of the inner coroutine
+  // We'll memcpy the entire frame here, then restore it on each loop iteration
+  // Using a fixed size of 512 bytes (MAX_CORO_FRAME_SIZE)
+  LLVMValueRef frame_snapshot = LLVMBuildArrayAlloca(
+      builder, LLVMInt8Type(), LLVMConstInt(LLVMInt32Type(), 512, 0),
+      "frame.snapshot");
+
   // Initialize is_done flag to false
   LLVMValueRef is_done_gep = LLVMBuildStructGEP2(
       builder, promise_type, promise_alloca, 1, "is_done_ptr");
@@ -74,6 +84,7 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMValueRef frame =
       LLVMBuildArrayMalloc(builder, LLVMInt8Type(), size, "coro.frame");
+  // LLVMValueRef handle = LLVMGetParam(wrapper_fn, 0);
 
   LLVMValueRef handle = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_begin_intrinsic(module)),
@@ -102,14 +113,40 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // === START BLOCK ===
   LLVMPositionBuilderAtEnd(builder, start_bb);
+
+  // Get the inner coroutine handle from the parameter
+  LLVMValueRef inner_handle = LLVMGetParam(wrapper_fn, 0);
+
+  // Save a snapshot of the entire inner coroutine frame
+  // This captures: function pointers, promise, spilled state, suspension index
+  // We'll restore from this snapshot on each loop iteration
+  LLVMValueRef frame_size = LLVMConstInt(LLVMInt64Type(), 512, 0);
+
+  // Get memcpy intrinsic
+  LLVMTypeRef memcpy_param_types[] = {GENERIC_PTR, GENERIC_PTR, LLVMInt64Type(),
+                                      LLVMInt1Type()};
+  LLVMTypeRef memcpy_type =
+      LLVMFunctionType(LLVMVoidType(), memcpy_param_types, 4, 0);
+  LLVMValueRef memcpy_fn =
+      LLVMGetNamedFunction(module, "llvm.memcpy.p0.p0.i64");
+  if (!memcpy_fn) {
+    memcpy_fn = LLVMAddFunction(module, "llvm.memcpy.p0.p0.i64", memcpy_type);
+  }
+
+  // Save: memcpy(snapshot, inner_handle, 512, volatile=false)
+  LLVMValueRef save_args[] = {frame_snapshot, inner_handle, frame_size,
+                              LLVMConstInt(LLVMInt1Type(), 0, 0)};
+  LLVMBuildCall2(builder, memcpy_type, memcpy_fn, save_args, 4,
+                 "save.snapshot");
+
   LLVMBuildBr(builder, loop_bb);
 
   // === LOOP BLOCK: Evaluate coroutine expression and drain it ===
   LLVMPositionBuilderAtEnd(builder, loop_bb);
 
-  // Evaluate the coroutine expression to get a handle
-  // Each time through the loop, this creates a new coroutine instance
-  LLVMValueRef inner_handle = codegen(coro_ast, ctx, module, builder);
+  // Get the inner handle again (it's a function parameter, accessible from any
+  // block) Note: inner_handle variable from start_bb is not in scope here
+  LLVMValueRef inner_handle_loop = LLVMGetParam(wrapper_fn, 0);
 
   // === YIELD-FROM LOOP (copied from codegen_yield) ===
   LLVMBasicBlockRef loop_check_bb =
@@ -129,19 +166,20 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, loop_check_bb);
   LLVMValueRef is_done_before = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
-      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle}, 1,
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle_loop}, 1,
       "inner.is_done_before");
   LLVMBuildCondBr(builder, is_done_before, loop_exit_bb, loop_body_bb);
 
   // Resume inner
   LLVMPositionBuilderAtEnd(builder, loop_body_bb);
-  LLVMBuildCall2(
-      builder, LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
-      get_coro_resume_intrinsic(module), (LLVMValueRef[]){inner_handle}, 1, "");
+  LLVMBuildCall2(builder,
+                 LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
+                 get_coro_resume_intrinsic(module),
+                 (LLVMValueRef[]){inner_handle_loop}, 1, "");
 
   LLVMValueRef is_done_after = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
-      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle}, 1,
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle_loop}, 1,
       "inner.is_done_after");
   LLVMBuildCondBr(builder, is_done_after, loop_exit_bb, get_value_bb);
 
@@ -151,7 +189,7 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef inner_promise_raw = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),
       get_coro_promise_intrinsic(module),
-      (LLVMValueRef[]){inner_handle, LLVMConstInt(LLVMInt32Type(), 0, 0),
+      (LLVMValueRef[]){inner_handle_loop, LLVMConstInt(LLVMInt32Type(), 0, 0),
                        LLVMConstInt(LLVMInt1Type(), 0, 0)},
       3, "inner.promise.raw");
 
@@ -193,7 +231,14 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // When inner is exhausted, go back to outer loop to create new instance
   LLVMPositionBuilderAtEnd(builder, loop_exit_bb);
-  LLVMBuildBr(builder, loop_bb); // Infinite loop!
+  // INSERT_PRINTF(0, "are we branching correctly????\n");
+
+  // Restore the inner coroutine frame from the snapshot we saved in start_bb
+  // This resets ALL state: function pointers, promise, spilled variables,
+  // suspension index - everything back to the initial state
+  coro_emit_memcpy_restore(inner_handle_loop, frame_snapshot, builder);
+
+  LLVMBuildBr(builder, loop_bb);
 
   // === CLEANUP BLOCK ===
   LLVMPositionBuilderAtEnd(builder, cleanup_bb);
@@ -219,9 +264,12 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // Restore builder position
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
+  LLVMValueRef cor_to_loop = codegen(coro_ast, ctx, module, builder);
+
   // Call the wrapper to create the looping coroutine handle
-  LLVMValueRef loop_handle = LLVMBuildCall2(builder, wrapper_fn_type,
-                                            wrapper_fn, NULL, 0, "loop.handle");
+  LLVMValueRef loop_handle =
+      LLVMBuildCall2(builder, wrapper_fn_type, wrapper_fn,
+                     (LLVMValueRef[]){cor_to_loop}, 1, "loop.handle");
 
   return loop_handle;
 }

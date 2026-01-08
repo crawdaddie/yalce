@@ -235,4 +235,11 @@ LLVMValueRef codegen_handle_resume(LLVMValueRef handle,
                                    LLVMTypeRef llvm_yield_type, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder);
+
+void coro_emit_reset(LLVMValueRef handle, LLVMTypeRef yield_type,
+                     LLVMValueRef resume_fn, JITLangCtx *ctx,
+                     LLVMModuleRef module, LLVMBuilderRef builder);
+
+void coro_emit_memcpy_restore(LLVMValueRef dst_handle, LLVMValueRef src_snapshot,
+                               LLVMBuilderRef builder);
 #endif

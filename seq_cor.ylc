@@ -14,17 +14,24 @@ import Patterns;
 
 # let s = Patterns.parse "1 <7 8 9> c2 4 {80 200} 200";
 let s = Patterns.parse "1 c2 4 200";
+let p = fn ot ->
+  match ot with
+  | Some s -> Patterns.print_seq_helper true s
+  | None -> ()
+;;
+
+let x = Patterns.pat_to_coroutine s |> cor_loop;
+
+x () |> p;
+print "\n:\n";
+x () |> p;
+print "\n:\n";
+x () |> p;
+print "\n:\n";
+x () |> p;
+print "\n:\n";
+x () |> p;
 
 
-let x = Patterns.pat_to_coroutine s;
-print `
-{x ()}
-`;
-# print `
-# {x ()}
-# {x ()}
-# {x ()}
-# {x ()}
-# {x ()}
-# `
+
 

@@ -53,6 +53,7 @@ extern Type logical_op_scheme;
 extern Type cor_map_scheme;
 extern Type cor_stop_scheme;
 extern Type cor_loop_scheme;
+// extern Type loop_cor_scheme;
 extern Type cor_combine_scheme;
 extern Type cor_try_opt_scheme;
 extern Type play_routine_scheme;

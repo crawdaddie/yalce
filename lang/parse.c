@@ -982,6 +982,8 @@ Ast *ast_yield_end() {
 }
 Ast *ast_thunk_expr(Ast *expr) {
   Ast *thunk = ast_lambda(ast_arg_list(ast_void(), NULL), expr);
+  // printf("thunk???\n");
+  // print_ast(thunk);
   return thunk;
 }
 

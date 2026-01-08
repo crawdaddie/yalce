@@ -199,6 +199,13 @@ int main() {
   status &= test_parse("1 + -2.", "((+ 1) -2.000000)");
   status &= test_parse("()", "()");
 
+  // thunk
+  status &= test_parse("\\1", "(() -> \n"
+                              "1)");
+
+  status &= test_parse("\\(x + y)", "(() -> \n"
+                                    "((+ x) y))");
+
   // # multiple binop expression",
   status &=
       test_parse("1 + 2 - 3 * 4 + 5", "((+ ((- ((+ 1) 2)) ((* 3) 4))) 5)");

@@ -88,10 +88,6 @@ void print_type_to_stream(Type *t, FILE *stream) {
       break;
     }
 
-    if (is_recursive_ref_container(t)) {
-      break;
-    }
-
     if (is_list_type(t)) {
       print_type_to_stream(t->data.T_CONS.args[0], stream);
       fprintf(stream, "[]");

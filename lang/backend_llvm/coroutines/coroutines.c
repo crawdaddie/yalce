@@ -651,6 +651,7 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
   // Initialize is_done flag to false
   LLVMValueRef is_done_gep = LLVMBuildStructGEP2(
       builder, prom_struct_type, promise_alloca, 1, "is_done_ptr");
+
   LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_done_gep);
 
   LLVMValueRef get_coro_id = get_coro_id_intrinsic(module);
@@ -1228,4 +1229,129 @@ LLVMBasicBlockRef coro_emit_yield_from_loop(
   LLVMPositionBuilderAtEnd(builder, loop_exit_bb);
 
   return loop_exit_bb;
+}
+
+// ============================================================================
+// Helper: coroutine reset
+// ============================================================================
+
+void coro_emit_reset(LLVMValueRef handle, LLVMTypeRef yield_type,
+                     LLVMValueRef resume_fn, JITLangCtx *ctx,
+                     LLVMModuleRef module, LLVMBuilderRef builder) {
+  // DEPRECATED: This function doesn't work reliably for complex coroutines
+  // because the suspension index location and spilled state layout varies.
+  // Use coro_emit_memcpy_restore instead.
+
+  // The lowered coroutine frame layout is:
+  // Offset 0:  Resume function pointer (ptr, 8 bytes)
+  // Offset 8:  Destroy function pointer (ptr, 8 bytes)
+  // Offset 16: Promise data {yield_type, i1 is_done}
+  // Offset 16 + promise_size: Suspension index (iN where N depends on # of
+  // suspends)
+
+  // CRITICAL: Restore the resume function pointer at offset 0
+  // When a coroutine finishes, LLVM sets this to null to mark it as done.
+  // We must restore it to allow the coroutine to be resumed again.
+  LLVMBuildStore(builder, resume_fn, handle);
+
+  // Construct the promise struct type {yield_type, i1}
+  LLVMTypeRef promise_struct_type =
+      LLVMStructType((LLVMTypeRef[]){yield_type, LLVMInt1Type()}, 2, 0);
+
+  // Get pointer to promise at offset 16
+  LLVMValueRef promise_ptr_i8 = LLVMBuildGEP2(
+      builder, LLVMInt8Type(), handle,
+      (LLVMValueRef[]){LLVMConstInt(LLVMInt64Type(), 16, 0)}, 1,
+      "promise.offset");
+
+  // Cast to promise struct pointer
+  LLVMValueRef promise_ptr = LLVMBuildBitCast(
+      builder, promise_ptr_i8, LLVMPointerType(promise_struct_type, 0),
+      "promise.ptr");
+
+  // Reset the is_done flag (field 1) to false
+  LLVMValueRef is_done_ptr = LLVMBuildStructGEP2(
+      builder, promise_struct_type, promise_ptr, 1, "is_done.ptr");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_done_ptr);
+
+  // Calculate suspension index offset:
+  // It's at offset 16 + sizeof(promise_struct)
+  // We'll use LLVM's data layout to get the actual size
+  LLVMTypeRef i64_type = LLVMInt64Type();
+
+  // Get the promise struct size using GEP trick:
+  // GEP from null pointer gives us the size
+  LLVMValueRef size_gep = LLVMBuildGEP2(
+      builder, promise_struct_type,
+      LLVMConstNull(LLVMPointerType(promise_struct_type, 0)),
+      (LLVMValueRef[]){LLVMConstInt(LLVMInt64Type(), 1, 0)}, 1,
+      "promise.size");
+  LLVMValueRef promise_size =
+      LLVMBuildPtrToInt(builder, size_gep, i64_type, "promise.size.int");
+
+  // Suspension index is at offset 16 + promise_size
+  LLVMValueRef base_offset = LLVMConstInt(i64_type, 16, 0);
+  LLVMValueRef index_offset =
+      LLVMBuildAdd(builder, base_offset, promise_size, "index.offset");
+
+  // Get pointer to suspension index
+  LLVMValueRef index_ptr_i8 =
+      LLVMBuildGEP2(builder, LLVMInt8Type(), handle,
+                    (LLVMValueRef[]){index_offset}, 1, "index.ptr.i8");
+
+  // The suspension index type varies based on number of suspend points.
+  // We'll use i32 as a safe bet (can represent up to 2^32 suspend points)
+  // If there are fewer suspend points, LLVM will use smaller type (i3, i8,
+  // etc) but storing i32 zero will still work
+  LLVMValueRef index_ptr = LLVMBuildBitCast(
+      builder, index_ptr_i8, LLVMPointerType(LLVMInt32Type(), 0), "index.ptr");
+
+  // Reset suspension index to 0 (initial state)
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0), index_ptr);
+}
+
+// Maximum coroutine frame size we'll snapshot (512 bytes should be plenty)
+#define MAX_CORO_FRAME_SIZE 512
+
+void coro_emit_memcpy_restore(LLVMValueRef dst_handle, LLVMValueRef src_snapshot,
+                               LLVMBuilderRef builder) {
+  // Restore the entire coroutine frame from a previously saved snapshot.
+  // This includes: function pointers, promise data, spilled state, and
+  // suspension index - everything needed to reset the coroutine to its
+  // initial state.
+
+  // We use a fixed size memcpy. This may copy more bytes than the actual
+  // frame size, but that's okay - we're restoring from our own snapshot.
+  LLVMValueRef frame_size = LLVMConstInt(LLVMInt64Type(), MAX_CORO_FRAME_SIZE, 0);
+
+  // Get memcpy intrinsic
+  LLVMTypeRef memcpy_param_types[] = {
+      GENERIC_PTR,      // dest
+      GENERIC_PTR,      // src
+      LLVMInt64Type(),  // size
+      LLVMInt1Type()    // is_volatile
+  };
+
+  LLVMTypeRef memcpy_type =
+      LLVMFunctionType(LLVMVoidType(), memcpy_param_types, 4, 0);
+
+  // Declare llvm.memcpy.p0.p0.i64
+  LLVMModuleRef module = LLVMGetGlobalParent(
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)));
+  LLVMValueRef memcpy_fn =
+      LLVMGetNamedFunction(module, "llvm.memcpy.p0.p0.i64");
+
+  if (!memcpy_fn) {
+    memcpy_fn = LLVMAddFunction(module, "llvm.memcpy.p0.p0.i64", memcpy_type);
+  }
+
+  // Call memcpy to restore the frame
+  LLVMValueRef memcpy_args[] = {
+      dst_handle,                            // dest
+      src_snapshot,                          // src
+      frame_size,                            // size
+      LLVMConstInt(LLVMInt1Type(), 0, 0)    // is_volatile = false
+  };
+
+  LLVMBuildCall2(builder, memcpy_type, memcpy_fn, memcpy_args, 4, "");
 }

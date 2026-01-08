@@ -219,9 +219,7 @@ let dummy = fn () ->
 
 let pat_to_coroutine = fn p ->
   match p with
-  | SeqList (3, len, l) -> (
-    let c = iter_of_array (Arrays.of_list len l);
-    cor_loop c
-  )
+  | SeqList (3, len, l) -> iter_of_list l
+  # | SeqList (4, len, l) -> (let arr = iter_of_list l
   | _ -> (dummy ())
 ;;

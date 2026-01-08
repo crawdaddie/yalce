@@ -1774,6 +1774,13 @@ int test_closures() {
     }
     status &= res;
   });
+
+  // ({
+  // TODO: typecheck thunks
+  //   Type f = MAKE_FN_TYPE_3(&t_void, &t_void, &t_num);
+  //   f.data.T_FN.to->closure_meta = &TTUPLE(2, &t_num, &t_int);
+  //   Ast *b = T("let x = 1; let y = 2.; \\(x + y)", &f);
+  // });
   return status;
 }
 

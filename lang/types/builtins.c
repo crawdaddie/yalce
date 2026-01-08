@@ -460,9 +460,11 @@ Type create_cor_combine_scheme() {
 }
 
 Type cor_loop_scheme;
+Type loop_cor_scheme;
 Type create_cor_loop_scheme() {
   Type *a = tvar("a");
   Type *cor = create_coroutine_instance_type(a);
+  // cor = type_fn(&t_void, cor);
   Type *f = type_fn(cor, cor);
 
   TypeList *vars_mem = t_alloc(sizeof(TypeList));
@@ -745,6 +747,9 @@ void initialize_builtin_types() {
   cor_loop_scheme = create_cor_loop_scheme();
   add_builtin("cor_loop", &cor_loop_scheme);
 
+  // loop_cor_scheme = create_cor_loop_scheme();
+  // add_builtin("loop_cor", &cor_loop_scheme);
+
   cor_map_scheme = create_cor_map_scheme();
   add_builtin("cor_map", &cor_map_scheme);
 
@@ -774,7 +779,7 @@ void initialize_builtin_types() {
   add_builtin("asbytes", &asbytes_scheme);
 
   typeof_scheme = create_str_fmt_scheme();
-  add_builtin("asbytes", &typeof_scheme);
+  add_builtin("typeof", &typeof_scheme);
 
   // print_builtin_types();
 }

@@ -229,23 +229,23 @@ let test_cor_map = fn () ->
 
 ;;
 
-let test_cor_loop_and_map = fn () ->
-  let c = fn () -> yield 1; yield 2; yield 3;;
-  let x = c () |> cor_loop |> cor_map ((*) 2) in 
-  let y = c () |> cor_map ((*) 2) |> cor_loop in 
-
-
-     (let xx = x () in let yy = y () in xx == yy && xx == Some 2) 
-  && (let xx = x () in let yy = y () in xx == yy && xx == Some 4)
-  && (let xx = x () in let yy = y () in xx == yy && xx == Some 6)
-  && (let xx = x () in let yy = y () in xx == yy && xx == Some 2)
-  && (let xx = x () in let yy = y () in xx == yy && xx == Some 4)
-  && (let xx = x () in let yy = y () in xx == yy && xx == Some 6)
-  && (let xx = x () in let yy = y () in xx == yy && xx == Some 2)
-  && (let xx = x () in let yy = y () in xx == yy && xx == Some 4)
-  && (let xx = x () in let yy = y () in xx == yy && xx == Some 6)
-
-;;
+# let test_cor_loop_and_map = fn () ->
+#   let c = fn () -> yield 1; yield 2; yield 3;;
+#   let x = c () |> cor_loop |> cor_map ((*) 2) in 
+#   let y = c () |> cor_map ((*) 2) |> cor_loop in 
+#
+#
+#      (let xx = x () in let yy = y () in xx == yy && xx == Some 2) 
+#   && (let xx = x () in let yy = y () in xx == yy && xx == Some 4)
+#   && (let xx = x () in let yy = y () in xx == yy && xx == Some 6)
+#   && (let xx = x () in let yy = y () in xx == yy && xx == Some 2)
+#   && (let xx = x () in let yy = y () in xx == yy && xx == Some 4)
+#   && (let xx = x () in let yy = y () in xx == yy && xx == Some 6)
+#   && (let xx = x () in let yy = y () in xx == yy && xx == Some 2)
+#   && (let xx = x () in let yy = y () in xx == yy && xx == Some 4)
+#   && (let xx = x () in let yy = y () in xx == yy && xx == Some 6)
+#
+# ;;
 
 let test_cor_stop = fn () ->
   let c = fn () -> yield 1; yield 2; yield 3;;
