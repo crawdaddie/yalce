@@ -1511,6 +1511,7 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
     // return type_error(ast, "%s not found in scope\n", name);
     return next_tvar();
   }
+  ast->type = type_ref->type;
 
   if (type_ref->md.type == BT_RECURSIVE_REF) {
     return type_ref->type;
@@ -1573,7 +1574,8 @@ bool is_constant_closure(Ast *ast, TICtx *ctx);
 //
 // this is true if it's an
 // application and each supplied parameter is a constant value, or another
-// constant expression, or a reference to a value in the global scope
+// constant expression, or a reference to a value in the global scope - function
+// references are also constant expressio
 bool is_constant_expr(Ast *expr, TICtx *ctx) {
   if (expr->tag == AST_APPLICATION) {
     for (int i = 0; i < expr->data.AST_APPLICATION.len; i++) {
@@ -1600,6 +1602,7 @@ bool is_constant_expr(Ast *expr, TICtx *ctx) {
 
     if (type_ref && type_ref->md.type == BT_VAR &&
         type_ref->md.data.VAR.scope == 0) {
+
       return true;
     }
 

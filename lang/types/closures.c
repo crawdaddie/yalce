@@ -1,4 +1,7 @@
+
 #include "./closures.h"
+#include "serde.h"
+#include "type_ser.h"
 #include <string.h>
 
 Type *_get_full_closure_type(int num, Type *f, AstList *cl) {
@@ -90,6 +93,13 @@ void handle_closed_over_ref(Ast *ast, TypeEnv *ref, TICtx *ctx) {
 void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx) {
 
   if (!ctx->current_fn_ast) {
+    return;
+  }
+
+  // printf("handle closed over???\n");
+  // print_ast(ast);
+  // print_type(ast->type);
+  if (ast->type->kind == T_FN || is_coroutine_constructor_type(ast->type)) {
     return;
   }
 

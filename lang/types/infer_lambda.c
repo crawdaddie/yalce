@@ -183,11 +183,15 @@ Type *create_coroutine_lambda(Type *fn_type, TICtx *ctx) {
 }
 
 Type *create_closure(Ast *ast, Type *fn_type, TICtx *ctx) {
+  // printf("create closure???\n");
+  // print_ast(ast);
+  // print_type(fn_type);
   int num = ast->data.AST_LAMBDA.num_closed_vals;
 
   if (num == 0) {
     return NULL;
   }
+
   Type **closed_types = t_alloc(sizeof(Type) * num);
 
   int i = 0;

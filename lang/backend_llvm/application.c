@@ -10,6 +10,7 @@
 #include "types/infer_application.h"
 #include "types/type_ser.h"
 #include "llvm-c/Core.h"
+#include <alloca.h>
 #include <string.h>
 
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
@@ -254,6 +255,26 @@ bool is_closure_symbol(JITSymbol *sym) {
   return sym->symbol_type && is_closure(sym->symbol_type);
 }
 
+LLVMValueRef create_inline_callable(JITSymbol *sym, Type *callable_type,
+                                    Ast *ast, JITLangCtx *ctx,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+
+  Ast f = *ast->data.AST_APPLICATION.function;
+  if (is_closure(callable_type)) {
+    printf("is closure callable type\n");
+    print_type(callable_type);
+  } else {
+    LLVMValueRef fn = codegen(&f, ctx, module, builder);
+    *sym = (JITSymbol){
+        .type = STYPE_FUNCTION,
+        .llvm_type = type_to_llvm_type(callable_type, ctx, module),
+        .symbol_type = callable_type,
+        .val = fn,
+    };
+  }
+}
+
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   // TODO: this function is extraordinarily ugly - refactor to something a bit
@@ -316,8 +337,13 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
-  if (!sym) {
+  if (!sym && ast->data.AST_APPLICATION.function->tag == AST_LAMBDA) {
+    sym = alloca(sizeof(JITSymbol));
+    *sym = (JITSymbol){};
+    create_inline_callable(sym, callable_type, ast, ctx, module, builder);
+  }
 
+  if (!sym) {
     fprintf(stderr, "Error callable symbol %s not found in scope %d\n",
             sym_name, ctx->stack_ptr);
     print_location(ast->data.AST_APPLICATION.function);

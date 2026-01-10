@@ -1,4 +1,5 @@
 #include "./coroutine_extensions.h"
+#include "../../types/builtins.h"
 #include "../../types/type_ser.h"
 #include "../adt.h"
 #include "../types.h"
@@ -20,8 +21,228 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
-  printf("?????\n");
-  print_ast(ast);
+  // Get the inner coroutine expression
+  Ast *coro_constructor = ast->data.AST_APPLICATION.args;
+  Type *coro_type = coro_constructor->type; // Type is Coroutine<T>
+  //
+  if (is_void_func(coro_type)) {
+    coro_type = fn_return_type(coro_type);
+  } else if (is_coroutine_constructor_type(coro_type)) {
+    coro_type = coro_type->data.T_CONS.args[0];
+    coro_type = fn_return_type(coro_type);
+  }
+
+  // Extract yield type T from Coroutine<T>
+  Type *yield_type = coro_type->data.T_CONS.args[0];
+  LLVMTypeRef llvm_yield_type = type_to_llvm_type(yield_type, ctx, module);
+
+  // Create wrapper coroutine function
+  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(GENERIC_PTR, NULL, 0, 0);
+
+  static int loop_counter = 0;
+  char wrapper_name[64];
+  snprintf(wrapper_name, sizeof(wrapper_name), "coro_loop_wrapper_%d",
+           loop_counter++);
+
+  LLVMValueRef wrapper_fn =
+      LLVMAddFunction(module, wrapper_name, wrapper_fn_type);
+  LLVMSetLinkage(wrapper_fn, LLVMExternalLinkage);
+
+  COROUTINE_ATTR_MARKING(wrapper_fn)
+
+  // Create basic blocks
+  COROUTINE_BASIC_BLOCKS(wrapper_fn)
+
+  LLVMBasicBlockRef loop_bb = LLVMAppendBasicBlock(wrapper_fn, "loop");
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+
+  // === ENTRY BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, entry_bb);
+
+  LLVMTypeRef promise_type =
+      LLVMStructType((LLVMTypeRef[]){llvm_yield_type, LLVMInt1Type()}, 2, 0);
+  LLVMValueRef promise_alloca =
+      LLVMBuildAlloca(builder, promise_type, "promise");
+
+  // Initialize is_done flag to false
+  LLVMValueRef is_done_gep = LLVMBuildStructGEP2(
+      builder, promise_type, promise_alloca, 1, "is_done_ptr");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_done_gep);
+
+  LLVMValueRef id = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
+      get_coro_id_intrinsic(module),
+      (LLVMValueRef[]){LLVMConstInt(LLVMInt32Type(), 0, 0), promise_alloca,
+                       LLVMConstNull(GENERIC_PTR), LLVMConstNull(GENERIC_PTR)},
+      4, "coro.id");
+
+  LLVMValueRef size = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_size_intrinsic(module)),
+      get_coro_size_intrinsic(module), NULL, 0, "coro.size");
+
+  LLVMValueRef frame =
+      LLVMBuildArrayMalloc(builder, LLVMInt8Type(), size, "coro.frame");
+
+  LLVMValueRef handle = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_begin_intrinsic(module)),
+      get_coro_begin_intrinsic(module), (LLVMValueRef[]){id, frame}, 2,
+      "coro.handle");
+
+  // Initial suspend
+  LLVMValueRef initial_save = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "initial.save");
+
+  LLVMValueRef initial_suspend = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){initial_save, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2,
+      "initial.suspend");
+
+  LLVMValueRef init_switch =
+      LLVMBuildSwitch(builder, initial_suspend, initial_return_bb, 2);
+  LLVMAddCase(init_switch, LLVMConstInt(LLVMInt8Type(), 0, 0), start_bb);
+  LLVMAddCase(init_switch, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, initial_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // === START BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, start_bb);
+  LLVMBuildBr(builder, loop_bb);
+
+  // === LOOP BLOCK: Evaluate coroutine expression and drain it ===
+  LLVMPositionBuilderAtEnd(builder, loop_bb);
+
+  // Evaluate the coroutine expression to get a handle
+  // Each time through the loop, this creates a new coroutine instance
+  Ast void_arg = {AST_VOID, .type = &t_void};
+  Ast fresh_coro_ast = {
+      AST_APPLICATION, .type = coro_type,
+      .data = {.AST_APPLICATION = {.function = coro_constructor,
+                                   .args = {&void_arg},
+                                   .len = 1}}};
+
+  LLVMValueRef inner_handle = codegen(&fresh_coro_ast, ctx, module, builder);
+
+  // === YIELD-FROM LOOP (copied from codegen_yield) ===
+  LLVMBasicBlockRef loop_check_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "yield_from.check");
+  LLVMBasicBlockRef loop_body_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "yield_from.body");
+  LLVMBasicBlockRef get_value_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "yield_from.get_value");
+  LLVMBasicBlockRef loop_resume_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "yield_from.resume");
+  LLVMBasicBlockRef loop_exit_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "yield_from.exit");
+
+  LLVMBuildBr(builder, loop_check_bb);
+
+  // Check if inner is done
+  LLVMPositionBuilderAtEnd(builder, loop_check_bb);
+  LLVMValueRef is_done_before = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle}, 1,
+      "inner.is_done_before");
+  LLVMBuildCondBr(builder, is_done_before, loop_exit_bb, loop_body_bb);
+
+  // Resume inner
+  LLVMPositionBuilderAtEnd(builder, loop_body_bb);
+  LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
+      get_coro_resume_intrinsic(module), (LLVMValueRef[]){inner_handle}, 1, "");
+
+  LLVMValueRef is_done_after = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle}, 1,
+      "inner.is_done_after");
+  LLVMBuildCondBr(builder, is_done_after, loop_exit_bb, get_value_bb);
+
+  // Get value from inner and yield it
+  LLVMPositionBuilderAtEnd(builder, get_value_bb);
+
+  LLVMValueRef inner_promise_raw = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),
+      get_coro_promise_intrinsic(module),
+      (LLVMValueRef[]){inner_handle, LLVMConstInt(LLVMInt32Type(), 0, 0),
+                       LLVMConstInt(LLVMInt1Type(), 0, 0)},
+      3, "inner.promise.raw");
+
+  LLVMValueRef inner_promise_ptr = LLVMBuildBitCast(
+      builder, inner_promise_raw, LLVMPointerType(llvm_yield_type, 0),
+      "inner.promise.ptr");
+
+  LLVMValueRef inner_value = LLVMBuildLoad2(builder, llvm_yield_type,
+                                            inner_promise_ptr, "inner.value");
+
+  // Store in our promise
+  LLVMBuildStore(builder, inner_value, promise_alloca);
+
+  // Suspend
+  LLVMValueRef save_token = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "coro.save");
+
+  LLVMValueRef suspend_result = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){save_token, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2,
+      "coro.suspend");
+
+  LLVMBasicBlockRef suspend_return_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "yield_from.suspend_return");
+
+  LLVMValueRef switch_inst =
+      LLVMBuildSwitch(builder, suspend_result, suspend_return_bb, 2);
+  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 0, 0), loop_resume_bb);
+  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, suspend_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  LLVMPositionBuilderAtEnd(builder, loop_resume_bb);
+  LLVMBuildBr(builder, loop_check_bb);
+
+  // When inner is exhausted, go back to outer loop to create new instance
+  LLVMPositionBuilderAtEnd(builder, loop_exit_bb);
+  LLVMBuildBr(builder, loop_bb); // Infinite loop!
+
+  // === CLEANUP BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, cleanup_bb);
+
+  LLVMValueRef mem = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_free_intrinsic(module)),
+      get_coro_free_intrinsic(module), (LLVMValueRef[]){id, handle}, 2,
+      "coro.free");
+
+  LLVMBuildFree(builder, mem);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // === SUSPEND BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, suspend_bb);
+
+  LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
+      get_coro_end_intrinsic(module),
+      (LLVMValueRef[]){handle, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2, "");
+
+  LLVMBuildRet(builder, handle);
+
+  // Restore builder position
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  // Call the wrapper to create the looping coroutine handle
+  LLVMValueRef loop_handle = LLVMBuildCall2(builder, wrapper_fn_type,
+                                            wrapper_fn, NULL, 0, "loop.handle");
+
+  return loop_handle;
+}
+
+LLVMValueRef _CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                             LLVMBuilderRef builder) {
   // Get the inner coroutine expression
   Ast *coro_ast = ast->data.AST_APPLICATION.args;
   Type *coro_type = coro_ast->type; // Type is Coroutine<T>

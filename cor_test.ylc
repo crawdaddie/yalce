@@ -1,0 +1,64 @@
+# let c = fn a: (Int) -> yield 1; yield 2; yield 3;;
+#
+# let x = cor_loop (\c ()) |> cor_map ((*) 2) in 
+#
+# print `
+# {x ()}
+# {x ()}
+# {x ()}
+# {x ()}
+# {x ()}
+# {x ()}
+# {x ()}
+#
+#
+# `
+#
+# let c = fn () -> yield 1; yield 2; yield 3;;
+# let x = c |> cor_loop in 
+#    x () == Some 1 
+# && x () == Some 2 
+# && x () == Some 3 
+# && x () == Some 1 
+# && x () == Some 2 
+# && x () == Some 3 
+# && x () == Some 1
+
+# let y = c () |> cor_map ((*) 2) |> cor_loop in 
+#
+#
+#    (let xx = x () in let yy = y () in xx == yy && xx == Some 2) 
+# && (let xx = x () in let yy = y () in xx == yy && xx == Some 4)
+# && (let xx = x () in let yy = y () in xx == yy && xx == Some 6)
+# && (let xx = x () in let yy = y () in xx == yy && xx == Some 2)
+# && (let xx = x () in let yy = y () in xx == yy && xx == Some 4)
+# && (let xx = x () in let yy = y () in xx == yy && xx == Some 6)
+# && (let xx = x () in let yy = y () in xx == yy && xx == Some 2)
+# && (let xx = x () in let yy = y () in xx == yy && xx == Some 4)
+# && (let xx = x () in let yy = y () in xx == yy && xx == Some 6)
+#
+
+let chaining = fn () ->
+  let (+>) = fn a b -> yield a; yield b;;
+  # let z = (\ ([ 1,2,3 ] |> iter_of_list) +> ([| 6,5,4 |] |> iter_of_array)) |> cor_loop;
+
+  let z = ([ 1,2,3 ] |> iter_of_list) +> (\ ([| 6,5,4 |] |> iter_of_array)) |> cor_loop;
+  print `
+  {z ()}
+  {z ()}
+  {z ()}
+  {z ()}
+  {z ()}
+  {z ()}
+  {z ()}
+  {z ()}
+  {z ()}
+  {z ()}
+  {z ()}
+  `
+
+
+
+;;
+chaining ();
+
