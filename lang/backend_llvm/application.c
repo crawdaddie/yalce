@@ -348,8 +348,8 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (is_coroutine_constructor_type(symbol_type)) {
-    LLVMValueRef instance_ptr =
-        coro_create(sym, callable_type, ast, ctx, module, builder);
+    LLVMValueRef instance_ptr = coro_create_with_reset_closure(
+        sym, callable_type, ast, ctx, module, builder);
     return instance_ptr;
   } else if (is_coroutine_type(symbol_type)) {
     return coro_symbol_resume(sym, ctx, module, builder);

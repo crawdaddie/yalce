@@ -464,7 +464,6 @@ Type loop_cor_scheme;
 Type create_cor_loop_scheme() {
   Type *a = tvar("a");
   Type *cor = create_coroutine_instance_type(a);
-  // cor = type_fn(&t_void, cor);
   Type *f = type_fn(cor, cor);
 
   TypeList *vars_mem = t_alloc(sizeof(TypeList));

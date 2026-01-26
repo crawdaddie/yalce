@@ -20,8 +20,6 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
-  printf("?????\n");
-  print_ast(ast);
   // Get the inner coroutine expression
   Ast *coro_ast = ast->data.AST_APPLICATION.args;
   Type *coro_type = coro_ast->type; // Type is Coroutine<T>

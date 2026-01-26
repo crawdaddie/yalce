@@ -45,6 +45,12 @@ LLVMValueRef coro_create(JITSymbol *sym, Type *expected_fn_type, Ast *app,
                          JITLangCtx *ctx, LLVMModuleRef module,
                          LLVMBuilderRef builder);
 
+LLVMValueRef coro_create_with_reset_closure(JITSymbol *sym,
+                                            Type *expected_fn_type, Ast *app,
+                                            JITLangCtx *ctx,
+                                            LLVMModuleRef module,
+                                            LLVMBuilderRef builder);
+
 LLVMValueRef coro_symbol_resume(JITSymbol *sym, JITLangCtx *ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder);
 
@@ -240,6 +246,7 @@ void coro_emit_reset(LLVMValueRef handle, LLVMTypeRef yield_type,
                      LLVMValueRef resume_fn, JITLangCtx *ctx,
                      LLVMModuleRef module, LLVMBuilderRef builder);
 
-void coro_emit_memcpy_restore(LLVMValueRef dst_handle, LLVMValueRef src_snapshot,
-                               LLVMBuilderRef builder);
+void coro_emit_memcpy_restore(LLVMValueRef dst_handle,
+                              LLVMValueRef src_snapshot,
+                              LLVMBuilderRef builder);
 #endif
