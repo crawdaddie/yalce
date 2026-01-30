@@ -105,6 +105,8 @@ LLVMValueRef bind_value(Ast *id, LLVMValueRef val, Type *val_type,
     // NB: convert bare handle type to 'fat handle' struct
     llvm_type = LLVMStructType(
         (LLVMTypeRef[]){llvm_type, GENERIC_PTR, GENERIC_PTR}, 3, 0);
+    // printf("fat handle type\n");
+    // LLVMDumpType(llvm_type);
   }
   // printf("bind value\n");
   // print_ast(id);

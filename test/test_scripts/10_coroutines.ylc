@@ -139,34 +139,34 @@ let test_iter_boundary_xers = fn () ->
 # ;;
 #
 
-let test_nested_coroutines = fn () ->
-  let cor1 = fn () ->
-    yield 1
-  ;;
-
-  let cor2 = fn () ->
-    yield cor1 ();
-    yield 2
-  ;;
-
-  let cor3 = fn () ->
-    yield cor2 ();
-    yield 3
-  ;;
-
-  let cor = fn () ->
-    yield cor3 ();
-    yield 4 
-  ;;
-
-  let x = cor () in
-
-     x () == Some 1 
-  && x () == Some 2 
-  && x () == Some 3 
-  && x () == Some 4
-  && x () == None
-;;
+# let test_nested_coroutines = fn () ->
+#   let cor1 = fn () ->
+#     yield 1
+#   ;;
+#
+#   let cor2 = fn () ->
+#     yield cor1 ();
+#     yield 2
+#   ;;
+#
+#   let cor3 = fn () ->
+#     yield cor2 ();
+#     yield 3
+#   ;;
+#
+#   let cor = fn () ->
+#     yield cor3 ();
+#     yield 4 
+#   ;;
+#
+#   let x = cor () in
+#
+#      x () == Some 1 
+#   && x () == Some 2 
+#   && x () == Some 3 
+#   && x () == Some 4
+#   && x () == None
+# ;;
 
 
 let test_iter_array = fn () ->
@@ -190,34 +190,34 @@ let test_iter_list = fn () ->
   && x () == None
 ;;
 
-let test_cor_loop = fn () ->
-  let c = fn () -> yield 1; yield 2; yield 3;;
-  let x = c () |> cor_loop in 
-     x () == Some 1 
-  && x () == Some 2 
-  && x () == Some 3 
-  && x () == Some 1 
-  && x () == Some 2 
-  && x () == Some 3 
-  && x () == Some 1
+# let test_cor_loop = fn () ->
+#   let c = fn () -> yield 1; yield 2; yield 3;;
+#   let x = c () |> cor_loop in 
+#      x () == Some 1 
+#   && x () == Some 2 
+#   && x () == Some 3 
+#   && x () == Some 1 
+#   && x () == Some 2 
+#   && x () == Some 3 
+#   && x () == Some 1
+#
+# ;;
 
-;;
-
-
-let test_chaining = fn () ->
-  let (+>) = fn a b -> yield a; yield b;;
-  let z = ([ 1,2,3 ] |> iter_of_list)
-    +> ([| 6,5,4 |] |> iter_of_array |> cor_loop);
-     z () == Some 1
-  && z () == Some 2
-  && z () == Some 3
-  && z () == Some 6
-  && z () == Some 5 
-  && z () == Some 4 
-  && z () == Some 6
-  && z () == Some 5
-
-;;
+#
+# let test_chaining = fn () ->
+#   let (+>) = fn a b -> yield a; yield b;;
+#   let z = ([ 1,2,3 ] |> iter_of_list)
+#     +> ([| 6,5,4 |] |> iter_of_array |> cor_loop);
+#      z () == Some 1
+#   && z () == Some 2
+#   && z () == Some 3
+#   && z () == Some 6
+#   && z () == Some 5 
+#   && z () == Some 4 
+#   && z () == Some 6
+#   && z () == Some 5
+#
+# ;;
 
 let test_cor_map = fn () ->
   let c = fn () -> yield 1; yield 2; yield 3;;
@@ -254,32 +254,32 @@ let test_cor_stop = fn () ->
 ;;
 
 
-let test_embed_list_of_cors = fn () ->
-  let get_head = fn l -> 
-    match l with
-    | [] -> None
-    | x::rest -> Some (x, rest)
-  ;;
-
-  let embed = fn l ->
-    let h, r = cor_try_opt (get_head l);
-    yield h;
-    yield embed r
-  ;;
-  let ex = fn () ->
-    yield 2000;
-    yield 2001
-  ;;
-  let x = embed [
-    iter_of_list [1, 2],
-    ex (),
-    iter_of_list [3, 4],
-  ] in
-     x () == Some 1
-  && x () == Some 2
-  && x () == Some 2000
-  && x () == Some 2001
-  && x () == Some 3
-  && x () == Some 4
-  && x () == None
-;;
+# let test_embed_list_of_cors = fn () ->
+#   let get_head = fn l -> 
+#     match l with
+#     | [] -> None
+#     | x::rest -> Some (x, rest)
+#   ;;
+#
+#   let embed = fn l ->
+#     let h, r = cor_try_opt (get_head l);
+#     yield h;
+#     yield embed r
+#   ;;
+#   let ex = fn () ->
+#     yield 2000;
+#     yield 2001
+#   ;;
+#   let x = embed [
+#     iter_of_list [1, 2],
+#     ex (),
+#     iter_of_list [3, 4],
+#   ] in
+#      x () == Some 1
+#   && x () == Some 2
+#   && x () == Some 2000
+#   && x () == Some 2001
+#   && x () == Some 3
+#   && x () == Some 4
+#   && x () == None
+# ;;

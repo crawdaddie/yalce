@@ -2,6 +2,7 @@
 #define _LANG_BACKEND_LLVM_COROUTINES_H
 
 #define PRESPLIT_COROUTINE_KIND_ID 50
+#define MAX_CORO_FRAME_SIZE 512
 #include "../common.h"
 
 typedef struct {
@@ -132,6 +133,19 @@ LLVMValueRef get_coro_destroy_intrinsic(LLVMModuleRef module);
       LLVMCreateEnumAttribute(llvm_ctx, PRESPLIT_COROUTINE_KIND_ID, 0);        \
   LLVMAddAttributeAtIndex(coro_fn, LLVMAttributeFunctionIndex, attr);
 
+// Allocate a coroutine frame padded to at least MAX_CORO_FRAME_SIZE bytes.
+// This ensures coro_emit_memcpy_restore (512-byte memcpy) doesn't overflow.
+#define CORO_FRAME_ALLOC(builder, size_val)                                    \
+  ({                                                                           \
+    LLVMValueRef _min =                                                        \
+        LLVMConstInt(LLVMInt64Type(), MAX_CORO_FRAME_SIZE, 0);                 \
+    LLVMValueRef _cmp =                                                        \
+        LLVMBuildICmp(builder, LLVMIntUGT, size_val, _min, "size.cmp");        \
+    LLVMValueRef _alloc_size =                                                 \
+        LLVMBuildSelect(builder, _cmp, size_val, _min, "frame.size");          \
+    LLVMBuildArrayMalloc(builder, LLVMInt8Type(), _alloc_size, "coro.frame");   \
+  })
+
 /**
  * Result of coroutine setup initialization
  */
@@ -249,4 +263,20 @@ void coro_emit_reset(LLVMValueRef handle, LLVMTypeRef yield_type,
 void coro_emit_memcpy_restore(LLVMValueRef dst_handle,
                               LLVMValueRef src_snapshot,
                               LLVMBuilderRef builder);
+#define FAT_HANDLE_TY                                                          \
+  LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR}, 3, 0)
+
+#define FAT_HANDLE(handle, args_ptr, closure)                                  \
+  ({                                                                           \
+    LLVMTypeRef fat_handle_ty = FAT_HANDLE_TY;                                 \
+    LLVMValueRef fat_handle = LLVMGetUndef(fat_handle_ty);                     \
+    fat_handle =                                                               \
+        LLVMBuildInsertValue(builder, fat_handle, handle, 0, "insert_handle"); \
+    fat_handle = LLVMBuildInsertValue(builder, fat_handle, closure, 1,         \
+                                      "insert_closure");                       \
+    fat_handle = LLVMBuildInsertValue(builder, fat_handle, args_ptr, 2,        \
+                                      "insert_closure_data");                  \
+    fat_handle;                                                                \
+  })
+
 #endif

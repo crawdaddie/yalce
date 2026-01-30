@@ -2,7 +2,7 @@
 #include "../../types/type_ser.h"
 #include "../adt.h"
 #include "../types.h"
-#include "./coroutines/coroutines.h"
+#include "./coroutines.h"
 #include "llvm-c/Core.h"
 
 // ============================================================================
@@ -30,7 +30,7 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Create wrapper coroutine function
   LLVMTypeRef wrapper_fn_type =
-      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){FAT_HANDLE_TY}, 1, 0);
 
   static int loop_counter = 0;
   char wrapper_name[64];
@@ -39,6 +39,7 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMValueRef wrapper_fn =
       LLVMAddFunction(module, wrapper_name, wrapper_fn_type);
+
   LLVMSetLinkage(wrapper_fn, LLVMExternalLinkage);
 
   COROUTINE_ATTR_MARKING(wrapper_fn)
@@ -60,9 +61,9 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // Allocate a snapshot buffer to save the initial state of the inner coroutine
   // We'll memcpy the entire frame here, then restore it on each loop iteration
   // Using a fixed size of 512 bytes (MAX_CORO_FRAME_SIZE)
-  LLVMValueRef frame_snapshot = LLVMBuildArrayAlloca(
-      builder, LLVMInt8Type(), LLVMConstInt(LLVMInt32Type(), 512, 0),
-      "frame.snapshot");
+  // LLVMValueRef frame_snapshot = LLVMBuildArrayAlloca(
+  //     builder, LLVMInt8Type(), LLVMConstInt(LLVMInt32Type(), 512, 0),
+  //     "frame.snapshot");
 
   // Initialize is_done flag to false
   LLVMValueRef is_done_gep = LLVMBuildStructGEP2(
@@ -114,6 +115,7 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Get the inner coroutine handle from the parameter
   LLVMValueRef inner_handle = LLVMGetParam(wrapper_fn, 0);
+  inner_handle = LLVMBuildExtractValue(builder, inner_handle, 0, "");
 
   // Save a snapshot of the entire inner coroutine frame
   // This captures: function pointers, promise, spilled state, suspension index
@@ -132,10 +134,10 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   // Save: memcpy(snapshot, inner_handle, 512, volatile=false)
-  LLVMValueRef save_args[] = {frame_snapshot, inner_handle, frame_size,
-                              LLVMConstInt(LLVMInt1Type(), 0, 0)};
-  LLVMBuildCall2(builder, memcpy_type, memcpy_fn, save_args, 4,
-                 "save.snapshot");
+  // LLVMValueRef save_args[] = {frame_snapshot, inner_handle, frame_size,
+  //                             LLVMConstInt(LLVMInt1Type(), 0, 0)};
+  // LLVMBuildCall2(builder, memcpy_type, memcpy_fn, save_args, 4,
+  //                "save.snapshot");
 
   LLVMBuildBr(builder, loop_bb);
 
@@ -145,6 +147,8 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // Get the inner handle again (it's a function parameter, accessible from any
   // block) Note: inner_handle variable from start_bb is not in scope here
   LLVMValueRef inner_handle_loop = LLVMGetParam(wrapper_fn, 0);
+  inner_handle_loop =
+      LLVMBuildExtractValue(builder, inner_handle_loop, 0, "inner_handle_raw");
 
   // === YIELD-FROM LOOP (copied from codegen_yield) ===
   LLVMBasicBlockRef loop_check_bb =
@@ -234,6 +238,19 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // Restore the inner coroutine frame from the snapshot we saved in start_bb
   // This resets ALL state: function pointers, promise, spilled variables,
   // suspension index - everything back to the initial state
+
+  LLVMValueRef inner_fat = LLVMGetParam(wrapper_fn, 0);
+  LLVMValueRef args_ptr =
+      LLVMBuildExtractValue(builder, inner_fat, 1, "inner_args_ptr");
+
+  LLVMValueRef reset_closure =
+      LLVMBuildExtractValue(builder, inner_fat, 2, "inner_args_reset");
+
+  LLVMTypeRef closure_type =
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1,
+                       0); // &{cons args...} -> coroutine_handle_type
+  LLVMValueRef frame_snapshot = LLVMBuildCall2(
+      builder, closure_type, reset_closure, (LLVMValueRef[]){args_ptr}, 1, "");
   coro_emit_memcpy_restore(inner_handle_loop, frame_snapshot, builder);
 
   LLVMBuildBr(builder, loop_bb);
@@ -263,13 +280,15 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, prev_block);
 
   LLVMValueRef cor_to_loop = codegen(coro_ast, ctx, module, builder);
+  // LLVMDumpValue(cor_to_loop);
 
   // Call the wrapper to create the looping coroutine handle
   LLVMValueRef loop_handle =
       LLVMBuildCall2(builder, wrapper_fn_type, wrapper_fn,
                      (LLVMValueRef[]){cor_to_loop}, 1, "loop.handle");
 
-  return loop_handle;
+  return FAT_HANDLE(loop_handle, LLVMConstPointerNull(LLVMInt8Type()),
+                    LLVMConstPointerNull(LLVMInt8Type()));
 }
 
 LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -291,7 +310,13 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // IMPORTANT: Evaluate arguments in CALLER's scope BEFORE creating coroutine
   LLVMValueRef map_fn = codegen(map_fn_ast, ctx, module, builder);
-  LLVMValueRef inner_handle = codegen(coro_ast, ctx, module, builder);
+  LLVMValueRef inner_fat = codegen(coro_ast, ctx, module, builder);
+  LLVMValueRef inner_handle =
+      LLVMBuildExtractValue(builder, inner_fat, 0, "handle_from_fat_handle");
+  LLVMValueRef inner_args_data =
+      LLVMBuildExtractValue(builder, inner_fat, 1, "inner_args_data");
+  LLVMValueRef inner_reset_fn =
+      LLVMBuildExtractValue(builder, inner_fat, 2, "inner_reset_fn");
 
   // Create wrapper coroutine function that TAKES map function and coroutine as
   // parameters
@@ -524,13 +549,82 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMBuildCall2(builder, wrapper_fn_type, wrapper_fn,
                      (LLVMValueRef[]){map_fn, inner_handle}, 2, "map.handle");
 
-  return map_handle;
+  // Create reset closure for mapped coroutine
+  // Closure args: {map_fn_ptr, inner_args_data, inner_reset_fn}
+  LLVMTypeRef closure_args_ty =
+      LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR}, 3,
+                      0);
+
+  LLVMTypeRef reset_closure_type =
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+
+  char reset_name[64];
+  snprintf(reset_name, sizeof(reset_name), "coro_map_%d.reset", counter - 1);
+
+  LLVMValueRef reset_closure_fn =
+      LLVMAddFunction(module, reset_name, reset_closure_type);
+  LLVMSetLinkage(reset_closure_fn, LLVMExternalLinkage);
+
+  LLVMBasicBlockRef reset_prev = LLVMGetInsertBlock(builder);
+  LLVMBasicBlockRef reset_entry =
+      LLVMAppendBasicBlock(reset_closure_fn, "entry");
+  LLVMPositionBuilderAtEnd(builder, reset_entry);
+
+  // Load fields from closure args struct
+  LLVMValueRef reset_args_raw = LLVMGetParam(reset_closure_fn, 0);
+  LLVMValueRef reset_args = LLVMBuildBitCast(
+      builder, reset_args_raw, LLVMPointerType(closure_args_ty, 0),
+      "reset_args");
+
+  LLVMValueRef r_map_fn = LLVMBuildLoad2(
+      builder, GENERIC_PTR,
+      LLVMBuildStructGEP2(builder, closure_args_ty, reset_args, 0, ""),
+      "map_fn");
+  LLVMValueRef r_inner_args = LLVMBuildLoad2(
+      builder, GENERIC_PTR,
+      LLVMBuildStructGEP2(builder, closure_args_ty, reset_args, 1, ""),
+      "inner_args");
+  LLVMValueRef r_inner_reset = LLVMBuildLoad2(
+      builder, GENERIC_PTR,
+      LLVMBuildStructGEP2(builder, closure_args_ty, reset_args, 2, ""),
+      "inner_reset");
+
+  // Call inner reset closure to get a fresh inner coroutine handle
+  LLVMValueRef fresh_inner = LLVMBuildCall2(
+      builder, reset_closure_type, r_inner_reset,
+      (LLVMValueRef[]){r_inner_args}, 1, "fresh_inner");
+
+  // Call wrapper_fn(map_fn, fresh_inner) to create new mapped coroutine
+  LLVMValueRef new_map_handle = LLVMBuildCall2(
+      builder, wrapper_fn_type, wrapper_fn,
+      (LLVMValueRef[]){r_map_fn, fresh_inner}, 2, "new_map_handle");
+  LLVMBuildRet(builder, new_map_handle);
+
+  LLVMPositionBuilderAtEnd(builder, reset_prev);
+
+  // Allocate and populate closure args struct
+  LLVMValueRef args_struct = LLVMGetUndef(closure_args_ty);
+  args_struct = LLVMBuildInsertValue(builder, args_struct, map_fn, 0, "");
+  args_struct =
+      LLVMBuildInsertValue(builder, args_struct, inner_args_data, 1, "");
+  args_struct =
+      LLVMBuildInsertValue(builder, args_struct, inner_reset_fn, 2, "");
+
+  LLVMValueRef args_ptr_alloc = LLVMBuildMalloc(builder, closure_args_ty, "");
+  LLVMBuildStore(builder, args_struct, args_ptr_alloc);
+
+  LLVMValueRef fat_handle =
+      FAT_HANDLE(map_handle, reset_closure_fn, args_ptr_alloc);
+
+  return fat_handle;
 }
 
 LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
   LLVMValueRef handle_raw =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+
+  handle_raw = LLVMBuildExtractValue(builder, handle_raw, 0, "");
 
   LLVMBasicBlockRef current_bb = LLVMGetInsertBlock(builder);
   LLVMValueRef current_fn = LLVMGetBasicBlockParent(current_bb);
@@ -1144,7 +1238,11 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMBuildCall2(builder, wrapper_fn_type, wrapper_fn,
                      (LLVMValueRef[]){list_ptr}, 1, "list.coro.handle");
 
-  return coro_handle;
+  LLVMValueRef fat_handle =
+      FAT_HANDLE(coro_handle, LLVMConstPointerNull(LLVMInt8Type()),
+                 LLVMConstPointerNull(LLVMInt8Type()));
+
+  return fat_handle;
 }
 
 LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -1366,7 +1464,11 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMBuildCall2(builder, wrapper_fn_type, wrapper_fn,
                      (LLVMValueRef[]){array_val}, 1, "array.coro.handle");
 
-  return coro_handle;
+  LLVMValueRef fat_handle =
+      FAT_HANDLE(coro_handle, LLVMConstPointerNull(LLVMInt8Type()),
+                 LLVMConstPointerNull(LLVMInt8Type()));
+
+  return fat_handle;
 }
 
 LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -1460,8 +1562,6 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildRetVoid(builder);
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
-
-  // LLVMDumpValue(func);
 
   LLVMPositionBuilderAtEnd(builder, prev_block);
   LLVMBuildCall2(builder, schedule_event_type, schedule_event,

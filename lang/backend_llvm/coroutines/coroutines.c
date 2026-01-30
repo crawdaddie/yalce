@@ -409,17 +409,7 @@ LLVMValueRef coro_create_with_reset_closure(JITSymbol *sym,
   //                    args, // No arguments
   //                    app->data.AST_APPLICATION.len, "coro.handle");
 
-  LLVMTypeRef fat_handle_ty = LLVMStructType(
-      (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR}, 3, 0);
-
-  LLVMValueRef fat_handle = LLVMGetUndef(fat_handle_ty);
-  fat_handle =
-      LLVMBuildInsertValue(builder, fat_handle, handle, 0, "insert_handle");
-  fat_handle =
-      LLVMBuildInsertValue(builder, fat_handle, closure, 1, "insert_closure");
-
-  fat_handle = LLVMBuildInsertValue(builder, fat_handle, args_ptr, 2,
-                                    "insert_closure_data");
+  LLVMValueRef fat_handle = FAT_HANDLE(handle, closure, args_ptr);
 
   return fat_handle;
 }
@@ -561,6 +551,7 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // ===== YIELD FROM: Drain the entire inner coroutine =====
 
     LLVMValueRef inner_handle = yield_value;
+    inner_handle = LLVMBuildExtractValue(builder, inner_handle, 0, "");
 
     // Get the inner coroutine's yield type
     Type *inner_yield_type =
@@ -945,8 +936,7 @@ LLVMValueRef codegen_handle_resume(LLVMValueRef fat_handle,
                                    LLVMTypeRef llvm_yield_type, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
-  LLVMDumpValue(fat_handle);
-  printf("\n");
+
   LLVMValueRef handle =
       LLVMBuildExtractValue(builder, fat_handle, 0, "handle_from_fat");
   // Extract yield type from coroutine type
