@@ -137,13 +137,12 @@ LLVMValueRef get_coro_destroy_intrinsic(LLVMModuleRef module);
 // This ensures coro_emit_memcpy_restore (512-byte memcpy) doesn't overflow.
 #define CORO_FRAME_ALLOC(builder, size_val)                                    \
   ({                                                                           \
-    LLVMValueRef _min =                                                        \
-        LLVMConstInt(LLVMInt64Type(), MAX_CORO_FRAME_SIZE, 0);                 \
+    LLVMValueRef _min = LLVMConstInt(LLVMInt64Type(), MAX_CORO_FRAME_SIZE, 0); \
     LLVMValueRef _cmp =                                                        \
         LLVMBuildICmp(builder, LLVMIntUGT, size_val, _min, "size.cmp");        \
     LLVMValueRef _alloc_size =                                                 \
         LLVMBuildSelect(builder, _cmp, size_val, _min, "frame.size");          \
-    LLVMBuildArrayMalloc(builder, LLVMInt8Type(), _alloc_size, "coro.frame");   \
+    LLVMBuildArrayMalloc(builder, LLVMInt8Type(), _alloc_size, "coro.frame");  \
   })
 
 /**
@@ -264,9 +263,11 @@ void coro_emit_memcpy_restore(LLVMValueRef dst_handle,
                               LLVMValueRef src_snapshot,
                               LLVMBuilderRef builder);
 #define FAT_HANDLE_TY                                                          \
-  LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR}, 3, 0)
+  LLVMStructType(                                                              \
+      (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR, LLVMInt64Type()}, \
+      3, 0)
 
-#define FAT_HANDLE(handle, args_ptr, closure)                                  \
+#define FAT_HANDLE(handle, args_ptr, closure, size)                            \
   ({                                                                           \
     LLVMTypeRef fat_handle_ty = FAT_HANDLE_TY;                                 \
     LLVMValueRef fat_handle = LLVMGetUndef(fat_handle_ty);                     \
@@ -276,6 +277,8 @@ void coro_emit_memcpy_restore(LLVMValueRef dst_handle,
                                       "insert_closure");                       \
     fat_handle = LLVMBuildInsertValue(builder, fat_handle, args_ptr, 2,        \
                                       "insert_closure_data");                  \
+    fat_handle = LLVMBuildInsertValue(builder, fat_handle, size, 3,            \
+                                      "insert_frame_size_data");               \
     fat_handle;                                                                \
   })
 

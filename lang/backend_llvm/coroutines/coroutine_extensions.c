@@ -288,7 +288,8 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      (LLVMValueRef[]){cor_to_loop}, 1, "loop.handle");
 
   return FAT_HANDLE(loop_handle, LLVMConstPointerNull(LLVMInt8Type()),
-                    LLVMConstPointerNull(LLVMInt8Type()));
+                    LLVMConstPointerNull(LLVMInt8Type()),
+                    LLVMConstInt(LLVMInt64Type(), 0, 0));
 }
 
 LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -551,9 +552,8 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Create reset closure for mapped coroutine
   // Closure args: {map_fn_ptr, inner_args_data, inner_reset_fn}
-  LLVMTypeRef closure_args_ty =
-      LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR}, 3,
-                      0);
+  LLVMTypeRef closure_args_ty = LLVMStructType(
+      (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR}, 3, 0);
 
   LLVMTypeRef reset_closure_type =
       LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
@@ -572,9 +572,9 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Load fields from closure args struct
   LLVMValueRef reset_args_raw = LLVMGetParam(reset_closure_fn, 0);
-  LLVMValueRef reset_args = LLVMBuildBitCast(
-      builder, reset_args_raw, LLVMPointerType(closure_args_ty, 0),
-      "reset_args");
+  LLVMValueRef reset_args =
+      LLVMBuildBitCast(builder, reset_args_raw,
+                       LLVMPointerType(closure_args_ty, 0), "reset_args");
 
   LLVMValueRef r_map_fn = LLVMBuildLoad2(
       builder, GENERIC_PTR,
@@ -590,9 +590,9 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       "inner_reset");
 
   // Call inner reset closure to get a fresh inner coroutine handle
-  LLVMValueRef fresh_inner = LLVMBuildCall2(
-      builder, reset_closure_type, r_inner_reset,
-      (LLVMValueRef[]){r_inner_args}, 1, "fresh_inner");
+  LLVMValueRef fresh_inner =
+      LLVMBuildCall2(builder, reset_closure_type, r_inner_reset,
+                     (LLVMValueRef[]){r_inner_args}, 1, "fresh_inner");
 
   // Call wrapper_fn(map_fn, fresh_inner) to create new mapped coroutine
   LLVMValueRef new_map_handle = LLVMBuildCall2(
@@ -614,7 +614,8 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildStore(builder, args_struct, args_ptr_alloc);
 
   LLVMValueRef fat_handle =
-      FAT_HANDLE(map_handle, reset_closure_fn, args_ptr_alloc);
+      FAT_HANDLE(map_handle, reset_closure_fn, args_ptr_alloc,
+                 LLVMConstInt(LLVMInt64Type(), 0, 0));
 
   return fat_handle;
 }
@@ -1240,7 +1241,8 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMValueRef fat_handle =
       FAT_HANDLE(coro_handle, LLVMConstPointerNull(LLVMInt8Type()),
-                 LLVMConstPointerNull(LLVMInt8Type()));
+                 LLVMConstPointerNull(LLVMInt8Type()),
+                 LLVMConstInt(LLVMInt64Type(), 0, 0));
 
   return fat_handle;
 }
@@ -1466,7 +1468,8 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMValueRef fat_handle =
       FAT_HANDLE(coro_handle, LLVMConstPointerNull(LLVMInt8Type()),
-                 LLVMConstPointerNull(LLVMInt8Type()));
+                 LLVMConstPointerNull(LLVMInt8Type()),
+                 LLVMConstInt(LLVMInt64Type(), 0, 0));
 
   return fat_handle;
 }

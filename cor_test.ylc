@@ -2,8 +2,15 @@
 let c = fn () -> yield 1; yield 2; yield 3;;
 
 # let x = c ();
-let x = c () |> cor_map ((*) 2);
+let x = c ()
+|> cor_loop
+# |> cor_map ((*) 2)
+;
+# let x = c () |> cor_loop;
 print `
+{x ()}
+{x ()}
+{x ()}
 {x ()}
 {x ()}
 {x ()}
