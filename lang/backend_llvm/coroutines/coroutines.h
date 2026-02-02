@@ -133,18 +133,6 @@ LLVMValueRef get_coro_destroy_intrinsic(LLVMModuleRef module);
       LLVMCreateEnumAttribute(llvm_ctx, PRESPLIT_COROUTINE_KIND_ID, 0);        \
   LLVMAddAttributeAtIndex(coro_fn, LLVMAttributeFunctionIndex, attr);
 
-// Allocate a coroutine frame padded to at least MAX_CORO_FRAME_SIZE bytes.
-// This ensures coro_emit_memcpy_restore (512-byte memcpy) doesn't overflow.
-#define CORO_FRAME_ALLOC(builder, size_val)                                    \
-  ({                                                                           \
-    LLVMValueRef _min = LLVMConstInt(LLVMInt64Type(), MAX_CORO_FRAME_SIZE, 0); \
-    LLVMValueRef _cmp =                                                        \
-        LLVMBuildICmp(builder, LLVMIntUGT, size_val, _min, "size.cmp");        \
-    LLVMValueRef _alloc_size =                                                 \
-        LLVMBuildSelect(builder, _cmp, size_val, _min, "frame.size");          \
-    LLVMBuildArrayMalloc(builder, LLVMInt8Type(), _alloc_size, "coro.frame");  \
-  })
-
 /**
  * Result of coroutine setup initialization
  */
@@ -247,6 +235,64 @@ LLVMBasicBlockRef coro_emit_yield_from_loop(
                                   LLVMConstInt(LLVMInt1Type(), 0, 0)},         \
                  3, "promise.raw");
 
+// Promise layout: {T yield_val, i1 is_done, ptr reset_fn, ptr args_ptr}
+//                  field 0       field 1     field 2       field 3
+#define CORO_PROMISE_TYPE(yield_type)                                          \
+  LLVMStructType(                                                              \
+      (LLVMTypeRef[]){yield_type, LLVMInt1Type(), GENERIC_PTR, GENERIC_PTR},   \
+      4, 0)
+
+// Get a typed pointer to a coroutine's promise given its handle.
+// Requires: builder, module in scope
+#define GET_PROMISE_PTR(handle, prom_type)                                     \
+  LLVMBuildBitCast(builder, GET_PROMISE_PTR_RAW(handle),                       \
+                   LLVMPointerType(prom_type, 0), "promise.typed")
+
+// Read the yielded value (field 0) from a coroutine's promise
+#define PROMISE_GET_VALUE(promise_ptr, prom_type, yield_type)                  \
+  LLVMBuildLoad2(                                                              \
+      builder, yield_type,                                                     \
+      LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 0, "prom.val.gep"),\
+      "prom.value")
+
+// Read the is_done flag (field 1) from a coroutine's promise
+#define PROMISE_GET_IS_DONE(promise_ptr, prom_type)                            \
+  LLVMBuildLoad2(                                                              \
+      builder, LLVMInt1Type(),                                                 \
+      LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 1,                  \
+                           "prom.is_done.gep"),                                \
+      "prom.is_done")
+
+// Read the reset_fn (field 2) from a coroutine's promise
+#define PROMISE_GET_RESET_FN(promise_ptr, prom_type)                           \
+  LLVMBuildLoad2(                                                              \
+      builder, GENERIC_PTR,                                                    \
+      LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 2,                  \
+                           "prom.reset_fn.gep"),                               \
+      "prom.reset_fn")
+
+// Read the args_ptr (field 3) from a coroutine's promise
+#define PROMISE_GET_ARGS_PTR(promise_ptr, prom_type)                           \
+  LLVMBuildLoad2(                                                              \
+      builder, GENERIC_PTR,                                                    \
+      LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 3,                  \
+                           "prom.args_ptr.gep"),                               \
+      "prom.args_ptr")
+
+// Store the reset_fn (field 2) into a coroutine's promise
+#define PROMISE_SET_RESET_FN(promise_ptr, prom_type, val)                      \
+  LLVMBuildStore(                                                              \
+      builder, val,                                                            \
+      LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 2,                  \
+                           "prom.reset_fn.gep"))
+
+// Store the args_ptr (field 3) into a coroutine's promise
+#define PROMISE_SET_ARGS_PTR(promise_ptr, prom_type, val)                      \
+  LLVMBuildStore(                                                              \
+      builder, val,                                                            \
+      LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 3,                  \
+                           "prom.args_ptr.gep"))
+
 LLVMValueRef coro_is_done(LLVMValueRef handle, LLVMTypeRef yield_type,
                           LLVMModuleRef module, LLVMBuilderRef builder);
 
@@ -261,13 +307,13 @@ void coro_emit_reset(LLVMValueRef handle, LLVMTypeRef yield_type,
 
 void coro_emit_memcpy_restore(LLVMValueRef dst_handle,
                               LLVMValueRef src_snapshot,
-                              LLVMBuilderRef builder);
+                              LLVMValueRef frame_size, LLVMBuilderRef builder);
 #define FAT_HANDLE_TY                                                          \
   LLVMStructType(                                                              \
       (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR, LLVMInt64Type()}, \
-      3, 0)
+      4, 0)
 
-#define FAT_HANDLE(handle, args_ptr, closure, size)                            \
+#define FAT_HANDLE(handle, closure, args_ptr, size)                            \
   ({                                                                           \
     LLVMTypeRef fat_handle_ty = FAT_HANDLE_TY;                                 \
     LLVMValueRef fat_handle = LLVMGetUndef(fat_handle_ty);                     \

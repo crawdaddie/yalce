@@ -58,12 +58,15 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef promise_alloca =
       LLVMBuildAlloca(builder, promise_type, "promise");
 
-  // Allocate a snapshot buffer to save the initial state of the inner coroutine
-  // We'll memcpy the entire frame here, then restore it on each loop iteration
-  // Using a fixed size of 512 bytes (MAX_CORO_FRAME_SIZE)
-  // LLVMValueRef frame_snapshot = LLVMBuildArrayAlloca(
-  //     builder, LLVMInt8Type(), LLVMConstInt(LLVMInt32Type(), 512, 0),
-  //     "frame.snapshot");
+  // Single struct alloca for the entire FAT_HANDLE — stored before initial
+  // suspend so it's part of the coroutine frame directly. No separate spill
+  // needed since the param SSA value doesn't cross the suspend point.
+  LLVMTypeRef fat_handle_ty = FAT_HANDLE_TY;
+  LLVMValueRef fat_handle_slot =
+      LLVMBuildAlloca(builder, fat_handle_ty, "fat_handle.slot");
+
+  // Store the FAT_HANDLE param into the alloca before initial suspend
+  LLVMBuildStore(builder, LLVMGetParam(wrapper_fn, 0), fat_handle_slot);
 
   // Initialize is_done flag to false
   LLVMValueRef is_done_gep = LLVMBuildStructGEP2(
@@ -110,45 +113,34 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, initial_return_bb);
   LLVMBuildBr(builder, suspend_bb);
 
-  // === START BLOCK ===
+  // === START BLOCK === (param already stored in entry block, just fall through)
   LLVMPositionBuilderAtEnd(builder, start_bb);
-
-  // Get the inner coroutine handle from the parameter
-  LLVMValueRef inner_handle = LLVMGetParam(wrapper_fn, 0);
-  inner_handle = LLVMBuildExtractValue(builder, inner_handle, 0, "");
-
-  // Save a snapshot of the entire inner coroutine frame
-  // This captures: function pointers, promise, spilled state, suspension index
-  // We'll restore from this snapshot on each loop iteration
-  LLVMValueRef frame_size = LLVMConstInt(LLVMInt64Type(), 512, 0);
-
-  // Get memcpy intrinsic
-  LLVMTypeRef memcpy_param_types[] = {GENERIC_PTR, GENERIC_PTR, LLVMInt64Type(),
-                                      LLVMInt1Type()};
-  LLVMTypeRef memcpy_type =
-      LLVMFunctionType(LLVMVoidType(), memcpy_param_types, 4, 0);
-  LLVMValueRef memcpy_fn =
-      LLVMGetNamedFunction(module, "llvm.memcpy.p0.p0.i64");
-  if (!memcpy_fn) {
-    memcpy_fn = LLVMAddFunction(module, "llvm.memcpy.p0.p0.i64", memcpy_type);
-  }
-
-  // Save: memcpy(snapshot, inner_handle, 512, volatile=false)
-  // LLVMValueRef save_args[] = {frame_snapshot, inner_handle, frame_size,
-  //                             LLVMConstInt(LLVMInt1Type(), 0, 0)};
-  // LLVMBuildCall2(builder, memcpy_type, memcpy_fn, save_args, 4,
-  //                "save.snapshot");
-
   LLVMBuildBr(builder, loop_bb);
 
   // === LOOP BLOCK: Evaluate coroutine expression and drain it ===
   LLVMPositionBuilderAtEnd(builder, loop_bb);
 
-  // Get the inner handle again (it's a function parameter, accessible from any
-  // block) Note: inner_handle variable from start_bb is not in scope here
-  LLVMValueRef inner_handle_loop = LLVMGetParam(wrapper_fn, 0);
-  inner_handle_loop =
-      LLVMBuildExtractValue(builder, inner_handle_loop, 0, "inner_handle_raw");
+  // Load FAT_HANDLE fields via GEP from the single struct alloca in the frame
+  LLVMValueRef inner_handle_loop = LLVMBuildLoad2(
+      builder, GENERIC_PTR,
+      LLVMBuildStructGEP2(builder, fat_handle_ty, fat_handle_slot, 0,
+                           "fat.handle.gep"),
+      "inner_handle");
+  LLVMValueRef reset_closure = LLVMBuildLoad2(
+      builder, GENERIC_PTR,
+      LLVMBuildStructGEP2(builder, fat_handle_ty, fat_handle_slot, 1,
+                           "fat.closure.gep"),
+      "reset_closure");
+  LLVMValueRef args_ptr = LLVMBuildLoad2(
+      builder, GENERIC_PTR,
+      LLVMBuildStructGEP2(builder, fat_handle_ty, fat_handle_slot, 2,
+                           "fat.args_ptr.gep"),
+      "args_ptr");
+  LLVMValueRef _frame_size = LLVMBuildLoad2(
+      builder, LLVMInt64Type(),
+      LLVMBuildStructGEP2(builder, fat_handle_ty, fat_handle_slot, 3,
+                           "fat.frame_size.gep"),
+      "frame_size");
 
   // === YIELD-FROM LOOP (copied from codegen_yield) ===
   LLVMBasicBlockRef loop_check_bb =
@@ -233,25 +225,16 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // When inner is exhausted, go back to outer loop to create new instance
   LLVMPositionBuilderAtEnd(builder, loop_exit_bb);
-  // INSERT_PRINTF(0, "are we branching correctly????\n");
 
-  // Restore the inner coroutine frame from the snapshot we saved in start_bb
-  // This resets ALL state: function pointers, promise, spilled variables,
-  // suspension index - everything back to the initial state
-
-  LLVMValueRef inner_fat = LLVMGetParam(wrapper_fn, 0);
-  LLVMValueRef args_ptr =
-      LLVMBuildExtractValue(builder, inner_fat, 1, "inner_args_ptr");
-
-  LLVMValueRef reset_closure =
-      LLVMBuildExtractValue(builder, inner_fat, 2, "inner_args_reset");
-
+  // Reset the inner coroutine by calling the reset closure with the args ptr
   LLVMTypeRef closure_type =
       LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1,
                        0); // &{cons args...} -> coroutine_handle_type
-  LLVMValueRef frame_snapshot = LLVMBuildCall2(
-      builder, closure_type, reset_closure, (LLVMValueRef[]){args_ptr}, 1, "");
-  coro_emit_memcpy_restore(inner_handle_loop, frame_snapshot, builder);
+  LLVMValueRef new_coro =
+      LLVMBuildCall2(builder, closure_type, reset_closure,
+                     (LLVMValueRef[]){args_ptr}, 1, "call_reset_closure");
+
+  coro_emit_memcpy_restore(inner_handle_loop, new_coro, _frame_size, builder);
 
   LLVMBuildBr(builder, loop_bb);
 
