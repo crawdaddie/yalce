@@ -59,5 +59,15 @@ void bind_fn_param_with_storage(LLVMValueRef param_val, LLVMValueRef storage,
                                 JITLangCtx *ctx, JITLangCtx *fn_ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder);
 TypeEnv *codegen_bind_in_env(TypeEnv *env, Type *f, Type *t);
+LLVMValueRef codegen_fn_compose(LLVMValueRef a, LLVMValueRef b, Type *type_a,
+                                Type *type_b, JITLangCtx *ctx,
+                                LLVMModuleRef module, LLVMBuilderRef builder);
 
+LLVMValueRef codegen_compose_functions(int len, LLVMValueRef *funcs,
+                                       LLVMTypeRef *types, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder);
+
+LLVMValueRef HandleFnComposition(Ast *ast, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder);
 #endif

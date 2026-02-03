@@ -1,4 +1,15 @@
-let x = [|1, 2, 3|] |> iter_of_array |> cor_loop;
+let c = fn () -> 
+  yield 1; 
+  yield 2; 
+  yield 3
+;;
+
+let x = c ()
+|> cor_map ((*) 2)
+|> cor_loop
+|> cor_map ((*) 3)
+;
+
 print `
 {x ()}
 {x ()}

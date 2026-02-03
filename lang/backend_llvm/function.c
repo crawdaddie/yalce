@@ -492,3 +492,77 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
 
   return specific_fn;
 }
+
+LLVMValueRef codegen_fn_compose(LLVMValueRef a, LLVMValueRef b, Type *type_a,
+                                Type *type_b, JITLangCtx *ctx,
+                                LLVMModuleRef module, LLVMBuilderRef builder) {}
+
+// creates a new function which is the composition of unary functions a0, a1,
+// a2..., ie a0(a1(a2(...[n*)] becomes fn x ->
+//   x0 = a0(x);
+//   x1 = a1(x0);
+//   x2 = a2(x1);
+//   ...
+//   xn = an(xn-1);
+//   xn
+// ;;
+// this function's semantics are pipeline order
+// ie x |> a |> b |> c
+// becomes
+// compose {a, b, c}
+// becomes c(b(a(x)))
+//
+LLVMValueRef codegen_compose_functions(int len, LLVMValueRef *funcs,
+                                       LLVMTypeRef *types, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+  if (len == 1) {
+    fprintf(stderr,
+            "Compiler Error: must have at least 2 items in composition chain");
+    return funcs[0];
+  }
+  if (len < 1) {
+    fprintf(stderr,
+            "Compiler Error: must have at least 2 items in composition chain");
+    return NULL;
+  }
+
+  LLVMTypeRef input_type[1];
+  LLVMGetParamTypes(types[0], input_type);
+  LLVMTypeRef output_type = LLVMGetReturnType(types[len - 1]);
+  LLVMTypeRef fn_type = LLVMFunctionType(output_type, input_type, 1, 0);
+  LLVMValueRef func = LLVMAddFunction(module, "composition", fn_type);
+
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMPositionBuilderAtEnd(builder, block);
+  LLVMValueRef input = LLVMGetParam(func, 0);
+  for (int i = 0; i < len; i++) {
+    LLVMValueRef f = funcs[i];
+    input = LLVMBuildCall2(builder, types[i], f, (LLVMValueRef[]){input}, 1,
+                           "composition_inner_call");
+  }
+  LLVMBuildRet(builder, input);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+  return func;
+}
+
+LLVMValueRef HandleFnComposition(Ast *ast, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+
+  int len = ast->data.AST_APPLICATION.len;
+  LLVMValueRef funcs[len];
+  LLVMTypeRef types[len];
+  for (int i = 0; i < len; i++) {
+    funcs[i] =
+        codegen(ast->data.AST_APPLICATION.args + i, ctx, module, builder);
+    types[i] =
+        type_to_llvm_type(ast->data.AST_APPLICATION.args[i].type, ctx, module);
+  }
+  LLVMValueRef fused =
+      codegen_compose_functions(len, funcs, types, ctx, module, builder);
+
+  return fused;
+}

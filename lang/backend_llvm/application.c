@@ -2,6 +2,7 @@
 #include "./coroutines/coroutines.h"
 #include "adt.h"
 #include "closures.h"
+#include "coroutines/coroutine_extensions.h"
 #include "function.h"
 #include "function_extern.h"
 #include "modules.h"
@@ -258,6 +259,21 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   // TODO: this function is extraordinarily ugly - refactor to something a bit
   // more easy to read with logical sequence of cases
+  //
+  //
+  if (is_coroutine_type(ast->type)) {
+    // transformation for coroutine combinator applications, eg
+    // cor_loop (cor_map f (cor_map g (cor ()))) is less efficient than
+    // cor_map f (cor_map g (cor_loop (cor ())))
+    Ast *opt_cor_combinators = NULL;
+    if ((opt_cor_combinators = optimise_coro_combinators(ast)) != NULL) {
+      // printf("optimised\n");
+      // print_ast(ast);
+      //
+      // print_ast(opt_cor_combinators);
+      ast = opt_cor_combinators;
+    }
+  }
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->type;
 
@@ -318,8 +334,10 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   if (!sym) {
 
-    fprintf(stderr, "Error callable symbol %s not found in scope %d\n",
+    fprintf(stderr, "Error callable symbol `%s` not found in scope %d\n",
             sym_name, ctx->stack_ptr);
+    // print_ast(ast->data.AST_APPLICATION.function);
+    // printf("tag %d\n", ast->data.AST_APPLICATION.function->tag);
     print_location(ast->data.AST_APPLICATION.function);
     return NULL;
   }

@@ -4,6 +4,7 @@
 #include "../types.h"
 #include "./coroutines.h"
 #include "llvm-c/Core.h"
+#include <string.h>
 
 // ============================================================================
 // Coroutine Builtin Handlers (TODO: Implement these)
@@ -1622,15 +1623,14 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Call the wrapper function, passing frame_size_out and the array as
   // arguments
-  LLVMValueRef coro_handle =
-      LLVMBuildCall2(builder, wrapper_fn_type, wrapper_fn,
-                     (LLVMValueRef[]){frame_size_alloca, array_val}, 2,
-                     "array.coro.handle");
+  LLVMValueRef coro_handle = LLVMBuildCall2(
+      builder, wrapper_fn_type, wrapper_fn,
+      (LLVMValueRef[]){frame_size_alloca, array_val}, 2, "array.coro.handle");
 
   // Create reset closure for array coroutine
-  LLVMValueRef reset_closure_fn = cor_of_array_reset_fn(
-      promise_struct_type, wrapper_fn_type, llvm_array_type, wrapper_fn, module,
-      builder);
+  LLVMValueRef reset_closure_fn =
+      cor_of_array_reset_fn(promise_struct_type, wrapper_fn_type,
+                            llvm_array_type, wrapper_fn, module, builder);
 
   // Malloc storage for the array struct and store the value there
   // (array is a struct value {size, data}, not a pointer)
@@ -1842,4 +1842,208 @@ LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
       LLVMBuildExtractValue(builder, opt_val, 1, "unwrapped_value");
 
   return inner_value;
+}
+
+// Ast *optimise_coro_combinators(Ast *ast) {
+//   printf("detect coroutine manipulation optimisation opportunities\n");
+//
+//   // Ast *apps[]
+//
+//   int n = 0;
+//   Ast *_ast = ast;
+//   while (_ast->tag == AST_APPLICATION) {
+//     _ast =
+//         _ast->data.AST_APPLICATION.args + (_ast->data.AST_APPLICATION.len -
+//         1);
+//     n++;
+//   }
+//   Ast *apps[n];
+//
+//   int i = 0;
+//   while (ast->tag == AST_APPLICATION) {
+//     apps[i] = ast;
+//     ast = ast->data.AST_APPLICATION.args + (ast->data.AST_APPLICATION.len -
+//     1); i++;
+//   }
+//   for (int i = 0; i < n; i++) {
+//     print_ast(apps[i]);
+//   }
+//
+//   return NULL;
+// }
+
+// Helper to check function name
+static bool is_fn_call(Ast *ast, const char *name) {
+  if (ast->tag != AST_APPLICATION)
+    return false;
+  Ast *fn = ast->data.AST_APPLICATION.function;
+  if (fn->tag != AST_IDENTIFIER)
+    return false;
+  return strcmp(fn->data.AST_IDENTIFIER.value, name) == 0;
+}
+
+// Check if this is a combinator we can push loop through
+static bool is_transparent_coroutine_combinator(Ast *ast) {
+  if (ast->tag != AST_APPLICATION)
+    return false;
+  Ast *fn = ast->data.AST_APPLICATION.function;
+  if (fn->tag != AST_IDENTIFIER)
+    return false;
+  const char *name = fn->data.AST_IDENTIFIER.value;
+  return strcmp(name, "cor_map") == 0;
+  // / || strcmp(name, "filter") == 0;
+}
+
+// Fuse consecutive cor_map calls into a single cor_map with fn_composition
+// cor_map(h, cor_map(g, cor_map(f, X))) → cor_map(fn_composition(f, g, h), X)
+static Ast *fuse_cor_maps(Ast *ast) {
+  if (!is_fn_call(ast, "cor_map") || ast->data.AST_APPLICATION.len != 2) {
+    return NULL;
+  }
+
+  // Collect all consecutive cor_map functions
+  Ast *funcs[64];
+  int num_funcs = 0;
+  Ast *current = ast;
+
+  while (is_fn_call(current, "cor_map") &&
+         current->data.AST_APPLICATION.len == 2) {
+    funcs[num_funcs++] = &current->data.AST_APPLICATION.args[0];
+    current = &current->data.AST_APPLICATION.args[1];
+    if (num_funcs >= 64)
+      break;
+  }
+
+  if (num_funcs < 2)
+    return NULL; // Nothing to fuse
+
+  Ast *source = current;
+
+  // Build fn_composition(f, g, h) - innermost first, outermost last
+  // funcs[0] is outermost (h), funcs[num_funcs-1] is innermost (f)
+  // We want fn_composition(f, g, h) to apply f first, then g, then h
+  Ast *comp_args = malloc(sizeof(Ast) * num_funcs);
+  for (int i = 0; i < num_funcs; i++) {
+    comp_args[i] = *funcs[num_funcs - 1 - i]; // reverse: innermost first
+  }
+
+  // print_ast(funcs[num_funcs - 1])
+  Type *innermost_type = comp_args[0].type;
+  Type *innermost_input_type = innermost_type->data.T_FN.from;
+
+  Type *outermost_type = funcs[0]->type;
+  Type *outermost_ret_type = fn_return_type(outermost_type);
+
+  Type *fused_type = type_fn(innermost_input_type, outermost_ret_type);
+
+  Ast *composition = Ast_new(AST_APPLICATION);
+  composition->type = fused_type;
+  composition->data.AST_APPLICATION.function =
+      ast_identifier((ObjString){"fn_composition", 14});
+
+  // TODO: this is a little wrong but type can just not be NULL
+  composition->data.AST_APPLICATION.function->type = fused_type;
+
+  composition->data.AST_APPLICATION.args = comp_args;
+  composition->data.AST_APPLICATION.len = num_funcs;
+
+  // Build cor_map(composition, source)
+  Ast *fused_args = malloc(sizeof(Ast) * 2);
+  fused_args[0] = *composition;
+  fused_args[1] = *source;
+
+  Ast *fused = Ast_new(AST_APPLICATION);
+  fused->data.AST_APPLICATION.function = ast->data.AST_APPLICATION.function;
+  fused->data.AST_APPLICATION.args = fused_args;
+  fused->data.AST_APPLICATION.len = 2;
+  fused->type = ast->type;
+
+  return fused;
+}
+
+// Recursively optimize coroutine combinators anywhere in the AST
+// Returns optimized AST, or NULL if no optimization was possible
+// Swaps: cor_loop(transparent(args..., X)) → transparent(args..., cor_loop(X))
+Ast *optimise_coro_combinators(Ast *ast) {
+  if (ast == NULL || ast->tag != AST_APPLICATION) {
+    return NULL;
+  }
+
+  // Check if THIS node is cor_loop(transparent_combinator(args..., X))
+  if (is_fn_call(ast, "cor_loop") && ast->data.AST_APPLICATION.len == 1) {
+    Ast *inner = &ast->data.AST_APPLICATION.args[0];
+    if (is_transparent_coroutine_combinator(inner)) {
+      Ast *loop_fn = ast->data.AST_APPLICATION.function;
+      size_t inner_len = inner->data.AST_APPLICATION.len;
+      Ast *innermost = &inner->data.AST_APPLICATION.args[inner_len - 1];
+
+      // Build cor_loop(X)
+      Ast *loop_arg = malloc(sizeof(Ast));
+      *loop_arg = *innermost;
+      Ast *new_loop = Ast_new(AST_APPLICATION);
+      new_loop->data.AST_APPLICATION.function = loop_fn;
+      new_loop->data.AST_APPLICATION.args = loop_arg;
+      new_loop->data.AST_APPLICATION.len = 1;
+      new_loop->type = ast->type;
+
+      // Build transparent(args..., cor_loop(X))
+      Ast *new_args = malloc(sizeof(Ast) * inner_len);
+      for (size_t i = 0; i < inner_len - 1; i++) {
+        new_args[i] = inner->data.AST_APPLICATION.args[i];
+      }
+      new_args[inner_len - 1] = *new_loop;
+
+      Ast *new_outer = Ast_new(AST_APPLICATION);
+      new_outer->data.AST_APPLICATION.function =
+          inner->data.AST_APPLICATION.function;
+      new_outer->data.AST_APPLICATION.args = new_args;
+      new_outer->data.AST_APPLICATION.len = inner_len;
+      new_outer->type = inner->type;
+
+      // Recursively optimize (will swap again if needed)
+      Ast *further = optimise_coro_combinators(new_outer);
+      return further ? further : new_outer;
+    }
+  }
+
+  // Recursively try to optimize arguments
+  size_t len = ast->data.AST_APPLICATION.len;
+  Ast *new_args = NULL;
+  bool changed = false;
+
+  for (size_t i = 0; i < len; i++) {
+    Ast *arg = &ast->data.AST_APPLICATION.args[i];
+    Ast *opt = optimise_coro_combinators(arg);
+
+    if (opt != NULL) {
+      if (!changed) {
+        new_args = malloc(sizeof(Ast) * len);
+        for (size_t j = 0; j < i; j++) {
+          new_args[j] = ast->data.AST_APPLICATION.args[j];
+        }
+        changed = true;
+      }
+      new_args[i] = *opt;
+    } else if (changed) {
+      new_args[i] = ast->data.AST_APPLICATION.args[i];
+    }
+  }
+
+  Ast *result = ast;
+  if (changed) {
+    Ast *new_app = Ast_new(AST_APPLICATION);
+    new_app->type = ast->type;
+    new_app->data.AST_APPLICATION.function = ast->data.AST_APPLICATION.function;
+    new_app->data.AST_APPLICATION.args = new_args;
+    new_app->data.AST_APPLICATION.len = len;
+    result = new_app;
+  }
+
+  // Try to fuse consecutive cor_map calls
+  Ast *fused = fuse_cor_maps(result);
+  if (fused) {
+    return fused;
+  }
+
+  return changed ? result : NULL;
 }
