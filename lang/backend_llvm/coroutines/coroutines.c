@@ -304,6 +304,59 @@ LLVMValueRef coro_create(JITSymbol *sym, Type *expected_fn_type, Ast *app,
   return NULL;
 }
 
+// LLVMValueRef coro_create_reset_fn_from_handle(int coro_cons_name_len,
+//                                               char *coro_cons_name,
+//                                               LLVMModuleRef module,
+//                                               LLVMBuilderRef builder) {
+//
+//   char name[coro_cons_name_len + 6];
+//   sprintf(name, "%s.reset", coro_cons_name);
+//
+//   LLVMValueRef reset_fn = LLVMAddFunction(module, name, CORO_RESET_FN_TYPE);
+//   LLVMSetLinkage(reset_fn, LLVMExternalLinkage);
+//
+//   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+//   LLVMBasicBlockRef entry_bb = LLVMAppendBasicBlock(reset_fn, "entry");
+//   LLVMPositionBuilderAtEnd(builder, entry_bb);
+//
+//   // Closure params: (ptr frame_size_out, ptr args_ptr)
+//   LLVMValueRef frame_size_out_param = LLVMGetParam(reset_fn, 0);
+//   LLVMValueRef args_ptr_param = LLVMGetParam(reset_fn, 1);
+//
+//   // inner_args layout: [frame_size_out, arg0, arg1, ...]
+//   LLVMValueRef inner_args[1 + app->data.AST_APPLICATION.len];
+//   inner_args[0] = frame_size_out_param;
+//
+//   if (!is_void_arg) {
+//     for (int i = 0; i < app->data.AST_APPLICATION.len; i++) {
+//       LLVMValueRef arg_ptr = LLVMBuildStructGEP2(
+//           builder, closure_args_struct_type, args_ptr_param, i, "");
+//       inner_args[1 + i] = LLVMBuildLoad2(builder, arg_types[i], arg_ptr, "");
+//     }
+//     LLVMValueRef inner_handle = LLVMBuildCall2(
+//         builder, LLVMGlobalGetValueType(coro_fn), coro_fn, inner_args,
+//         1 + app->data.AST_APPLICATION.len, "coro.handle[inner]");
+//
+//     // Write reset_fn and args_ptr into the new coroutine's promise
+//     LLVMValueRef inner_prom_ptr = GET_PROMISE_PTR(inner_handle, prom_type);
+//     PROMISE_SET_RESET_FN(inner_prom_ptr, prom_type, reset_fn);
+//     PROMISE_SET_ARGS_PTR(inner_prom_ptr, prom_type, args_ptr_param);
+//
+//     LLVMBuildRet(builder, inner_handle);
+//   } else {
+//     LLVMValueRef inner_handle = LLVMBuildCall2(
+//         builder, LLVMGlobalGetValueType(coro_fn), coro_fn,
+//         (LLVMValueRef[]){frame_size_out_param}, 1, "coro.handle[inner]");
+//
+//     // Write reset_fn and args_ptr into the new coroutine's promise
+//     LLVMValueRef inner_prom_ptr = GET_PROMISE_PTR(inner_handle, prom_type);
+//     PROMISE_SET_RESET_FN(inner_prom_ptr, prom_type, reset_fn);
+//     PROMISE_SET_ARGS_PTR(inner_prom_ptr, prom_type, args_ptr_param);
+//
+//     LLVMBuildRet(builder, inner_handle);
+//   }
+// }
+
 LLVMValueRef coro_create_with_reset_closure(JITSymbol *sym,
                                             Type *expected_fn_type, Ast *app,
                                             JITLangCtx *ctx,
@@ -333,13 +386,9 @@ LLVMValueRef coro_create_with_reset_closure(JITSymbol *sym,
   LLVMTypeRef closure_args_struct_type;
   LLVMTypeRef arg_types[app->data.AST_APPLICATION.len];
 
-  LLVMTypeRef closure_type;
-  if (is_void_arg) {
-    closure_type = LLVMFunctionType(GENERIC_PTR, NULL, 0, 0);
-  } else {
-    closure_type =
-        LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1,
-                         0); // &{cons args...} -> coroutine_handle_type
+  LLVMTypeRef reset_fn_type;
+  reset_fn_type = CORO_RESET_FN_TYPE;
+  if (!is_void_arg) {
     for (int i = 0; i < app->data.AST_APPLICATION.len; i++) {
       arg_types[i] = type_to_llvm_type(
           (app->data.AST_APPLICATION.args + i)->type, ctx, module);
@@ -348,52 +397,54 @@ LLVMValueRef coro_create_with_reset_closure(JITSymbol *sym,
     closure_args_struct_type =
         LLVMStructType(arg_types, app->data.AST_APPLICATION.len, 0);
   }
+
   size_t length;
   const char *coro_cons_name = LLVMGetValueName2(coro_fn, &length);
+
   char name[length + 6];
   sprintf(name, "%s.reset", coro_cons_name);
 
-  LLVMValueRef closure = LLVMAddFunction(module, name, closure_type);
+  LLVMValueRef reset_fn = LLVMAddFunction(module, name, reset_fn_type);
 
-  LLVMSetLinkage(closure, LLVMExternalLinkage);
+  LLVMSetLinkage(reset_fn, LLVMExternalLinkage);
 
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
-  LLVMBasicBlockRef entry_bb = LLVMAppendBasicBlock(closure, "entry");
+  LLVMBasicBlockRef entry_bb = LLVMAppendBasicBlock(reset_fn, "entry");
   LLVMPositionBuilderAtEnd(builder, entry_bb);
 
-  LLVMValueRef inner_args_ptr = LLVMGetParam(closure, 0);
+  // Closure params: (ptr frame_size_out, ptr args_ptr)
+  LLVMValueRef frame_size_out_param = LLVMGetParam(reset_fn, 0);
+  LLVMValueRef args_ptr_param = LLVMGetParam(reset_fn, 1);
 
+  // inner_args layout: [frame_size_out, arg0, arg1, ...]
   LLVMValueRef inner_args[1 + app->data.AST_APPLICATION.len];
-  inner_args[0] = LLVMBuildAlloca(builder, LLVMInt64Type(), "tmp_fsize_alloca");
+  inner_args[0] = frame_size_out_param;
 
   if (!is_void_arg) {
     for (int i = 0; i < app->data.AST_APPLICATION.len; i++) {
       LLVMValueRef arg_ptr = LLVMBuildStructGEP2(
-          builder, closure_args_struct_type, inner_args_ptr, i, "");
-      inner_args[i] = LLVMBuildLoad2(builder, arg_types[i], arg_ptr, "");
+          builder, closure_args_struct_type, args_ptr_param, i, "");
+      inner_args[1 + i] = LLVMBuildLoad2(builder, arg_types[i], arg_ptr, "");
     }
-    LLVMValueRef inner_handle =
-        LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_fn), coro_fn,
-                       inner_args,
-                       app->data.AST_APPLICATION.len, "coro.handle[inner]");
+    LLVMValueRef inner_handle = LLVMBuildCall2(
+        builder, LLVMGlobalGetValueType(coro_fn), coro_fn, inner_args,
+        1 + app->data.AST_APPLICATION.len, "coro.handle[inner]");
 
     // Write reset_fn and args_ptr into the new coroutine's promise
     LLVMValueRef inner_prom_ptr = GET_PROMISE_PTR(inner_handle, prom_type);
-    PROMISE_SET_RESET_FN(inner_prom_ptr, prom_type, closure);
-    PROMISE_SET_ARGS_PTR(inner_prom_ptr, prom_type, inner_args_ptr);
+    PROMISE_SET_RESET_FN(inner_prom_ptr, prom_type, reset_fn);
+    PROMISE_SET_ARGS_PTR(inner_prom_ptr, prom_type, args_ptr_param);
 
     LLVMBuildRet(builder, inner_handle);
   } else {
-    LLVMValueRef inner_handle =
-        LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_fn), coro_fn,
-                       (LLVMValueRef[]){inner_args[0]}, // frame size out-param
-                       1, "coro.handle[inner]");
+    LLVMValueRef inner_handle = LLVMBuildCall2(
+        builder, LLVMGlobalGetValueType(coro_fn), coro_fn,
+        (LLVMValueRef[]){frame_size_out_param}, 1, "coro.handle[inner]");
 
     // Write reset_fn and args_ptr into the new coroutine's promise
     LLVMValueRef inner_prom_ptr = GET_PROMISE_PTR(inner_handle, prom_type);
-    PROMISE_SET_RESET_FN(inner_prom_ptr, prom_type, closure);
-    PROMISE_SET_ARGS_PTR(inner_prom_ptr, prom_type,
-                         LLVMConstNull(GENERIC_PTR));
+    PROMISE_SET_RESET_FN(inner_prom_ptr, prom_type, reset_fn);
+    PROMISE_SET_ARGS_PTR(inner_prom_ptr, prom_type, args_ptr_param);
 
     LLVMBuildRet(builder, inner_handle);
   }
@@ -409,7 +460,8 @@ LLVMValueRef coro_create_with_reset_closure(JITSymbol *sym,
     for (int i = 0; i < app->data.AST_APPLICATION.len; i++) {
       args[i + 1] =
           codegen(app->data.AST_APPLICATION.args + i, ctx, module, builder);
-      args_struct = LLVMBuildInsertValue(builder, args_struct, args[i], i, "");
+      args_struct =
+          LLVMBuildInsertValue(builder, args_struct, args[i + 1], i, "");
     }
 
     // TODO: use escape analysis to determine if this can go on the stack
@@ -431,21 +483,14 @@ LLVMValueRef coro_create_with_reset_closure(JITSymbol *sym,
                            args, 1 + app->data.AST_APPLICATION.len,
                            "coro.handle")
           : LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_fn), coro_fn,
-                           (LLVMValueRef[]){frame_size_ptr},
-                           1, "coro.handle");
+                           (LLVMValueRef[]){frame_size_ptr}, 1, "coro.handle");
 
   // Write reset_fn and args_ptr into the coroutine's own promise
   LLVMValueRef handle_prom_ptr = GET_PROMISE_PTR(handle, prom_type);
-  PROMISE_SET_RESET_FN(handle_prom_ptr, prom_type, closure);
+  PROMISE_SET_RESET_FN(handle_prom_ptr, prom_type, reset_fn);
   PROMISE_SET_ARGS_PTR(handle_prom_ptr, prom_type, args_ptr);
 
-  LLVMValueRef fsize =
-      LLVMBuildLoad2(builder, LLVMInt64Type(), frame_size_ptr, "");
-  INSERT_PRINTF(1, "found coro instance frame size %llu\n", fsize);
-
-  LLVMValueRef fat_handle = FAT_HANDLE(handle, closure, args_ptr, fsize);
-
-  return fat_handle;
+  return handle;
 }
 
 // ============================================================================
@@ -583,9 +628,8 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (is_coroutine_type(yield_val_type)) {
     // ===== YIELD FROM: Drain the entire inner coroutine =====
-
+    // Handle is now just a pointer (not FAT_HANDLE)
     LLVMValueRef inner_handle = yield_value;
-    inner_handle = LLVMBuildExtractValue(builder, inner_handle, 0, "");
 
     // Get the inner coroutine's yield type
     Type *inner_yield_type =
@@ -1041,13 +1085,10 @@ LLVMValueRef coro_symbol_resume(JITSymbol *sym, JITLangCtx *ctx,
   return codegen_handle_resume(handle, llvm_yield_type, ctx, module, builder);
 }
 
-LLVMValueRef codegen_handle_resume(LLVMValueRef fat_handle,
+LLVMValueRef codegen_handle_resume(LLVMValueRef handle,
                                    LLVMTypeRef llvm_yield_type, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
-
-  LLVMValueRef handle =
-      LLVMBuildExtractValue(builder, fat_handle, 0, "handle_from_fat");
   // Extract yield type from coroutine type
   // symbol_type should be something like: () -> Option<T>
   LLVMTypeRef llvm_option_type = codegen_option_struct_type(llvm_yield_type);

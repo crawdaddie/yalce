@@ -226,6 +226,10 @@ LLVMBasicBlockRef coro_emit_yield_from_loop(
     LLVMBasicBlockRef cleanup_bb, LLVMBasicBlockRef suspend_bb,
     const char *label_prefix // "loop", "map", etc.
 );
+#define CORO_RESET_FN_TYPE                                                     \
+  LLVMFunctionType(                                                            \
+      GENERIC_PTR,                                                             \
+      (LLVMTypeRef[]){LLVMPointerType(LLVMInt64Type(), 0), GENERIC_PTR}, 2, 0)
 
 #define GET_PROMISE_PTR_RAW(handle)                                            \
   LLVMBuildCall2(builder,                                                      \
@@ -233,7 +237,7 @@ LLVMBasicBlockRef coro_emit_yield_from_loop(
                  get_coro_promise_intrinsic(module),                           \
                  (LLVMValueRef[]){handle, LLVMConstInt(LLVMInt32Type(), 0, 0), \
                                   LLVMConstInt(LLVMInt1Type(), 0, 0)},         \
-                 3, "promise.raw");
+                 3, "promise.raw")
 
 // Promise layout: {T yield_val, i1 is_done, ptr reset_fn, ptr args_ptr}
 //                  field 0       field 1     field 2       field 3
@@ -252,46 +256,41 @@ LLVMBasicBlockRef coro_emit_yield_from_loop(
 #define PROMISE_GET_VALUE(promise_ptr, prom_type, yield_type)                  \
   LLVMBuildLoad2(                                                              \
       builder, yield_type,                                                     \
-      LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 0, "prom.val.gep"),\
+      LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 0, "prom.val.gep"), \
       "prom.value")
 
 // Read the is_done flag (field 1) from a coroutine's promise
 #define PROMISE_GET_IS_DONE(promise_ptr, prom_type)                            \
-  LLVMBuildLoad2(                                                              \
-      builder, LLVMInt1Type(),                                                 \
-      LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 1,                  \
-                           "prom.is_done.gep"),                                \
-      "prom.is_done")
+  LLVMBuildLoad2(builder, LLVMInt1Type(),                                      \
+                 LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 1,       \
+                                     "prom.is_done.gep"),                      \
+                 "prom.is_done")
 
 // Read the reset_fn (field 2) from a coroutine's promise
 #define PROMISE_GET_RESET_FN(promise_ptr, prom_type)                           \
-  LLVMBuildLoad2(                                                              \
-      builder, GENERIC_PTR,                                                    \
-      LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 2,                  \
-                           "prom.reset_fn.gep"),                               \
-      "prom.reset_fn")
+  LLVMBuildLoad2(builder, GENERIC_PTR,                                         \
+                 LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 2,       \
+                                     "prom.reset_fn.gep"),                     \
+                 "prom.reset_fn")
 
 // Read the args_ptr (field 3) from a coroutine's promise
 #define PROMISE_GET_ARGS_PTR(promise_ptr, prom_type)                           \
-  LLVMBuildLoad2(                                                              \
-      builder, GENERIC_PTR,                                                    \
-      LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 3,                  \
-                           "prom.args_ptr.gep"),                               \
-      "prom.args_ptr")
+  LLVMBuildLoad2(builder, GENERIC_PTR,                                         \
+                 LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 3,       \
+                                     "prom.args_ptr.gep"),                     \
+                 "prom.args_ptr")
 
 // Store the reset_fn (field 2) into a coroutine's promise
 #define PROMISE_SET_RESET_FN(promise_ptr, prom_type, val)                      \
-  LLVMBuildStore(                                                              \
-      builder, val,                                                            \
-      LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 2,                  \
-                           "prom.reset_fn.gep"))
+  LLVMBuildStore(builder, val,                                                 \
+                 LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 2,       \
+                                     "prom.reset_fn.gep"))
 
 // Store the args_ptr (field 3) into a coroutine's promise
 #define PROMISE_SET_ARGS_PTR(promise_ptr, prom_type, val)                      \
-  LLVMBuildStore(                                                              \
-      builder, val,                                                            \
-      LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 3,                  \
-                           "prom.args_ptr.gep"))
+  LLVMBuildStore(builder, val,                                                 \
+                 LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 3,       \
+                                     "prom.args_ptr.gep"))
 
 LLVMValueRef coro_is_done(LLVMValueRef handle, LLVMTypeRef yield_type,
                           LLVMModuleRef module, LLVMBuilderRef builder);
@@ -308,24 +307,25 @@ void coro_emit_reset(LLVMValueRef handle, LLVMTypeRef yield_type,
 void coro_emit_memcpy_restore(LLVMValueRef dst_handle,
                               LLVMValueRef src_snapshot,
                               LLVMValueRef frame_size, LLVMBuilderRef builder);
-#define FAT_HANDLE_TY                                                          \
-  LLVMStructType(                                                              \
-      (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR, LLVMInt64Type()}, \
-      4, 0)
-
-#define FAT_HANDLE(handle, closure, args_ptr, size)                            \
-  ({                                                                           \
-    LLVMTypeRef fat_handle_ty = FAT_HANDLE_TY;                                 \
-    LLVMValueRef fat_handle = LLVMGetUndef(fat_handle_ty);                     \
-    fat_handle =                                                               \
-        LLVMBuildInsertValue(builder, fat_handle, handle, 0, "insert_handle"); \
-    fat_handle = LLVMBuildInsertValue(builder, fat_handle, closure, 1,         \
-                                      "insert_closure");                       \
-    fat_handle = LLVMBuildInsertValue(builder, fat_handle, args_ptr, 2,        \
-                                      "insert_closure_data");                  \
-    fat_handle = LLVMBuildInsertValue(builder, fat_handle, size, 3,            \
-                                      "insert_frame_size_data");               \
-    fat_handle;                                                                \
-  })
+// #define FAT_HANDLE_TY \
+//   LLVMStructType( \
+//       (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR,
+//       LLVMInt64Type()}, \ 4, 0)
+//
+// #define FAT_HANDLE(handle, closure, args_ptr, size) \
+//   ({ \
+//     LLVMTypeRef fat_handle_ty = FAT_HANDLE_TY; \
+//     LLVMValueRef fat_handle = LLVMGetUndef(fat_handle_ty); \
+//     fat_handle = \
+//         LLVMBuildInsertValue(builder, fat_handle, handle, 0,
+//         "insert_handle"); \
+//     fat_handle = LLVMBuildInsertValue(builder, fat_handle, closure, 1, \
+//                                       "insert_closure"); \
+//     fat_handle = LLVMBuildInsertValue(builder, fat_handle, args_ptr, 2, \
+//                                       "insert_closure_data"); \
+//     fat_handle = LLVMBuildInsertValue(builder, fat_handle, size, 3, \
+//                                       "insert_frame_size_data"); \
+//     fat_handle; \
+//   })
 
 #endif
