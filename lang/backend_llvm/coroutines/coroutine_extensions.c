@@ -36,13 +36,8 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef wrapper_fn_type =
       LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
 
-  static int loop_counter = 0;
-  char wrapper_name[64];
-  snprintf(wrapper_name, sizeof(wrapper_name), "coro_loop_wrapper_%d",
-           loop_counter++);
-
   LLVMValueRef wrapper_fn =
-      LLVMAddFunction(module, wrapper_name, wrapper_fn_type);
+      LLVMAddFunction(module, "coro_loop_wrapper", wrapper_fn_type);
 
   LLVMSetLinkage(wrapper_fn, LLVMExternalLinkage);
 
@@ -269,25 +264,22 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 }
 
 LLVMValueRef coro_map_reset_fn(LLVMTypeRef promise_type,
+                               LLVMTypeRef inner_prom_type,
                                LLVMTypeRef wrapper_fn_type,
                                LLVMValueRef wrapper_fn, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
   // Create reset closure for mapped coroutine
-  //
-  // Closure args: {map_fn_ptr, inner_args_data, inner_reset_fn}
-  LLVMTypeRef closure_args_ty = LLVMStructType(
-      (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR}, 3, 0);
+  // Closure args: {map_fn_ptr, inner_handle}
+  LLVMTypeRef closure_args_ty =
+      LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR}, 2, 0);
 
   // Reset closure signature: (ptr frame_size_out, ptr args_ptr) -> ptr handle
   LLVMTypeRef reset_closure_type = LLVMFunctionType(
       GENERIC_PTR,
       (LLVMTypeRef[]){LLVMPointerType(LLVMInt64Type(), 0), GENERIC_PTR}, 2, 0);
 
-  char reset_name[64];
-  snprintf(reset_name, sizeof(reset_name), "coro_map.reset");
-
   LLVMValueRef reset_closure_fn =
-      LLVMAddFunction(module, reset_name, reset_closure_type);
+      LLVMAddFunction(module, "coro_map.reset", reset_closure_type);
   LLVMSetLinkage(reset_closure_fn, LLVMExternalLinkage);
 
   LLVMBasicBlockRef reset_prev = LLVMGetInsertBlock(builder);
@@ -308,17 +300,20 @@ LLVMValueRef coro_map_reset_fn(LLVMTypeRef promise_type,
       builder, GENERIC_PTR,
       LLVMBuildStructGEP2(builder, closure_args_ty, reset_args, 0, ""),
       "map_fn");
-  LLVMValueRef r_inner_args = LLVMBuildLoad2(
+  LLVMValueRef r_inner_handle = LLVMBuildLoad2(
       builder, GENERIC_PTR,
       LLVMBuildStructGEP2(builder, closure_args_ty, reset_args, 1, ""),
-      "inner_args");
-  LLVMValueRef r_inner_reset = LLVMBuildLoad2(
-      builder, GENERIC_PTR,
-      LLVMBuildStructGEP2(builder, closure_args_ty, reset_args, 2, ""),
-      "inner_reset");
+      "inner_handle");
 
-  // Alloca for inner's frame size (we don't need it, just need to pass
-  // something)
+  // Get inner's reset_fn and args_ptr from its promise
+  LLVMValueRef inner_prom_ptr =
+      GET_PROMISE_PTR(r_inner_handle, inner_prom_type);
+  LLVMValueRef r_inner_reset =
+      PROMISE_GET_RESET_FN(inner_prom_ptr, inner_prom_type);
+  LLVMValueRef r_inner_args =
+      PROMISE_GET_ARGS_PTR(inner_prom_ptr, inner_prom_type);
+
+  // Alloca for inner's frame size
   LLVMValueRef inner_frame_size_slot =
       LLVMBuildAlloca(builder, LLVMInt64Type(), "inner_frame_size.ignored");
 
@@ -368,13 +363,6 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef map_fn = codegen(map_fn_ast, ctx, module, builder);
   LLVMValueRef inner_handle = codegen(coro_ast, ctx, module, builder);
 
-  // Read reset_fn and args_ptr from the inner coroutine's promise
-  LLVMValueRef inner_prom_ptr = GET_PROMISE_PTR(inner_handle, inner_prom_type);
-  LLVMValueRef inner_reset_fn =
-      PROMISE_GET_RESET_FN(inner_prom_ptr, inner_prom_type);
-  LLVMValueRef inner_args_data =
-      PROMISE_GET_ARGS_PTR(inner_prom_ptr, inner_prom_type);
-
   // Create wrapper coroutine function that TAKES frame_size_out, map function,
   // and coroutine as parameters
   LLVMTypeRef wrapper_fn_type =
@@ -383,11 +371,8 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                        LLVMTypeOf(map_fn), GENERIC_PTR},
                        3, 0);
 
-  char wrapper_name[64];
-  snprintf(wrapper_name, sizeof(wrapper_name), "coro_map");
-
   LLVMValueRef wrapper_fn =
-      LLVMAddFunction(module, wrapper_name, wrapper_fn_type);
+      LLVMAddFunction(module, "coro_map", wrapper_fn_type);
   LLVMSetLinkage(wrapper_fn, LLVMExternalLinkage);
 
   COROUTINE_ATTR_MARKING(wrapper_fn)
@@ -624,28 +609,18 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      3, "map.handle");
 
   // Create reset closure for mapped coroutine
-  // Closure args: {map_fn_ptr, inner_args_data, inner_reset_fn}
-  LLVMTypeRef closure_args_ty = LLVMStructType(
-      (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR}, 3, 0);
+  // Closure args: {map_fn_ptr, inner_handle}
+  LLVMTypeRef closure_args_ty =
+      LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR}, 2, 0);
 
-  // Reset closure signature: (ptr frame_size_out, ptr args_ptr) -> ptr handle
-  LLVMTypeRef reset_closure_type = LLVMFunctionType(
-      GENERIC_PTR,
-      (LLVMTypeRef[]){LLVMPointerType(LLVMInt64Type(), 0), GENERIC_PTR}, 2, 0);
-
-  char reset_name[64];
-  snprintf(reset_name, sizeof(reset_name), "coro_map.reset");
-
-  LLVMValueRef reset_closure_fn = coro_map_reset_fn(
-      promise_type, wrapper_fn_type, wrapper_fn, module, builder);
+  LLVMValueRef reset_closure_fn =
+      coro_map_reset_fn(promise_type, inner_prom_type, wrapper_fn_type,
+                        wrapper_fn, module, builder);
 
   // Allocate and populate closure args struct
   LLVMValueRef args_struct = LLVMGetUndef(closure_args_ty);
   args_struct = LLVMBuildInsertValue(builder, args_struct, map_fn, 0, "");
-  args_struct =
-      LLVMBuildInsertValue(builder, args_struct, inner_args_data, 1, "");
-  args_struct =
-      LLVMBuildInsertValue(builder, args_struct, inner_reset_fn, 2, "");
+  args_struct = LLVMBuildInsertValue(builder, args_struct, inner_handle, 1, "");
 
   LLVMValueRef args_ptr_alloc = LLVMBuildMalloc(builder, closure_args_ty, "");
   LLVMBuildStore(builder, args_struct, args_ptr_alloc);
@@ -656,6 +631,689 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   PROMISE_SET_ARGS_PTR(map_prom_ptr, promise_type, args_ptr_alloc);
 
   return map_handle;
+}
+
+LLVMValueRef CorFilterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+  // Get the two arguments: filter predicate and coroutine
+  Ast *filter_fn_ast = ast->data.AST_APPLICATION.args;
+  Ast *coro_ast = ast->data.AST_APPLICATION.args + 1;
+
+  // Type analysis: (T -> Bool) -> Coroutine<T> -> Coroutine<T>
+  Type *filter_fn_type = filter_fn_ast->type;
+  Type *elem_type = filter_fn_type->data.T_FN.from; // T
+
+  LLVMTypeRef llvm_elem_type = type_to_llvm_type(elem_type, ctx, module);
+
+  // Promise type for inner coroutine (to read reset_fn/args_ptr)
+  LLVMTypeRef inner_prom_type = CORO_PROMISE_TYPE(llvm_elem_type);
+
+  LLVMValueRef filter_fn = codegen(filter_fn_ast, ctx, module, builder);
+  LLVMValueRef inner_handle = codegen(coro_ast, ctx, module, builder);
+
+  // Create wrapper coroutine function that TAKES frame_size_out, filter function,
+  // and coroutine as parameters
+  LLVMTypeRef wrapper_fn_type =
+      LLVMFunctionType(GENERIC_PTR,
+                       (LLVMTypeRef[]){LLVMPointerType(LLVMInt64Type(), 0),
+                                       LLVMTypeOf(filter_fn), GENERIC_PTR},
+                       3, 0);
+
+  LLVMValueRef wrapper_fn =
+      LLVMAddFunction(module, "coro_filter", wrapper_fn_type);
+  LLVMSetLinkage(wrapper_fn, LLVMExternalLinkage);
+
+  COROUTINE_ATTR_MARKING(wrapper_fn)
+  COROUTINE_BASIC_BLOCKS(wrapper_fn)
+
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+
+  // === ENTRY BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, entry_bb);
+
+  // Promise stores element type T with 4-field layout (filter preserves type)
+  LLVMTypeRef promise_type = CORO_PROMISE_TYPE(llvm_elem_type);
+
+  LLVMValueRef promise_alloca =
+      LLVMBuildAlloca(builder, promise_type, "promise");
+
+  // Initialize is_done flag to false
+  LLVMValueRef is_done_gep = LLVMBuildStructGEP2(
+      builder, promise_type, promise_alloca, 1, "is_done_ptr");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_done_gep);
+
+  // Initialize reset_fn and args_ptr to null
+  PROMISE_SET_RESET_FN(promise_alloca, promise_type,
+                       LLVMConstNull(GENERIC_PTR));
+  PROMISE_SET_ARGS_PTR(promise_alloca, promise_type,
+                       LLVMConstNull(GENERIC_PTR));
+
+  LLVMValueRef id = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
+      get_coro_id_intrinsic(module),
+      (LLVMValueRef[]){LLVMConstInt(LLVMInt32Type(), 0, 0), promise_alloca,
+                       LLVMConstNull(GENERIC_PTR), LLVMConstNull(GENERIC_PTR)},
+      4, "coro.id");
+
+  LLVMValueRef size = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_size_intrinsic(module)),
+      get_coro_size_intrinsic(module), NULL, 0, "coro.size");
+
+  // Write frame size to caller's out-param (param 0)
+  LLVMValueRef frame_size_out_param = LLVMGetParam(wrapper_fn, 0);
+  LLVMBuildStore(builder, size, frame_size_out_param);
+
+  LLVMValueRef frame =
+      LLVMBuildArrayMalloc(builder, LLVMInt8Type(), size, "coro.frame");
+
+  LLVMValueRef handle = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_begin_intrinsic(module)),
+      get_coro_begin_intrinsic(module), (LLVMValueRef[]){id, frame}, 2,
+      "coro.handle");
+
+  // Initial suspend
+  LLVMValueRef initial_save = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "initial.save");
+
+  LLVMValueRef initial_suspend = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){initial_save, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2,
+      "initial.suspend");
+
+  LLVMValueRef init_switch =
+      LLVMBuildSwitch(builder, initial_suspend, initial_return_bb, 2);
+  LLVMAddCase(init_switch, LLVMConstInt(LLVMInt8Type(), 0, 0), start_bb);
+  LLVMAddCase(init_switch, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, initial_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // === START BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, start_bb);
+
+  // Get the parameters (param 0 is frame_size_out, param 1 is filter fn, param
+  // 2 is inner handle)
+  LLVMValueRef filter_fn_param = LLVMGetParam(wrapper_fn, 1);
+  LLVMSetValueName(filter_fn_param, "filter_fn.param");
+  LLVMValueRef inner_handle_param = LLVMGetParam(wrapper_fn, 2);
+  LLVMSetValueName(inner_handle_param, "inner_handle.param");
+
+  // Store filter function in frame for repeated use
+  LLVMValueRef filter_fn_alloca =
+      LLVMBuildAlloca(builder, LLVMTypeOf(filter_fn_param), "filter_fn");
+  LLVMBuildStore(builder, filter_fn_param, filter_fn_alloca);
+
+  // === FILTER LOOP: consume inner until predicate passes or exhausted ===
+  LLVMBasicBlockRef loop_check_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "filter.check");
+  LLVMBasicBlockRef loop_body_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "filter.body");
+  LLVMBasicBlockRef test_predicate_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "filter.test");
+  LLVMBasicBlockRef yield_bb = LLVMAppendBasicBlock(wrapper_fn, "filter.yield");
+  LLVMBasicBlockRef loop_resume_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "filter.resume");
+  LLVMBasicBlockRef loop_exit_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "filter.exit");
+
+  LLVMBuildBr(builder, loop_check_bb);
+
+  // Check if inner is done before resuming
+  LLVMPositionBuilderAtEnd(builder, loop_check_bb);
+  LLVMValueRef is_done_before = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle_param}, 1,
+      "inner.is_done_before");
+  LLVMBuildCondBr(builder, is_done_before, loop_exit_bb, loop_body_bb);
+
+  // Resume inner to get next value
+  LLVMPositionBuilderAtEnd(builder, loop_body_bb);
+  LLVMBuildCall2(builder,
+                 LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
+                 get_coro_resume_intrinsic(module),
+                 (LLVMValueRef[]){inner_handle_param}, 1, "");
+
+  LLVMValueRef is_done_after = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle_param}, 1,
+      "inner.is_done_after");
+  LLVMBuildCondBr(builder, is_done_after, loop_exit_bb, test_predicate_bb);
+
+  // Get value from inner and test predicate
+  LLVMPositionBuilderAtEnd(builder, test_predicate_bb);
+
+  LLVMValueRef inner_promise_raw = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),
+      get_coro_promise_intrinsic(module),
+      (LLVMValueRef[]){inner_handle_param, LLVMConstInt(LLVMInt32Type(), 0, 0),
+                       LLVMConstInt(LLVMInt1Type(), 0, 0)},
+      3, "inner.promise.raw");
+
+  LLVMValueRef inner_promise_ptr = LLVMBuildBitCast(
+      builder, inner_promise_raw, LLVMPointerType(llvm_elem_type, 0),
+      "inner.promise.ptr");
+
+  LLVMValueRef inner_value = LLVMBuildLoad2(builder, llvm_elem_type,
+                                            inner_promise_ptr, "inner.value");
+
+  // Load and call filter predicate
+  LLVMValueRef loaded_filter_fn = LLVMBuildLoad2(
+      builder, LLVMTypeOf(filter_fn_param), filter_fn_alloca, "filter_fn");
+
+  // Filter function returns Bool (i1)
+  LLVMTypeRef filter_fn_llvm_type =
+      LLVMFunctionType(LLVMInt1Type(), (LLVMTypeRef[]){llvm_elem_type}, 1, 0);
+
+  LLVMValueRef predicate_result =
+      LLVMBuildCall2(builder, filter_fn_llvm_type, loaded_filter_fn,
+                     (LLVMValueRef[]){inner_value}, 1, "predicate.result");
+
+  // If predicate passes, yield; otherwise loop back to consume more
+  LLVMBuildCondBr(builder, predicate_result, yield_bb, loop_check_bb);
+
+  // Yield the value that passed the predicate
+  LLVMPositionBuilderAtEnd(builder, yield_bb);
+
+  // Store the passing value in our promise (same type, no transformation)
+  LLVMBuildStore(builder, inner_value, promise_alloca);
+
+  // Suspend
+  LLVMValueRef save_token = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "coro.save");
+
+  LLVMValueRef suspend_result = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){save_token, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2,
+      "coro.suspend");
+
+  LLVMBasicBlockRef suspend_return_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "filter.suspend_return");
+
+  LLVMValueRef switch_inst =
+      LLVMBuildSwitch(builder, suspend_result, suspend_return_bb, 2);
+  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 0, 0), loop_resume_bb);
+  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, suspend_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  LLVMPositionBuilderAtEnd(builder, loop_resume_bb);
+  LLVMBuildBr(builder, loop_check_bb);
+
+  // When inner is exhausted, finish
+  LLVMPositionBuilderAtEnd(builder, loop_exit_bb);
+
+  // Final suspend
+  LLVMValueRef final_save = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "final.save");
+
+  LLVMValueRef final_suspend = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){final_save, LLVMConstInt(LLVMInt1Type(), 1, 0)}, 2,
+      "final.suspend");
+
+  LLVMBasicBlockRef final_return_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "final.return");
+  LLVMValueRef final_switch =
+      LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
+  LLVMAddCase(final_switch, LLVMConstInt(LLVMInt8Type(), 0, 0),
+              final_return_bb);
+  LLVMAddCase(final_switch, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, final_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // === CLEANUP BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, cleanup_bb);
+
+  LLVMValueRef mem = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_free_intrinsic(module)),
+      get_coro_free_intrinsic(module), (LLVMValueRef[]){id, handle}, 2,
+      "coro.free");
+
+  LLVMBuildFree(builder, mem);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // === SUSPEND BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, suspend_bb);
+
+  LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
+      get_coro_end_intrinsic(module),
+      (LLVMValueRef[]){handle, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2, "");
+
+  LLVMBuildRet(builder, handle);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  // Alloca for frame size (not used here, but wrapper expects it)
+  LLVMValueRef frame_size_alloca =
+      LLVMBuildAlloca(builder, LLVMInt64Type(), "frame_size.ignored");
+
+  // Call the wrapper function, passing frame_size_out, filter function, and
+  // inner coroutine
+  LLVMValueRef filter_handle = LLVMBuildCall2(
+      builder, wrapper_fn_type, wrapper_fn,
+      (LLVMValueRef[]){frame_size_alloca, filter_fn, inner_handle}, 3,
+      "filter.handle");
+
+  // Create reset closure for filtered coroutine
+  // Closure args: {filter_fn_ptr, inner_handle}
+  LLVMTypeRef closure_args_ty =
+      LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR}, 2, 0);
+
+  // Reuse coro_map_reset_fn since filter has same closure structure
+  LLVMValueRef reset_closure_fn =
+      coro_map_reset_fn(promise_type, inner_prom_type, wrapper_fn_type,
+                        wrapper_fn, module, builder);
+
+  // Allocate and populate closure args struct
+  LLVMValueRef args_struct = LLVMGetUndef(closure_args_ty);
+  args_struct = LLVMBuildInsertValue(builder, args_struct, filter_fn, 0, "");
+  args_struct = LLVMBuildInsertValue(builder, args_struct, inner_handle, 1, "");
+
+  LLVMValueRef args_ptr_alloc = LLVMBuildMalloc(builder, closure_args_ty, "");
+  LLVMBuildStore(builder, args_struct, args_ptr_alloc);
+
+  // Write reset_fn and args_ptr into filter_handle's promise
+  LLVMValueRef filter_prom_ptr = GET_PROMISE_PTR(filter_handle, promise_type);
+  PROMISE_SET_RESET_FN(filter_prom_ptr, promise_type, reset_closure_fn);
+  PROMISE_SET_ARGS_PTR(filter_prom_ptr, promise_type, args_ptr_alloc);
+
+  return filter_handle;
+}
+
+LLVMValueRef coro_take_reset_fn(LLVMTypeRef promise_type,
+                                LLVMTypeRef inner_prom_type,
+                                LLVMTypeRef wrapper_fn_type,
+                                LLVMValueRef wrapper_fn, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  // Create reset closure for coro_take coroutine
+  //
+  // Closure args: {take_count (i32), inner_handle (ptr)}
+  LLVMTypeRef closure_args_ty =
+      LLVMStructType((LLVMTypeRef[]){LLVMInt32Type(), GENERIC_PTR}, 2, 0);
+
+  // Reset closure signature: (ptr frame_size_out, ptr args_ptr) -> ptr handle
+  LLVMTypeRef reset_closure_type = LLVMFunctionType(
+      GENERIC_PTR,
+      (LLVMTypeRef[]){LLVMPointerType(LLVMInt64Type(), 0), GENERIC_PTR}, 2, 0);
+
+  LLVMValueRef reset_closure_fn =
+      LLVMAddFunction(module, "coro_take.reset", reset_closure_type);
+  LLVMSetLinkage(reset_closure_fn, LLVMExternalLinkage);
+
+  LLVMBasicBlockRef reset_prev = LLVMGetInsertBlock(builder);
+  LLVMBasicBlockRef reset_entry =
+      LLVMAppendBasicBlock(reset_closure_fn, "entry");
+  LLVMPositionBuilderAtEnd(builder, reset_entry);
+
+  // Reset closure params: (ptr frame_size_out, ptr args_ptr)
+  LLVMValueRef reset_frame_size_out = LLVMGetParam(reset_closure_fn, 0);
+  LLVMValueRef reset_args_raw = LLVMGetParam(reset_closure_fn, 1);
+
+  // Load fields from closure args struct
+  LLVMValueRef reset_args =
+      LLVMBuildBitCast(builder, reset_args_raw,
+                       LLVMPointerType(closure_args_ty, 0), "reset_args");
+
+  LLVMValueRef r_take_count = LLVMBuildLoad2(
+      builder, LLVMInt32Type(),
+      LLVMBuildStructGEP2(builder, closure_args_ty, reset_args, 0, ""),
+      "take_count");
+  LLVMValueRef r_inner_handle = LLVMBuildLoad2(
+      builder, GENERIC_PTR,
+      LLVMBuildStructGEP2(builder, closure_args_ty, reset_args, 1, ""),
+      "inner_handle");
+
+  // Get inner's reset_fn and args_ptr from its promise
+  LLVMValueRef inner_prom_ptr =
+      GET_PROMISE_PTR(r_inner_handle, inner_prom_type);
+  LLVMValueRef r_inner_reset =
+      PROMISE_GET_RESET_FN(inner_prom_ptr, inner_prom_type);
+  LLVMValueRef r_inner_args =
+      PROMISE_GET_ARGS_PTR(inner_prom_ptr, inner_prom_type);
+
+  // Alloca for inner's frame size
+  LLVMValueRef inner_frame_size_slot =
+      LLVMBuildAlloca(builder, LLVMInt64Type(), "inner_frame_size.ignored");
+
+  // Call inner reset closure to get a fresh inner handle
+  LLVMValueRef fresh_inner = LLVMBuildCall2(
+      builder, reset_closure_type, r_inner_reset,
+      (LLVMValueRef[]){inner_frame_size_slot, r_inner_args}, 2, "fresh_inner");
+
+  // Call wrapper_fn(frame_size_out, count, fresh_inner)
+  LLVMValueRef new_take_handle = LLVMBuildCall2(
+      builder, wrapper_fn_type, wrapper_fn,
+      (LLVMValueRef[]){reset_frame_size_out, r_take_count, fresh_inner}, 3,
+      "new_take_handle");
+
+  // Write reset_fn and args_ptr into the new handle's promise
+  LLVMValueRef new_prom_ptr = GET_PROMISE_PTR(new_take_handle, promise_type);
+  PROMISE_SET_RESET_FN(new_prom_ptr, promise_type, reset_closure_fn);
+  PROMISE_SET_ARGS_PTR(new_prom_ptr, promise_type, reset_args_raw);
+
+  LLVMBuildRet(builder, new_take_handle);
+
+  LLVMPositionBuilderAtEnd(builder, reset_prev);
+  return reset_closure_fn;
+}
+
+LLVMValueRef CorTakeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder) {
+  // Get the two arguments: count n and coroutine
+  Ast *count_ast = ast->data.AST_APPLICATION.args;
+  Ast *coro_ast = ast->data.AST_APPLICATION.args + 1;
+
+  // Type analysis: Int -> Coroutine<T> -> Coroutine<T>
+  Type *coro_type = coro_ast->type;
+  Type *yield_type = coro_type->data.T_CONS.args[0];
+  LLVMTypeRef llvm_yield_type = type_to_llvm_type(yield_type, ctx, module);
+
+  // Promise type for inner coroutine
+  LLVMTypeRef inner_prom_type = CORO_PROMISE_TYPE(llvm_yield_type);
+
+  LLVMValueRef count_val = codegen(count_ast, ctx, module, builder);
+  LLVMValueRef inner_handle = codegen(coro_ast, ctx, module, builder);
+
+  // Create wrapper coroutine function: (frame_size_out, count, inner_handle) ->
+  // handle
+  LLVMTypeRef wrapper_fn_type =
+      LLVMFunctionType(GENERIC_PTR,
+                       (LLVMTypeRef[]){LLVMPointerType(LLVMInt64Type(), 0),
+                                       LLVMInt32Type(), GENERIC_PTR},
+                       3, 0);
+
+  LLVMValueRef wrapper_fn =
+      LLVMAddFunction(module, "coro_take_wrapper", wrapper_fn_type);
+  LLVMSetLinkage(wrapper_fn, LLVMExternalLinkage);
+
+  COROUTINE_ATTR_MARKING(wrapper_fn)
+  COROUTINE_BASIC_BLOCKS(wrapper_fn)
+
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+
+  // === ENTRY BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, entry_bb);
+
+  LLVMTypeRef promise_type = CORO_PROMISE_TYPE(llvm_yield_type);
+  LLVMValueRef promise_alloca =
+      LLVMBuildAlloca(builder, promise_type, "promise");
+
+  // Alloca for remaining counter
+  LLVMValueRef remaining_slot =
+      LLVMBuildAlloca(builder, LLVMInt32Type(), "remaining.slot");
+
+  // Alloca to store the inner handle (must be saved before initial suspend)
+  LLVMValueRef inner_handle_slot =
+      LLVMBuildAlloca(builder, GENERIC_PTR, "inner_handle.slot");
+
+  // Store initial count before initial suspend (param 1 is i32)
+  LLVMValueRef count_param = LLVMGetParam(wrapper_fn, 1);
+  LLVMBuildStore(builder, count_param, remaining_slot);
+
+  // Store inner handle before initial suspend (param 2)
+  LLVMBuildStore(builder, LLVMGetParam(wrapper_fn, 2), inner_handle_slot);
+
+  // Initialize is_done flag to false
+  LLVMValueRef is_done_gep = LLVMBuildStructGEP2(
+      builder, promise_type, promise_alloca, 1, "is_done_ptr");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_done_gep);
+
+  // Initialize reset_fn and args_ptr to null (will be set later)
+  PROMISE_SET_RESET_FN(promise_alloca, promise_type,
+                       LLVMConstNull(GENERIC_PTR));
+  PROMISE_SET_ARGS_PTR(promise_alloca, promise_type,
+                       LLVMConstNull(GENERIC_PTR));
+
+  LLVMValueRef id = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
+      get_coro_id_intrinsic(module),
+      (LLVMValueRef[]){LLVMConstInt(LLVMInt32Type(), 0, 0), promise_alloca,
+                       LLVMConstNull(GENERIC_PTR), LLVMConstNull(GENERIC_PTR)},
+      4, "coro.id");
+
+  LLVMValueRef size = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_size_intrinsic(module)),
+      get_coro_size_intrinsic(module), NULL, 0, "coro.size");
+
+  // Write frame size to caller's out-param (param 0)
+  LLVMValueRef frame_size_out_param = LLVMGetParam(wrapper_fn, 0);
+  LLVMBuildStore(builder, size, frame_size_out_param);
+
+  LLVMValueRef frame =
+      LLVMBuildArrayMalloc(builder, LLVMInt8Type(), size, "coro.frame");
+
+  LLVMValueRef handle = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_begin_intrinsic(module)),
+      get_coro_begin_intrinsic(module), (LLVMValueRef[]){id, frame}, 2,
+      "coro.handle");
+
+  // Initial suspend
+  LLVMValueRef initial_save = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "initial.save");
+
+  LLVMValueRef initial_suspend = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){initial_save, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2,
+      "initial.suspend");
+
+  LLVMValueRef init_switch =
+      LLVMBuildSwitch(builder, initial_suspend, initial_return_bb, 2);
+  LLVMAddCase(init_switch, LLVMConstInt(LLVMInt8Type(), 0, 0), start_bb);
+  LLVMAddCase(init_switch, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, initial_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // === START BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, start_bb);
+
+  // === TAKE LOOP ===
+  LLVMBasicBlockRef loop_check_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "take.check");
+  LLVMBasicBlockRef count_check_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "take.count_check");
+  LLVMBasicBlockRef loop_body_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "take.body");
+  LLVMBasicBlockRef get_value_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "take.get_value");
+  LLVMBasicBlockRef loop_resume_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "take.resume");
+  LLVMBasicBlockRef loop_exit_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "take.exit");
+
+  LLVMBuildBr(builder, loop_check_bb);
+
+  // First check: is remaining > 0?
+  LLVMPositionBuilderAtEnd(builder, loop_check_bb);
+  LLVMValueRef remaining =
+      LLVMBuildLoad2(builder, LLVMInt32Type(), remaining_slot, "remaining");
+
+  LLVMValueRef has_remaining =
+      LLVMBuildICmp(builder, LLVMIntSGT, remaining,
+                    LLVMConstInt(LLVMInt32Type(), 0, 0), "has_remaining");
+  LLVMBuildCondBr(builder, has_remaining, count_check_bb, loop_exit_bb);
+
+  // Second check: is inner done?
+  LLVMPositionBuilderAtEnd(builder, count_check_bb);
+  // Load inner handle from slot
+  LLVMValueRef inner_handle_for_done =
+      LLVMBuildLoad2(builder, GENERIC_PTR, inner_handle_slot, "inner_handle");
+  LLVMValueRef is_done_before = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle_for_done},
+      1, "inner.is_done_before");
+  LLVMBuildCondBr(builder, is_done_before, loop_exit_bb, loop_body_bb);
+
+  // Resume inner
+  LLVMPositionBuilderAtEnd(builder, loop_body_bb);
+  LLVMValueRef inner_handle_for_resume =
+      LLVMBuildLoad2(builder, GENERIC_PTR, inner_handle_slot, "inner_handle");
+  LLVMBuildCall2(builder,
+                 LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
+                 get_coro_resume_intrinsic(module),
+                 (LLVMValueRef[]){inner_handle_for_resume}, 1, "");
+
+  LLVMValueRef is_done_after = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
+      get_coro_done_intrinsic(module),
+      (LLVMValueRef[]){inner_handle_for_resume}, 1, "inner.is_done_after");
+  LLVMBuildCondBr(builder, is_done_after, loop_exit_bb, get_value_bb);
+
+  // Get value from inner and yield it
+  LLVMPositionBuilderAtEnd(builder, get_value_bb);
+  LLVMValueRef inner_handle_for_value =
+      LLVMBuildLoad2(builder, GENERIC_PTR, inner_handle_slot, "inner_handle");
+
+  LLVMValueRef inner_promise_raw = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),
+      get_coro_promise_intrinsic(module),
+      (LLVMValueRef[]){inner_handle_for_value,
+                       LLVMConstInt(LLVMInt32Type(), 0, 0),
+                       LLVMConstInt(LLVMInt1Type(), 0, 0)},
+      3, "inner.promise.raw");
+
+  LLVMValueRef inner_promise_ptr = LLVMBuildBitCast(
+      builder, inner_promise_raw, LLVMPointerType(llvm_yield_type, 0),
+      "inner.promise.ptr");
+
+  LLVMValueRef inner_value = LLVMBuildLoad2(builder, llvm_yield_type,
+                                            inner_promise_ptr, "inner.value");
+
+  // Store in our promise
+  LLVMBuildStore(builder, inner_value, promise_alloca);
+
+  // Decrement remaining counter
+  LLVMValueRef remaining_now =
+      LLVMBuildLoad2(builder, LLVMInt32Type(), remaining_slot, "remaining.now");
+
+  LLVMValueRef remaining_dec =
+      LLVMBuildSub(builder, remaining_now, LLVMConstInt(LLVMInt32Type(), 1, 0),
+                   "remaining.dec");
+  LLVMBuildStore(builder, remaining_dec, remaining_slot);
+
+  // Suspend
+  LLVMValueRef save_token = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "coro.save");
+
+  LLVMValueRef suspend_result = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){save_token, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2,
+      "coro.suspend");
+
+  LLVMBasicBlockRef suspend_return_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "take.suspend_return");
+
+  LLVMValueRef switch_inst =
+      LLVMBuildSwitch(builder, suspend_result, suspend_return_bb, 2);
+  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 0, 0), loop_resume_bb);
+  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, suspend_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  LLVMPositionBuilderAtEnd(builder, loop_resume_bb);
+  LLVMBuildBr(builder, loop_check_bb);
+
+  // When count exhausted or inner done, finish
+  LLVMPositionBuilderAtEnd(builder, loop_exit_bb);
+
+  // Final suspend
+  LLVMValueRef final_save = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "final.save");
+
+  LLVMValueRef final_suspend = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){final_save, LLVMConstInt(LLVMInt1Type(), 1, 0)}, 2,
+      "final.suspend");
+
+  LLVMBasicBlockRef final_return_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "final.return");
+  LLVMValueRef final_switch =
+      LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
+  LLVMAddCase(final_switch, LLVMConstInt(LLVMInt8Type(), 0, 0),
+              final_return_bb);
+  LLVMAddCase(final_switch, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, final_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // === CLEANUP BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, cleanup_bb);
+
+  LLVMValueRef mem = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_free_intrinsic(module)),
+      get_coro_free_intrinsic(module), (LLVMValueRef[]){id, handle}, 2,
+      "coro.free");
+
+  LLVMBuildFree(builder, mem);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // === SUSPEND BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, suspend_bb);
+
+  LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
+      get_coro_end_intrinsic(module),
+      (LLVMValueRef[]){handle, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2, "");
+
+  LLVMBuildRet(builder, handle);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  // Alloca for frame size (not used here, but wrapper expects it)
+  LLVMValueRef frame_size_alloca =
+      LLVMBuildAlloca(builder, LLVMInt64Type(), "frame_size.ignored");
+
+  // Call the wrapper to create the take coroutine handle
+  LLVMValueRef take_handle = LLVMBuildCall2(
+      builder, wrapper_fn_type, wrapper_fn,
+      (LLVMValueRef[]){frame_size_alloca, count_val, inner_handle}, 3,
+      "take.handle");
+
+  // Create reset closure for coro_take
+  // Closure args: {take_count (i32), inner_handle (ptr)}
+  LLVMTypeRef closure_args_ty =
+      LLVMStructType((LLVMTypeRef[]){LLVMInt32Type(), GENERIC_PTR}, 2, 0);
+
+  LLVMValueRef reset_closure_fn =
+      coro_take_reset_fn(promise_type, inner_prom_type, wrapper_fn_type,
+                         wrapper_fn, module, builder);
+
+  // Allocate and populate closure args struct
+  LLVMValueRef args_struct = LLVMGetUndef(closure_args_ty);
+  args_struct = LLVMBuildInsertValue(builder, args_struct, count_val, 0, "");
+  args_struct = LLVMBuildInsertValue(builder, args_struct, inner_handle, 1, "");
+
+  LLVMValueRef args_ptr_alloc = LLVMBuildMalloc(builder, closure_args_ty, "");
+  LLVMBuildStore(builder, args_struct, args_ptr_alloc);
+
+  // Write reset_fn and args_ptr into take_handle's promise
+  LLVMValueRef take_prom_ptr = GET_PROMISE_PTR(take_handle, promise_type);
+  PROMISE_SET_RESET_FN(take_prom_ptr, promise_type, reset_closure_fn);
+  PROMISE_SET_ARGS_PTR(take_prom_ptr, promise_type, args_ptr_alloc);
+
+  return take_handle;
 }
 
 LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

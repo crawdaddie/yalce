@@ -1589,8 +1589,10 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   // GENERIC_FN_SYMBOL("cor_promise", NULL, CorGetPromiseValHandler);
   GENERIC_FN_SYMBOL("cor_last_val", NULL, CorGetLastValHandler);
   GENERIC_FN_SYMBOL("cor_loop", &cor_loop_scheme, CorLoopHandler);
+  GENERIC_FN_SYMBOL("cor_take", &cor_take_scheme, CorTakeHandler);
   // GENERIC_FN_SYMBOL("loop_cor", &loop_cor_scheme, LoopCorHandler);
   GENERIC_FN_SYMBOL("cor_map", &cor_map_scheme, CorMapHandler);
+  GENERIC_FN_SYMBOL("cor_filter", &cor_filter_scheme, CorFilterHandler);
   GENERIC_FN_SYMBOL("cor_stop", &cor_stop_scheme, CorStopHandler);
   GENERIC_FN_SYMBOL("iter_of_list", &iter_of_list_scheme, CorOfListHandler);
   GENERIC_FN_SYMBOL("iter_cor_list", &iter_cor_list_scheme,

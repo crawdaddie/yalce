@@ -366,8 +366,8 @@ LLVMValueRef coro_create_with_reset_closure(JITSymbol *sym,
   LLVMValueRef coro_fn = sym->val;
 
   if (sym->type == STYPE_GENERIC_FUNCTION) {
-    LLVMValueRef coro_fn = coro_create_from_generic(sym, expected_fn_type, app,
-                                                    ctx, module, builder);
+    coro_fn = coro_create_from_generic(sym, expected_fn_type, app, ctx, module,
+                                       builder);
   }
 
   // Extract yield type for promise access

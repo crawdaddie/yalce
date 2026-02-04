@@ -430,6 +430,23 @@ Type create_cor_map_scheme() {
       {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = cmap_f}}};
 }
 
+Type cor_filter_scheme;
+Type create_cor_filter_scheme() {
+  // (a -> Bool) -> Coroutine<a> -> Coroutine<a>
+  Type *a = tvar("a");
+  Type *pred = type_fn(a, &t_bool);
+  Type *cfilter_f = create_coroutine_instance_type(a);
+  cfilter_f = type_fn(create_coroutine_instance_type(a), cfilter_f);
+  cfilter_f = type_fn(pred, cfilter_f);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){
+      T_SCHEME,
+      {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = cfilter_f}}};
+}
+
 Type cor_try_opt_scheme;
 Type create_cor_try_opt_scheme() {
   Type *a = tvar("a");
@@ -468,6 +485,21 @@ Type create_cor_loop_scheme() {
 
   TypeList *vars_mem = t_alloc(sizeof(TypeList));
 
+  vars_mem[0] = vlist_of_typevar(a);
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
+}
+
+Type cor_take_scheme;
+Type create_cor_take_scheme() {
+  // Int -> Coroutine<a> -> Coroutine<a>
+  Type *a = tvar("a");
+  Type *cor = create_coroutine_instance_type(a);
+  Type *f = type_fn(cor, cor);
+  f = type_fn(&t_int, f);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
   vars_mem[0] = vlist_of_typevar(a);
 
   return (Type){T_SCHEME,
@@ -746,11 +778,17 @@ void initialize_builtin_types() {
   cor_loop_scheme = create_cor_loop_scheme();
   add_builtin("cor_loop", &cor_loop_scheme);
 
+  cor_take_scheme = create_cor_take_scheme();
+  add_builtin("cor_take", &cor_take_scheme);
+
   // loop_cor_scheme = create_cor_loop_scheme();
   // add_builtin("loop_cor", &cor_loop_scheme);
 
   cor_map_scheme = create_cor_map_scheme();
   add_builtin("cor_map", &cor_map_scheme);
+
+  cor_filter_scheme = create_cor_filter_scheme();
+  add_builtin("cor_filter", &cor_filter_scheme);
 
   cor_combine_scheme = create_cor_combine_scheme();
   add_builtin("cor_combine", &cor_combine_scheme);
