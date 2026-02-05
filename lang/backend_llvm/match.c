@@ -229,8 +229,7 @@ LLVMValueRef test_list_cons_pattern(Ast *pattern, LLVMValueRef val,
                                     LLVMBuilderRef builder) {
 
   if (is_generic(val_type)) {
-    val_type = resolve_type_in_env(val_type, ctx->env);
-    print_type(val_type);
+    val_type = resolve_type_in_env(deep_copy_type(val_type), ctx->env);
   }
 
   Type *list_el_type = val_type->data.T_CONS.args[0];
