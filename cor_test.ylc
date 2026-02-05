@@ -1,23 +1,22 @@
-let c = fn () -> 
-  yield 1; 
-  yield 2; 
-  yield 3
+#! /usr/bin/env ylc
+let naturals = fn s ->
+  yield s;
+  yield naturals (s + 1)
 ;;
 
-let x = c ()
-|> cor_map ((*) 2)
-|> cor_loop
-|> cor_map ((*) 3)
-;
-
-print `
+let arr = fn () ->
+  let x = naturals 0 |> cor_take 10 |> cor_filter (fn x -> x < 5) in
+  print `
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
 {x ()}
 {x ()}
 {x ()}
 {x ()}
 {x ()}
 `
-
-
-
-
+;;
+arr ()
