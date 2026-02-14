@@ -8,10 +8,10 @@ let Harps = module () ->
     let freq = inlet 55. in
     let trig = inlet 1. in
 
-    let pm_amt = chirp_node 2. 0.001 0.5 trig
+    let pm_amt = chirp_node 2. 0.001 0.2 trig
     in
 
-    pm_node freq pm_amt 6.
+    pm_node freq pm_amt 2.
     |> comb_node 0.05 0.1 0.8 0.8 
     |> (*) (asr_kill_node 0.001 1. 0.3 trig)
 
@@ -39,7 +39,7 @@ import BachWTC;
 defer_quant q (fn t -> 
   BachWTC.notes ()
   |> cor_map (fn n ->
-    Harps.play_dur (midi_to_freq n) .5;
+    Harps.play_dur (midi_to_freq n) .4;
     q / 4. 
   )
   |> Harps.set_pattern t
