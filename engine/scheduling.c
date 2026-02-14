@@ -160,6 +160,8 @@ uint64_t get_current_sample() { return atomic_load(&global_sample_position); }
 
 void *scheduler_thread_fn(void *arg) {
   while (1) {
+    move_overflow();
+
     uint64_t current_sample = get_current_sample();
     process_scheduler_events(current_sample);
     usleep(5000); // 5ms

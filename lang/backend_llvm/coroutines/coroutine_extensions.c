@@ -651,8 +651,8 @@ LLVMValueRef CorFilterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef filter_fn = codegen(filter_fn_ast, ctx, module, builder);
   LLVMValueRef inner_handle = codegen(coro_ast, ctx, module, builder);
 
-  // Create wrapper coroutine function that TAKES frame_size_out, filter function,
-  // and coroutine as parameters
+  // Create wrapper coroutine function that TAKES frame_size_out, filter
+  // function, and coroutine as parameters
   LLVMTypeRef wrapper_fn_type =
       LLVMFunctionType(GENERIC_PTR,
                        (LLVMTypeRef[]){LLVMPointerType(LLVMInt64Type(), 0),
@@ -792,12 +792,12 @@ LLVMValueRef CorFilterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMConstInt(LLVMInt1Type(), 0, 0)},
       3, "inner.promise.raw");
 
-  LLVMValueRef inner_promise_ptr = LLVMBuildBitCast(
-      builder, inner_promise_raw, LLVMPointerType(llvm_elem_type, 0),
-      "inner.promise.ptr");
+  LLVMValueRef inner_promise_ptr =
+      LLVMBuildBitCast(builder, inner_promise_raw,
+                       LLVMPointerType(llvm_elem_type, 0), "inner.promise.ptr");
 
-  LLVMValueRef inner_value = LLVMBuildLoad2(builder, llvm_elem_type,
-                                            inner_promise_ptr, "inner.value");
+  LLVMValueRef inner_value =
+      LLVMBuildLoad2(builder, llvm_elem_type, inner_promise_ptr, "inner.value");
 
   // Load and call filter predicate
   LLVMValueRef loaded_filter_fn = LLVMBuildLoad2(
@@ -2408,56 +2408,6 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                  4, "call.schedule_event.now");
   return outer_handle;
 }
-// static LLVMValueRef __build_scheduled_cor_wrapper(LLVMTypeRef promise_type,
-//                                                   LLVMValueRef scheduler,
-//                                                   LLVMTypeRef scheduler_type,
-//                                                   LLVMModuleRef module,
-//                                                   LLVMBuilderRef builder) {
-// LLVMTypeRef coro_obj_type = CORO_OBJ_TYPE(promise_type);
-
-// LLVMTypeRef wrapper_fn_type =
-//     LLVMFunctionType(LLVMVoidType(),
-//                      (LLVMTypeRef[]){
-//                          // LLVMPointerType(coro_obj_type, 0),
-//                          LLVMInt64Type(),
-//                      },
-//                      2, 0);
-// LLVMValueRef func =
-//     LLVMAddFunction(module, "scheduler_wrapper", wrapper_fn_type);
-
-// LLVMSetLinkage(func, LLVMExternalLinkage);
-// LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
-//
-// LLVMBasicBlockRef finished =
-//     LLVMAppendBasicBlock(func, "coro.is_finished_block");
-// LLVMBasicBlockRef not_finished =
-//     LLVMAppendBasicBlock(func, "coro.resume_block");
-//
-// LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
-// LLVMPositionBuilderAtEnd(builder, entry);
-// LLVMValueRef coro = LLVMGetParam(func, 0);
-// LLVMValueRef timestamp = LLVMGetParam(func, 1);
-// LLVMTypeRef val_type = LLVMDoubleType();
-// CoroutineCtx coro_ctx = {.coro_obj_type = coro_obj_type,
-//                          .promise_type = promise_type};
-//
-// coro = coro_advance(coro, &coro_ctx, builder);
-//
-// LLVMValueRef is_finished = coro_is_finished(coro, &coro_ctx, builder);
-// LLVMBuildCondBr(builder, is_finished, finished, not_finished);
-// LLVMPositionBuilderAtEnd(builder, not_finished);
-// LLVMValueRef promise =
-//     coro_promise(coro, coro_obj_type, promise_type, builder);
-// LLVMValueRef val = LLVMBuildExtractValue(builder, promise, 1, "");
-//
-
-//
-// LLVMPositionBuilderAtEnd(builder, finished);
-// LLVMBuildRetVoid(builder);
-//
-// LLVMPositionBuilderAtEnd(builder, prev_block);
-// return func;
-// }
 
 LLVMValueRef CurrentCorHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {

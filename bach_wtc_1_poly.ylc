@@ -1,0 +1,47 @@
+open engine/bindings/Synth;
+open engine/bindings/Sched; 
+import std/Math;
+
+let Harps = module () ->
+
+  let synth_tpl = (fn () -> 
+    let freq = inlet 55. in
+    let trig = inlet 1. in
+
+    let pm_amt = chirp_node 2. 0.001 0.5 trig
+    in
+
+    pm_node freq pm_amt 6.
+    |> comb_node 0.05 0.1 0.8 0.8 
+    |> (*) (asr_kill_node 0.001 1. 0.3 trig)
+
+  ) |> compile_blob_template;
+
+
+  let play_dur = fn freq dur ->
+    let fo = get_tl_tick ();
+    synth_tpl |> instantiate_template [(0, freq / 2),] |> play_node_dur fo dur 1
+  ;;
+
+  let pattern_ref = [| cstr "" |] ;
+
+  let set_pattern = fn t cor ->
+    cor_stop ( pattern_ref[0] );
+    cor
+    |> play_routine t schedule_event
+    |> array_set pattern_ref 0
+  ;;
+;
+
+let q = 60. / 75.;
+import BachWTC;
+
+defer_quant q (fn t -> 
+  BachWTC.notes ()
+  |> cor_map (fn n ->
+    Harps.play_dur (midi_to_freq n) .5;
+    q / 4. 
+  )
+  |> Harps.set_pattern t
+);
+

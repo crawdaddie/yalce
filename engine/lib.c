@@ -130,7 +130,6 @@ void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int frame_count,
                        double spf) {
   // printf("frame count %d\n", frame_count);
 
-  move_overflow();
   int consumed =
       process_msg_queue_pre(current_tick, frame_count, &ctx->msg_queue);
   node_group_state graph = ctx->graph;
