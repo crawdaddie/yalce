@@ -44,10 +44,11 @@ Node *add_to_dac(Node *node);
 int ctx_sample_rate();
 double ctx_spf();
 
-int process_msg_queue_pre(uint64_t current_tick, msg_queue *queue);
+int process_msg_queue_pre(uint64_t current_tick, int frame_count,
+                          msg_queue *queue);
 
-void process_msg_queue_post(uint64_t current_tick, msg_queue *queue,
-                            int consumed);
+void process_msg_queue_post(uint64_t current_tick, int frame_count,
+                            msg_queue *queue, int consumed);
 
 void audio_ctx_add(Node *ensemble);
 

@@ -812,9 +812,12 @@ void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
 
   double d_index, frac, a, b, sample;
   int index;
+  int trig_idx = 0;
 
   while (nframes--) {
+
     if (*trig > 0.5 && state->prev_trig < 0.5) {
+      printf("bufplayer trig @ %d? \n", trig_idx);
       state->phase = 0;
     }
 
@@ -850,6 +853,7 @@ void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
     state->prev_trig = *trig;
     rate++;
     trig++;
+    trig_idx++;
     start_pos++;
   }
 

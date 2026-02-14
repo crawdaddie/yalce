@@ -65,14 +65,15 @@ let Hihat = module () ->
   ;;
 
   let tts_pat = fn () ->
+    # print "trig hat\n";
+    trig ();e
+    yield 0.25;
     trig ();
     yield 0.25;
-    # trig ();
-    # yield 0.25;
-    # trig_open ();
-    # yield 0.25;
-    # Math.chance 0.125 (trig);
-    # yield 0.25;
+    trig_open ();
+    yield 0.25;
+    Math.chance 0.125 (trig);
+    yield 0.25;
     yield tts_pat ()
   ;;
 ;

@@ -71,6 +71,7 @@ static void process_msg_pre(int frame_offset, scheduler_msg msg) {
       }
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
+      printf("trig @ %d inlet node %p\n", frame_offset, inlet_node);
       inlet_data.buf[frame_offset] = 1.0;
     }
 
@@ -123,6 +124,7 @@ static void process_msg_post(int frame_offset, scheduler_msg msg) {
       }
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
+      printf("post trig %d\n", frame_offset);
       inlet_data.buf[frame_offset] = 0.0;
     }
     break;
@@ -156,7 +158,8 @@ void print_msg(scheduler_msg *msg) {
   }
 }
 
-int process_msg_queue_pre(uint64_t current_tick, msg_queue *queue) {
+int process_msg_queue_pre(uint64_t current_tick, int frame_count,
+                          msg_queue *queue) {
   int read_ptr = queue->read_ptr;
   scheduler_msg *msg;
   int consumed = 0;
@@ -166,23 +169,14 @@ int process_msg_queue_pre(uint64_t current_tick, msg_queue *queue) {
     msg = queue->buffer + read_ptr;
     // printf("msg tick %d %d %p\n", msg->tick, current_tick, msg);
 
-    if (msg->tick - current_tick >= BUF_SIZE) {
-
-      // printf("message too early\n");
-      // print_msg(msg);
-      // msg is too early
-      // TODO: if msg->tick - current_tick > 512 - push message to write_ptr
-      // printf("push msg to overflow queue\n");
-      // print_msg(msg);
+    if (msg->tick < current_tick) {
+      // msg is in the past - process at offset 0 (better late than never)
+      process_msg_pre(0, *msg);
+    } else if (msg->tick - current_tick >= frame_count) {
+      // msg is too early - defer to next block
       push_msg(&ctx.overflow_queue, *msg, 0);
       num_moved++;
-    } else if (msg->tick - current_tick < 0) {
-      // msg is too late ???
-      printf("skip message\n");
-      print_msg(msg);
-
     } else {
-
       process_msg_pre(msg->tick - current_tick, *msg);
     }
 
@@ -193,15 +187,16 @@ int process_msg_queue_pre(uint64_t current_tick, msg_queue *queue) {
   return consumed;
 }
 
-void process_msg_queue_post(uint64_t current_tick, msg_queue *queue,
-                            int consumed) {
+void process_msg_queue_post(uint64_t current_tick, int frame_count,
+                            msg_queue *queue, int consumed) {
   scheduler_msg msg;
   while (consumed--) {
     msg = pop_msg(queue);
-    if (msg.tick - current_tick >= BUF_SIZE) {
-      // printf("msg post skipped\n");
-      // print_msg(&msg);
-      // skip
+    if (msg.tick < current_tick) {
+      // was in the past, processed at offset 0
+      process_msg_post(0, msg);
+    } else if (msg.tick - current_tick >= frame_count) {
+      // was deferred to overflow, skip post-processing
     } else {
       int frame_offset = msg.tick - current_tick;
       process_msg_post(frame_offset, msg);

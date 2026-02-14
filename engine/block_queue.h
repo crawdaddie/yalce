@@ -62,4 +62,6 @@ typedef struct {
 void push_msg(msg_queue *queue, scheduler_msg msg, int buffer_offset);
 
 scheduler_msg pop_msg(msg_queue *queue);
+
+void print_msg(scheduler_msg *msg);
 #endif

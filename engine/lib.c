@@ -130,7 +130,9 @@ void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int frame_count,
                        double spf) {
   // printf("frame count %d\n", frame_count);
 
-  int consumed = process_msg_queue_pre(current_tick, &ctx->msg_queue);
+  move_overflow();
+  int consumed =
+      process_msg_queue_pre(current_tick, frame_count, &ctx->msg_queue);
   node_group_state graph = ctx->graph;
 
   if (graph.head == NULL) {
@@ -138,7 +140,7 @@ void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int frame_count,
   } else {
     perform_graph(graph.head, frame_count, spf, ctx->output_buf, LAYOUT, 0);
   }
-  process_msg_queue_post(current_tick, &ctx->msg_queue, consumed);
+  process_msg_queue_post(current_tick, frame_count, &ctx->msg_queue, consumed);
 }
 
 Node *audio_graph_inlet(AudioGraph *g, int inlet_idx) {

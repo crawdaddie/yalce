@@ -109,6 +109,7 @@ SchedulerEvent pop_event(EventHeap *heap) {
 
 void push_event(void (*callback)(void *, uint64_t), void *userdata,
                 uint64_t delay_in_samples, uint64_t base_time) {
+  printf("push trig\n");
 
   EventHeap *queue = &scheduler_queue;
   pthread_mutex_lock(&scheduler_mutex);
@@ -160,8 +161,6 @@ uint64_t get_current_sample() { return atomic_load(&global_sample_position); }
 
 void *scheduler_thread_fn(void *arg) {
   while (1) {
-    move_overflow();
-
     uint64_t current_sample = get_current_sample();
     process_scheduler_events(current_sample);
     usleep(5000); // 5ms
