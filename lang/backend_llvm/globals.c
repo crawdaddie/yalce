@@ -1,5 +1,6 @@
 #include "backend_llvm/globals.h"
 #include "backend_llvm/common.h"
+#include "symbols.h"
 #include "llvm-c/Core.h"
 
 // Global variables
@@ -79,7 +80,9 @@ LLVMValueRef codegen_get_global(const char *sym_name, JITSymbol *sym,
       builder, generic_ptr, LLVMPointerType(llvm_type, 0), "typed_ptr");
 
   snprintf(buf, 32, "%s_load", sym_name);
-  return LLVMBuildLoad2(builder, llvm_type, typed_ptr, buf);
+  LLVMValueRef load_inst = LLVMBuildLoad2(builder, llvm_type, typed_ptr, buf);
+  mark_invariant(load_inst);
+  return load_inst;
 }
 
 void setup_global_storage(LLVMModuleRef module, LLVMBuilderRef builder) {

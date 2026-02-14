@@ -33,6 +33,8 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
 LLVMValueRef create_fn_binding(Ast *binding, Type *fn_type, LLVMValueRef fn,
                                JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder);
+
+void mark_invariant(LLVMValueRef load_inst);
 // TODO: use gperf for better builtin func lookups
 #define SYM_NAME_ARRAY_AT "array_at"
 #define SYM_NAME_ARRAY_SIZE "array_size"

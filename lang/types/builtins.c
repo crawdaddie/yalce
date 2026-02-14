@@ -617,6 +617,22 @@ Type create_asbytes_scheme() {
 Type dlopen_type = MAKE_FN_TYPE_2(&t_string, &t_void);
 Type cor_current_scheme = MAKE_FN_TYPE_2(&t_void, &t_ptr);
 
+TypeClass GenericIter = {.name = TYPE_NAME_TYPECLASS_ITER, .rank = 1000.};
+
+Type iter_scheme;
+
+Type create_iter_scheme() {
+  Type *a = tvar("a");
+  Type *cons = create_cons_type("tbc", 1, &a);
+  typeclasses_extend(cons, &GenericIter);
+  Type *f = type_fn(cons, a);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList));
+
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
+}
+
 void initialize_builtin_types() {
   ht_init(&builtin_types);
   static TypeClass tc_int[] = {{

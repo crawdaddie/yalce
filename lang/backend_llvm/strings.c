@@ -11,6 +11,20 @@
 #include "llvm-c/Types.h"
 #include <string.h>
 
+// Memory effects encoding: 2 bits per location kind
+// Locations: ArgMem=bits[0:1], InaccessibleMem=bits[2:3], Other=bits[4:5]
+// Access: NoModRef=0, Ref=1, Mod=2, ModRef=3
+#define MEM_ARGMEM_REF (1)
+#define MEM_ARGMEM_MODREF (3)
+#define MEM_INACCESSIBLE_MODREF (3 << 2)
+
+static inline void set_memory_effects(LLVMValueRef fn, uint64_t effects) {
+  unsigned kind = LLVMGetEnumAttributeKindForName("memory", 6);
+  LLVMAttributeRef attr =
+      LLVMCreateEnumAttribute(LLVMGetGlobalContext(), kind, effects);
+  LLVMAddAttributeAtIndex(fn, LLVMAttributeFunctionIndex, attr);
+}
+
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
@@ -23,6 +37,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        2, 1);                                                  \
   if (!sprintf_func) {                                                         \
     sprintf_func = LLVMAddFunction(module, "sprintf", sprintf_type);           \
+    set_memory_effects(sprintf_func, MEM_ARGMEM_MODREF);                       \
   };
 
 LLVMValueRef _codegen_string(const char *chars, int length, JITLangCtx *ctx,
@@ -915,12 +930,14 @@ LLVMValueRef print_str(LLVMValueRef val, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,
       1);
   LLVMValueRef printf_func = get_extern_fn("printf", printf_type, module);
+  set_memory_effects(printf_func, MEM_ARGMEM_REF | MEM_INACCESSIBLE_MODREF);
 
   LLVMTypeRef fflush_type = LLVMFunctionType(
       LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,
       0);
 
   LLVMValueRef fflush_func = get_extern_fn("fflush", fflush_type, module);
+  set_memory_effects(fflush_func, MEM_INACCESSIBLE_MODREF);
 
   LLVMValueRef chars_ptr =
       LLVMBuildExtractValue(builder, val, 1, "string_chars");
@@ -943,13 +960,18 @@ LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef printf_type = LLVMFunctionType(
       LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,
       1);
+
   LLVMValueRef printf_func = get_extern_fn("printf", printf_type, module);
+  // memory(argmem: read, inaccessiblemem: readwrite)
+  set_memory_effects(printf_func, MEM_ARGMEM_REF | MEM_INACCESSIBLE_MODREF);
 
   LLVMTypeRef fflush_type = LLVMFunctionType(
       LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,
       0);
 
   LLVMValueRef fflush_func = get_extern_fn("fflush", fflush_type, module);
+  // memory(inaccessiblemem: readwrite)
+  set_memory_effects(fflush_func, MEM_INACCESSIBLE_MODREF);
 
   if (ast->data.AST_APPLICATION.args->tag == AST_FMT_STRING) {
 

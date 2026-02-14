@@ -21,6 +21,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+void mark_invariant(LLVMValueRef load_inst) {
+  // unsigned kind = LLVMGetMDKindID("invariant.load", 14);
+  // LLVMValueRef md = LLVMMDNodeInContext(LLVMGetGlobalContext(), NULL, 0);
+  // LLVMSetMetadata(load_inst, kind, md);
+}
+
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
@@ -158,7 +164,10 @@ LLVMValueRef codegen_identifier(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     if (sym->storage != NULL) {
       LLVMTypeRef llvm_type = type_to_llvm_type(ast->type, ctx, module);
-      return LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
+      LLVMValueRef load_inst =
+          LLVMBuildLoad2(builder, llvm_type, sym->storage, "load pointer");
+      mark_invariant(load_inst);
+      return load_inst;
     }
 
     return sym->val;

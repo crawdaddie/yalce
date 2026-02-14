@@ -9,6 +9,7 @@
 #include "types/builtins.h"
 #include "types/inference.h"
 #include "types/type.h"
+#include "types/type_ser.h"
 #include "llvm-c/Core.h"
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -300,8 +301,9 @@ LLVMValueRef codegen_loop_iter_list(Ast *binding, Ast *iter_expr, Ast *body,
 
   return NULL; // Return void for loops
 }
+
 bool is_loop_of_iterable(Ast *ast) { // TODO: implement
-  return false;
+  return true;
 }
 
 LLVMValueRef codegen_loop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -317,22 +319,20 @@ LLVMValueRef codegen_loop(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               builder);
   }
 
-  if (is_loop_of_iterable(ast)) {
-    Type *iterable_type =
-        ast->data.AST_LET.expr->data.AST_APPLICATION.function->type;
+  Type *iterable_type = ast->data.AST_LET.expr->type;
 
-    if (is_coroutine_constructor_type(iterable_type)) {
-      iterable_type = iterable_type->data.T_FN.from;
+  if (is_coroutine_type(iter_expr->data.AST_APPLICATION.function->type)) {
 
-      if (is_array_type(iterable_type)) {
-        return codegen_loop_iter_array(binding, iter_expr, body, &loop_ctx,
-                                       module, builder);
-      }
+    Type *iterable_type = iter_expr->data.AST_APPLICATION.args->type;
 
-      if (is_list_type(iterable_type)) {
-        return codegen_loop_iter_list(binding, iter_expr, body, &loop_ctx,
-                                      module, builder);
-      }
+    if (is_array_type(iterable_type)) {
+      return codegen_loop_iter_array(binding, iter_expr, body, &loop_ctx,
+                                     module, builder);
+    }
+
+    if (is_list_type(iterable_type)) {
+      return codegen_loop_iter_list(binding, iter_expr, body, &loop_ctx, module,
+                                    builder);
     }
   }
 

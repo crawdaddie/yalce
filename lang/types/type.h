@@ -67,6 +67,7 @@ bool is_string_type(Type *type);
 #define TYPE_NAME_RUN_IN_SCHEDULER "run_in_scheduler"
 #define TYPE_NAME_COROUTINE_CONSTRUCTOR "CoroutineConstructor"
 #define TYPE_NAME_COROUTINE_INSTANCE "Coroutine"
+#define TYPE_NAME_TYPECLASS_ITER "Iter"
 
 
 

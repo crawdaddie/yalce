@@ -166,6 +166,26 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
     return type_error(ast, "Cannot infer type of applicable");
   }
 
+  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+      CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               "iter")) {
+    Type *iterable = infer(ast->data.AST_APPLICATION.args, ctx);
+
+    // TODO: replace with "implements trait 'iter' ? "
+    if (is_list_type(iterable) || is_array_type(iterable)) {
+      Type *opt = iterable->data.T_CONS.args[0];
+      ast->data.AST_APPLICATION.function->type =
+          create_coroutine_instance_type(iterable->data.T_CONS.args[0]);
+      return opt;
+    }
+
+    fprintf(stderr, "Error: ");
+    print_type_err(iterable);
+    fprintf(stderr, "does not implement Iter");
+    print_ast_err(ast->data.AST_APPLICATION.args);
+    return NULL;
+  }
+
   if (is_coroutine_type(func_type) &&
       ast->data.AST_APPLICATION.args->tag == AST_VOID) {
 
