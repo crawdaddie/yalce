@@ -817,7 +817,6 @@ void *bufplayer_trig_perform(Node *node, bufplayer_state *state, Node *inputs[],
   while (nframes--) {
 
     if (*trig > 0.5 && state->prev_trig < 0.5) {
-      printf("bufplayer trig @ %d? \n", trig_idx);
       state->phase = 0;
     }
 

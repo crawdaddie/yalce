@@ -71,7 +71,6 @@ static void process_msg_pre(int frame_offset, scheduler_msg msg) {
       }
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
-      printf("trig @ %d inlet node %p\n", frame_offset, inlet_node);
       inlet_data.buf[frame_offset] = 1.0;
     }
 
@@ -124,7 +123,6 @@ static void process_msg_post(int frame_offset, scheduler_msg msg) {
       }
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
-      printf("post trig %d\n", frame_offset);
       inlet_data.buf[frame_offset] = 0.0;
     }
     break;

@@ -109,7 +109,6 @@ SchedulerEvent pop_event(EventHeap *heap) {
 
 void push_event(void (*callback)(void *, uint64_t), void *userdata,
                 uint64_t delay_in_samples, uint64_t base_time) {
-  printf("push trig\n");
 
   EventHeap *queue = &scheduler_queue;
   pthread_mutex_lock(&scheduler_mutex);
