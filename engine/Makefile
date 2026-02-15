@@ -35,7 +35,7 @@ CC = clang
 
 SHARED_LIB_TARGET := $(BUILD_DIR)/libyalce_synth.so
 
-.PHONY: all clean ylc_bindings vst_lib
+.PHONY: all clean ylc_bindings vst_lib test
 
 all: $(SHARED_LIB_TARGET)
 	# vst_lib
@@ -84,6 +84,10 @@ ifeq ($(shell uname -s),Darwin)
 endif
 	$(MAKE) -C ../tools;
 	$(MAKE) -C . ylc_bindings
+
+test: | $(BUILD_DIR)
+	$(CC) -g -I. -I../lang/ -o $(BUILD_DIR)/test_scheduling test/test_scheduling.c -lm -lpthread
+	$(BUILD_DIR)/test_scheduling
 
 audio_test: $(OBJS)
 	$(CC) $(LDFLAGS) $(FRAMEWORKS) $(OBJS) -o $(BUILD_DIR)/engine_test
