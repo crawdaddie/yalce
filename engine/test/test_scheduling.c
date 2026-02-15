@@ -15,11 +15,11 @@
 
 /* ── Headers (types only) ─────────────────────────────────── */
 
-#include "../common.h"
-#include "../node.h"
 #include "../audio_graph.h"
 #include "../block_queue.h"
+#include "../common.h"
 #include "../ctx.h"
+#include "../node.h"
 
 /* ── Globals required by headers ──────────────────────────── */
 
@@ -34,20 +34,33 @@ Node *_chain_tail = NULL;
 
 void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
                          int nframes, double spf) {
-  (void)_node; (void)graph; (void)_inputs; (void)nframes; (void)spf;
+  (void)_node;
+  (void)graph;
+  (void)_inputs;
+  (void)nframes;
+  (void)spf;
 }
 
 NodeRef group_add(NodeRef node, NodeRef group) {
-  (void)node; (void)group;
+  (void)node;
+  (void)group;
   return NULL;
 }
 
 void audio_ctx_add(Node *node) { (void)node; }
-void offset_node_bufs(Node *node, int f) { (void)node; (void)f; }
-void unoffset_node_bufs(Node *node, int f) { (void)node; (void)f; }
+void offset_node_bufs(Node *node, int f) {
+  (void)node;
+  (void)f;
+}
+void unoffset_node_bufs(Node *node, int f) {
+  (void)node;
+  (void)f;
+}
 
 double pow2table_read(double pos, int tabsize, double *table) {
-  (void)pos; (void)tabsize; (void)table;
+  (void)pos;
+  (void)tabsize;
+  (void)table;
   return 0.0;
 }
 
@@ -111,9 +124,7 @@ static void reset_heap(void) {
   /* keep existing allocation */
 }
 
-static void reset_msg_queue(msg_queue *q) {
-  memset(q, 0, sizeof(msg_queue));
-}
+static void reset_msg_queue(msg_queue *q) { memset(q, 0, sizeof(msg_queue)); }
 
 static void reset_all(void) {
   reset_heap();
@@ -664,12 +675,11 @@ static void test_pre_multiple_messages_ordering(void) {
   MockSynth *m = create_mock_synth(1);
   clear_inlet_buf(m, 0);
 
-  /* Two scalar messages: first sets 0.5 at offset 0, second sets 0.8 at offset 128.
-     After pre, buf should be:
-       [0..127]  = 0.5 (first msg fills from 0, then second overwrites nothing here
-                        since it starts at 128)
-       wait no — first msg fills [0..end] with 0.5, then second msg fills [128..end] with 0.8
-       So: [0..127] = 0.5, [128..end] = 0.8 */
+  /* Two scalar messages: first sets 0.5 at offset 0, second sets 0.8 at offset
+     128. After pre, buf should be: [0..127]  = 0.5 (first msg fills from 0,
+     then second overwrites nothing here since it starts at 128) wait no — first
+     msg fills [0..end] with 0.5, then second msg fills [128..end] with 0.8 So:
+     [0..127] = 0.5, [128..end] = 0.8 */
   scheduler_msg msg1 = {.type = NODE_SET_SCALAR, .tick = 0};
   msg1.payload.NODE_SET_SCALAR.target = &m->node;
   msg1.payload.NODE_SET_SCALAR.input = 0;
@@ -701,7 +711,8 @@ static void test_pre_post_full_buffer_coverage(void) {
   reset_all();
   MockSynth *m = create_mock_synth(1);
 
-  /* Test several different offsets to ensure pre+post always covers full buffer */
+  /* Test several different offsets to ensure pre+post always covers full buffer
+   */
   int offsets[] = {0, 1, BUF_SIZE / 4, BUF_SIZE / 2, BUF_SIZE - 1};
   int noffsets = sizeof(offsets) / sizeof(offsets[0]);
 
