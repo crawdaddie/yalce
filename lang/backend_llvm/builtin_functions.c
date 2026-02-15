@@ -1137,7 +1137,9 @@ LLVMValueRef DlOpenHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   const char *path = ast->data.AST_APPLICATION.args->data.AST_STRING.value;
   const char *full_path;
+
   if (module_path == NULL) {
+
     full_path = path;
   } else {
     const char *_module_path = get_dirname(module_path);
@@ -1147,8 +1149,9 @@ LLVMValueRef DlOpenHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       _module_path = get_dirname(_module_path);
     }
 
-    full_path = malloc(strlen(path) + strlen(_module_path) + 1);
-    sprintf(full_path, "%s/%s", _module_path, path);
+    full_path = calloc(strlen(path) + strlen(_module_path) + 2, sizeof(char));
+    snprintf(full_path, strlen(_module_path) + strlen(path) + 2, "%s/%s",
+             _module_path, path);
   }
 
   void *handle = dlopen(full_path, RTLD_GLOBAL | RTLD_LAZY);
@@ -1158,6 +1161,7 @@ LLVMValueRef DlOpenHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     free(full_path);
     return LLVMConstInt(LLVMInt32Type(), 0, 0);
   }
+
   fprintf(stderr, "loaded %s\n", full_path);
 
   free(full_path);
