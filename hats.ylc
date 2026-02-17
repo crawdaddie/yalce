@@ -8,10 +8,37 @@ open engine/bindings/Synth;
 open engine/bindings/Sched; 
 import engine/bindings/MIDI;
 import std/Math;
+# import std/Arrays;
 
 
 let q = 60. / 130.;
 
+let Kick = module () ->
+  let buf = load_soundfile "./engine/assets/kick.wav";
+
+  let synth = (fn () ->
+    let trig = inlet 0.; # 0
+    bufplayer_trig_node (buf_ref buf) ( 44100. / 48000. ) (inlet 0.) trig # 3 
+    |> (*) (aslr_node 0. 1. 0.2 0.1 trig)
+    |> math_node (fn x -> 0.5 * (x + Math.sin (7. * x)))
+  )
+  |> play_tpl
+  ;
+
+  let trig = fn () -> 
+    let fo = get_tl_tick ();
+    set_input_trig_offset synth 0 fo
+  ;;
+
+  let pattern_ref = [| cstr "" |] ;
+
+  let set_pattern = fn t cor ->
+    cor_stop (pattern_ref[0]);
+    cor
+    |> play_routine t schedule_event
+    |> array_set pattern_ref 0
+  ;;
+;
 let Hihat = module () ->
 
   let closed_hh_buf = load_soundfile "./engine/assets/hihat_closed.wav";
@@ -24,16 +51,9 @@ let Hihat = module () ->
   |> play_tpl
   ;
 
-  let _ = MIDI.register_cc_handler 2 0 (fn val ->
-    set_input_scalar_offset closed_hh 1 (get_current_sample ()) (Math.unipolar_scale 0. (8. / q) val)  
-  );
-
-
   let trig = fn () -> 
     let fo = get_tl_tick ();
-    print `hh tick {fo}\n`;
-    set_input_trig_offset closed_hh 0 fo;
-    set_input_scalar_offset closed_hh 3 fo 1.  
+    set_input_trig_offset closed_hh 0 fo
   ;;
 
   let pattern_ref = [| cstr "" |] ;
@@ -45,25 +65,49 @@ let Hihat = module () ->
     |> array_set pref 0
   ;;
 
+
+  # let tts_pat = fn arr ->
+  #   trig ();
+  #   let p = Math.array_choose arr;
+  #   yield (iter_of_array p);
+  #   yield tts_pat arr 
+  # ;;
+  let a = [|
+    [|0.125, 0.125, 0.125, 0.125|],
+    [|0.25, 0.25|],
+    # [|0.333, 0.333, 0.333, 0.001|],
+    [|0.5|],
+    [|0.75, 0.75, 0.5|],
+    [|0.75, 0.75, 0.75, 1.75|],
+    [|0.75, 0.75, 0.5|],
+    [|0.75, 0.75, 0.5|],
+    [|0.75, 0.75, 0.5|],
+    [|0.75, 0.75, 0.5|],
+  |];
+
   let tts_pat = fn () ->
-    # print "trig hat\n";
-    trig ();
-    yield 0.25;
-    # trig ();
-    # yield 0.25;
-    # trig_open ();
-    # yield 0.25;
-    # Math.chance 0.125 (trig);
-    # yield 0.25;
-    yield tts_pat ()
-  ;;
+      let p = Math.array_choose a;
+      yield Math.array_choose a |> iter_of_array;
+      yield tts_pat ()
+    ;;
+
 ;
 
+
 defer_quant (q * 1) (fn t ->
-  Hihat.tts_pat ()
+  [|0.25, 0.25, 0.25, 0.125, 0.125, 0.25, 0.25, 0.125, 0.125|]
+  |> iter_of_array
+  |> cor_loop
+  |> cor_map (fn t -> Hihat.trig (); t)
   |> cor_map ((*) q)
   |> Hihat.set_pattern t
   ;
+
+  Hihat.tts_pat ()
+  |> cor_map (fn t -> Kick.trig (); t)
+  |> cor_map ((*) q)
+  |> Kick.set_pattern t
+  # ;
 
 );
 
