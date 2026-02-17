@@ -1,0 +1,3 @@
+let _ = dlopen "libs/audio_jit/libaudio_jit.so";
+
+compile_audio_fn (fn a b -> a + b + 2001)

@@ -7,6 +7,7 @@
 #include "backend_llvm/common.h"
 #include "function.h"
 #include "input.h"
+#include "lib_registry.h"
 #include "list.h"
 #include "module.h"
 #include "strings.h"
@@ -1154,7 +1155,15 @@ LLVMValueRef DlOpenHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
              _module_path, path);
   }
 
+  ylc_jit_ctx = ctx;
+  ylc_jit_module = module;
+  ylc_jit_builder = builder;
+
   void *handle = dlopen(full_path, RTLD_GLOBAL | RTLD_LAZY);
+
+  ylc_jit_ctx = NULL;
+  ylc_jit_module = NULL;
+  ylc_jit_builder = NULL;
 
   if (!handle) {
     fprintf(stderr, "Failed to load library globally: %s\n", dlerror());
