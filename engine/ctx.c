@@ -4,7 +4,6 @@
 #include "audio_routing.h"
 #include "ext_lib.h"
 #include "group.h"
-#include <stdio.h>
 #include <stdlib.h>
 
 Ctx ctx;
@@ -52,47 +51,8 @@ Node *add_to_dac(Node *node) {
 
 Ctx *get_audio_ctx() { return &ctx; }
 
-void push_msg(msg_queue *queue, scheduler_msg msg, int buffer_offset) {
-  msg.tick += buffer_offset;
-
-  if (queue->num_msgs == MSG_QUEUE_MAX_SIZE) {
-    // printf("Error: Command FIFO full overflow ? %d\n",
-    //        queue == &ctx.overflow_queue);
-    return;
-  }
-
-  *(queue->buffer + queue->write_ptr) = msg;
-  queue->write_ptr = (queue->write_ptr + 1) % MSG_QUEUE_MAX_SIZE;
-  queue->num_msgs++;
-}
-
-scheduler_msg pop_msg(msg_queue *queue) {
-  scheduler_msg msg = *(queue->buffer + queue->read_ptr);
-  queue->read_ptr = (queue->read_ptr + 1) % MSG_QUEUE_MAX_SIZE;
-  queue->num_msgs--;
-  return msg;
-}
-
-scheduler_msg *create_bundle(int length) {
-  return malloc(sizeof(scheduler_msg) * length);
-}
-
-int get_write_ptr() {
-  Ctx *ctx = get_audio_ctx();
-  return ctx->msg_queue.write_ptr;
-}
-
 int ctx_sample_rate() { return ctx.sample_rate; }
 double ctx_spf() { return ctx.spf; }
 
 double *ctx_main_out() { return ctx.output_buf; }
 void set_main_vol(double vol) { ctx.main_vol = vol; }
-
-void move_overflow() {
-  msg_queue *queue = &ctx.overflow_queue;
-  scheduler_msg msg;
-  while (queue->num_msgs) {
-    msg = pop_msg(queue);
-    push_msg(&(ctx.msg_queue), msg, 0);
-  }
-}

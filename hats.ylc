@@ -28,31 +28,12 @@ let Hihat = module () ->
     set_input_scalar_offset closed_hh 1 (get_current_sample ()) (Math.unipolar_scale 0. (8. / q) val)  
   );
 
-  let open_hh_buf = load_soundfile  "./engine/assets/hihat_open.wav";
-  let open_hh = (fn () ->
-    let trig = inlet 0.; # 0
-    let imp = lfpulse_node 0. (inlet 0.) trig; # 1
-    bufplayer_trig_node (buf_ref open_hh_buf) (44100. * 1.1 / 48000.) (inlet 0.) imp # 3 
-    |> (*) (aslr_node 0. 3. 0.2 0.1 trig)
-  )
-  |> play_tpl
-  ;
 
   let trig = fn () -> 
     let fo = get_tl_tick ();
+    print `hh tick {fo}\n`;
     set_input_trig_offset closed_hh 0 fo;
     set_input_scalar_offset closed_hh 3 fo 1.  
-  ;;
-
-
-  let trig_rev = fn () -> 
-    let fo = get_tl_tick ();
-    set_input_scalar_offset closed_hh 3 fo -1.  
-  ;;
-
-  let trig_open = fn () -> 
-    let fo = get_tl_tick ();
-    set_input_trig_offset open_hh 0 fo
   ;;
 
   let pattern_ref = [| cstr "" |] ;
@@ -66,14 +47,14 @@ let Hihat = module () ->
 
   let tts_pat = fn () ->
     # print "trig hat\n";
-    trig ();e
-    yield 0.25;
     trig ();
     yield 0.25;
-    trig_open ();
-    yield 0.25;
-    Math.chance 0.125 (trig);
-    yield 0.25;
+    # trig ();
+    # yield 0.25;
+    # trig_open ();
+    # yield 0.25;
+    # Math.chance 0.125 (trig);
+    # yield 0.25;
     yield tts_pat ()
   ;;
 ;

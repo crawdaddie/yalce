@@ -1,9 +1,10 @@
-#include "./block_queue.h"
+#include "./audio_instructions.h"
 #include "audio_graph.h"
 #include "group.h"
 #include <stdio.h>
+#include <stdlib.h>
 
-static void process_msg_pre(int frame_offset, scheduler_msg msg) {
+static void process_msg_pre(int frame_offset, audio_instruction msg) {
 
   switch (msg.type) {
   case NODE_ADD: {
@@ -81,7 +82,7 @@ static void process_msg_pre(int frame_offset, scheduler_msg msg) {
   }
 }
 
-static void process_msg_post(int frame_offset, scheduler_msg msg) {
+static void process_msg_post(int frame_offset, audio_instruction msg) {
   switch (msg.type) {
   case NODE_ADD: {
     break;
@@ -131,7 +132,7 @@ static void process_msg_post(int frame_offset, scheduler_msg msg) {
     break;
   }
 }
-void print_msg(scheduler_msg *msg) {
+void print_msg(audio_instruction *msg) {
   printf("[%llu]", msg->tick);
   switch (msg->type) {
   case NODE_ADD: {
@@ -156,24 +157,65 @@ void print_msg(scheduler_msg *msg) {
   }
 }
 
+void push_msg(audio_instructions_queue *queue, audio_instruction msg) {
+  if (queue->num_msgs == MSG_QUEUE_MAX_SIZE) {
+    fprintf(stderr, "Audio Instruction Error: Command FIFO full\n");
+    return;
+  }
+
+  *(queue->buffer + queue->write_ptr) = msg;
+  queue->write_ptr = (queue->write_ptr + 1) % MSG_QUEUE_MAX_SIZE;
+  queue->num_msgs++;
+}
+
+audio_instruction pop_msg(audio_instructions_queue *queue) {
+  audio_instruction msg = *(queue->buffer + queue->read_ptr);
+  queue->read_ptr = (queue->read_ptr + 1) % MSG_QUEUE_MAX_SIZE;
+  queue->num_msgs--;
+  return msg;
+}
+
+audio_instruction *create_bundle(int length) {
+  return malloc(sizeof(audio_instruction) * length);
+}
+
+// Audio-thread-local deferral buffer — only touched by the audio thread,
+// no synchronization needed. Replaces the old cross-thread overflow_queue.
+#define DEFERRED_MAX 64
+static audio_instruction deferred_msgs[DEFERRED_MAX];
+static int num_deferred = 0;
+
 int process_msg_queue_pre(uint64_t current_tick, int frame_count,
-                          msg_queue *queue) {
+                          audio_instructions_queue *queue) {
+
+  // Process deferred messages that are now due
+  int still_deferred = 0;
+  for (int i = 0; i < num_deferred; i++) {
+    audio_instruction *m = &deferred_msgs[i];
+    if (m->tick < current_tick) {
+      process_msg_pre(0, *m);
+    } else if (m->tick - current_tick < frame_count) {
+      process_msg_pre(m->tick - current_tick, *m);
+    } else {
+      deferred_msgs[still_deferred++] = *m;
+    }
+  }
+  num_deferred = still_deferred;
+
+  // Drain the ring buffer
   int read_ptr = queue->read_ptr;
-  scheduler_msg *msg;
+  audio_instruction *msg;
   int consumed = 0;
-  int write_ptr = queue->write_ptr;
-  int num_moved = 0;
   while (read_ptr != queue->write_ptr) {
     msg = queue->buffer + read_ptr;
-    // printf("msg tick %d %d %p\n", msg->tick, current_tick, msg);
 
     if (msg->tick < current_tick) {
-      // msg is in the past - process at offset 0 (better late than never)
       process_msg_pre(0, *msg);
     } else if (msg->tick - current_tick >= frame_count) {
-      // msg is too early - defer to next block
-      push_msg(&ctx.overflow_queue, *msg, 0);
-      num_moved++;
+      // too early — defer locally
+      if (num_deferred < DEFERRED_MAX) {
+        deferred_msgs[num_deferred++] = *msg;
+      }
     } else {
       process_msg_pre(msg->tick - current_tick, *msg);
     }
@@ -186,15 +228,14 @@ int process_msg_queue_pre(uint64_t current_tick, int frame_count,
 }
 
 void process_msg_queue_post(uint64_t current_tick, int frame_count,
-                            msg_queue *queue, int consumed) {
-  scheduler_msg msg;
+                            audio_instructions_queue *queue, int consumed) {
+  audio_instruction msg;
   while (consumed--) {
     msg = pop_msg(queue);
     if (msg.tick < current_tick) {
-      // was in the past, processed at offset 0
       process_msg_post(0, msg);
     } else if (msg.tick - current_tick >= frame_count) {
-      // was deferred to overflow, skip post-processing
+      // was deferred, skip post-processing
     } else {
       int frame_offset = msg.tick - current_tick;
       process_msg_post(frame_offset, msg);

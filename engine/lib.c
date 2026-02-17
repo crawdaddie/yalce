@@ -431,23 +431,15 @@ Node *play_node_offset(uint64_t tick, Node *s) {
   // add_to_dac(group);
 
   push_msg(&ctx.msg_queue,
-           (scheduler_msg){NODE_ADD, tick, {.NODE_ADD = {.target = s}}},
-           BUF_SIZE);
+           (audio_instruction){NODE_ADD, tick, {.NODE_ADD = {.target = s}}});
 
   return s;
 }
 
 Node *play_node_offset_in_group(uint64_t tick, Node *s, Node *group) {
-  // printf("play node %p at offset %d\n", s, offset);
-  // Node *group = _chain;
-  // reset_chain();
-  // add_to_dac(s);
-  // add_to_dac(group);
-
   push_msg(&ctx.msg_queue,
-           (scheduler_msg){
-               NODE_ADD, tick, {.NODE_ADD = {.target = s, .group = group}}},
-           BUF_SIZE);
+           (audio_instruction){
+               NODE_ADD, tick, {.NODE_ADD = {.target = s, .group = group}}});
 
   return s;
 }
@@ -456,80 +448,45 @@ typedef struct close_payload {
   NodeRef target;
   int gate_input;
 } close_payload;
-void close_gate(close_payload *p, int offset) {
-  NodeRef target = p->target;
-  int input = p->gate_input;
 
+void close_gate(close_payload *p, uint64_t tick) {
   push_msg(
       &ctx.msg_queue,
-      (scheduler_msg){
+      (audio_instruction){
           NODE_SET_SCALAR,
-          offset,
-          {.NODE_SET_SCALAR = {.target = target, .input = input, .value = 0.}}},
-      BUF_SIZE);
+          tick,
+          {.NODE_SET_SCALAR = {.target = p->target, .input = p->gate_input, .value = 0.}}});
   free(p);
 }
 
 NodeRef play_node_dur(uint64_t tick, double dur, int gate_in, NodeRef s) {
-  // printf("play node %p dur: %f\n", s, dur);
   play_node_offset_in_group(tick, s, NULL);
 
-  push_msg(
-      &ctx.msg_queue,
-      (scheduler_msg){
-          NODE_SET_SCALAR,
-          tick + dur * ctx_sample_rate(),
-          {.NODE_SET_SCALAR = {.target = s, .input = gate_in, .value = 0.}}},
-      BUF_SIZE);
-
-  // close_payload *cp = malloc(sizeof(close_payload));
-  // *cp = (close_payload){
-  //     .target = s,
-  //     .gate_input = gate_in,
-  // };
-  //
-  // schedule_event(tick, dur, (SchedulerCallback)close_gate, cp);
+  close_payload *cp = malloc(sizeof(close_payload));
+  *cp = (close_payload){.target = s, .gate_input = gate_in};
+  schedule_event(tick, dur, (SchedulerCallback)close_gate, cp);
 
   return s;
 }
 
 NodeRef play_node_dur_in_group(uint64_t tick, double dur, int gate_in,
                                NodeRef group, NodeRef s) {
-  // printf("play node %p dur: %f\n", s, dur);
   play_node_offset_in_group(tick, s, group);
 
-  push_msg(
-      &ctx.msg_queue,
-      (scheduler_msg){
-          NODE_SET_SCALAR,
-          tick + dur * ctx_sample_rate(),
-          {.NODE_SET_SCALAR = {.target = s, .input = gate_in, .value = 0.}}},
-      BUF_SIZE);
-
-  // close_payload *cp = malloc(sizeof(close_payload));
-  // *cp = (close_payload){
-  //     .target = s,
-  //     .gate_input = gate_in,
-  // };
-  //
-  // schedule_event(tick, dur, (SchedulerCallback)close_gate, cp);
+  close_payload *cp = malloc(sizeof(close_payload));
+  *cp = (close_payload){.target = s, .gate_input = gate_in};
+  schedule_event(tick, dur, (SchedulerCallback)close_gate, cp);
 
   return s;
 }
 
 NodeRef trigger_gate(uint64_t tick, double dur, int gate_in, NodeRef s) {
-  // Node *group = _chain;
-  // reset_chain();
-  // add_to_dac(s);
-  // add_to_dac(group);
-
   push_msg(
       &ctx.msg_queue,
-      (scheduler_msg){
+      (audio_instruction){
           NODE_SET_SCALAR,
           tick,
-          {.NODE_SET_SCALAR = {.target = s, .input = gate_in, .value = 1.}}},
-      BUF_SIZE);
+          {.NODE_SET_SCALAR = {.target = s, .input = gate_in, .value = 1.}}});
 
   close_payload *cp = malloc(sizeof(close_payload));
   *cp = (close_payload){
@@ -624,7 +581,7 @@ NodeRef load_soundfile(_String path) {
 // val) {
 //   push_msg(
 //       &ctx.msg_queue,
-//       (scheduler_msg){NODE_SET_SCALAR,
+//       (audio_instruction){NODE_SET_SCALAR,
 //                       offset,
 //                       {.NODE_SET_SCALAR = {
 //                            .target = target, .input = input, .value =
@@ -633,19 +590,17 @@ NodeRef load_soundfile(_String path) {
 //
 NodeRef set_input_scalar(NodeRef node, int input, double value) {
   push_msg(&ctx.msg_queue,
-           (scheduler_msg){NODE_SET_SCALAR,
-                           get_frame_offset(),
-                           {.NODE_SET_SCALAR = {node, input, value}}},
-           BUF_SIZE);
+           (audio_instruction){NODE_SET_SCALAR,
+                               get_frame_offset(),
+                               {.NODE_SET_SCALAR = {node, input, value}}});
   return node;
 }
 
 NodeRef set_input_buf(int input, NodeRef buf, NodeRef node) {
   push_msg(&ctx.msg_queue,
-           (scheduler_msg){NODE_SET_INPUT,
-                           get_frame_offset(),
-                           {.NODE_SET_INPUT = {node, input, buf}}},
-           BUF_SIZE);
+           (audio_instruction){NODE_SET_INPUT,
+                               get_frame_offset(),
+                               {.NODE_SET_INPUT = {node, input, buf}}});
   return node;
 }
 
@@ -674,26 +629,23 @@ NodeRef set_input_buf_immediate(int input, NodeRef buf, NodeRef node) {
 NodeRef set_input_scalar_offset(NodeRef node, int input, uint64_t tick,
                                 double value) {
   push_msg(&ctx.msg_queue,
-           (scheduler_msg){NODE_SET_SCALAR,
-                           tick,
-                           {.NODE_SET_SCALAR = {node, input, value}}},
-           BUF_SIZE);
+           (audio_instruction){NODE_SET_SCALAR,
+                               tick,
+                               {.NODE_SET_SCALAR = {node, input, value}}});
   return node;
 }
 
 NodeRef set_input_trig(NodeRef node, int input) {
   push_msg(&ctx.msg_queue,
-           (scheduler_msg){
-               NODE_SET_TRIG, get_tl_tick(), {.NODE_SET_TRIG = {node, input}}},
-           BUF_SIZE);
+           (audio_instruction){
+               NODE_SET_TRIG, get_tl_tick(), {.NODE_SET_TRIG = {node, input}}});
   return node;
 }
 
 NodeRef set_input_trig_offset(NodeRef node, int input, uint64_t tick) {
-  push_msg(
-      &ctx.msg_queue,
-      (scheduler_msg){NODE_SET_TRIG, tick, {.NODE_SET_TRIG = {node, input}}},
-      BUF_SIZE);
+  push_msg(&ctx.msg_queue,
+           (audio_instruction){
+               NODE_SET_TRIG, tick, {.NODE_SET_TRIG = {node, input}}});
   return node;
 }
 

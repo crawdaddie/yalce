@@ -1,8 +1,8 @@
-#ifndef _ENGINE_BLOCK_QUEUE_H
-#define _ENGINE_BLOCK_QUEUE_H
+#ifndef _ENGINE_AUDIO_INSTRUCTIONS_QUEUE_H
+#define _ENGINE_AUDIO_INSTRUCTIONS_QUEUE_H
 #include "node.h"
 #include <stdint.h>
-typedef struct scheduler_msg {
+typedef struct {
   enum {
     NODE_ADD,
     GROUP_ADD,
@@ -47,21 +47,26 @@ typedef struct scheduler_msg {
     } NODE_REMOVE;
 
   } payload;
-} scheduler_msg;
+} audio_instruction;
 
 #define MSG_QUEUE_MAX_SIZE 256
-// single reader-single writer lockfree FIFO queue
-// implemented as a ringbuffer of scheduler_msg s
+// Single-reader single-writer lock-free FIFO queue.
+// Scheduler thread = sole writer, audio thread = sole reader.
 typedef struct {
-  scheduler_msg buffer[MSG_QUEUE_MAX_SIZE];
+  audio_instruction buffer[MSG_QUEUE_MAX_SIZE];
   int read_ptr;
   int write_ptr;
   int num_msgs;
-} msg_queue;
+} audio_instructions_queue;
 
-void push_msg(msg_queue *queue, scheduler_msg msg, int buffer_offset);
+void push_msg(audio_instructions_queue *queue, audio_instruction msg);
+audio_instruction pop_msg(audio_instructions_queue *queue);
+audio_instruction *create_bundle(int length);
+void print_msg(audio_instruction *msg);
 
-scheduler_msg pop_msg(msg_queue *queue);
+int process_msg_queue_pre(uint64_t current_tick, int frame_count,
+                          audio_instructions_queue *queue);
 
-void print_msg(scheduler_msg *msg);
+void process_msg_queue_post(uint64_t current_tick, int frame_count,
+                            audio_instructions_queue *queue, int consumed);
 #endif

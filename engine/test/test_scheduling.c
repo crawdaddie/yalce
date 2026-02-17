@@ -1,6 +1,6 @@
 /*
- * Tests for scheduling (EventHeap) and audio queue (msg_queue,
- * process_msg_queue_pre/post) code.
+ * Tests for scheduling (EventHeap) and audio instructions
+ * (audio_instructions_queue, process_msg_queue_pre/post).
  *
  * Build: make -C engine test
  *
@@ -16,7 +16,7 @@
 /* ── Headers (types only) ─────────────────────────────────── */
 
 #include "../audio_graph.h"
-#include "../block_queue.h"
+#include "../audio_instructions.h"
 #include "../common.h"
 #include "../ctx.h"
 #include "../node.h"
@@ -64,45 +64,17 @@ double pow2table_read(double pos, int tabsize, double *table) {
   return 0.0;
 }
 
-/* ── msg_queue implementation (from ctx.c, standalone) ────── */
-
-void push_msg(msg_queue *queue, scheduler_msg msg, int buffer_offset) {
-  msg.tick += buffer_offset;
-  if (queue->num_msgs == MSG_QUEUE_MAX_SIZE) {
-    return; /* full — silently drop */
-  }
-  *(queue->buffer + queue->write_ptr) = msg;
-  queue->write_ptr = (queue->write_ptr + 1) % MSG_QUEUE_MAX_SIZE;
-  queue->num_msgs++;
-}
-
-scheduler_msg pop_msg(msg_queue *queue) {
-  scheduler_msg msg = *(queue->buffer + queue->read_ptr);
-  queue->read_ptr = (queue->read_ptr + 1) % MSG_QUEUE_MAX_SIZE;
-  queue->num_msgs--;
-  return msg;
-}
-
-void move_overflow(void) {
-  msg_queue *queue = &ctx.overflow_queue;
-  scheduler_msg msg;
-  while (queue->num_msgs) {
-    msg = pop_msg(queue);
-    push_msg(&(ctx.msg_queue), msg, 0);
-  }
-}
-
 int ctx_sample_rate(void) { return 48000; }
 double ctx_spf(void) { return 1.0 / 48000.0; }
 
 /* ── Include source files under test ──────────────────────── */
 
-/* scheduling.c — gives us EventHeap, push_event, pop_event,
-   process_scheduler_events, schedule_event, defer_quant, etc. */
+/* scheduling.c — EventHeap, push_event, pop_event, collect_due_events,
+   fire_events, schedule_event, defer_quant */
 #include "../scheduling.c"
 
-/* block_queue.c — gives us process_msg_queue_pre/post */
-#include "../block_queue.c"
+/* audio_instructions.c — process_msg_queue_pre/post, deferred buffer */
+#include "../audio_instructions.c"
 
 /* ── Test helpers ─────────────────────────────────────────── */
 
@@ -124,13 +96,30 @@ static void reset_heap(void) {
   /* keep existing allocation */
 }
 
-static void reset_msg_queue(msg_queue *q) { memset(q, 0, sizeof(msg_queue)); }
+static void reset_msg_queue(audio_instructions_queue *q) {
+  memset(q, 0, sizeof(audio_instructions_queue));
+}
+
+static void reset_deferred(void) { num_deferred = 0; }
 
 static void reset_all(void) {
   reset_heap();
   reset_msg_queue(&ctx.msg_queue);
-  reset_msg_queue(&ctx.overflow_queue);
+  reset_deferred();
   atomic_store(&global_sample_position, 0);
+}
+
+/* Helper: process all due events (single-threaded equivalent of the
+   scheduler thread's inner loop). */
+static void process_scheduler_events(uint64_t current_sample) {
+  for (;;) {
+    pthread_mutex_lock(&scheduler_mutex);
+    int count = collect_due_events(current_sample);
+    pthread_mutex_unlock(&scheduler_mutex);
+    if (count == 0)
+      break;
+    fire_events(count);
+  }
 }
 
 /*
@@ -149,16 +138,13 @@ static MockSynth *create_mock_synth(int num_inlets) {
   MockSynth *m = calloc(1, sizeof(MockSynth));
 
   m->node.perform = (perform_func_t)perform_audio_graph;
-  /* block_queue.c does: AudioGraph *g = (AudioGraph *)((Node *)node + 1)
-     but then checks node->state_ptr first. We use state_ptr to point
-     to our graph so the memory layout doesn't matter. */
   m->node.state_ptr = &m->graph;
 
   m->graph.num_inlets = num_inlets;
   m->graph.nodes = m->inlet_nodes;
 
   for (int i = 0; i < num_inlets; i++) {
-    m->graph.inlets[i] = i; /* inlet i → inlet_nodes[i] */
+    m->graph.inlets[i] = i;
     m->inlet_nodes[i].output.buf = m->inlet_bufs[i];
     m->inlet_nodes[i].output.layout = 1;
     m->inlet_nodes[i].output.size = BUF_SIZE;
@@ -187,7 +173,6 @@ static void record_tick_cb(void *ud, uint64_t tick) {
 
 static void test_heap_insert_pop_order(void) {
   reset_all();
-  /* Insert out of order */
   push_event(record_tick_cb, (void *)1, 300, 0);
   push_event(record_tick_cb, (void *)1, 100, 0);
   push_event(record_tick_cb, (void *)1, 200, 0);
@@ -223,7 +208,6 @@ static void test_heap_duplicate_ticks(void) {
   SchedulerEvent e2 = pop_event(&scheduler_queue);
   SchedulerEvent e3 = pop_event(&scheduler_queue);
 
-  /* All should have tick 50 */
   assert(e1.tick == 50);
   assert(e2.tick == 50);
   assert(e3.tick == 50);
@@ -242,14 +226,12 @@ static void test_heap_single_element(void) {
 
 static void test_heap_grow_past_capacity(void) {
   reset_all();
-  /* Initial capacity is 64, push 100 events */
   for (int i = 0; i < 100; i++) {
     push_event(record_tick_cb, (void *)(uintptr_t)i, (uint64_t)(100 - i), 0);
   }
   assert(scheduler_queue.size == 100);
   assert(scheduler_queue.capacity >= 100);
 
-  /* Verify they come out in ascending tick order */
   uint64_t prev_tick = 0;
   for (int i = 0; i < 100; i++) {
     SchedulerEvent e = pop_event(&scheduler_queue);
@@ -261,9 +243,8 @@ static void test_heap_grow_past_capacity(void) {
 
 static void test_heap_large_batch(void) {
   reset_all();
-  /* Insert 1000 events with random-ish ticks */
   for (int i = 0; i < 1000; i++) {
-    uint64_t tick = (uint64_t)((i * 7919) % 10000); /* pseudo-random */
+    uint64_t tick = (uint64_t)((i * 7919) % 10000);
     push_event(record_tick_cb, (void *)1, tick, 0);
   }
   assert(scheduler_queue.size == 1000);
@@ -296,19 +277,19 @@ static void test_heap_interleaved_push_pop(void) {
   assert(scheduler_queue.size == 0);
 }
 
-/* ── msg_queue tests ──────────────────────────────────────── */
+/* ── audio_instructions_queue tests ──────────────────────── */
 
 static void test_queue_push_pop_single(void) {
   reset_all();
-  msg_queue *q = &ctx.msg_queue;
+  audio_instructions_queue *q = &ctx.msg_queue;
 
-  scheduler_msg msg = {.type = NODE_SET_SCALAR, .tick = 100};
+  audio_instruction msg = {.type = NODE_SET_SCALAR, .tick = 100};
   msg.payload.NODE_SET_SCALAR.value = 0.75;
 
-  push_msg(q, msg, 0);
+  push_msg(q, msg);
   assert(q->num_msgs == 1);
 
-  scheduler_msg out = pop_msg(q);
+  audio_instruction out = pop_msg(q);
   assert(out.tick == 100);
   assert(out.type == NODE_SET_SCALAR);
   assert(out.payload.NODE_SET_SCALAR.value == 0.75);
@@ -317,92 +298,60 @@ static void test_queue_push_pop_single(void) {
 
 static void test_queue_fill_to_capacity(void) {
   reset_all();
-  msg_queue *q = &ctx.msg_queue;
+  audio_instructions_queue *q = &ctx.msg_queue;
 
   for (int i = 0; i < MSG_QUEUE_MAX_SIZE; i++) {
-    scheduler_msg msg = {.type = NODE_SET_SCALAR, .tick = (uint64_t)i};
-    push_msg(q, msg, 0);
+    audio_instruction msg = {.type = NODE_SET_SCALAR, .tick = (uint64_t)i};
+    push_msg(q, msg);
   }
   assert(q->num_msgs == MSG_QUEUE_MAX_SIZE);
 
-  /* Verify all round-trip */
   for (int i = 0; i < MSG_QUEUE_MAX_SIZE; i++) {
-    scheduler_msg out = pop_msg(q);
+    audio_instruction out = pop_msg(q);
     assert(out.tick == (uint64_t)i);
   }
   assert(q->num_msgs == 0);
 }
 
-static void test_queue_overflow_drops(void) {
-  reset_all();
-  msg_queue *q = &ctx.msg_queue;
-
-  /* Fill to capacity */
-  for (int i = 0; i < MSG_QUEUE_MAX_SIZE; i++) {
-    scheduler_msg msg = {.type = NODE_SET_SCALAR, .tick = (uint64_t)i};
-    push_msg(q, msg, 0);
-  }
-  assert(q->num_msgs == MSG_QUEUE_MAX_SIZE);
-
-  /* This should be silently dropped */
-  scheduler_msg extra = {.type = NODE_SET_SCALAR, .tick = 9999};
-  push_msg(q, extra, 0);
-  assert(q->num_msgs == MSG_QUEUE_MAX_SIZE);
-
-  /* First message should still be tick 0, not 9999 */
-  scheduler_msg out = pop_msg(q);
-  assert(out.tick == 0);
-}
-
 static void test_queue_wraparound(void) {
   reset_all();
-  msg_queue *q = &ctx.msg_queue;
+  audio_instructions_queue *q = &ctx.msg_queue;
 
   /* Push 200, pop 200 */
   for (int i = 0; i < 200; i++) {
-    scheduler_msg msg = {.type = NODE_SET_SCALAR, .tick = (uint64_t)i};
-    push_msg(q, msg, 0);
+    audio_instruction msg = {.type = NODE_SET_SCALAR, .tick = (uint64_t)i};
+    push_msg(q, msg);
   }
   for (int i = 0; i < 200; i++) {
-    scheduler_msg out = pop_msg(q);
+    audio_instruction out = pop_msg(q);
     assert(out.tick == (uint64_t)i);
   }
   assert(q->num_msgs == 0);
 
   /* Now write_ptr and read_ptr are at 200. Push another 200. */
   for (int i = 0; i < 200; i++) {
-    scheduler_msg msg = {.type = NODE_SET_SCALAR, .tick = (uint64_t)(1000 + i)};
-    push_msg(q, msg, 0);
+    audio_instruction msg = {.type = NODE_SET_SCALAR,
+                             .tick = (uint64_t)(1000 + i)};
+    push_msg(q, msg);
   }
   assert(q->num_msgs == 200);
 
   for (int i = 0; i < 200; i++) {
-    scheduler_msg out = pop_msg(q);
+    audio_instruction out = pop_msg(q);
     assert(out.tick == (uint64_t)(1000 + i));
   }
   assert(q->num_msgs == 0);
 }
 
-static void test_queue_buffer_offset(void) {
-  reset_all();
-  msg_queue *q = &ctx.msg_queue;
-
-  scheduler_msg msg = {.type = NODE_SET_SCALAR, .tick = 100};
-  push_msg(q, msg, 50); /* should add 50 to tick */
-
-  scheduler_msg out = pop_msg(q);
-  assert(out.tick == 150);
-}
-
 static void test_queue_num_msgs_tracking(void) {
   reset_all();
-  msg_queue *q = &ctx.msg_queue;
+  audio_instructions_queue *q = &ctx.msg_queue;
 
   assert(q->num_msgs == 0);
 
   for (int i = 0; i < 10; i++) {
-    scheduler_msg msg = {.type = NODE_SET_SCALAR, .tick = 0};
-    push_msg(q, msg, 0);
+    audio_instruction msg = {.type = NODE_SET_SCALAR, .tick = 0};
+    push_msg(q, msg);
     assert(q->num_msgs == i + 1);
   }
 
@@ -455,7 +404,6 @@ static void reschedule_cb(void *ud, uint64_t tick) {
   int *count = (int *)ud;
   (*count)++;
   if (*count < 3) {
-    /* Re-schedule 100 samples later */
     push_event(reschedule_cb, ud, 100, tick);
   }
 }
@@ -466,15 +414,12 @@ static void test_process_events_reschedule(void) {
 
   push_event(reschedule_cb, &count, 100, 0);
 
-  /* Fire at tick 100 → callback pushes event at tick 200 */
   process_scheduler_events(100);
   assert(count == 1);
 
-  /* Fire at tick 200 → callback pushes event at tick 300 */
   process_scheduler_events(200);
   assert(count == 2);
 
-  /* Fire at tick 300 → callback does NOT re-schedule (count reaches 3) */
   process_scheduler_events(300);
   assert(count == 3);
   assert(scheduler_queue.size == 0);
@@ -484,7 +429,7 @@ static void test_defer_quant_alignment(void) {
   reset_all();
   ctx.sample_rate = 48000;
 
-  /* At sample 0, quant 1.0s → target = 48000 */
+  /* At sample 0, quant 1.0s -> target = 48000 */
   atomic_store(&global_sample_position, 0);
   defer_quant(1.0, (DeferQuantCallback)record_tick_cb);
   assert(scheduler_queue.size == 1);
@@ -492,7 +437,7 @@ static void test_defer_quant_alignment(void) {
 
   reset_heap();
 
-  /* At sample 1000, quant 0.5s (24000 samples) → next boundary = 24000 */
+  /* At sample 1000, quant 0.5s (24000 samples) -> next boundary = 24000 */
   atomic_store(&global_sample_position, 1000);
   defer_quant(0.5, (DeferQuantCallback)record_tick_cb);
   assert(scheduler_queue.size == 1);
@@ -500,7 +445,7 @@ static void test_defer_quant_alignment(void) {
 
   reset_heap();
 
-  /* At exact boundary: sample 48000, quant 1.0s → next boundary = 96000 */
+  /* At exact boundary: sample 48000, quant 1.0s -> next boundary = 96000 */
   atomic_store(&global_sample_position, 48000);
   defer_quant(1.0, (DeferQuantCallback)record_tick_cb);
   assert(scheduler_queue.size == 1);
@@ -511,7 +456,7 @@ static void test_schedule_event_conversion(void) {
   reset_all();
   ctx.sample_rate = 48000;
 
-  /* 1 second delay from tick 0 → tick 48000 */
+  /* 1 second delay from tick 0 -> tick 48000 */
   int dummy = 42;
   schedule_event(0, 1.0, record_tick_cb, &dummy);
   assert(scheduler_queue.size == 1);
@@ -519,13 +464,13 @@ static void test_schedule_event_conversion(void) {
 
   reset_heap();
 
-  /* NULL userdata → early return, nothing pushed */
+  /* NULL userdata -> early return, nothing pushed */
   schedule_event(0, 1.0, record_tick_cb, NULL);
   assert(scheduler_queue.size == 0);
 }
 
 /* ══════════════════════════════════════════════════════════════
-   LAYER 2: Message Processing (pre/post with mock nodes)
+   LAYER 2: Audio Instruction Processing (pre/post with mock nodes)
    ══════════════════════════════════════════════════════════════ */
 
 static void test_pre_on_time_scalar(void) {
@@ -533,24 +478,20 @@ static void test_pre_on_time_scalar(void) {
   MockSynth *m = create_mock_synth(1);
   clear_inlet_buf(m, 0);
 
-  /* Message at tick 10, current_tick 0, frame_count = BUF_SIZE
-     → frame_offset = 10 → fills buf[10..BUF_SIZE-1] with 0.5 */
-  scheduler_msg msg = {.type = NODE_SET_SCALAR, .tick = 10};
+  audio_instruction msg = {.type = NODE_SET_SCALAR, .tick = 10};
   msg.payload.NODE_SET_SCALAR.target = &m->node;
   msg.payload.NODE_SET_SCALAR.input = 0;
   msg.payload.NODE_SET_SCALAR.value = 0.5;
 
-  push_msg(&ctx.msg_queue, msg, 0);
+  push_msg(&ctx.msg_queue, msg);
 
   int consumed = process_msg_queue_pre(0, BUF_SIZE, &ctx.msg_queue);
   assert(consumed == 1);
 
   double *buf = m->inlet_bufs[0];
-  /* Samples 0..9 should be untouched (0.0) */
   for (int i = 0; i < 10; i++) {
     assert(buf[i] == 0.0);
   }
-  /* Samples 10..BUF_SIZE-1 should be 0.5 */
   for (int i = 10; i < BUF_SIZE; i++) {
     assert(buf[i] == 0.5);
   }
@@ -563,19 +504,17 @@ static void test_post_on_time_scalar(void) {
   MockSynth *m = create_mock_synth(1);
   clear_inlet_buf(m, 0);
 
-  scheduler_msg msg = {.type = NODE_SET_SCALAR, .tick = 10};
+  audio_instruction msg = {.type = NODE_SET_SCALAR, .tick = 10};
   msg.payload.NODE_SET_SCALAR.target = &m->node;
   msg.payload.NODE_SET_SCALAR.input = 0;
   msg.payload.NODE_SET_SCALAR.value = 0.5;
 
-  push_msg(&ctx.msg_queue, msg, 0);
+  push_msg(&ctx.msg_queue, msg);
 
-  /* Pre fills [10..end], post fills [0..9] */
   int consumed = process_msg_queue_pre(0, BUF_SIZE, &ctx.msg_queue);
   process_msg_queue_post(0, BUF_SIZE, &ctx.msg_queue, consumed);
 
   double *buf = m->inlet_bufs[0];
-  /* After pre+post, entire buffer should be 0.5 */
   for (int i = 0; i < BUF_SIZE; i++) {
     assert(buf[i] == 0.5);
   }
@@ -588,18 +527,16 @@ static void test_pre_late_message(void) {
   MockSynth *m = create_mock_synth(1);
   clear_inlet_buf(m, 0);
 
-  /* Message at tick 50, but current_tick is 100 → late, offset 0 */
-  scheduler_msg msg = {.type = NODE_SET_SCALAR, .tick = 50};
+  audio_instruction msg = {.type = NODE_SET_SCALAR, .tick = 50};
   msg.payload.NODE_SET_SCALAR.target = &m->node;
   msg.payload.NODE_SET_SCALAR.input = 0;
   msg.payload.NODE_SET_SCALAR.value = 0.9;
 
-  push_msg(&ctx.msg_queue, msg, 0);
+  push_msg(&ctx.msg_queue, msg);
 
   int consumed = process_msg_queue_pre(100, BUF_SIZE, &ctx.msg_queue);
   assert(consumed == 1);
 
-  /* Late message processed at offset 0 → entire buffer filled */
   double *buf = m->inlet_bufs[0];
   for (int i = 0; i < BUF_SIZE; i++) {
     assert(buf[i] == 0.9);
@@ -614,13 +551,13 @@ static void test_pre_early_message_deferred(void) {
   clear_inlet_buf(m, 0);
 
   /* Message at tick 1000, current_tick 0, frame_count 256
-     → tick - current >= frame_count → deferred to overflow */
-  scheduler_msg msg = {.type = NODE_SET_SCALAR, .tick = 1000};
+     -> tick - current >= frame_count -> deferred locally */
+  audio_instruction msg = {.type = NODE_SET_SCALAR, .tick = 1000};
   msg.payload.NODE_SET_SCALAR.target = &m->node;
   msg.payload.NODE_SET_SCALAR.input = 0;
   msg.payload.NODE_SET_SCALAR.value = 0.3;
 
-  push_msg(&ctx.msg_queue, msg, 0);
+  push_msg(&ctx.msg_queue, msg);
 
   int consumed = process_msg_queue_pre(0, BUF_SIZE, &ctx.msg_queue);
   assert(consumed == 1);
@@ -631,10 +568,20 @@ static void test_pre_early_message_deferred(void) {
     assert(buf[i] == 0.0);
   }
 
-  /* Message should have been pushed to overflow queue */
-  assert(ctx.overflow_queue.num_msgs == 1);
-  scheduler_msg overflow_msg = pop_msg(&ctx.overflow_queue);
-  assert(overflow_msg.tick == 1000);
+  /* Message should be in the audio-thread-local deferred buffer */
+  assert(num_deferred == 1);
+  assert(deferred_msgs[0].tick == 1000);
+
+  /* Process again at tick 1000 — deferred message should fire */
+  clear_inlet_buf(m, 0);
+  reset_msg_queue(&ctx.msg_queue);
+  consumed = process_msg_queue_pre(1000, BUF_SIZE, &ctx.msg_queue);
+  assert(consumed == 0);     /* nothing new in ring buffer */
+  assert(num_deferred == 0); /* deferred was consumed */
+
+  for (int i = 0; i < BUF_SIZE; i++) {
+    assert(buf[i] == 0.3);
+  }
 
   free(m);
 }
@@ -644,17 +591,16 @@ static void test_pre_post_trig(void) {
   MockSynth *m = create_mock_synth(1);
   clear_inlet_buf(m, 0);
 
-  scheduler_msg msg = {.type = NODE_SET_TRIG, .tick = 20};
+  audio_instruction msg = {.type = NODE_SET_TRIG, .tick = 20};
   msg.payload.NODE_SET_TRIG.target = &m->node;
   msg.payload.NODE_SET_TRIG.input = 0;
 
-  push_msg(&ctx.msg_queue, msg, 0);
+  push_msg(&ctx.msg_queue, msg);
 
   int consumed = process_msg_queue_pre(0, BUF_SIZE, &ctx.msg_queue);
   assert(consumed == 1);
 
   double *buf = m->inlet_bufs[0];
-  /* Pre: buf[20] = 1.0, everything else 0.0 */
   for (int i = 0; i < BUF_SIZE; i++) {
     if (i == 20) {
       assert(buf[i] == 1.0);
@@ -663,7 +609,6 @@ static void test_pre_post_trig(void) {
     }
   }
 
-  /* Post: buf[20] = 0.0 (trig cleared) */
   process_msg_queue_post(0, BUF_SIZE, &ctx.msg_queue, consumed);
   assert(buf[20] == 0.0);
 
@@ -675,23 +620,18 @@ static void test_pre_multiple_messages_ordering(void) {
   MockSynth *m = create_mock_synth(1);
   clear_inlet_buf(m, 0);
 
-  /* Two scalar messages: first sets 0.5 at offset 0, second sets 0.8 at offset
-     128. After pre, buf should be: [0..127]  = 0.5 (first msg fills from 0,
-     then second overwrites nothing here since it starts at 128) wait no — first
-     msg fills [0..end] with 0.5, then second msg fills [128..end] with 0.8 So:
-     [0..127] = 0.5, [128..end] = 0.8 */
-  scheduler_msg msg1 = {.type = NODE_SET_SCALAR, .tick = 0};
+  audio_instruction msg1 = {.type = NODE_SET_SCALAR, .tick = 0};
   msg1.payload.NODE_SET_SCALAR.target = &m->node;
   msg1.payload.NODE_SET_SCALAR.input = 0;
   msg1.payload.NODE_SET_SCALAR.value = 0.5;
 
-  scheduler_msg msg2 = {.type = NODE_SET_SCALAR, .tick = 128};
+  audio_instruction msg2 = {.type = NODE_SET_SCALAR, .tick = 128};
   msg2.payload.NODE_SET_SCALAR.target = &m->node;
   msg2.payload.NODE_SET_SCALAR.input = 0;
   msg2.payload.NODE_SET_SCALAR.value = 0.8;
 
-  push_msg(&ctx.msg_queue, msg1, 0);
-  push_msg(&ctx.msg_queue, msg2, 0);
+  push_msg(&ctx.msg_queue, msg1);
+  push_msg(&ctx.msg_queue, msg2);
 
   int consumed = process_msg_queue_pre(0, BUF_SIZE, &ctx.msg_queue);
   assert(consumed == 2);
@@ -711,8 +651,6 @@ static void test_pre_post_full_buffer_coverage(void) {
   reset_all();
   MockSynth *m = create_mock_synth(1);
 
-  /* Test several different offsets to ensure pre+post always covers full buffer
-   */
   int offsets[] = {0, 1, BUF_SIZE / 4, BUF_SIZE / 2, BUF_SIZE - 1};
   int noffsets = sizeof(offsets) / sizeof(offsets[0]);
 
@@ -720,14 +658,14 @@ static void test_pre_post_full_buffer_coverage(void) {
     int offset = offsets[t];
     clear_inlet_buf(m, 0);
     reset_msg_queue(&ctx.msg_queue);
-    reset_msg_queue(&ctx.overflow_queue);
+    reset_deferred();
 
-    scheduler_msg msg = {.type = NODE_SET_SCALAR, .tick = (uint64_t)offset};
+    audio_instruction msg = {.type = NODE_SET_SCALAR, .tick = (uint64_t)offset};
     msg.payload.NODE_SET_SCALAR.target = &m->node;
     msg.payload.NODE_SET_SCALAR.input = 0;
     msg.payload.NODE_SET_SCALAR.value = 1.0;
 
-    push_msg(&ctx.msg_queue, msg, 0);
+    push_msg(&ctx.msg_queue, msg);
 
     int consumed = process_msg_queue_pre(0, BUF_SIZE, &ctx.msg_queue);
     process_msg_queue_post(0, BUF_SIZE, &ctx.msg_queue, consumed);
@@ -745,27 +683,60 @@ static void test_pre_post_full_buffer_coverage(void) {
   free(m);
 }
 
-static void test_move_overflow_to_msg_queue(void) {
-  reset_all();
+/* ══════════════════════════════════════════════════════════════
+   LAYER 3: End-to-end scheduler → audio instruction tests
+   ══════════════════════════════════════════════════════════════ */
 
-  /* Push messages directly to overflow queue */
-  for (int i = 0; i < 5; i++) {
-    scheduler_msg msg = {.type = NODE_SET_SCALAR, .tick = (uint64_t)(100 + i)};
-    push_msg(&ctx.overflow_queue, msg, 0);
-  }
-  assert(ctx.overflow_queue.num_msgs == 5);
+typedef struct close_payload {
+  NodeRef target;
+  int gate_input;
+} close_payload;
+
+static void close_gate(close_payload *p, uint64_t tick) {
+  push_msg(
+      &ctx.msg_queue,
+      (audio_instruction){
+          NODE_SET_SCALAR,
+          tick,
+          {.NODE_SET_SCALAR = {.target = p->target, .input = p->gate_input, .value = 0.}}});
+  free(p);
+}
+
+static void test_schedule_close_gate(void) {
+  reset_all();
+  ctx.sample_rate = 48000;
+
+  MockSynth *m = create_mock_synth(2);
+  uint64_t note_on_tick = 1000;
+  double dur = 0.5; /* 0.5s = 24000 samples */
+  int gate_in = 1;
+
+  /* Schedule the close_gate event, same as play_node_dur does */
+  close_payload *cp = malloc(sizeof(close_payload));
+  *cp = (close_payload){.target = &m->node, .gate_input = gate_in};
+  schedule_event(note_on_tick, dur, (SchedulerCallback)close_gate, cp);
+
+  /* Expected fire tick: 1000 + 24000 = 25000 */
+  assert(scheduler_queue.size == 1);
+  assert(scheduler_queue.events[0].tick == 25000);
+
+  /* Too early — nothing should fire */
+  process_scheduler_events(20000);
   assert(ctx.msg_queue.num_msgs == 0);
 
-  move_overflow();
+  /* Advance past the target tick — close_gate fires, pushes to queue */
+  process_scheduler_events(25000);
+  assert(ctx.msg_queue.num_msgs == 1);
 
-  assert(ctx.overflow_queue.num_msgs == 0);
-  assert(ctx.msg_queue.num_msgs == 5);
+  audio_instruction out = pop_msg(&ctx.msg_queue);
+  assert(out.type == NODE_SET_SCALAR);
+  assert(out.tick == 25000);
+  assert(out.payload.NODE_SET_SCALAR.target == &m->node);
+  assert(out.payload.NODE_SET_SCALAR.input == gate_in);
+  assert(out.payload.NODE_SET_SCALAR.value == 0.0);
 
-  /* Verify messages transferred correctly */
-  for (int i = 0; i < 5; i++) {
-    scheduler_msg out = pop_msg(&ctx.msg_queue);
-    assert(out.tick == (uint64_t)(100 + i));
-  }
+  assert(scheduler_queue.size == 0);
+  free(m);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -784,12 +755,10 @@ int main(void) {
   RUN_TEST(test_heap_large_batch);
   RUN_TEST(test_heap_interleaved_push_pop);
 
-  printf("\n=== Layer 1: msg_queue ===\n");
+  printf("\n=== Layer 1: audio_instructions_queue ===\n");
   RUN_TEST(test_queue_push_pop_single);
   RUN_TEST(test_queue_fill_to_capacity);
-  RUN_TEST(test_queue_overflow_drops);
   RUN_TEST(test_queue_wraparound);
-  RUN_TEST(test_queue_buffer_offset);
   RUN_TEST(test_queue_num_msgs_tracking);
 
   printf("\n=== Layer 1.5: Scheduler Logic ===\n");
@@ -799,7 +768,7 @@ int main(void) {
   RUN_TEST(test_defer_quant_alignment);
   RUN_TEST(test_schedule_event_conversion);
 
-  printf("\n=== Layer 2: Message Processing ===\n");
+  printf("\n=== Layer 2: Audio Instruction Processing ===\n");
   RUN_TEST(test_pre_on_time_scalar);
   RUN_TEST(test_post_on_time_scalar);
   RUN_TEST(test_pre_late_message);
@@ -807,7 +776,9 @@ int main(void) {
   RUN_TEST(test_pre_post_trig);
   RUN_TEST(test_pre_multiple_messages_ordering);
   RUN_TEST(test_pre_post_full_buffer_coverage);
-  RUN_TEST(test_move_overflow_to_msg_queue);
+
+  printf("\n=== Layer 3: Scheduler → Audio Instructions ===\n");
+  RUN_TEST(test_schedule_close_gate);
 
   printf("\n%d/%d tests passed.\n\n", tests_passed, tests_run);
   return tests_passed == tests_run ? 0 : 1;

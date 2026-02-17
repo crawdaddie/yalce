@@ -1,12 +1,9 @@
 #ifndef _ENGINE_CTX_H
 #define _ENGINE_CTX_H
-#include "block_queue.h"
+#include "audio_instructions.h"
 #include "common.h"
 #include "node.h"
 #include <stdint.h>
-
-int get_write_ptr();
-void update_bundle(int write_ptr);
 
 typedef struct {
   Node *head;
@@ -21,8 +18,7 @@ typedef struct {
   node_group_state graph;
   int sample_rate;
   double spf;
-  msg_queue msg_queue;
-  msg_queue overflow_queue;
+  audio_instructions_queue msg_queue;
   int **sig_to_hw_in_map;
   double main_vol;
 } Ctx;
@@ -44,13 +40,7 @@ Node *add_to_dac(Node *node);
 int ctx_sample_rate();
 double ctx_spf();
 
-int process_msg_queue_pre(uint64_t current_tick, int frame_count,
-                          msg_queue *queue);
-
-void process_msg_queue_post(uint64_t current_tick, int frame_count,
-                            msg_queue *queue, int consumed);
 
 void audio_ctx_add(Node *ensemble);
 
-void move_overflow();
 #endif

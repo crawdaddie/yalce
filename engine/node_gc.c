@@ -33,6 +33,7 @@ void remove_and_free_node(node_group_state *ctx, NodeRef prev,
     free(to_free->state_ptr);
     free(to_free);
   } else if (to_free->state_ptr) {
+    // printf("freeing %p\n", to_free);
     free(to_free->state_ptr);
     free(to_free);
   } else {

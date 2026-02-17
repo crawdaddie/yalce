@@ -12,7 +12,7 @@ let Harps = module () ->
     in
 
     pm_node freq pm_amt 2.
-    |> comb_node 0.05 0.1 0.8 0.8 
+    # |> comb_node 0.05 0.1 0.8 0.8 
     |> (*) (asr_kill_node 0.001 1. 0.3 trig)
 
   ) |> compile_blob_template;
