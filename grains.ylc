@@ -16,12 +16,12 @@ let rates = [|
 let synth = (fn () ->
   let trig = (impulse_node 30.) in
   grain_osc_node
-  50
+  20
   (buf_ref amen)
   trig
   (ramp_node 0.005 |> (+) ((0.5 + 0.5 * sin_node 0.1) * (0.01 * trig_rand_node trig)))
-  (trig_sel_node trig (buf_ref rates))
-  # 1.
+  # (trig_sel_node trig (buf_ref rates))
+  1.
   0.2
 ) |> play_tpl
 

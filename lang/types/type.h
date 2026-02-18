@@ -295,8 +295,8 @@ bool is_array_type(Type *type);
 Type *replace_in(Type *type, Type *tvar, Type *replacement);
 bool is_sum_type(Type *type);
 
-typedef struct VariantContext {
-} VariantContext;
+// typedef struct VariantContext {
+// } VariantContext;
 
 Type *create_cons_type(const char *name, int len, Type **unified_args);
 Type *create_option_type(Type *option_of);

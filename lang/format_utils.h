@@ -1,6 +1,7 @@
 #ifndef _LANG_FORMAT_UTILS_H
 #define _LANG_FORMAT_UTILS_H
 // Text colors
+#define COLOR_BLACK "\x1b[030m"
 #define COLOR_RED "\x1b[31m"
 #define COLOR_GREEN "\x1b[32m"
 #define COLOR_YELLOW "\x1b[33m"
