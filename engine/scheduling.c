@@ -322,7 +322,6 @@ void defer_quant(double quant, DeferQuantCallback callback) {
 int scheduler_event_loop() {
   init_heap(&scheduler_queue);
   scheduler_init_fds();
-  printf("init scheduler thread\n");
 
   pthread_t thread;
   if (pthread_create(&thread, NULL, scheduler_thread_fn, NULL) != 0) {

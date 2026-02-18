@@ -30,7 +30,7 @@ LLVMValueRef handle_constructor_module_conversion(
   if (!cons_method_name) {
     fprintf(
         stderr,
-        "Error: could not find constructor method for type conversion to %s",
+        "Error: could not find constructor method for type conversion to %s\n",
         to_type->alias);
     return val;
   }

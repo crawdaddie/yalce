@@ -71,6 +71,8 @@ typedef enum symbol_type {
   STYPE_CONSTRUCTOR_MODULE,
 } symbol_type;
 
+extern int REGISTERED_JIT_SYMBOL_TYPE;
+
 typedef LLVMValueRef (*BuiltinHandler)(Ast *ast, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder);
@@ -126,6 +128,8 @@ typedef struct {
       Type *state_type;
       bool recursive_ref;
     } STYPE_COROUTINE_CONSTRUCTOR;
+
+    void *_USER_DEFINED_SYMBOL;
 
   } symbol_data;
 

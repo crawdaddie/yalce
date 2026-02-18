@@ -1,4 +1,15 @@
+
+# compile_audio_fn (fn () -> 1);
+#
+# compile_audio_fn (fn a: (Double) -> 2 + a);
+
+open engine/bindings/Synth;
+import std/Math;
+
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
 
-compile_audio_fn (fn () -> 1);
-compile_audio_fn (fn a: (Double) -> 2 + a)
+let _ = compile_audio_fn (fn () ->
+  # (sq_osc 50.) + sq_osc 51.
+  trig 0.00001
+) |> play_node
+

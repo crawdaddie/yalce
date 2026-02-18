@@ -3,6 +3,7 @@
 
 #include "../lang/backend_llvm/common.h"
 #include <llvm-c/Types.h>
+extern int STYPE_AUDIO_JIT_SYM;
 
 #ifdef __cplusplus
 extern "C" {

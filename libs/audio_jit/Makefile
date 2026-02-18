@@ -25,7 +25,7 @@ LDFLAGS  += `$(LLVM_CONFIG) --libs core linker` -lLLVM-21
 LIB_NAME    = libaudio_jit
 DYNAMIC_LIB = $(LIB_NAME).so
 
-SOURCES = audio_jit.cpp
+SOURCES = audio_jit.cpp dialect.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 
 all: $(DYNAMIC_LIB)
