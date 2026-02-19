@@ -134,6 +134,23 @@ public:
   }
 };
 
+class LinscaleOp
+    : public Op<LinscaleOp, OpTrait::ZeroRegions, OpTrait::OneResult,
+                OpTrait::ZeroSuccessors, OpTrait::NOperands<5>::Impl> {
+public:
+  using Op::Op;
+  static StringRef getOperationName() { return "dsp.linscale"; }
+  static ArrayRef<StringRef> getAttributeNames() {
+    static StringRef n[] = {"state_offset"};
+    return n;
+  }
+  static void build(OpBuilder &b, OperationState &s, Value domain_a,
+                    Value domain_b, Value range_a, Value range_b, Value input) {
+    s.addOperands({domain_a, domain_b, range_a, range_b, input});
+    s.addTypes(b.getF64Type());
+  }
+};
+
 // dsp.table_lookup %phase, %table_ptr {size} : (f64, !llvm.ptr) -> f64
 // Stateless linear interpolation into a f64 wavetable of compile-time size
 // (must be a power of 2). phase in [0, 1). Used by sin_osc and other

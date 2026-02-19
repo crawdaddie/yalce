@@ -4,12 +4,50 @@
 # compile_audio_fn (fn a: (Double) -> 2 + a);
 
 open engine/bindings/Synth;
-import std/Math;
+
+# builtin type declarations
+# extern fn symbols are later overridden by the constructor method of libaudio_jit.so
+let sq_osc = extern fn Double -> Double;
+let saw_osc = extern fn Double -> Double;
+let sin_osc = extern fn Double -> Double;
+let phasor = extern fn Double -> Double;
+let trig = extern fn Double -> Double;
+let linscale = extern fn Double -> Double -> Double -> Double -> Double;
+let bipolar_scale = extern fn Double -> Double -> Double -> Double;
+let unipolar_scale = extern fn Double -> Double -> Double -> Double;
+let wrap = extern fn Double -> Double -> Double -> Double;
+let fold = extern fn Double -> Double -> Double -> Double;
 
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
 
-let _ = compile_audio_fn (fn () ->
-  # (sq_osc 50.) + sq_osc 51.
-  trig 0.00001
-) |> play_node
 
+
+register_audio_op (
+  let SynthFuncs = module () ->
+    let sq_detune = fn f -> sq_osc f + sq_osc (f * 1.01);;
+    let saw_detune = fn f -> saw_osc f + saw_osc (f * 1.01);;
+);
+
+let _ = compile_audio_fn (fn () ->
+  sin_osc 1.
+  |> bipolar_scale 0.2 4.
+  |> sin_osc
+  |> bipolar_scale 40. 400.
+  |> SynthFuncs.sq_detune
+) |> play_node;
+
+# print @@ typeof SynthFuncs;
+# let _ = compile_audio_fn (fn () ->
+#   sin_osc 3.
+#   |> bipolar_scale 4. 10.
+#   |> sin_osc
+#   |> (*) (Math.rand_double_range -1. 1.)
+# ) |> play_node
+
+
+
+
+# with_register_audio_op (
+# let sq_detune = fn f -> 
+#   sq_osc f + sq_osc (f * 1.01)
+# )

@@ -16,13 +16,18 @@ extern "C" {
 #include "../../engine/ctx.h"
 #include "../../engine/node.h"
 #include "../../engine/node_util.h"
+#include "../../engine/osc.h"
+#include "../../lang/backend_llvm/function_extern.h"
 #include "../../lang/backend_llvm/lib_registry.h"
+#include "../../lang/backend_llvm/module.h"
 #include "../../lang/backend_llvm/symbols.h"
 #include "../../lang/common.h"
 #include "../../lang/format_utils.h"
 #include "../../lang/ht.h"
+#include "../../lang/modules.h"
 #include "../../lang/parse.h"
 #include "../../lang/serde.h"
+#include "../../lang/types/builtins.h"
 }
 
 #include "dialect.h"
@@ -51,6 +56,7 @@ extern "C" {
 // identifier.
 #undef PI
 #include "llvm/Analysis/CGSCCPassManager.h"
+#include "llvm/IR/Operator.h"
 #include "llvm/Passes/PassBuilder.h"
 
 #include <cstdio>
@@ -106,9 +112,9 @@ extern "C" Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
   return graph_embed(node);
 }
 
-static const int YLC_SIN_TABSIZE = 1 << 11;
-static const int YLC_SQ_TABSIZE = 1 << 11;
-static const int YLC_SAW_TABSIZE = 1 << 11;
+// static const int YLC_SIN_TABSIZE = 1 << 11;
+// static const int YLC_SQ_TABSIZE = 1 << 11;
+// static const int YLC_SAW_TABSIZE = 1 << 11;
 
 // Circular-buffer delay: read the delayed sample, write the current input,
 // advance both circular pointers.  State layout at state_offset:
@@ -128,6 +134,25 @@ extern "C" double ylc_delay_sample(void *state_raw, int32_t state_offset,
   return out;
 }
 
+// Feedback delay: read delayed sample, compute out = input + delayed,
+// write fb*out into the buffer, advance both circular pointers.
+// State layout (8 bytes at state_offset): [read_pos: i32][write_pos: i32]
+extern "C" double ylc_delay_fb(void *state_raw, int32_t state_offset,
+                                void *inputs_raw, int32_t inlet_idx,
+                                double input, double fb) {
+  int32_t *read_pos = (int32_t *)((char *)state_raw + state_offset);
+  int32_t *write_pos = read_pos + 1;
+  Node **inputs = (Node **)inputs_raw;
+  double *buf = inputs[inlet_idx]->output.buf;
+  int buf_sz = inputs[inlet_idx]->output.size;
+  double delayed = buf[*read_pos];
+  double out = input + delayed;
+  buf[*write_pos] = fb * out;
+  *read_pos = (*read_pos + 1) % buf_sz;
+  *write_pos = (*write_pos + 1) % buf_sz;
+  return out;
+}
+
 // Allocate a const_buf node sized for delay_time_sec and wire it into the
 // DSP node at inlet_idx.  Called once at node-creation time.
 extern "C" void ylc_attach_buf_input(Node *node, int inlet_idx,
@@ -135,6 +160,21 @@ extern "C" void ylc_attach_buf_input(Node *node, int inlet_idx,
   int size = (int)(delay_time_sec / ctx_spf());
   Node *buf = const_buf(0.0, 1, size);
   plug_input_in_graph(inlet_idx, node, buf);
+}
+
+// Allocate a delay buffer of max_delay_sec capacity, wire it into inlet_idx,
+// and initialize read_pos so the initial delay is init_delay_sec.
+// state_off is the byte offset of [read_pos: i32][write_pos: i32] within
+// node->state_ptr.
+extern "C" void ylc_attach_delay_buf(Node *node, int32_t inlet_idx,
+                                     int32_t state_off, double max_delay_sec,
+                                     double init_delay_sec) {
+  int max_sz = (int)(max_delay_sec / ctx_spf());
+  int delay_samps = (int)(init_delay_sec / ctx_spf());
+  Node *buf = const_buf(0.0, 1, max_sz);
+  plug_input_in_graph(inlet_idx, node, buf);
+  int32_t *read_pos = (int32_t *)((char *)node->state_ptr + state_off);
+  *read_pos = max_sz - delay_samps; // write_pos (read_pos+1) stays 0
 }
 
 // =============================================================================
@@ -174,9 +214,13 @@ static Location ast_loc(Ast *ast, MLIRContext *ctx) {
 // =============================================================================
 
 // Describes one hidden buffer inlet that must be created at node-setup time.
+// If state_offset >= 0 this is a delay line: ylc_attach_delay_buf is called
+// to also initialise read_pos in the node's state block.
 struct BufInputSpec {
   int inlet_idx;
-  double delay_time_sec;
+  double delay_time_sec;    // buffer capacity (max delay)
+  int state_offset = -1;    // >= 0: delay buf; -1: plain buf
+  double init_delay_sec = 0.0;
 };
 
 struct DspBuildCtx {
@@ -302,19 +346,19 @@ Value SinOscHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   Ast *args = ast->data.AST_APPLICATION.args;
 
   Value freq = build_dsp_expr(args, ctx, jit_ctx);
-  return emit_table_osc(freq, "get_sin_table", YLC_SIN_TABSIZE, ctx);
+  return emit_table_osc(freq, "get_sin_table", SIN_TABSIZE, ctx);
 }
 
 Value SqOscHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   Ast *args = ast->data.AST_APPLICATION.args;
   Value freq = build_dsp_expr(args, ctx, jit_ctx);
-  return emit_table_osc(freq, "get_sq_table", YLC_SQ_TABSIZE, ctx);
+  return emit_table_osc(freq, "get_sq_table", SQ_TABSIZE, ctx);
 }
 
 Value SawOscHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   Ast *args = ast->data.AST_APPLICATION.args;
   Value freq = build_dsp_expr(args, ctx, jit_ctx);
-  return emit_table_osc(freq, "get_saw_table", YLC_SAW_TABSIZE, ctx);
+  return emit_table_osc(freq, "get_saw_table", SAW_TABSIZE, ctx);
 }
 
 Value PhasorHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
@@ -351,6 +395,132 @@ Value ImpulseHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   return b.create<arith::UIToFPOp>(loc, b.getF64Type(), cmp);
 }
 
+Value LinscaleHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+
+  Ast *args = ast->data.AST_APPLICATION.args;
+  Value domain_a = build_dsp_expr(args, ctx, jit_ctx);
+  Value domain_b = build_dsp_expr(args + 1, ctx, jit_ctx);
+  Value range_a = build_dsp_expr(args + 2, ctx, jit_ctx);
+  Value range_b = build_dsp_expr(args + 3, ctx, jit_ctx);
+  Value input = build_dsp_expr(args + 4, ctx, jit_ctx);
+  // Ast *args = ast->data.AST_APPLICATION.args;
+  // Value freq = build_dsp_expr(args, ctx, jit_ctx);
+  // int off = ctx.state_offset;
+  // ctx.state_offset += 8;
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  return ctx.b
+      .create<LinscaleOp>(ctx.loc, domain_a, domain_b, range_a, range_b, input)
+      ->getResult(0);
+}
+
+Value BipolarLinscaleHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  Ast *args = ast->data.AST_APPLICATION.args;
+  Value domain_a =
+      b.create<arith::ConstantFloatOp>(loc, b.getF64Type(), APFloat(-1.));
+
+  Value domain_b =
+      b.create<arith::ConstantFloatOp>(loc, b.getF64Type(), APFloat(1.));
+  Value range_a = build_dsp_expr(args, ctx, jit_ctx);
+  Value range_b = build_dsp_expr(args + 1, ctx, jit_ctx);
+  Value input = build_dsp_expr(args + 2, ctx, jit_ctx);
+  return ctx.b
+      .create<LinscaleOp>(ctx.loc, domain_a, domain_b, range_a, range_b, input)
+      ->getResult(0);
+}
+
+Value UnipolarLinscaleHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+
+  Ast *args = ast->data.AST_APPLICATION.args;
+
+  Value domain_a =
+      b.create<arith::ConstantFloatOp>(loc, b.getF64Type(), APFloat(0.));
+
+  Value domain_b =
+      b.create<arith::ConstantFloatOp>(loc, b.getF64Type(), APFloat(1.));
+
+  Value range_a = build_dsp_expr(args, ctx, jit_ctx);
+  Value range_b = build_dsp_expr(args + 1, ctx, jit_ctx);
+
+  Value input = build_dsp_expr(args + 2, ctx, jit_ctx);
+  return ctx.b
+      .create<LinscaleOp>(ctx.loc, domain_a, domain_b, range_a, range_b, input)
+      ->getResult(0);
+}
+
+Value FoldHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  Ast *args = ast->data.AST_APPLICATION.args;
+
+  Value limit_a = build_dsp_expr(args, ctx, jit_ctx);
+  Value limit_b = build_dsp_expr(args + 1, ctx, jit_ctx);
+  Value input = build_dsp_expr(args + 2, ctx, jit_ctx);
+
+  auto f64 = b.getF64Type();
+  auto floor_fn =
+      declare_extern(ctx.mod, b, "llvm.floor.f64",
+                     LLVM::LLVMFunctionType::get(f64, {f64}, false));
+  auto fabs_fn = declare_extern(ctx.mod, b, "llvm.fabs.f64",
+                                LLVM::LLVMFunctionType::get(f64, {f64}, false));
+
+  auto fmf =
+      arith::FastMathFlagsAttr::get(b.getContext(), arith::FastMathFlags::fast);
+  Value two = b.create<arith::ConstantFloatOp>(loc, f64, APFloat(2.0));
+  Value range = b.create<arith::SubFOp>(loc, limit_b, limit_a, fmf);
+  Value dbl = b.create<arith::MulFOp>(loc, two, range, fmf);
+  Value shifted = b.create<arith::SubFOp>(loc, input, limit_a, fmf);
+  // t = shifted mod double_range  (same wrap formula)
+  Value floored =
+      b.create<LLVM::CallOp>(
+           loc, floor_fn,
+           ValueRange{b.create<arith::DivFOp>(loc, shifted, dbl, fmf)})
+          .getResult();
+  Value t = b.create<arith::SubFOp>(
+      loc, shifted, b.create<arith::MulFOp>(loc, dbl, floored, fmf), fmf);
+  // result = limit_a + range - |t - range|
+  Value abs_val = b.create<LLVM::CallOp>(
+                       loc, fabs_fn,
+                       ValueRange{b.create<arith::SubFOp>(loc, t, range, fmf)})
+                      .getResult();
+  return b.create<arith::AddFOp>(
+      loc, limit_a, b.create<arith::SubFOp>(loc, range, abs_val, fmf), fmf);
+}
+
+Value WrapHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  Ast *args = ast->data.AST_APPLICATION.args;
+
+  Value limit_a = build_dsp_expr(args, ctx, jit_ctx);
+  Value limit_b = build_dsp_expr(args + 1, ctx, jit_ctx);
+  Value input = build_dsp_expr(args + 2, ctx, jit_ctx);
+
+  // floor intrinsic: no libm call, LLVM lowers to a single instruction
+  auto f64 = b.getF64Type();
+  auto floor_fn =
+      declare_extern(ctx.mod, b, "llvm.floor.f64",
+                     LLVM::LLVMFunctionType::get(f64, {f64}, false));
+
+  auto fmf =
+      arith::FastMathFlagsAttr::get(b.getContext(), arith::FastMathFlags::fast);
+  // result = input - range * floor((input - limit_a) / range)
+  Value range = b.create<arith::SubFOp>(loc, limit_b, limit_a, fmf);
+  Value shifted = b.create<arith::SubFOp>(loc, input, limit_a, fmf);
+  Value t = b.create<LLVM::CallOp>(
+                 loc, floor_fn,
+                 ValueRange{b.create<arith::DivFOp>(loc, shifted, range, fmf)})
+                .getResult();
+  return b.create<arith::SubFOp>(
+      loc, input, b.create<arith::MulFOp>(loc, range, t, fmf), fmf);
+}
+
 //   if (strcmp(name, "sq_osc") == 0 && nargs >= 1) {
 //     Value freq = build_dsp_expr(&args[0], ctx, jit_ctx);
 //     return emit_table_osc(freq, "get_sq_table", YLC_SQ_TABSIZE, ctx);
@@ -359,6 +529,61 @@ Value ImpulseHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
 //     Value freq = build_dsp_expr(&args[0], ctx, jit_ctx);
 //     return emit_table_osc(freq, "get_saw_table", YLC_SAW_TABSIZE, ctx);
 //   }
+struct InlinedCtx {
+  DspBuildCtx child;
+  DspBuildCtx &parent;
+
+  explicit InlinedCtx(DspBuildCtx &parent)
+      : parent(parent), child{.b = parent.b,
+                              .mod = parent.mod,
+                              .loc = parent.loc,
+                              .node_ptr = parent.node_ptr,
+                              .state_ptr = parent.state_ptr,
+                              .inputs_ptr = parent.inputs_ptr,
+                              .spf = parent.spf,
+                              .frame_idx = parent.frame_idx,
+                              .state_offset = parent.state_offset,
+                              .next_hidden_inlet = parent.next_hidden_inlet,
+                              .hoist_ip = parent.hoist_ip,
+                              .hoisted_ptrs = parent.hoisted_ptrs} {}
+
+  ~InlinedCtx() {
+    parent.b = child.b;
+    parent.hoist_ip = child.hoist_ip;
+    parent.hoisted_ptrs = std::move(child.hoisted_ptrs);
+    parent.state_offset = child.state_offset;
+    parent.next_hidden_inlet = child.next_hidden_inlet;
+    parent.buf_inputs.insert(parent.buf_inputs.end(), child.buf_inputs.begin(),
+                             child.buf_inputs.end());
+  }
+};
+static Value inline_dsp_subexpr(JITSymbol *f, Ast *args, DspBuildCtx &ctx,
+                                JITLangCtx *jit_ctx) {
+
+  Ast *fn_ast = (Ast *)f->symbol_data._USER_DEFINED_SYMBOL;
+
+  // Evaluate args first so any phasors inside them advance ctx.state_offset
+  // before we snapshot it into the child context.
+  llvm::SmallVector<std::pair<std::string, Value>> arg_vals;
+  int inlet_idx = 0;
+  for (AstList *p = fn_ast->data.AST_LAMBDA.params; p;
+       p = p->next, inlet_idx++) {
+    Ast *param = p->ast;
+    if (param->tag != AST_IDENTIFIER)
+      continue;
+    std::string pname(param->data.AST_IDENTIFIER.value,
+                      param->data.AST_IDENTIFIER.length);
+    arg_vals.push_back(
+        {std::move(pname), build_dsp_expr(args + inlet_idx, ctx, jit_ctx)});
+  }
+
+  // Create InlinedCtx *after* args are evaluated so state_offset is current.
+  InlinedCtx inlined(ctx);
+  for (auto &[name, val] : arg_vals)
+    inlined.child.locals[name] = val;
+
+  return build_dsp_expr(fn_ast->data.AST_LAMBDA.body, inlined.child, jit_ctx);
+}
 
 static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   if (!ast)
@@ -387,7 +612,7 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
     }
 
     JITSymbol *sym;
-    if (sym = lookup_id_ast(ast, jit_ctx)) {
+    if ((sym = lookup_id_ast(ast, jit_ctx))) {
       fprintf(stderr, "audio_jit: found '%s'\n", name.c_str());
       return {};
     }
@@ -397,7 +622,7 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   case AST_RECORD_ACCESS: {
 
     JITSymbol *sym;
-    if (sym = lookup_id_ast(ast, jit_ctx)) {
+    if ((sym = lookup_id_ast(ast, jit_ctx))) {
       printf("found this -- ");
       print_ast(ast);
       return {};
@@ -430,14 +655,61 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
     Ast *fn = ast->data.AST_APPLICATION.function;
     Ast *args = ast->data.AST_APPLICATION.args;
     size_t nargs = ast->data.AST_APPLICATION.len;
-    if (fn->tag == AST_IDENTIFIER) {
-      JITSymbol *f = lookup_id_ast(fn, jit_ctx);
-      if (f && f->type == STYPE_AUDIO_JIT_BUILTIN_HANDLER &&
-          f->symbol_data._USER_DEFINED_SYMBOL) {
-        BuiltinDSPHandler handler =
-            (BuiltinDSPHandler)f->symbol_data._USER_DEFINED_SYMBOL;
-        return handler(ast, ctx, jit_ctx);
+
+    JITSymbol *f = lookup_id_ast(fn, jit_ctx);
+
+    if (f && f->type == STYPE_AUDIO_JIT_BUILTIN_HANDLER &&
+        f->symbol_data._USER_DEFINED_SYMBOL) {
+      BuiltinDSPHandler handler =
+          (BuiltinDSPHandler)f->symbol_data._USER_DEFINED_SYMBOL;
+      return handler(ast, ctx, jit_ctx);
+    }
+    if (f && f->type == STYPE_AUDIO_JIT_SYM) {
+      return inline_dsp_subexpr(f, args, ctx, jit_ctx);
+    }
+
+    if (f && f->symbol_type->kind == T_FN) {
+      const char *fn_name = nullptr;
+
+      if (f->type == STYPE_GENERIC_FUNCTION) {
+        fprintf(stderr, "Error: generic function instantiation in audio "
+                        "compiler not yet supported\n");
+        return nullptr;
       }
+
+      if (f->type == STYPE_LAZY_EXTERN_FUNCTION) {
+        fn_name = f->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast->data
+                      .AST_EXTERN_FN.fn_name.chars;
+      } else if (f->type == STYPE_FUNCTION) {
+        fn_name = LLVMGetValueName(f->val);
+      }
+
+      auto fn_ty = ylc_fn_to_mlir(f->symbol_type, b.getContext());
+      auto fn_op = declare_extern(ctx.mod, b, fn_name, fn_ty);
+
+      llvm::SmallVector<Value> call_args;
+      ::Type *param_t = f->symbol_type;
+      for (size_t i = 0; i < nargs && param_t->kind == T_FN;
+           i++, param_t = param_t->data.T_FN.to) {
+        if (param_t->data.T_FN.from->kind == T_VOID)
+          continue;
+        Value v = build_dsp_expr(&args[i], ctx, jit_ctx);
+        if (!v)
+          return {};
+        call_args.push_back(v);
+      }
+
+      auto call = b.create<LLVM::CallOp>(loc, fn_op, call_args);
+
+      ::Type *ret_t = f->symbol_type;
+      while (ret_t->kind == T_FN)
+        ret_t = ret_t->data.T_FN.to;
+      if (ret_t->kind == T_VOID)
+        return {};
+      return call.getResult();
+    }
+
+    if (fn->tag == AST_IDENTIFIER) {
 
       const char *name = fn->data.AST_IDENTIFIER.value;
 
@@ -446,10 +718,17 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
         Value r = build_dsp_expr(&args[1], ctx, jit_ctx);
         return b.create<arith::MulFOp>(loc, l, r);
       }
+
       if (strcmp(name, "+") == 0 && nargs == 2) {
         Value l = build_dsp_expr(&args[0], ctx, jit_ctx);
         Value r = build_dsp_expr(&args[1], ctx, jit_ctx);
         return b.create<arith::AddFOp>(loc, l, r);
+      }
+
+      if (strcmp(name, "-") == 0 && nargs == 2) {
+        Value l = build_dsp_expr(&args[0], ctx, jit_ctx);
+        Value r = build_dsp_expr(&args[1], ctx, jit_ctx);
+        return b.create<arith::SubFOp>(loc, l, r);
       }
 
       if (strcmp(name, "==") == 0 && nargs == 2) {
@@ -477,187 +756,9 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
         Value r = build_dsp_expr(&args[1], ctx, jit_ctx);
         Value cmp =
             b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OGE, l, r);
-        // TODO: cast boolean value as an f64
         return b.create<arith::UIToFPOp>(loc, b.getF64Type(), cmp);
-        // return b.create<rith::
       }
     }
-    // DSP builtins — must be intercepted before the generic JITSymbol path,
-    // because these names may also exist as extern functions in the symbol
-    // table (e.g. a C phasor helper), and we need the stateful dsp.* ops.
-    // if (fn->tag == AST_IDENTIFIER) {
-    //   const char *name = fn->data.AST_IDENTIFIER.value;
-    //
-    //   if (strcmp(name, "phasor") == 0 && nargs >= 1) {
-    //     Value freq = build_dsp_expr(&args[0], ctx, jit_ctx);
-    //     int off = ctx.state_offset;
-    //     ctx.state_offset += 8;
-    //     return b.create<PhasorOp>(loc, ctx.state_ptr, freq, ctx.spf, off)
-    //         ->getResult(0);
-    //   }
-    //
-    //   if (strcmp(name, "sin_osc") == 0 && nargs >= 1) {
-    //     Value freq = build_dsp_expr(&args[0], ctx, jit_ctx);
-    //     return emit_table_osc(freq, "get_sin_table", YLC_SIN_TABSIZE, ctx);
-    //   }
-    //   if (strcmp(name, "sq_osc") == 0 && nargs >= 1) {
-    //     Value freq = build_dsp_expr(&args[0], ctx, jit_ctx);
-    //     return emit_table_osc(freq, "get_sq_table", YLC_SQ_TABSIZE, ctx);
-    //   }
-    //   if (strcmp(name, "saw_osc") == 0 && nargs >= 1) {
-    //     Value freq = build_dsp_expr(&args[0], ctx, jit_ctx);
-    //     return emit_table_osc(freq, "get_saw_table", YLC_SAW_TABSIZE, ctx);
-    //   }
-    //
-    //   if (strcmp(name, "bufplayer_trig_node") == 0 && nargs >= 4) {
-    //     Value rate = build_dsp_expr(&args[1], ctx, jit_ctx);
-    //     Value trig = build_dsp_expr(&args[3], ctx, jit_ctx);
-    //     int off = ctx.state_offset;
-    //     ctx.state_offset += 16;
-    //     return b.create<BufplayOp>(loc, ctx.state_ptr, rate, trig, off)
-    //         ->getResult(0);
-    //   }
-    //
-    //   if (strcmp(name, "aslr_node") == 0 && nargs >= 5) {
-    //     Value attack = build_dsp_expr(&args[0], ctx, jit_ctx);
-    //     Value sus_lvl = build_dsp_expr(&args[1], ctx, jit_ctx);
-    //     Value sus_dur = build_dsp_expr(&args[2], ctx, jit_ctx);
-    //     Value rel = build_dsp_expr(&args[3], ctx, jit_ctx);
-    //     Value trig = build_dsp_expr(&args[4], ctx, jit_ctx);
-    //     int off = ctx.state_offset;
-    //     ctx.state_offset += 12;
-    //     return b
-    //         .create<EnvAslrOp>(loc, ctx.state_ptr, attack, sus_lvl, sus_dur,
-    //                            rel, trig, off)
-    //         ->getResult(0);
-    //   }
-    //
-    //   if (strcmp(name, "delay") == 0 && nargs >= 2) {
-    //     Value input = build_dsp_expr(&args[0], ctx, jit_ctx);
-    //     if (!input)
-    //       return {};
-    //     double delay_time = 0.0;
-    //     Ast *time_ast = &args[1];
-    //     if (time_ast->tag == AST_DOUBLE)
-    //       delay_time = time_ast->data.AST_DOUBLE.value;
-    //     else if (time_ast->tag == AST_FLOAT)
-    //       delay_time = time_ast->data.AST_FLOAT.value;
-    //     else if (time_ast->tag == AST_INT)
-    //       delay_time = (double)time_ast->data.AST_INT.value;
-    //     else {
-    //       fprintf(stderr, "audio_jit: delay time must be a constant\n");
-    //       return {};
-    //     }
-    //     int inlet_idx = ctx.next_hidden_inlet++;
-    //     ctx.buf_inputs.push_back({inlet_idx, delay_time});
-    //     int state_off = ctx.state_offset;
-    //     ctx.state_offset += 8;
-    //     auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
-    //     auto i32_ty = b.getI32Type();
-    //     auto f64_ty = b.getF64Type();
-    //     auto fn_ty = LLVM::LLVMFunctionType::get(
-    //         f64_ty, {ptr_ty, i32_ty, ptr_ty, i32_ty, f64_ty}, false);
-    //     auto fn_op = declare_extern(ctx.mod, b, "ylc_delay_sample", fn_ty);
-    //     Value state_off_val = b.create<LLVM::ConstantOp>(
-    //         loc, i32_ty, b.getI32IntegerAttr(state_off));
-    //     Value inlet_val = b.create<LLVM::ConstantOp>(
-    //         loc, i32_ty, b.getI32IntegerAttr(inlet_idx));
-    //     return b
-    //         .create<LLVM::CallOp>(loc, fn_op,
-    //                               ValueRange{ctx.state_ptr, state_off_val,
-    //                                          ctx.inputs_ptr, inlet_val,
-    //                                          input})
-    //         .getResult();
-    //   }
-    // }
-
-    // General case: resolved Yalce symbol with a known function type
-
-    // if (f && f->symbol_type && f->symbol_type->kind == T_FN) {
-    //   const char *fn_name = nullptr;
-    //   if (f->type == STYPE_LAZY_EXTERN_FUNCTION)
-    //     fn_name = f->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast->data
-    //                   .AST_EXTERN_FN.fn_name.chars;
-    //   else if (f->val)
-    //     fn_name = LLVMGetValueName(f->val);
-    //
-    //   if (!fn_name)
-    //     break;
-    //
-    //   // Intercept DSP builtins by resolved name — catches both direct calls
-    //   // (phasor 1.0) and module-qualified calls (dsp.phasor 1.0).
-    //   if (strcmp(fn_name, "phasor") == 0 && nargs >= 1) {
-    //     Value freq = build_dsp_expr(&args[0], ctx, jit_ctx);
-    //     int off = ctx.state_offset;
-    //     ctx.state_offset += 8;
-    //     return b.create<PhasorOp>(loc, ctx.state_ptr, freq, ctx.spf, off)
-    //         ->getResult(0);
-    //   }
-    //
-    //   if (strcmp(fn_name, "sin_osc") == 0 && nargs >= 1) {
-    //     Value freq = build_dsp_expr(&args[0], ctx, jit_ctx);
-    //     return emit_table_osc(freq, "get_sin_table", YLC_SIN_TABSIZE, ctx);
-    //   }
-    //   if (strcmp(fn_name, "sq_osc") == 0 && nargs >= 1) {
-    //     Value freq = build_dsp_expr(&args[0], ctx, jit_ctx);
-    //     return emit_table_osc(freq, "get_sq_table", YLC_SQ_TABSIZE, ctx);
-    //   }
-    //   if (strcmp(fn_name, "saw_osc") == 0 && nargs >= 1) {
-    //     Value freq = build_dsp_expr(&args[0], ctx, jit_ctx);
-    //     return emit_table_osc(freq, "get_saw_table", YLC_SAW_TABSIZE, ctx);
-    //   }
-    //
-    //   if (strcmp(fn_name, "bufplayer_trig_node") == 0 && nargs >= 4) {
-    //     Value rate = build_dsp_expr(&args[1], ctx, jit_ctx);
-    //     Value trig = build_dsp_expr(&args[3], ctx, jit_ctx);
-    //     int off = ctx.state_offset;
-    //     ctx.state_offset += 16;
-    //     return b.create<BufplayOp>(loc, ctx.state_ptr, rate, trig, off)
-    //         ->getResult(0);
-    //   }
-    //
-    //   if (strcmp(fn_name, "aslr_node") == 0 && nargs >= 5) {
-    //     Value attack = build_dsp_expr(&args[0], ctx, jit_ctx);
-    //     Value sus_lvl = build_dsp_expr(&args[1], ctx, jit_ctx);
-    //     Value sus_dur = build_dsp_expr(&args[2], ctx, jit_ctx);
-    //     Value rel = build_dsp_expr(&args[3], ctx, jit_ctx);
-    //     Value trig = build_dsp_expr(&args[4], ctx, jit_ctx);
-    //     int off = ctx.state_offset;
-    //     ctx.state_offset += 12;
-    //     return b
-    //         .create<EnvAslrOp>(loc, ctx.state_ptr, attack, sus_lvl, sus_dur,
-    //                            rel, trig, off)
-    //         ->getResult(0);
-    //   }
-    //
-    //   auto fn_ty = ylc_fn_to_mlir(f->symbol_type, b.getContext());
-    //   auto fn_op = declare_extern(ctx.mod, b, fn_name, fn_ty);
-    //
-    //   llvm::SmallVector<Value> call_args;
-    //   ::Type *param_t = f->symbol_type;
-    //   for (size_t i = 0; i < nargs && param_t->kind == T_FN;
-    //        i++, param_t = param_t->data.T_FN.to) {
-    //     if (param_t->data.T_FN.from->kind == T_VOID)
-    //       continue;
-    //     Value v = build_dsp_expr(&args[i], ctx, jit_ctx);
-    //     if (!v)
-    //       return {};
-    //     call_args.push_back(v);
-    //   }
-    //
-    //   auto call = b.create<LLVM::CallOp>(loc, fn_op, call_args);
-    //
-    //   ::Type *ret_t = f->symbol_type;
-    //   while (ret_t->kind == T_FN)
-    //     ret_t = ret_t->data.T_FN.to;
-    //   if (ret_t->kind == T_VOID)
-    //     return {};
-    //   return call.getResult();
-    // }
-    //
-    // if (fn->tag != AST_IDENTIFIER)
-    //   break;
-    //
     break;
   }
   default:
@@ -790,6 +891,14 @@ static LogicalResult runMLIRPasses(ModuleOp mod, MLIRContext *ctx) {
 }
 
 static void runLLVMOptPasses(llvm::Module &mod) {
+  // llvm::FastMathFlags fmf;
+  // fmf.setFast();
+  // for (auto &F : mod)
+  //   for (auto &BB : F)
+  //     for (auto &I : BB)
+  //       if (llvm::isa<llvm::FPMathOperator>(I))
+  //         I.setFastMathFlags(fmf);
+
   llvm::PassBuilder pb;
   llvm::LoopAnalysisManager lam;
   llvm::FunctionAnalysisManager fam;
@@ -919,12 +1028,91 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
   return node_val;
 }
 
-extern "C" LLVMValueRef RegisterDSPOpHandler(Ast *ast, JITLangCtx *jit_ctx,
-                                             LLVMModuleRef module_ref,
-                                             LLVMBuilderRef builder) {
-  printf("register this: \n");
-  print_ast(ast);
-  return nullptr;
+extern "C" LLVMValueRef _register_let(Ast *let, JITLangCtx *jit_ctx,
+                                      LLVMModuleRef module_ref,
+                                      LLVMBuilderRef builder) {
+  // printf("register inline: ");
+  // print_ast(let);
+
+  Ast *binding = let->data.AST_LET.binding;
+  const char *name = binding->data.AST_IDENTIFIER.value;
+
+  JITSymbol *sym =
+      new_symbol((symbol_type)STYPE_AUDIO_JIT_SYM, nullptr, nullptr, nullptr);
+  ht *stack = jit_ctx->frame->table;
+  Ast *expr = let->data.AST_LET.expr;
+  sym->symbol_data._USER_DEFINED_SYMBOL = expr;
+  ht_set_hash(stack, name, hash_string(name, strlen(name)), sym);
+  return LLVMConstInt(LLVMInt32Type(), 0, 0);
+}
+
+LLVMValueRef audio_jit_inline_module(Ast *binding, Ast *module_ast,
+                                     JITLangCtx *ctx,
+                                     LLVMModuleRef llvm_module_ref,
+                                     LLVMBuilderRef builder) {
+
+  YLCModule _module = {
+      .type = module_ast->type,
+      .ast = module_ast,
+  };
+
+  YLCModule *module = &_module;
+  JITSymbol *module_symbol;
+
+  if (module->ast) {
+    ::Type *module_type = module->type;
+    int mod_len = module_type->data.T_CONS.num_args;
+    Ast *module_ast = module->ast;
+
+    module_symbol = create_module_symbol(module_type, NULL, module_ast, ctx,
+                                         llvm_module_ref);
+
+    JITLangCtx *mod_ctx = module_symbol->symbol_data.STYPE_MODULE.ctx;
+    if (module_ast->data.AST_LAMBDA.body->tag != AST_BODY) {
+      _register_let(module_ast->data.AST_LAMBDA.body, mod_ctx, llvm_module_ref,
+                    builder);
+    } else {
+
+      AST_LIST_ITER(module_ast->data.AST_LAMBDA.body->data.AST_BODY.stmts, ({
+                      _register_let(l->ast, mod_ctx, llvm_module_ref, builder);
+                    }));
+    }
+
+    const char *mod_binding = binding->data.AST_IDENTIFIER.value;
+    int mod_binding_len = binding->data.AST_IDENTIFIER.length;
+
+    ht_set_hash(ctx->frame->table, mod_binding,
+                hash_string(mod_binding, mod_binding_len), module_symbol);
+
+    module->ref = module_symbol;
+  }
+
+  // return module_symbol->val;
+  return LLVMConstInt(LLVMInt32Type(), 0, 0);
+}
+
+extern "C" LLVMValueRef RegisterAudioOpHandler(Ast *ast, JITLangCtx *jit_ctx,
+                                               LLVMModuleRef module_ref,
+                                               LLVMBuilderRef builder) {
+  if (ast->tag == AST_APPLICATION &&
+      ast->data.AST_APPLICATION.args->tag == AST_LET) {
+
+    Ast *expr = ast->data.AST_APPLICATION.args->data.AST_LET.expr;
+
+    if (expr->tag == AST_LAMBDA) {
+
+      return _register_let(ast->data.AST_APPLICATION.args, jit_ctx, module_ref,
+                           builder);
+    }
+
+    if (expr->tag == AST_MODULE) {
+      return audio_jit_inline_module(
+          ast->data.AST_APPLICATION.args->data.AST_LET.binding, expr, jit_ctx,
+          module_ref, builder);
+    }
+  }
+
+  return LLVMConstInt(LLVMInt32Type(), 0, 0);
 }
 
 // =============================================================================
@@ -955,23 +1143,40 @@ __attribute__((constructor)) static void ylc_audio_jit_init() {
     JITSymbol *sym =
         new_symbol(STYPE_GENERIC_FUNCTION, nullptr, nullptr, nullptr);
     sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler =
-        RegisterDSPOpHandler;
-    const char *name = "register_dsp_op";
+        RegisterAudioOpHandler;
+    const char *name = "register_audio_op";
     ht_set_hash(stack, name, hash_string(name, strlen(name)), sym);
     fprintf(stderr, "libaudio_jit: registered register_dsp_op\n");
   });
-#define DSP_BUILTIN(name, handler)                                             \
+
+#define DSP_BUILTIN(name, handler, fn_type)                                    \
   ({                                                                           \
     JITSymbol *sym = new_symbol((symbol_type)STYPE_AUDIO_JIT_BUILTIN_HANDLER,  \
-                                nullptr, nullptr, nullptr);                    \
+                                fn_type, nullptr, nullptr);                    \
     sym->symbol_data._USER_DEFINED_SYMBOL = (void *)handler;                   \
     ht_set_hash(stack, name, hash_string(name, strlen(name)), sym);            \
+    add_builtin(name, fn_type);                                                \
     fprintf(stderr, "libaudio_jit: registered " name "\n");                    \
   })
 
-  DSP_BUILTIN("phasor", PhasorHandler);
-  DSP_BUILTIN("sin_osc", SinOscHandler);
-  DSP_BUILTIN("sq_osc", SqOscHandler);
-  DSP_BUILTIN("saw_osc", SawOscHandler);
-  DSP_BUILTIN("trig", ImpulseHandler);
+  DSP_BUILTIN("phasor", PhasorHandler, type_fn(&t_num, &t_num));
+  DSP_BUILTIN("sin_osc", SinOscHandler, type_fn(&t_num, &t_num));
+  DSP_BUILTIN("sq_osc", SqOscHandler, type_fn(&t_num, &t_num));
+  DSP_BUILTIN("saw_osc", SawOscHandler, type_fn(&t_num, &t_num));
+  DSP_BUILTIN("trig", ImpulseHandler, type_fn(&t_num, &t_num));
+  DSP_BUILTIN(
+      "linscale", LinscaleHandler,
+      type_fn(&t_num,
+              type_fn(&t_num, type_fn(&t_num, type_fn(&t_num, &t_num)))));
+
+  DSP_BUILTIN("bipolar_scale", BipolarLinscaleHandler,
+              type_fn(&t_num, type_fn(&t_num, &t_num)));
+
+  DSP_BUILTIN("unipolar_scale", UnipolarLinscaleHandler,
+              type_fn(&t_num, type_fn(&t_num, &t_num)));
+
+  DSP_BUILTIN("wrap", WrapHandler,
+              type_fn(&t_num, type_fn(&t_num, type_fn(&t_num, &t_num))));
+  DSP_BUILTIN("fold", FoldHandler,
+              type_fn(&t_num, type_fn(&t_num, type_fn(&t_num, &t_num))));
 }

@@ -67,4 +67,7 @@ extern double grain_win[GRAIN_WINDOW_TABSIZE];
 // double *get_saw_table();
 // uint32_t get_saw_tabsize();
 
+#define SQ_TABSIZE (1 << 11)
+#define SIN_TABSIZE (1 << 11)
+#define SAW_TABSIZE (1 << 11)
 #endif

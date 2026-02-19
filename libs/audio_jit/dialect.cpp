@@ -21,7 +21,7 @@ using namespace mlir;
 DspDialect::DspDialect(MLIRContext *ctx)
     : Dialect("dsp", ctx, TypeID::get<DspDialect>()) {
   addOperations<InletOp, OutletOp, PhasorOp, ImpulseOp, TableLookupOp,
-                BufplayOp, EnvAslrOp>();
+                BufplayOp, EnvAslrOp, LinscaleOp>();
 }
 
 // =============================================================================
@@ -95,9 +95,11 @@ struct PhasorOpLowering : public ConversionPattern {
                                             operands[0], ValueRange{off_val});
 
     // Load current phase — this is what we return (pre-advance semantics).
+    auto fmf = LLVM::FastmathFlagsAttr::get(r.getContext(),
+                                             LLVM::FastmathFlags::fast);
     Value phase = r.create<LLVM::LoadOp>(loc, f64, phase_ptr);
-    Value step = r.create<LLVM::FMulOp>(loc, operands[1], operands[2]);
-    Value advanced = r.create<LLVM::FAddOp>(loc, phase, step);
+    Value step = r.create<LLVM::FMulOp>(loc, operands[1], operands[2], fmf);
+    Value advanced = r.create<LLVM::FAddOp>(loc, phase, step, fmf);
 
     // On wrap, reset state to exactly 0.0 so the next frame returns 0.0.
     // This makes (phasor == 0.0) a reliable wrap/start detector.
@@ -113,46 +115,28 @@ struct PhasorOpLowering : public ConversionPattern {
   }
 };
 
-// // ImpulseOp: same phasor mechanics, but returns 1.0 on the wrap frame, 0.0
-// // otherwise. The ovf flag is the result — no freq comparison needed
-// externally. struct ImpulseOpLowering : public ConversionPattern {
-//   ImpulseOpLowering(MLIRContext *ctx)
-//       : ConversionPattern(ImpulseOp::getOperationName(), 1, ctx) {}
-//   LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value> operands,
-//                                 ConversionPatternRewriter &r) const override
-//                                 {
-//     auto imp = cast<ImpulseOp>(op);
-//     auto loc = op->getLoc();
-//     auto ptr = LLVM::LLVMPointerType::get(op->getContext());
-//     auto f64 = r.getF64Type();
-//     auto i64 = r.getI64Type();
-//
-//     Value off_val = r.create<LLVM::ConstantOp>(
-//         loc, i64, r.getI64IntegerAttr(imp.getStateOffset()));
-//     Value phase_ptr = r.create<LLVM::GEPOp>(loc, ptr, r.getI8Type(),
-//                                             operands[0],
-//                                             ValueRange{off_val});
-//
-//     // Load pre-advance phase. Fire when it is exactly 0.0 — true at frame 0
-//     // (zeroed initial state) and the frame after each wrap (because we store
-//     // 0.0 on wrap, not the fractional remainder).
-//     Value phase = r.create<LLVM::LoadOp>(loc, f64, phase_ptr);
-//     Value step = r.create<LLVM::FMulOp>(loc, operands[1], operands[2]);
-//     Value advanced = r.create<LLVM::FAddOp>(loc, phase, step);
-//
-//     Value one = r.create<LLVM::ConstantOp>(loc, f64, r.getF64FloatAttr(1.0));
-//     Value zero = r.create<LLVM::ConstantOp>(loc, f64,
-//     r.getF64FloatAttr(0.0)); Value ovf =
-//         r.create<LLVM::FCmpOp>(loc, LLVM::FCmpPredicate::oge, advanced, one);
-//     Value next = r.create<LLVM::SelectOp>(loc, ovf, zero, advanced);
-//     r.create<LLVM::StoreOp>(loc, next, phase_ptr);
-//
-//     Value fire =
-//         r.create<LLVM::FCmpOp>(loc, LLVM::FCmpPredicate::oeq, phase, zero);
-//     r.replaceOpWithNewOp<LLVM::SelectOp>(op, fire, one, zero);
-//     return success();
-//   }
-// };
+//  t      = (input - domain_a) / (domain_b - domain_a)   // normalize to [0,1]
+// output = range_a + t * (range_b - range_a)             // lerp into output
+// range
+struct LinscaleOpLowering : public ConversionPattern {
+  LinscaleOpLowering(MLIRContext *ctx)
+      : ConversionPattern(LinscaleOp::getOperationName(), 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                                ConversionPatternRewriter &r) const override {
+    auto loc = op->getLoc();
+    auto fmf = LLVM::FastmathFlagsAttr::get(r.getContext(),
+                                             LLVM::FastmathFlags::fast);
+    // operands[] are the already-lowered SSA values in order of addOperands():
+    // [domain_a, domain_b, range_a, range_b, input]
+    Value num = r.create<LLVM::FSubOp>(loc, operands[4], operands[0], fmf);
+    Value denom = r.create<LLVM::FSubOp>(loc, operands[1], operands[0], fmf);
+    Value t = r.create<LLVM::FDivOp>(loc, num, denom, fmf);
+    Value span = r.create<LLVM::FSubOp>(loc, operands[3], operands[2], fmf);
+    Value scaled = r.create<LLVM::FMulOp>(loc, t, span, fmf);
+    r.replaceOpWithNewOp<LLVM::FAddOp>(op, operands[2], scaled, fmf);
+    return success();
+  }
+};
 
 // TableLookupOp: fully inline GEP + linear interpolation — no function calls,
 // fully visible to the LLVM optimizer.
@@ -172,15 +156,17 @@ struct TableLookupOpLowering : public ConversionPattern {
     Value phase = operands[0];     // f64 in [0, 1)
     Value table_ptr = operands[1]; // !llvm.ptr — f64[]
 
+    auto fmf = LLVM::FastmathFlagsAttr::get(r.getContext(),
+                                             LLVM::FastmathFlags::fast);
     // d_index = phase * size
     Value size_f =
         r.create<LLVM::ConstantOp>(loc, f64, r.getF64FloatAttr((double)size));
-    Value d_index = r.create<LLVM::FMulOp>(loc, phase, size_f);
+    Value d_index = r.create<LLVM::FMulOp>(loc, phase, size_f, fmf);
 
     // integer index and fractional part
     Value index = r.create<LLVM::FPToSIOp>(loc, i64, d_index);
     Value index_f = r.create<LLVM::SIToFPOp>(loc, f64, index);
-    Value frac = r.create<LLVM::FSubOp>(loc, d_index, index_f);
+    Value frac = r.create<LLVM::FSubOp>(loc, d_index, index_f, fmf);
 
     // idx0 = index & mask,  idx1 = (index + 1) & mask
     Value mask_c =
@@ -200,9 +186,9 @@ struct TableLookupOpLowering : public ConversionPattern {
     Value b_val = r.create<LLVM::LoadOp>(loc, f64, ptr_b);
 
     // lerp: a + frac * (b - a)
-    Value diff = r.create<LLVM::FSubOp>(loc, b_val, a);
-    Value interp =
-        r.create<LLVM::FAddOp>(loc, a, r.create<LLVM::FMulOp>(loc, frac, diff));
+    Value diff = r.create<LLVM::FSubOp>(loc, b_val, a, fmf);
+    Value interp = r.create<LLVM::FAddOp>(
+        loc, a, r.create<LLVM::FMulOp>(loc, frac, diff, fmf), fmf);
 
     r.replaceOp(op, interp);
     return success();
@@ -248,7 +234,8 @@ struct DspToLLVMPass
     RewritePatternSet patterns(&getContext());
     patterns.add<InletOpLowering, OutletOpLowering, PhasorOpLowering,
                  // ImpulseOpLowering,
-                 TableLookupOpLowering, BufplayOpLowering, EnvAslrOpLowering>(
+                 LinscaleOpLowering, TableLookupOpLowering, BufplayOpLowering,
+                 EnvAslrOpLowering>(
         &getContext());
 
     if (failed(applyPartialConversion(getOperation(), target,

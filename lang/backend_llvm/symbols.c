@@ -404,7 +404,6 @@ LLVMValueRef codegen_let_expr(Ast *ast, JITLangCtx *outer_ctx,
 
   LLVMValueRef res = _codegen_let_expr(binding, ast->data.AST_LET.expr,
                                        &cont_ctx, module, builder);
-
   if (ast->data.AST_LET.in_expr != NULL) {
     res = codegen(ast->data.AST_LET.in_expr, &cont_ctx, module, builder);
     destroy_ctx(&cont_ctx);
