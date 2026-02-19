@@ -17,6 +17,7 @@ let bipolar_scale = extern fn Double -> Double -> Double -> Double;
 let unipolar_scale = extern fn Double -> Double -> Double -> Double;
 let wrap = extern fn Double -> Double -> Double -> Double;
 let fold = extern fn Double -> Double -> Double -> Double;
+let delay = extern fn Double -> Double -> Double -> Double -> Double;
 
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
 
@@ -29,11 +30,13 @@ register_audio_op (
 );
 
 let _ = compile_audio_fn (fn () ->
-  sin_osc 1.
+  let s = sin_osc 1.
   |> bipolar_scale 0.2 4.
   |> sin_osc
   |> bipolar_scale 40. 400.
   |> SynthFuncs.sq_detune
+  ;
+  s + (delay 0.1 1.0 0.7 s)
 ) |> play_node;
 
 # print @@ typeof SynthFuncs;

@@ -23,6 +23,7 @@ class OutletOp;
 class PhasorOp;
 class BufplayOp;
 class EnvAslrOp;
+class DelayOp;
 
 // =============================================================================
 // DspDialect
@@ -226,6 +227,38 @@ public:
   }
   int32_t getStateOffset() {
     return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();
+  }
+};
+
+// dsp.delay %state_ptr, %inputs_ptr, %input, %fb {state_offset, inlet_idx}
+//           : (!llvm.ptr, !llvm.ptr, f64, f64) -> f64
+// Feedback delay. State (8 bytes at state_offset): [read_pos: i32, write_pos: i32].
+// inputs[inlet_idx] is a hidden delay-buffer node (delay line lives in its
+// output.buf, allocated with calloc so the pool is never invalidated).
+// out = input + buf[read_pos];  buf[write_pos] = fb * out;  advance both.
+class DelayOp
+    : public Op<DelayOp, OpTrait::ZeroRegions, OpTrait::OneResult,
+                OpTrait::ZeroSuccessors, OpTrait::NOperands<4>::Impl> {
+public:
+  using Op::Op;
+  static StringRef getOperationName() { return "dsp.delay"; }
+  static ArrayRef<StringRef> getAttributeNames() {
+    static StringRef n[] = {"state_offset", "inlet_idx"};
+    return n;
+  }
+  static void build(OpBuilder &b, OperationState &s, Value state_ptr,
+                    Value inputs_ptr, Value input, Value fb,
+                    int32_t state_offset, int32_t inlet_idx) {
+    s.addOperands({state_ptr, inputs_ptr, input, fb});
+    s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
+    s.addAttribute("inlet_idx", b.getI32IntegerAttr(inlet_idx));
+    s.addTypes(b.getF64Type());
+  }
+  int32_t getStateOffset() {
+    return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();
+  }
+  int32_t getInletIdx() {
+    return (*this)->getAttrOfType<IntegerAttr>("inlet_idx").getInt();
   }
 };
 

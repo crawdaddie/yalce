@@ -116,27 +116,9 @@ extern "C" Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
 // static const int YLC_SQ_TABSIZE = 1 << 11;
 // static const int YLC_SAW_TABSIZE = 1 << 11;
 
-// Circular-buffer delay: read the delayed sample, write the current input,
-// advance both circular pointers.  State layout at state_offset:
-//   [read_pos: i32][write_pos: i32]  (8 bytes total)
-extern "C" double ylc_delay_sample(void *state_raw, int32_t state_offset,
-                                   void *inputs_raw, int32_t inlet_idx,
-                                   double input) {
-  int32_t *read_pos = (int32_t *)((char *)state_raw + state_offset);
-  int32_t *write_pos = read_pos + 1;
-  Node **inputs = (Node **)inputs_raw;
-  double *buf = inputs[inlet_idx]->output.buf;
-  int buf_sz = inputs[inlet_idx]->output.size;
-  double out = buf[*read_pos];
-  buf[*write_pos] = input;
-  *read_pos = (*read_pos + 1) % buf_sz;
-  *write_pos = (*write_pos + 1) % buf_sz;
-  return out;
-}
-
-// Feedback delay: read delayed sample, compute out = input + delayed,
-// write fb*out into the buffer, advance both circular pointers.
-// State layout (8 bytes at state_offset): [read_pos: i32][write_pos: i32]
+// Feedback delay. State at state_offset: [read_pos: i32, write_pos: i32] (8 bytes).
+// inputs[inlet_idx] is the delay-buffer node (its output.buf is the delay line).
+// out = input + buf[read_pos];  buf[write_pos] = fb * out;  advance both.
 extern "C" double ylc_delay_fb(void *state_raw, int32_t state_offset,
                                 void *inputs_raw, int32_t inlet_idx,
                                 double input, double fb) {
@@ -153,28 +135,47 @@ extern "C" double ylc_delay_fb(void *state_raw, int32_t state_offset,
   return out;
 }
 
-// Allocate a const_buf node sized for delay_time_sec and wire it into the
-// DSP node at inlet_idx.  Called once at node-creation time.
-extern "C" void ylc_attach_buf_input(Node *node, int inlet_idx,
-                                     double delay_time_sec) {
-  int size = (int)(delay_time_sec / ctx_spf());
-  Node *buf = const_buf(0.0, 1, size);
-  plug_input_in_graph(inlet_idx, node, buf);
-}
-
-// Allocate a delay buffer of max_delay_sec capacity, wire it into inlet_idx,
-// and initialize read_pos so the initial delay is init_delay_sec.
-// state_off is the byte offset of [read_pos: i32][write_pos: i32] within
-// node->state_ptr.
+// Attach a hidden delay-buffer node as inlet_idx of the DSP node.
+// The delay line is calloc'd (not from the buffer pool), so it can never
+// trigger a pool realloc that would invalidate other nodes' output.buf pointers.
+// Also initialises read_pos in the node's state so the initial delay is correct.
 extern "C" void ylc_attach_delay_buf(Node *node, int32_t inlet_idx,
-                                     int32_t state_off, double max_delay_sec,
+                                     int32_t state_offset,
+                                     double max_delay_sec,
                                      double init_delay_sec) {
+  AudioGraph *graph = _graph;
+  // Save index before allocate_node_in_graph may realloc graph->nodes.
+  int node_idx = node->node_index;
+
   int max_sz = (int)(max_delay_sec / ctx_spf());
+  if (max_sz <= 0) max_sz = 1;
   int delay_samps = (int)(init_delay_sec / ctx_spf());
-  Node *buf = const_buf(0.0, 1, max_sz);
-  plug_input_in_graph(inlet_idx, node, buf);
-  int32_t *read_pos = (int32_t *)((char *)node->state_ptr + state_off);
-  *read_pos = max_sz - delay_samps; // write_pos (read_pos+1) stays 0
+  if (delay_samps >= max_sz) delay_samps = max_sz - 1;
+
+  // Allocate delay line outside the pool — no pool realloc, no stale pointers.
+  double *buf = (double *)calloc(max_sz, sizeof(double));
+
+  // Create a hidden node to own the delay line buffer.
+  // allocate_node_in_graph may move graph->nodes; re-lookup `node` afterwards.
+  Node *buf_node = allocate_node_in_graph(graph, 0);
+  *buf_node = (Node){
+      .perform = NULL,
+      .node_index = buf_node->node_index,
+      .num_inputs = 0,
+      .state_size = 0,
+      .state_offset = graph ? graph->state_memory_size : 0,
+      .output = (Signal){.layout = 1, .size = max_sz, .buf = buf},
+      .meta = (char *)"delay_buf",
+  };
+
+  // Re-lookup DSP node in the live (possibly reallocated) nodes array.
+  Node *live_node = graph ? (graph->nodes + node_idx) : node;
+  plug_input_in_graph(inlet_idx, live_node, buf_node);
+
+  // Initialise read_pos so the delay starts at init_delay_sec.
+  int32_t *read_pos = (int32_t *)((char *)live_node->state_ptr + state_offset);
+  *read_pos = max_sz - delay_samps;
+  // write_pos (read_pos + 1) stays 0 from the memset in ylc_create_audio_node.
 }
 
 // =============================================================================
@@ -213,14 +214,16 @@ static Location ast_loc(Ast *ast, MLIRContext *ctx) {
 // Build context threaded through AST → DSP op emission
 // =============================================================================
 
-// Describes one hidden buffer inlet that must be created at node-setup time.
-// If state_offset >= 0 this is a delay line: ylc_attach_delay_buf is called
-// to also initialise read_pos in the node's state block.
+// Describes a hidden delay-buffer inlet.
+// ylc_attach_delay_buf is called once at node-creation time to:
+//   - allocate the delay line (calloc, not pool)
+//   - wire it as inputs[inlet_idx]
+//   - initialise read_pos in state so the initial delay is correct
 struct BufInputSpec {
   int inlet_idx;
-  double delay_time_sec;    // buffer capacity (max delay)
-  int state_offset = -1;    // >= 0: delay buf; -1: plain buf
-  double init_delay_sec = 0.0;
+  int state_offset;     // byte offset of [read_pos: i32, write_pos: i32]
+  double max_delay_sec;
+  double init_delay_sec;
 };
 
 struct DspBuildCtx {
@@ -519,6 +522,36 @@ Value WrapHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
                 .getResult();
   return b.create<arith::SubFOp>(
       loc, input, b.create<arith::MulFOp>(loc, range, t, fmf), fmf);
+}
+
+// Extract a compile-time constant from a numeric AST node.
+static double ast_const_double(Ast *a) {
+  if (!a) return 0.0;
+  if (a->tag == AST_DOUBLE) return a->data.AST_DOUBLE.value;
+  if (a->tag == AST_FLOAT) return (double)a->data.AST_FLOAT.value;
+  if (a->tag == AST_INT) return (double)a->data.AST_INT.value;
+  return 0.0;
+}
+
+// delay delay_time max_delay fb input → f64
+// Creates a hidden inlet holding the circular delay buffer.
+// State: [read_pos: i32][write_pos: i32]  (8 bytes)
+static Value DelayHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+  Ast *args = ast->data.AST_APPLICATION.args;
+  double delay_time = ast_const_double(&args[0]);
+  double max_delay = ast_const_double(&args[1]);
+  Value fb = build_dsp_expr(&args[2], ctx, jit_ctx);
+  Value input = build_dsp_expr(&args[3], ctx, jit_ctx);
+
+  int off = ctx.state_offset;
+  ctx.state_offset += 8; // [read_pos: i32, write_pos: i32]
+  int hidden_idx = ctx.next_hidden_inlet++;
+  ctx.buf_inputs.push_back({hidden_idx, off, max_delay, delay_time});
+
+  return ctx.b
+      .create<DelayOp>(ctx.loc, ctx.state_ptr, ctx.inputs_ptr, input, fb,
+                       off, hidden_idx)
+      ->getResult(0);
 }
 
 //   if (strcmp(name, "sq_osc") == 0 && nargs >= 1) {
@@ -974,7 +1007,7 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
 
   int num_total_inputs = num_inputs + (int)buf_inputs.size();
   fprintf(stderr,
-          "compile_audio_fn: OK name=%s real_inputs=%d buf_inputs=%d "
+          "compile_audio_fn: OK name=%s real_inputs=%d delay_bufs=%d "
           "state=%d bytes\n",
           fn_name.c_str(), num_inputs, (int)buf_inputs.size(), state_bytes);
 
@@ -1004,24 +1037,28 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
   LLVMValueRef node_val =
       LLVMBuildCall2(builder, create_fn_ty, create_fn, create_args, 3, "node");
 
-  // --- ylc_attach_buf_input(node, inlet_idx, delay_time_sec) per buffer inlet
+  // Attach hidden delay-buffer inlets.
+  // ylc_attach_delay_buf(node, inlet_idx, state_offset, max_delay_sec,
+  //                      init_delay_sec)
+  // It allocates the delay line with calloc (not from pool) to avoid
+  // invalidating any previously allocated output.buf pointers.
   if (!buf_inputs.empty()) {
-    LLVMTypeRef attach_params[] = {ptr_ty, i32_ty, f64_ty};
-    LLVMTypeRef attach_fn_ty = LLVMFunctionType(void_ty, attach_params, 3, 0);
-    LLVMValueRef attach_fn =
-        LLVMGetNamedFunction(module_ref, "ylc_attach_buf_input");
-    if (!attach_fn) {
-      attach_fn =
-          LLVMAddFunction(module_ref, "ylc_attach_buf_input", attach_fn_ty);
-      LLVMSetLinkage(attach_fn, LLVMExternalLinkage);
+    LLVMTypeRef delay_params[] = {ptr_ty, i32_ty, i32_ty, f64_ty, f64_ty};
+    LLVMTypeRef delay_fn_ty = LLVMFunctionType(void_ty, delay_params, 5, 0);
+    LLVMValueRef delay_fn =
+        LLVMGetNamedFunction(module_ref, "ylc_attach_delay_buf");
+    if (!delay_fn) {
+      delay_fn =
+          LLVMAddFunction(module_ref, "ylc_attach_delay_buf", delay_fn_ty);
+      LLVMSetLinkage(delay_fn, LLVMExternalLinkage);
     }
     for (auto &buf : buf_inputs) {
-      LLVMValueRef attach_args[] = {
-          node_val,
-          LLVMConstInt(i32_ty, buf.inlet_idx, 0),
-          LLVMConstReal(f64_ty, buf.delay_time_sec),
-      };
-      LLVMBuildCall2(builder, attach_fn_ty, attach_fn, attach_args, 3, "");
+      LLVMValueRef args[] = {node_val,
+                             LLVMConstInt(i32_ty, buf.inlet_idx, 0),
+                             LLVMConstInt(i32_ty, buf.state_offset, 0),
+                             LLVMConstReal(f64_ty, buf.max_delay_sec),
+                             LLVMConstReal(f64_ty, buf.init_delay_sec)};
+      LLVMBuildCall2(builder, delay_fn_ty, delay_fn, args, 5, "");
     }
   }
 
@@ -1179,4 +1216,9 @@ __attribute__((constructor)) static void ylc_audio_jit_init() {
               type_fn(&t_num, type_fn(&t_num, type_fn(&t_num, &t_num))));
   DSP_BUILTIN("fold", FoldHandler,
               type_fn(&t_num, type_fn(&t_num, type_fn(&t_num, &t_num))));
+
+  // delay delay_time max_delay fb input → num
+  DSP_BUILTIN("delay", DelayHandler,
+              type_fn(&t_num, type_fn(&t_num, type_fn(&t_num,
+                                                       type_fn(&t_num, &t_num)))));
 }

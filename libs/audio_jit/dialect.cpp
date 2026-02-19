@@ -21,7 +21,7 @@ using namespace mlir;
 DspDialect::DspDialect(MLIRContext *ctx)
     : Dialect("dsp", ctx, TypeID::get<DspDialect>()) {
   addOperations<InletOp, OutletOp, PhasorOp, ImpulseOp, TableLookupOp,
-                BufplayOp, EnvAslrOp, LinscaleOp>();
+                BufplayOp, EnvAslrOp, LinscaleOp, DelayOp>();
 }
 
 // =============================================================================
@@ -195,6 +195,42 @@ struct TableLookupOpLowering : public ConversionPattern {
   }
 };
 
+// DelayOp: calls ylc_delay_fb(state_raw, state_offset, inputs_raw, inlet_idx,
+//          input, fb) → f64
+// inputs[inlet_idx] is the delay-buffer node; state holds [read_pos, write_pos].
+struct DelayOpLowering : public ConversionPattern {
+  DelayOpLowering(MLIRContext *ctx)
+      : ConversionPattern(DelayOp::getOperationName(), 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                                ConversionPatternRewriter &r) const override {
+    auto delay = cast<DelayOp>(op);
+    auto loc = op->getLoc();
+    auto mod = op->getParentOfType<ModuleOp>();
+    auto ptr = LLVM::LLVMPointerType::get(op->getContext());
+    auto f64 = r.getF64Type();
+    auto i32 = r.getI32Type();
+
+    // ylc_delay_fb(void* state_raw, int32_t state_offset,
+    //              void* inputs_raw, int32_t inlet_idx,
+    //              double input, double fb) -> double
+    auto fn_ty =
+        LLVM::LLVMFunctionType::get(f64, {ptr, i32, ptr, i32, f64, f64}, false);
+    auto fn = declare_extern(mod, r, "ylc_delay_fb", fn_ty);
+
+    Value state_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(delay.getStateOffset()));
+    Value inlet_idx = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(delay.getInletIdx()));
+
+    // operands: [state_ptr, inputs_ptr, input, fb]
+    r.replaceOpWithNewOp<LLVM::CallOp>(
+        op, fn,
+        ValueRange{operands[0], state_off, operands[1], inlet_idx,
+                   operands[2], operands[3]});
+    return success();
+  }
+};
+
 // BufplayOp and EnvAslrOp: stub lowerings (TODO: full implementations).
 struct BufplayOpLowering : public ConversionPattern {
   BufplayOpLowering(MLIRContext *ctx)
@@ -235,7 +271,7 @@ struct DspToLLVMPass
     patterns.add<InletOpLowering, OutletOpLowering, PhasorOpLowering,
                  // ImpulseOpLowering,
                  LinscaleOpLowering, TableLookupOpLowering, BufplayOpLowering,
-                 EnvAslrOpLowering>(
+                 EnvAslrOpLowering, DelayOpLowering>(
         &getContext());
 
     if (failed(applyPartialConversion(getOperation(), target,
