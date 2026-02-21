@@ -24,6 +24,11 @@ class PhasorOp;
 class BufplayOp;
 class EnvAslrOp;
 class DelayOp;
+class Delay1Op;
+class AllpassOp;
+class Allpass1Op;
+class WhiteNoiseOp;
+class BufReadOp;
 
 // =============================================================================
 // DspDialect
@@ -179,6 +184,26 @@ public:
   }
 };
 
+// dsp.bufread %phase, %buf_ptr, %size : (f64, !llvm.ptr, i64) -> f64
+// Stateless linear interpolation into a f64 buffer of runtime size.
+// phase in [0, 1). size is the number of f64 elements.
+class BufReadOp
+    : public Op<BufReadOp, OpTrait::ZeroRegions, OpTrait::OneResult,
+                OpTrait::ZeroSuccessors, OpTrait::NOperands<3>::Impl> {
+public:
+  using Op::Op;
+  static StringRef getOperationName() { return "dsp.bufread"; }
+  static ArrayRef<StringRef> getAttributeNames() { return {}; }
+  static void build(OpBuilder &b, OperationState &s, Value size, Value buf_ptr,
+                    Value phase) {
+    s.addOperands({size, buf_ptr, phase});
+    s.addTypes(b.getF64Type());
+  }
+  Value getPhase() { return getOperand(2); }
+  Value getBufPtr() { return getOperand(1); }
+  Value getSize() { return getOperand(0); }
+};
+
 // dsp.bufplay %state_ptr, %rate, %trig {state_offset} : (!llvm.ptr, f64, f64)
 // -> f64 Stateful buffer player. State: phase f64 + prev_trig f64 (16 bytes).
 class BufplayOp
@@ -230,15 +255,15 @@ public:
   }
 };
 
-// dsp.delay %state_ptr, %inputs_ptr, %input, %fb {state_offset, inlet_idx}
-//           : (!llvm.ptr, !llvm.ptr, f64, f64) -> f64
-// Feedback delay. State (8 bytes at state_offset): [read_pos: i32, write_pos: i32].
-// inputs[inlet_idx] is a hidden delay-buffer node (delay line lives in its
-// output.buf, allocated with calloc so the pool is never invalidated).
-// out = input + buf[read_pos];  buf[write_pos] = fb * out;  advance both.
+// dsp.delay %state_ptr, %inputs_ptr, %input, %fb, %spf, %delay_time
+//           {state_offset, inlet_idx}
+//           : (!llvm.ptr, !llvm.ptr, f64, f64, f64, f64) -> f64
+// Feedback delay. State (4 bytes used at state_offset): [write_pos: i32].
+// delay_time is a per-sample f64 (seconds); delay_samps = (i32)(delay_time/spf)
+// read_pos = (write_pos - delay_samps + buf_sz) % buf_sz.
 class DelayOp
     : public Op<DelayOp, OpTrait::ZeroRegions, OpTrait::OneResult,
-                OpTrait::ZeroSuccessors, OpTrait::NOperands<4>::Impl> {
+                OpTrait::ZeroSuccessors, OpTrait::NOperands<6>::Impl> {
 public:
   using Op::Op;
   static StringRef getOperationName() { return "dsp.delay"; }
@@ -247,9 +272,9 @@ public:
     return n;
   }
   static void build(OpBuilder &b, OperationState &s, Value state_ptr,
-                    Value inputs_ptr, Value input, Value fb,
-                    int32_t state_offset, int32_t inlet_idx) {
-    s.addOperands({state_ptr, inputs_ptr, input, fb});
+                    Value inputs_ptr, Value input, Value fb, Value spf,
+                    Value delay_time, int32_t state_offset, int32_t inlet_idx) {
+    s.addOperands({state_ptr, inputs_ptr, input, fb, spf, delay_time});
     s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
     s.addAttribute("inlet_idx", b.getI32IntegerAttr(inlet_idx));
     s.addTypes(b.getF64Type());
@@ -259,6 +284,101 @@ public:
   }
   int32_t getInletIdx() {
     return (*this)->getAttrOfType<IntegerAttr>("inlet_idx").getInt();
+  }
+};
+
+class Delay1Op
+    : public Op<Delay1Op, OpTrait::ZeroRegions, OpTrait::OneResult,
+                OpTrait::ZeroSuccessors, OpTrait::NOperands<6>::Impl> {
+public:
+  using Op::Op;
+  static StringRef getOperationName() { return "dsp.delay1"; }
+  static ArrayRef<StringRef> getAttributeNames() {
+    static StringRef n[] = {"state_offset", "inlet_idx"};
+    return n;
+  }
+  static void build(OpBuilder &b, OperationState &s, Value state_ptr,
+                    Value inputs_ptr, Value input, Value fb, Value spf,
+                    Value delay_time, int32_t state_offset, int32_t inlet_idx) {
+    s.addOperands({state_ptr, inputs_ptr, input, fb, spf, delay_time});
+    s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
+    s.addAttribute("inlet_idx", b.getI32IntegerAttr(inlet_idx));
+    s.addTypes(b.getF64Type());
+  }
+  int32_t getStateOffset() {
+    return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();
+  }
+  int32_t getInletIdx() {
+    return (*this)->getAttrOfType<IntegerAttr>("inlet_idx").getInt();
+  }
+};
+
+// dsp.allpass %state_ptr, %inputs_ptr, %input, %g, %spf, %delay_time
+//             {state_offset, inlet_idx}
+//             : (!llvm.ptr, !llvm.ptr, f64, f64, f64, f64) -> f64
+// Schroeder allpass: w = input + g*delayed; out = delayed - g*input.
+// Flat magnitude response — safe to chain. g=0 degenerates to pure ff delay.
+class AllpassOp
+    : public Op<AllpassOp, OpTrait::ZeroRegions, OpTrait::OneResult,
+                OpTrait::ZeroSuccessors, OpTrait::NOperands<6>::Impl> {
+public:
+  using Op::Op;
+  static StringRef getOperationName() { return "dsp.allpass"; }
+  static ArrayRef<StringRef> getAttributeNames() {
+    static StringRef n[] = {"state_offset", "inlet_idx"};
+    return n;
+  }
+  static void build(OpBuilder &b, OperationState &s, Value state_ptr,
+                    Value inputs_ptr, Value input, Value g, Value spf,
+                    Value delay_time, int32_t state_offset, int32_t inlet_idx) {
+    s.addOperands({state_ptr, inputs_ptr, input, g, spf, delay_time});
+    s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
+    s.addAttribute("inlet_idx", b.getI32IntegerAttr(inlet_idx));
+    s.addTypes(b.getF64Type());
+  }
+  int32_t getStateOffset() {
+    return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();
+  }
+  int32_t getInletIdx() {
+    return (*this)->getAttrOfType<IntegerAttr>("inlet_idx").getInt();
+  }
+};
+
+class Allpass1Op
+    : public Op<Allpass1Op, OpTrait::ZeroRegions, OpTrait::OneResult,
+                OpTrait::ZeroSuccessors, OpTrait::NOperands<6>::Impl> {
+public:
+  using Op::Op;
+  static StringRef getOperationName() { return "dsp.allpass1"; }
+  static ArrayRef<StringRef> getAttributeNames() {
+    static StringRef n[] = {"state_offset", "inlet_idx"};
+    return n;
+  }
+  static void build(OpBuilder &b, OperationState &s, Value state_ptr,
+                    Value inputs_ptr, Value input, Value g, Value spf,
+                    Value delay_time, int32_t state_offset, int32_t inlet_idx) {
+    s.addOperands({state_ptr, inputs_ptr, input, g, spf, delay_time});
+    s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
+    s.addAttribute("inlet_idx", b.getI32IntegerAttr(inlet_idx));
+    s.addTypes(b.getF64Type());
+  }
+  int32_t getStateOffset() {
+    return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();
+  }
+  int32_t getInletIdx() {
+    return (*this)->getAttrOfType<IntegerAttr>("inlet_idx").getInt();
+  }
+};
+
+class WhiteNoiseOp
+    : public Op<WhiteNoiseOp, OpTrait::ZeroRegions, OpTrait::OneResult,
+                OpTrait::ZeroSuccessors, OpTrait::ZeroOperands> {
+public:
+  using Op::Op;
+  static StringRef getOperationName() { return "dsp.white"; }
+  static ArrayRef<StringRef> getAttributeNames() { return {}; }
+  static void build(OpBuilder &b, OperationState &s) {
+    s.addTypes(b.getF64Type());
   }
 };
 

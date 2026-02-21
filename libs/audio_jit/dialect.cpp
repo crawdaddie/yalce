@@ -12,7 +12,117 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 
+extern "C" {
+#include "../../engine/node.h"
+}
+
 using namespace mlir;
+
+// Feedback delay.
+// State at state_offset: [write_pos: i32] (4 bytes used, 8 allocated).
+// inputs[inlet_idx] is the delay-buffer node; its output.buf is the delay line.
+// read_pos is computed as (write_pos - delay_samps + buf_sz) % buf_sz so the
+// read head is always exactly delay_samps behind the write head.
+extern "C" double ylc_delay_fb(void *state_raw, int32_t state_offset,
+                               void *inputs_raw, int32_t inlet_idx,
+                               double input, double fb, int32_t delay_samps) {
+  int32_t *write_pos = (int32_t *)((char *)state_raw + state_offset);
+  Node **inputs = (Node **)inputs_raw;
+  double *buf = inputs[inlet_idx]->output.buf;
+  int32_t buf_sz = inputs[inlet_idx]->output.size;
+  if (delay_samps <= 0) {
+    delay_samps = 1;
+  }
+  if (delay_samps >= buf_sz) {
+    delay_samps = buf_sz - 1;
+  }
+  int32_t read_pos = (*write_pos - delay_samps + buf_sz) % buf_sz;
+  double delayed = buf[read_pos];
+  double out = input + delayed;
+  buf[*write_pos] = fb * out;
+  *write_pos = (*write_pos + 1) % buf_sz;
+  return out;
+}
+
+// Lerp Feedback delay.
+// State at state_offset: [write_pos: i32] (4 bytes used, 8 allocated).
+// inputs[inlet_idx] is the delay-buffer node; its output.buf is the delay line.
+// delay_secs is divided by spf to get a fractional sample count; linear
+// interpolation between adjacent buffer samples gives sub-sample accuracy.
+extern "C" double ylc_delay1_fb(void *state_raw, int32_t state_offset,
+                                void *inputs_raw, int32_t inlet_idx,
+                                double input, double fb, double delay_secs,
+                                double spf) {
+  int32_t *write_pos = (int32_t *)((char *)state_raw + state_offset);
+  Node **inputs = (Node **)inputs_raw;
+  double *buf = inputs[inlet_idx]->output.buf;
+  int32_t buf_sz = inputs[inlet_idx]->output.size;
+  double delay_samps_f = delay_secs / spf;
+  if (delay_samps_f < 1.0)
+    delay_samps_f = 1.0;
+  if (delay_samps_f >= buf_sz)
+    delay_samps_f = buf_sz - 1;
+  int32_t delay_samps_i = (int32_t)delay_samps_f;
+  double frac = delay_samps_f - delay_samps_i;
+  // read_pos0 is floor(delay) samples behind write_pos,
+  // read_pos1 is one sample further back for the lerp upper bound.
+  int32_t read_pos0 = (*write_pos - delay_samps_i + buf_sz) % buf_sz;
+  int32_t read_pos1 = (read_pos0 - 1 + buf_sz) % buf_sz;
+  double delayed = buf[read_pos0] * (1.0 - frac) + buf[read_pos1] * frac;
+  double out = input + delayed;
+  buf[*write_pos] = fb * out;
+  *write_pos = (*write_pos + 1) % buf_sz;
+  return out;
+}
+
+// Schroeder allpass delay.
+// State at state_offset: [write_pos: i32] (4 bytes used, 8 allocated).
+// w = input + g * delayed;  out = delayed - g * input;  buf[write_pos] = w.
+// Flat magnitude response: safe to chain. g=0 is a pure feedforward delay.
+extern "C" double ylc_allpass(void *state_raw, int32_t state_offset,
+                              void *inputs_raw, int32_t inlet_idx, double input,
+                              double g, int32_t delay_samps) {
+  int32_t *write_pos = (int32_t *)((char *)state_raw + state_offset);
+  Node **inputs = (Node **)inputs_raw;
+  double *buf = inputs[inlet_idx]->output.buf;
+  int32_t buf_sz = inputs[inlet_idx]->output.size;
+  if (delay_samps <= 0)
+    delay_samps = 1;
+  if (delay_samps >= buf_sz)
+    delay_samps = buf_sz - 1;
+  int32_t read_pos = (*write_pos - delay_samps + buf_sz) % buf_sz;
+  double delayed = buf[read_pos];
+  buf[*write_pos] = input + g * delayed;
+  *write_pos = (*write_pos + 1) % buf_sz;
+  return delayed - g * input;
+}
+
+// Schroeder allpass with linear interpolation.
+// State at state_offset: [write_pos: i32] (4 bytes used, 8 allocated).
+// delay_secs is divided by spf to get a fractional sample count; lerp between
+// adjacent buffer samples gives sub-sample accuracy.
+extern "C" double ylc_allpass1(void *state_raw, int32_t state_offset,
+                               void *inputs_raw, int32_t inlet_idx,
+                               double input, double g, double delay_secs,
+                               double spf) {
+  int32_t *write_pos = (int32_t *)((char *)state_raw + state_offset);
+  Node **inputs = (Node **)inputs_raw;
+  double *buf = inputs[inlet_idx]->output.buf;
+  int32_t buf_sz = inputs[inlet_idx]->output.size;
+  double delay_samps_f = delay_secs / spf;
+  if (delay_samps_f < 1.0)
+    delay_samps_f = 1.0;
+  if (delay_samps_f >= buf_sz)
+    delay_samps_f = buf_sz - 1;
+  int32_t delay_samps_i = (int32_t)delay_samps_f;
+  double frac = delay_samps_f - delay_samps_i;
+  int32_t read_pos0 = (*write_pos - delay_samps_i + buf_sz) % buf_sz;
+  int32_t read_pos1 = (read_pos0 - 1 + buf_sz) % buf_sz;
+  double delayed = buf[read_pos0] * (1.0 - frac) + buf[read_pos1] * frac;
+  buf[*write_pos] = input + g * delayed;
+  *write_pos = (*write_pos + 1) % buf_sz;
+  return delayed - g * input;
+}
 
 // =============================================================================
 // DspDialect constructor — registers all ops.
@@ -21,7 +131,8 @@ using namespace mlir;
 DspDialect::DspDialect(MLIRContext *ctx)
     : Dialect("dsp", ctx, TypeID::get<DspDialect>()) {
   addOperations<InletOp, OutletOp, PhasorOp, ImpulseOp, TableLookupOp,
-                BufplayOp, EnvAslrOp, LinscaleOp, DelayOp>();
+                BufReadOp, BufplayOp, EnvAslrOp, LinscaleOp, DelayOp, Delay1Op,
+                AllpassOp, Allpass1Op, WhiteNoiseOp>();
 }
 
 // =============================================================================
@@ -95,19 +206,22 @@ struct PhasorOpLowering : public ConversionPattern {
                                             operands[0], ValueRange{off_val});
 
     // Load current phase — this is what we return (pre-advance semantics).
-    auto fmf = LLVM::FastmathFlagsAttr::get(r.getContext(),
-                                             LLVM::FastmathFlags::fast);
+    auto fmf =
+        LLVM::FastmathFlagsAttr::get(r.getContext(), LLVM::FastmathFlags::fast);
     Value phase = r.create<LLVM::LoadOp>(loc, f64, phase_ptr);
     Value step = r.create<LLVM::FMulOp>(loc, operands[1], operands[2], fmf);
     Value advanced = r.create<LLVM::FAddOp>(loc, phase, step, fmf);
 
-    // On wrap, reset state to exactly 0.0 so the next frame returns 0.0.
-    // This makes (phasor == 0.0) a reliable wrap/start detector.
+    // Wrap to [0, 1): overflow → 0.0, underflow (negative freq) → 1.0.
+    // Two chained selects keep the logic branchless.
     Value one = r.create<LLVM::ConstantOp>(loc, f64, r.getF64FloatAttr(1.0));
     Value zero = r.create<LLVM::ConstantOp>(loc, f64, r.getF64FloatAttr(0.0));
     Value ovf =
         r.create<LLVM::FCmpOp>(loc, LLVM::FCmpPredicate::oge, advanced, one);
+    Value udf =
+        r.create<LLVM::FCmpOp>(loc, LLVM::FCmpPredicate::olt, advanced, zero);
     Value next = r.create<LLVM::SelectOp>(loc, ovf, zero, advanced);
+    next = r.create<LLVM::SelectOp>(loc, udf, one, next);
 
     r.create<LLVM::StoreOp>(loc, next, phase_ptr);
     r.replaceOp(op, phase); // return pre-advance phase
@@ -124,8 +238,8 @@ struct LinscaleOpLowering : public ConversionPattern {
   LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                                 ConversionPatternRewriter &r) const override {
     auto loc = op->getLoc();
-    auto fmf = LLVM::FastmathFlagsAttr::get(r.getContext(),
-                                             LLVM::FastmathFlags::fast);
+    auto fmf =
+        LLVM::FastmathFlagsAttr::get(r.getContext(), LLVM::FastmathFlags::fast);
     // operands[] are the already-lowered SSA values in order of addOperands():
     // [domain_a, domain_b, range_a, range_b, input]
     Value num = r.create<LLVM::FSubOp>(loc, operands[4], operands[0], fmf);
@@ -156,8 +270,8 @@ struct TableLookupOpLowering : public ConversionPattern {
     Value phase = operands[0];     // f64 in [0, 1)
     Value table_ptr = operands[1]; // !llvm.ptr — f64[]
 
-    auto fmf = LLVM::FastmathFlagsAttr::get(r.getContext(),
-                                             LLVM::FastmathFlags::fast);
+    auto fmf =
+        LLVM::FastmathFlagsAttr::get(r.getContext(), LLVM::FastmathFlags::fast);
     // d_index = phase * size
     Value size_f =
         r.create<LLVM::ConstantOp>(loc, f64, r.getF64FloatAttr((double)size));
@@ -195,9 +309,61 @@ struct TableLookupOpLowering : public ConversionPattern {
   }
 };
 
+// BufReadOp: lerp into a runtime-sized f64 buffer.
+// operands: [phase: f64, buf_ptr: !llvm.ptr, size: i64]
+// size is a runtime value so idx1 wraps with modulo instead of bitmask.
+struct BufReadOpLowering : public ConversionPattern {
+  BufReadOpLowering(MLIRContext *ctx)
+      : ConversionPattern(BufReadOp::getOperationName(), 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                                ConversionPatternRewriter &r) const override {
+    auto loc = op->getLoc();
+    auto f64 = r.getF64Type();
+    auto i64 = r.getI64Type();
+    auto ptr = LLVM::LLVMPointerType::get(op->getContext());
+
+    Value phase = operands[2];    // f64 in [0, 1)
+    Value buf_ptr = operands[1];  // !llvm.ptr — f64[]
+    Value size_i64 = operands[0]; // i64 — number of elements
+
+    auto fmf =
+        LLVM::FastmathFlagsAttr::get(r.getContext(), LLVM::FastmathFlags::fast);
+
+    // d_index = phase * (f64)size  (in [0, size))
+    Value size_f = r.create<LLVM::SIToFPOp>(loc, f64, size_i64);
+    Value d_index = r.create<LLVM::FMulOp>(loc, phase, size_f, fmf);
+
+    // integer floor and fractional part
+    Value index = r.create<LLVM::FPToSIOp>(loc, i64, d_index);
+    Value index_f = r.create<LLVM::SIToFPOp>(loc, f64, index);
+    Value frac = r.create<LLVM::FSubOp>(loc, d_index, index_f, fmf);
+
+    // idx0 in [0, size-1]; idx1 = (idx0 + 1) % size
+    Value one_i64 =
+        r.create<LLVM::ConstantOp>(loc, i64, r.getI64IntegerAttr(1));
+    Value idx0 = index;
+    Value idx1 = r.create<LLVM::URemOp>(
+        loc, r.create<LLVM::AddOp>(loc, index, one_i64), size_i64);
+
+    Value ptr_a =
+        r.create<LLVM::GEPOp>(loc, ptr, f64, buf_ptr, ValueRange{idx0});
+    Value ptr_b =
+        r.create<LLVM::GEPOp>(loc, ptr, f64, buf_ptr, ValueRange{idx1});
+    Value a = r.create<LLVM::LoadOp>(loc, f64, ptr_a);
+    Value b_val = r.create<LLVM::LoadOp>(loc, f64, ptr_b);
+
+    // lerp: a + frac * (b - a)
+    Value diff = r.create<LLVM::FSubOp>(loc, b_val, a, fmf);
+    r.replaceOp(op,
+                r.create<LLVM::FAddOp>(
+                    loc, a, r.create<LLVM::FMulOp>(loc, frac, diff, fmf), fmf));
+    return success();
+  }
+};
+
 // DelayOp: calls ylc_delay_fb(state_raw, state_offset, inputs_raw, inlet_idx,
-//          input, fb) → f64
-// inputs[inlet_idx] is the delay-buffer node; state holds [read_pos, write_pos].
+//          input, fb, delay_samps) → f64
+// operands: [state_ptr, inputs_ptr, input, fb, spf, delay_time]
 struct DelayOpLowering : public ConversionPattern {
   DelayOpLowering(MLIRContext *ctx)
       : ConversionPattern(DelayOp::getOperationName(), 1, ctx) {}
@@ -210,11 +376,10 @@ struct DelayOpLowering : public ConversionPattern {
     auto f64 = r.getF64Type();
     auto i32 = r.getI32Type();
 
-    // ylc_delay_fb(void* state_raw, int32_t state_offset,
-    //              void* inputs_raw, int32_t inlet_idx,
-    //              double input, double fb) -> double
-    auto fn_ty =
-        LLVM::LLVMFunctionType::get(f64, {ptr, i32, ptr, i32, f64, f64}, false);
+    // ylc_delay_fb(state_raw, state_offset, inputs_raw, inlet_idx,
+    //              input, fb, delay_samps) -> f64
+    auto fn_ty = LLVM::LLVMFunctionType::get(
+        f64, {ptr, i32, ptr, i32, f64, f64, i32}, false);
     auto fn = declare_extern(mod, r, "ylc_delay_fb", fn_ty);
 
     Value state_off = r.create<LLVM::ConstantOp>(
@@ -222,15 +387,150 @@ struct DelayOpLowering : public ConversionPattern {
     Value inlet_idx = r.create<LLVM::ConstantOp>(
         loc, i32, r.getI32IntegerAttr(delay.getInletIdx()));
 
-    // operands: [state_ptr, inputs_ptr, input, fb]
+    auto fmf = arith::FastMathFlagsAttr::get(r.getContext(),
+                                             arith::FastMathFlags::fast);
+    Value delay_samps = r.create<arith::FPToSIOp>(
+        loc, i32, r.create<arith::DivFOp>(loc, operands[5], operands[4], fmf));
+
     r.replaceOpWithNewOp<LLVM::CallOp>(
         op, fn,
-        ValueRange{operands[0], state_off, operands[1], inlet_idx,
-                   operands[2], operands[3]});
+        ValueRange{operands[0], state_off, operands[1], inlet_idx, operands[2],
+                   operands[3], delay_samps});
     return success();
   }
 };
 
+struct Delay1OpLowering : public ConversionPattern {
+  Delay1OpLowering(MLIRContext *ctx)
+      : ConversionPattern(Delay1Op::getOperationName(), 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                                ConversionPatternRewriter &r) const override {
+    auto delay = cast<Delay1Op>(op);
+    auto loc = op->getLoc();
+    auto mod = op->getParentOfType<ModuleOp>();
+    auto ptr = LLVM::LLVMPointerType::get(op->getContext());
+    auto f64 = r.getF64Type();
+    auto i32 = r.getI32Type();
+
+    // ylc_delay1_fb(state_raw, state_offset, inputs_raw, inlet_idx,
+    //              input, fb, delay_secs, spf) -> f64
+    auto fn_ty = LLVM::LLVMFunctionType::get(
+        f64, {ptr, i32, ptr, i32, f64, f64, f64, f64}, false);
+    auto fn = declare_extern(mod, r, "ylc_delay1_fb", fn_ty);
+
+    Value state_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(delay.getStateOffset()));
+    Value inlet_idx = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(delay.getInletIdx()));
+
+    auto fmf = arith::FastMathFlagsAttr::get(r.getContext(),
+                                             arith::FastMathFlags::fast);
+
+    r.replaceOpWithNewOp<LLVM::CallOp>(
+        op, fn,
+        ValueRange{operands[0], state_off, operands[1], inlet_idx, operands[2],
+                   operands[3], operands[5], operands[4]});
+    return success();
+  }
+};
+
+// AllpassOp: calls ylc_allpass(state_raw, state_offset, inputs_raw, inlet_idx,
+//            input, g, delay_samps) → f64
+// operands: [state_ptr, inputs_ptr, input, g, spf, delay_time]
+struct AllpassOpLowering : public ConversionPattern {
+  AllpassOpLowering(MLIRContext *ctx)
+      : ConversionPattern(AllpassOp::getOperationName(), 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                                ConversionPatternRewriter &r) const override {
+    auto ap = cast<AllpassOp>(op);
+    auto loc = op->getLoc();
+    auto mod = op->getParentOfType<ModuleOp>();
+    auto ptr = LLVM::LLVMPointerType::get(op->getContext());
+    auto f64 = r.getF64Type();
+    auto i32 = r.getI32Type();
+
+    // ylc_allpass(state_raw, state_offset, inputs_raw, inlet_idx,
+    //             input, g, delay_samps) -> f64
+    auto fn_ty = LLVM::LLVMFunctionType::get(
+        f64, {ptr, i32, ptr, i32, f64, f64, i32}, false);
+    auto fn = declare_extern(mod, r, "ylc_allpass", fn_ty);
+
+    Value state_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(ap.getStateOffset()));
+    Value inlet_idx = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(ap.getInletIdx()));
+
+    auto fmf = arith::FastMathFlagsAttr::get(r.getContext(),
+                                             arith::FastMathFlags::fast);
+    Value delay_samps = r.create<arith::FPToSIOp>(
+        loc, i32, r.create<arith::DivFOp>(loc, operands[5], operands[4], fmf));
+
+    r.replaceOpWithNewOp<LLVM::CallOp>(
+        op, fn,
+        ValueRange{operands[0], state_off, operands[1], inlet_idx, operands[2],
+                   operands[3], delay_samps});
+    return success();
+  }
+};
+
+// Allpass1Op: calls ylc_allpass1(state_raw, state_offset, inputs_raw,
+//             inlet_idx, input, g, delay_secs, spf) → f64
+// operands: [state_ptr, inputs_ptr, input, g, spf, delay_time]
+struct Allpass1OpLowering : public ConversionPattern {
+  Allpass1OpLowering(MLIRContext *ctx)
+      : ConversionPattern(Allpass1Op::getOperationName(), 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                                ConversionPatternRewriter &r) const override {
+    auto ap = cast<Allpass1Op>(op);
+    auto loc = op->getLoc();
+    auto mod = op->getParentOfType<ModuleOp>();
+    auto ptr = LLVM::LLVMPointerType::get(op->getContext());
+    auto f64 = r.getF64Type();
+    auto i32 = r.getI32Type();
+
+    // ylc_allpass1(state_raw, state_offset, inputs_raw, inlet_idx,
+    //              input, g, delay_secs, spf) -> f64
+    auto fn_ty = LLVM::LLVMFunctionType::get(
+        f64, {ptr, i32, ptr, i32, f64, f64, f64, f64}, false);
+    auto fn = declare_extern(mod, r, "ylc_allpass1", fn_ty);
+
+    Value state_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(ap.getStateOffset()));
+    Value inlet_idx = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(ap.getInletIdx()));
+
+    // operands[5]=delay_time, operands[4]=spf
+    r.replaceOpWithNewOp<LLVM::CallOp>(
+        op, fn,
+        ValueRange{operands[0], state_off, operands[1], inlet_idx, operands[2],
+                   operands[3], operands[5], operands[4]});
+    return success();
+  }
+};
+
+extern "C" double white_noise_sample() {
+  int rand_int = rand();
+  double rand_double = (double)rand_int / RAND_MAX;
+  rand_double = rand_double * 2. - 1.;
+  return rand_double;
+}
+
+struct WhiteNoiseLowering : public ConversionPattern {
+  WhiteNoiseLowering(MLIRContext *ctx)
+      : ConversionPattern(WhiteNoiseOp::getOperationName(), 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                                ConversionPatternRewriter &r) const override {
+    auto loc = op->getLoc();
+    auto mod = op->getParentOfType<ModuleOp>();
+    auto f64 = r.getF64Type();
+
+    auto fn_ty = LLVM::LLVMFunctionType::get(f64, {}, false);
+    auto fn = declare_extern(mod, r, "white_noise_sample", fn_ty);
+
+    r.replaceOpWithNewOp<LLVM::CallOp>(op, fn, ValueRange{});
+    return success();
+  }
+};
 // BufplayOp and EnvAslrOp: stub lowerings (TODO: full implementations).
 struct BufplayOpLowering : public ConversionPattern {
   BufplayOpLowering(MLIRContext *ctx)
@@ -270,9 +570,10 @@ struct DspToLLVMPass
     RewritePatternSet patterns(&getContext());
     patterns.add<InletOpLowering, OutletOpLowering, PhasorOpLowering,
                  // ImpulseOpLowering,
-                 LinscaleOpLowering, TableLookupOpLowering, BufplayOpLowering,
-                 EnvAslrOpLowering, DelayOpLowering>(
-        &getContext());
+                 LinscaleOpLowering, TableLookupOpLowering, BufReadOpLowering,
+                 BufplayOpLowering, EnvAslrOpLowering, DelayOpLowering,
+                 Delay1OpLowering, AllpassOpLowering, Allpass1OpLowering,
+                 WhiteNoiseLowering>(&getContext());
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))

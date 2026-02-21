@@ -58,16 +58,11 @@ double pow2table_read(double pos, int tabsize, double *table);
 #define GRAIN_WINDOW_TABSIZE (1 << 9)
 extern double grain_win[GRAIN_WINDOW_TABSIZE];
 
-// double *get_sq_table();
-// uint32_t get_sq_tabsize();
-//
-// double *get_sin_table();
-// uint32_t get_sin_tabsize();
-//
-// double *get_saw_table();
-// uint32_t get_saw_tabsize();
-
 #define SQ_TABSIZE (1 << 11)
 #define SIN_TABSIZE (1 << 11)
 #define SAW_TABSIZE (1 << 11)
+
+extern double sin_table[SIN_TABSIZE];
+extern double sq_table[SQ_TABSIZE];
+extern double saw_table[SAW_TABSIZE];
 #endif

@@ -16,41 +16,259 @@ let linscale = extern fn Double -> Double -> Double -> Double -> Double;
 let bipolar_scale = extern fn Double -> Double -> Double -> Double;
 let unipolar_scale = extern fn Double -> Double -> Double -> Double;
 let wrap = extern fn Double -> Double -> Double -> Double;
+let clampup = extern fn Double -> Double -> Double;
 let fold = extern fn Double -> Double -> Double -> Double;
 let delay = extern fn Double -> Double -> Double -> Double -> Double;
-
+let delay1 = extern fn Double -> Double -> Double -> Double -> Double; # delay with linearly interpolated reads
+let allpass = extern fn Double -> Double -> Double -> Double -> Double;
+let allpass1 = extern fn Double -> Double -> Double -> Double -> Double; # linearly interpolating
+let white = extern fn () -> Double;
+let bufref = extern fn Ptr -> Ptr;
+let bufread = extern fn Double -> Ptr -> Double;
+let lfnoise0 = extern fn Double -> Double -> Double -> Double;
+let lfnoise1 = extern fn Double -> Double -> Double -> Double;
+let spf = extern fn () -> Double;
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
 
-
+import std/Math;
 
 register_audio_op (
-  let SynthFuncs = module () ->
-    let sq_detune = fn f -> sq_osc f + sq_osc (f * 1.01);;
-    let saw_detune = fn f -> saw_osc f + saw_osc (f * 1.01);;
+  let Filter = module () ->
+
+    let biquad = fn b0 b1 b2 a1 a2 x ->
+      let X = [| 0., 0. |];
+      let Y = [| 0., 0. |];
+      let y = b0 * x + b1 * X[0] + b2 * X[1] - a1 * Y[0] - a2 * Y[1];
+      X[1] := X[0];
+      X[0] := x;
+      Y[1] := Y[0];
+      Y[0] := y;
+      y
+    ;;
+
+    let lpf = fn freq q x ->
+      let w0   = 2.0 * Math.PI * freq * (spf ()) in
+      let cosw = Math.cos w0 in
+      let sinw = Math.sin w0 in
+      let alpha = sinw / (2.0 * q) in
+
+      let b0 = (1.0 - cosw) / 2.0 in
+      let b1 = 1.0 - cosw in
+      let b2 = (1.0 - cosw) / 2.0 in
+      let a0 = 1.0 + alpha in
+      let a1 = -2.0 * cosw in
+      let a2 = 1.0 - alpha in
+
+      let b0n = b0 / a0 in
+      let b1n = b1 / a0 in
+      let b2n = b2 / a0 in
+      let a1n = a1 / a0 in
+      let a2n = a2 / a0 in
+
+      biquad b0n b1n b2n a1n a2n x
+    ;;
+
+    let hpf = fn freq q x ->
+      let w0   = 2.0 * Math.PI * freq * (spf ()) in
+      let cosw = Math.cos w0 in
+      let sinw = Math.sin w0 in
+      let alpha = sinw / (2.0 * q) in
+
+      let b0 = (1.0 + cosw) / 2.0 in
+      let b1 = -1 * (1.0 + cosw) in
+      let b2 = (1.0 + cosw) / 2.0 in
+      let a0 = 1.0 + alpha in
+      let a1 = -2.0 * cosw in
+      let a2 = 1.0 - alpha in
+
+      let b0n = b0 / a0 in
+      let b1n = b1 / a0 in
+      let b2n = b2 / a0 in
+      let a1n = a1 / a0 in
+      let a2n = a2 / a0 in
+
+      biquad b0n b1n b2n a1n a2n x
+    ;;
+
+    let bpf = fn freq q x ->
+      let w0   = 2.0 * Math.PI * freq * (spf ()) in
+      let cosw = Math.cos w0 in
+      let sinw = Math.sin w0 in
+      let alpha = sinw / (2.0 * q) in
+
+      let b0 =  alpha in
+      let b1 =  0.0 in
+      let b2 = -1 * alpha in
+      let a0 =  1.0 + alpha in
+      let a1 = -2.0 * cosw in
+      let a2 =  1.0 - alpha in
+
+      let b0n = b0 / a0 in
+      let b1n = b1 / a0 in
+      let b2n = b2 / a0 in
+      let a1n = a1 / a0 in
+      let a2n = a2 / a0 in
+
+      biquad b0n b1n b2n a1n a2n x
+    ;;
+
+    let notch = fn freq q x ->
+      let w0   = 2.0 * Math.PI * freq * (spf ()) in
+      let cosw = Math.cos w0 in
+      let sinw = Math.sin w0 in
+      let alpha = sinw / (2.0 * q) in
+
+      let b0 =  1.0 in
+      let b1 = -2.0 * cosw in
+      let b2 =  1.0 in
+      let a0 =  1.0 + alpha in
+      let a1 = -2.0 * cosw in
+      let a2 =  1.0 - alpha in
+
+      let b0n = b0 / a0 in
+      let b1n = b1 / a0 in
+      let b2n = b2 / a0 in
+      let a1n = a1 / a0 in
+      let a2n = a2 / a0 in
+
+      biquad b0n b1n b2n a1n a2n x
+    ;;
+
+    let lowshelf = fn freq q gain_db x ->
+      let w0   = 2.0 * Math.PI * freq * (spf ()) in
+      let cosw = Math.cos w0 in
+      let sinw = Math.sin w0 in
+      let A = Math.pow 10.0 (gain_db / 40.0) in
+      let alpha = sinw / (2.0 * q) in
+      let sqrtA = Math.sqrt A in
+
+      let b0 =    A * ( (A + 1.0) - (A - 1.0) * cosw + 2.0 * sqrtA * alpha ) in
+      let b1 =  2.0 * A * ( (A - 1.0) - (A + 1.0) * cosw ) in
+      let b2 =    A * ( (A + 1.0) - (A - 1.0) * cosw - 2.0 * sqrtA * alpha ) in
+      let a0 =        (A + 1.0) + (A - 1.0) * cosw + 2.0 * sqrtA * alpha in
+      let a1 =   -2.0 * ( (A - 1.0) + (A + 1.0) * cosw ) in
+      let a2 =        (A + 1.0) + (A - 1.0) * cosw - 2.0 * sqrtA * alpha in
+
+      let b0n = b0 / a0 in
+      let b1n = b1 / a0 in
+      let b2n = b2 / a0 in
+      let a1n = a1 / a0 in
+      let a2n = a2 / a0 in
+
+      biquad b0n b1n b2n a1n a2n x
+    ;;
+
+    let highshelf = fn freq q gain_db x ->
+      let w0   = 2.0 * Math.PI * freq * (spf ()) in
+      let cosw = Math.cos w0 in
+      let sinw = Math.sin w0 in
+      let A = Math.pow 10.0 (gain_db / 40.0) in
+      let alpha = sinw / (2.0 * q) in
+      let sqrtA = Math.sqrt A in
+
+      let b0 =    A * ( (A + 1.0) + (A - 1.0) * cosw + 2.0 * sqrtA * alpha ) in
+      let b1 = -2.0 * A * ( (A - 1.0) + (A + 1.0) * cosw ) in
+      let b2 =    A * ( (A + 1.0) + (A - 1.0) * cosw - 2.0 * sqrtA * alpha ) in
+      let a0 =        (A + 1.0) - (A - 1.0) * cosw + 2.0 * sqrtA * alpha in
+      let a1 =    2.0 * ( (A - 1.0) - (A + 1.0) * cosw ) in
+      let a2 =        (A + 1.0) - (A - 1.0) * cosw - 2.0 * sqrtA * alpha in
+
+      let b0n = b0 / a0 in
+      let b1n = b1 / a0 in
+      let b2n = b2 / a0 in
+      let a1n = a1 / a0 in
+      let a2n = a2 / a0 in
+
+      biquad b0n b1n b2n a1n a2n x
+    ;;
+
+    let peak = fn freq q gain_db x ->
+      let w0   = 2.0 * Math.PI * freq * (spf ()) in
+      let cosw = Math.cos w0 in
+      let sinw = Math.sin w0 in
+      let alpha = sinw / (2.0 * q) in
+      let A = Math.pow 10.0 (gain_db / 40.0) in
+
+      let b0 = 1.0 + alpha * A in
+      let b1 = -2.0 * cosw in
+      let b2 = 1.0 - alpha * A in
+      let a0 = 1.0 + alpha / A in
+      let a1 = -2.0 * cosw in
+      let a2 = 1.0 - alpha / A in
+
+      let b0n = b0 / a0 in
+      let b1n = b1 / a0 in
+      let b2n = b2 / a0 in
+      let a1n = a1 / a0 in
+      let a2n = a2 / a0 in
+
+      biquad b0n b1n b2n a1n a2n x
+    ;;
+    # one‑pole with softclip
+    let pole = fn g x z ->
+      let y = z + g * (x - z) in
+      y
+    ;;
+
+    # 4‑pole ladder with feedback + tanh drive
+    let ladder = fn cutoff res drive x ->
+      let Z = [| 0., 0., 0., 0. |];  # z1..z4
+      let g = 2.0 * Math.PI * cutoff * (spf ()) in
+      let g1 = clampup 0.99 g in
+
+      # input drive + feedback
+      let u = Math.tanh (drive * x - (res * (Z[3]))) in
+
+      let y1 = Z[0] |> pole g1 u in
+      let y2 = Z[1] |> pole g1 y1 in
+      let y3 = Z[2] |> pole g1 y2 in
+      let y4 = Z[3] |> pole g1 y3 in
+
+      Z[0] := y1;
+      Z[1] := y2;
+      Z[2] := y3;
+      Z[3] := y4;
+
+      y4
+    ;
+
+  ;
 );
 
-let _ = compile_audio_fn (fn () ->
-  let s = sin_osc 1.
-  |> bipolar_scale 0.2 4.
-  |> sin_osc
-  |> bipolar_scale 40. 400.
-  |> SynthFuncs.sq_detune
+register_audio_op (let pump = fn f sp-> 
+  let cutoff = (phasor (-1. * sp) |> unipolar_scale 100. 800. ) in
+  let ff = f + lfnoise1 0 10 1 in
+  (saw_osc ff + saw_osc (ff * 1.01) + saw_osc (ff * 1.02))
+  |> Filter.ladder cutoff 40. 100.
   ;
-  s + (delay 0.1 1.0 0.7 s)
-) |> play_node;
+);
 
-# print @@ typeof SynthFuncs;
-# let _ = compile_audio_fn (fn () ->
-#   sin_osc 3.
-#   |> bipolar_scale 4. 10.
-#   |> sin_osc
-#   |> (*) (Math.rand_double_range -1. 1.)
+let _ = compile_audio_fn (fn () -> 
+  (pump 300. 3) + (pump 100. 3)
+) |> play_node
+
+
+# let _ = compile_audio_fn (fn () -> 
+#   let cutoff = (phasor -9. |> unipolar_scale 100. 800. ) in
+#   (saw_osc 100 + saw_osc 101. + saw_osc 102.)
+#   |> Filter.ladder cutoff 40. 100.
 # ) |> play_node
 
+# let amen = load_soundfile "whisper.wav";
 
 
 
-# with_register_audio_op (
-# let sq_detune = fn f -> 
-#   sq_osc f + sq_osc (f * 1.01)
-# )
+
+
+# register_audio_op (
+#   let SynthFuncs = module () ->
+#     let sq_detune = fn f -> sq_osc f + sq_osc (f * 1.01);;
+#     let saw_detune = fn f -> saw_osc f + saw_osc (f * 1.01);;
+#
+# );
+#
+# let _ = compile_audio_fn (fn () -> 
+#   let (sz, data) = bufdata amen;
+#   phasor 0.7 |> bufread sz data
+# ) |> play_node
+#

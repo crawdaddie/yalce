@@ -119,4 +119,6 @@ Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env);
 
 Type *find_in_subst(Subst *subst, const char *name);
 
+bool is_constant_expr(Ast *expr, TICtx *ctx);
+
 #endif
