@@ -15,8 +15,6 @@ extern "C" {
 #include "../../engine/audio_graph.h"
 #include "../../engine/ctx.h"
 #include "../../engine/node.h"
-#include "../../engine/node_util.h"
-#include "../../lang/backend_llvm/function_extern.h"
 #include "../../lang/backend_llvm/lib_registry.h"
 #include "../../lang/backend_llvm/module.h"
 #include "../../lang/backend_llvm/symbols.h"
@@ -56,14 +54,11 @@ extern "C" {
 // identifier.
 #undef PI
 #include "llvm/Analysis/CGSCCPassManager.h"
-#include "llvm/IR/Operator.h"
 #include "llvm/Passes/PassBuilder.h"
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <string>
-#include <unordered_map>
-#include <vector>
 
 // =============================================================================
 // Wavetable data — embedded at compile time from pre-generated CSV files.
@@ -112,11 +107,7 @@ extern "C" void *ylc_buf_inlet_data(void *inputs_raw, int32_t inlet_idx) {
 extern "C" int64_t ylc_buf_inlet_size(void *inputs_raw, int32_t inlet_idx) {
   return (int64_t)reinterpret_cast<Node **>(inputs_raw)[inlet_idx]->output.size;
 }
-// Wire an existing node as an inlet — called at node-creation time.
-extern "C" void ylc_attach_node_inlet(Node *synth, int32_t inlet_idx,
-                                      Node *source) {
-  plug_input_in_graph(inlet_idx, synth, source);
-}
+
 // Return the inlet Node* itself — hoisted before the sample loop by
 // BufRefHandler.
 extern "C" void *ylc_get_inlet_node(void *inputs_raw, int32_t inlet_idx) {
@@ -128,18 +119,31 @@ extern "C" double ylc_bufread(void *node_raw, double phase) {
   Node *node = reinterpret_cast<Node *>(node_raw);
   double *buf = node->output.buf;
   int64_t sz = (int64_t)node->output.size;
-  if (sz <= 0)
+  if (sz <= 0) {
     return 0.0;
+  }
   double d_index = phase * (double)sz;
   int64_t index = (int64_t)d_index;
-  if (index < 0)
+
+  if (index < 0) {
     index = 0;
-  if (index >= sz)
+  }
+
+  if (index >= sz) {
     index = sz - 1;
+  }
+
   double frac = d_index - (double)index;
   double a = buf[index];
   double b_val = buf[(index + 1) % sz];
+
   return a + frac * (b_val - a);
+}
+
+// Return the element count of a buffer node.
+extern "C" int64_t ylc_bufsize(void *node_raw) {
+  Node *node = reinterpret_cast<Node *>(node_raw);
+  return (int64_t)node->output.size;
 }
 
 // Describes a hidden delay-buffer inlet baked into a compiled synth.
@@ -171,10 +175,12 @@ extern "C" Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
       .state_offset = state_off,
       .meta = (char *)"audio_jit_synth",
   };
+
   if (state_bytes > 0) {
     node->state_ptr = state_ptr(graph, node);
     memset(node->state_ptr, 0, state_bytes);
   }
+
   return graph_embed(node);
 }
 
@@ -204,10 +210,6 @@ extern "C" void ylc_attach_buf_inlet(Node *node, int32_t inlet_idx,
   };
   plug_input_in_graph(inlet_idx, node, buf);
 }
-
-// static const int YLC_SIN_TABSIZE = 1 << 11;
-// static const int YLC_SQ_TABSIZE = 1 << 11;
-// static const int YLC_SAW_TABSIZE = 1 << 11;
 
 // =============================================================================
 // Global MLIR context
@@ -311,6 +313,41 @@ struct DspBuildCtx {
   // External buffer nodes wired as hidden inlets at node-creation time.
   std::vector<BufRefSpec> buf_ref_inputs;
 };
+
+// Hoist array literal into state and return base offset (i64) as MLIR value.
+static Value emit_array_state(Ast *array_ast, DspBuildCtx &ctx,
+                              const std::string &name) {
+  int len = (int)array_ast->data.AST_LIST.len;
+  int arr_base = ctx.state_offset;
+  ctx.state_offset += 8 * len;
+
+  ctx.array_states[name] = ArrayStateSpec{arr_base, len};
+
+  // Record literal initializers for node-creation time.
+  for (int i = 0; i < len; i++) {
+    Ast *el = &array_ast->data.AST_LIST.items[i];
+    double v = 0.0;
+    if (el->tag == AST_DOUBLE) {
+      v = el->data.AST_DOUBLE.value;
+    } else if (el->tag == AST_FLOAT) {
+      v = (double)el->data.AST_FLOAT.value;
+    } else if (el->tag == AST_INT) {
+      v = (double)el->data.AST_INT.value;
+    } else {
+      fprintf(stderr,
+              "Error: array literal elements must be numeric constants\n");
+      print_ast(el);
+      return {};
+    }
+    int off = arr_base + (i * 8);
+    ctx.array_inits.push_back({off, v});
+  }
+
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  auto i64_ty = b.getI64Type();
+  return b.create<LLVM::ConstantOp>(loc, i64_ty, b.getI64IntegerAttr(arr_base));
+}
 
 // =============================================================================
 // AST → DSP ops
@@ -471,6 +508,21 @@ Value ImpulseHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   return b.create<arith::UIToFPOp>(loc, b.getF64Type(), cmp);
 }
 
+// Like ImpulseHandler, but emits dsp.phasor_trig (trig, prev_trig).
+// Returns trig (result 0). prev_trig (result 1) is available to callers that
+// need it at the op level.
+Value PhasorTrigHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+  Ast *args = ast->data.AST_APPLICATION.args;
+  Value freq = build_dsp_expr(args, ctx, jit_ctx);
+  int off = ctx.state_offset;
+  ctx.state_offset += 16; // phase + prev_trig (2x f64)
+
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  auto op = b.create<PhasorTrigOp>(loc, ctx.state_ptr, freq, ctx.spf, off);
+  return op->getResult(0);
+}
+
 // bufref node_symbol -> !llvm.ptr
 // Registers node_symbol as a hidden inlet (wired at node-creation time) and
 // hoists ylc_get_inlet_node(inputs_ptr, inlet_idx) before the sample loop,
@@ -503,6 +555,111 @@ Value BufRefHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
           .getResult();
   ctx.hoist_ip = b.saveInsertionPoint();
   return node_ptr;
+}
+
+Value BufPlayHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+
+  Ast *args = ast->data.AST_APPLICATION.args;
+  Value node_ptr = build_dsp_expr(&args[0], ctx, jit_ctx);
+  Value rate = build_dsp_expr(&args[1], ctx, jit_ctx);
+  Value start_pos = build_dsp_expr(&args[2], ctx, jit_ctx);
+  Value trig = build_dsp_expr(&args[3], ctx, jit_ctx);
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  auto f64 = b.getF64Type();
+  auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
+  auto i64_ty = b.getI64Type();
+
+  // State: phase (f64) + prev_trig (f64)
+  int phase_off = ctx.state_offset;
+  ctx.state_offset += 8;
+
+  Value phase_off_val =
+      b.create<LLVM::ConstantOp>(loc, i64_ty, b.getI64IntegerAttr(phase_off));
+
+  Value phase_ptr = b.create<LLVM::GEPOp>(
+      loc, ptr_ty, b.getI8Type(), ctx.state_ptr, ValueRange{phase_off_val});
+
+  Value prev_trig;
+  Value prev_ptr;
+  bool has_prev_ptr = false;
+  if (auto op = trig.getDefiningOp<PhasorTrigOp>()) {
+    prev_trig = op->getResult(1);
+  } else {
+    int prev_off = ctx.state_offset;
+    ctx.state_offset += 8;
+    Value prev_off_val =
+        b.create<LLVM::ConstantOp>(loc, i64_ty, b.getI64IntegerAttr(prev_off));
+    prev_ptr = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), ctx.state_ptr,
+                                     ValueRange{prev_off_val});
+    prev_trig = b.create<LLVM::LoadOp>(loc, f64, prev_ptr)->getResult(0);
+    has_prev_ptr = true;
+  }
+
+  auto half = b.create<arith::ConstantFloatOp>(loc, f64, APFloat(0.5));
+
+  Value prev_lt =
+      b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OLT, prev_trig, half);
+  Value curr_ge =
+      b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OGE, trig, half);
+  Value rising = b.create<arith::AndIOp>(loc, prev_lt, curr_ge);
+
+  // On trigger, reset phase to start_pos.
+  auto if_op = b.create<scf::IfOp>(loc, rising);
+  auto &then_blk = if_op.getThenRegion().front();
+  b.setInsertionPointToStart(&then_blk);
+  b.create<LLVM::StoreOp>(loc, start_pos, phase_ptr);
+
+  b.setInsertionPointAfter(if_op);
+
+  // Load phase after possible reset.
+  Value phase = b.create<LLVM::LoadOp>(loc, f64, phase_ptr)->getResult(0);
+
+  // Wrap phase into [0, 1)
+  auto one = b.create<arith::ConstantFloatOp>(loc, f64, APFloat(1.0));
+  Value phase_mod = b.create<arith::RemFOp>(loc, phase, one);
+  Value phase_lt0 = b.create<arith::CmpFOp>(
+      loc, arith::CmpFPredicate::OLT, phase_mod,
+      b.create<arith::ConstantFloatOp>(loc, f64, APFloat(0.0)));
+  Value phase_wrapped = b.create<arith::SelectOp>(
+      loc, phase_lt0, b.create<arith::AddFOp>(loc, phase_mod, one), phase_mod);
+
+  // Sample using bufread(node_ptr, phase)
+  auto bufread_ty = LLVM::LLVMFunctionType::get(f64, {ptr_ty, f64}, false);
+  auto bufread_fn = declare_extern(ctx.mod, b, "ylc_bufread", bufread_ty);
+  Value sample = b.create<LLVM::CallOp>(loc, bufread_fn,
+                                        ValueRange{node_ptr, phase_wrapped})
+                     .getResult();
+
+  // Compute phase increment: rate / buf_size
+  auto bufsize_ty = LLVM::LLVMFunctionType::get(i64_ty, {ptr_ty}, false);
+  auto bufsize_fn = declare_extern(ctx.mod, b, "ylc_bufsize", bufsize_ty);
+  Value bufsize_i64 =
+      b.create<LLVM::CallOp>(loc, bufsize_fn, ValueRange{node_ptr}).getResult();
+
+  Value zero_i64 =
+      b.create<LLVM::ConstantOp>(loc, i64_ty, b.getI64IntegerAttr(0));
+  Value size_ok = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sgt,
+                                          bufsize_i64, zero_i64);
+  Value bufsize_f64 = b.create<arith::SIToFPOp>(loc, f64, bufsize_i64);
+  Value bufsize_safe =
+      b.create<arith::SelectOp>(loc, size_ok, bufsize_f64, one);
+  Value inc = b.create<arith::DivFOp>(loc, rate, bufsize_safe);
+
+  Value next_phase = b.create<arith::AddFOp>(loc, phase, inc);
+  Value next_mod = b.create<arith::RemFOp>(loc, next_phase, one);
+  Value next_lt0 = b.create<arith::CmpFOp>(
+      loc, arith::CmpFPredicate::OLT, next_mod,
+      b.create<arith::ConstantFloatOp>(loc, f64, APFloat(0.0)));
+  Value next_wrapped = b.create<arith::SelectOp>(
+      loc, next_lt0, b.create<arith::AddFOp>(loc, next_mod, one), next_mod);
+
+  b.create<LLVM::StoreOp>(loc, next_wrapped, phase_ptr);
+  if (has_prev_ptr) {
+    b.create<LLVM::StoreOp>(loc, trig, prev_ptr);
+  }
+
+  return sample;
 }
 
 // bufread node_ptr phase -> f64
@@ -650,14 +807,18 @@ Value WrapHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
 
 // Extract a compile-time constant from a numeric AST node.
 static double ast_const_double(Ast *a) {
-  if (!a)
+  if (!a) {
     return 0.0;
-  if (a->tag == AST_DOUBLE)
+  }
+  if (a->tag == AST_DOUBLE) {
     return a->data.AST_DOUBLE.value;
-  if (a->tag == AST_FLOAT)
+  }
+  if (a->tag == AST_FLOAT) {
     return (double)a->data.AST_FLOAT.value;
-  if (a->tag == AST_INT)
+  }
+  if (a->tag == AST_INT) {
     return (double)a->data.AST_INT.value;
+  }
   return 0.0;
 }
 
@@ -871,6 +1032,109 @@ static Value ClampHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
                   ->getResult(0);
   return b.create<arith::SelectOp>(loc, cmp, clamp_threshold, val)
       ->getResult(0);
+}
+
+static Value TrigFnHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+  print_ast(ast);
+  return {};
+}
+
+static Value TrigChooseHandler(Ast *ast, DspBuildCtx &ctx,
+                               JITLangCtx *jit_ctx) {
+
+  Ast *args = ast->data.AST_APPLICATION.args;
+  Value arr = build_dsp_expr(&args[0], ctx, jit_ctx);
+
+  Value trig_sig = build_dsp_expr(&args[1], ctx, jit_ctx);
+
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+
+  auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
+  auto i64_ty = b.getI64Type();
+  auto f64_ty = b.getF64Type();
+
+  Value prev_trig;
+  Value prev_ptr;
+  bool has_prev_ptr = false;
+  if (auto op = trig_sig.getDefiningOp<PhasorTrigOp>()) {
+    prev_trig = op->getResult(1);
+  } else {
+    auto off = ctx.state_offset;
+    ctx.state_offset += 8;
+    Value off_val =
+        b.create<LLVM::ConstantOp>(loc, i64_ty, b.getI64IntegerAttr(off));
+    prev_ptr = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), ctx.state_ptr,
+                                     ValueRange{off_val});
+    prev_trig = b.create<LLVM::LoadOp>(loc, f64_ty, prev_ptr)->getResult(0);
+    has_prev_ptr = true;
+  }
+
+  int out_val_off = ctx.state_offset;
+  ctx.state_offset += 8;
+
+  auto half =
+      b.create<arith::ConstantFloatOp>(loc, b.getF64Type(), APFloat(0.5));
+
+  Value prev_lt =
+      b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OLT, prev_trig, half);
+  Value curr_ge =
+      b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OGE, trig_sig, half);
+
+  Value cmp = b.create<arith::AndIOp>(loc, prev_lt, curr_ge);
+
+  Value out_val_off_val =
+      b.create<LLVM::ConstantOp>(loc, i64_ty, b.getI64IntegerAttr(out_val_off));
+  Value out_val_ptr = b.create<LLVM::GEPOp>(
+      loc, ptr_ty, b.getI8Type(), ctx.state_ptr, ValueRange{out_val_off_val});
+
+  auto if_op = b.create<scf::IfOp>(loc, cmp);
+  auto &then_blk = if_op.getThenRegion().front();
+  b.setInsertionPointToStart(&then_blk);
+
+  int len = -1;
+  if (args[0].tag == AST_IDENTIFIER) {
+    std::string name(args[0].data.AST_IDENTIFIER.value,
+                     args[0].data.AST_IDENTIFIER.length);
+    auto it = ctx.array_states.find(name);
+    if (it != ctx.array_states.end()) {
+      len = it->second.len;
+    }
+  } else if (args[0].tag == AST_ARRAY) {
+    len = (int)args[0].data.AST_LIST.len;
+  }
+  if (len <= 0) {
+    fprintf(stderr, "trig_choose: could not resolve array length\n");
+    print_ast(ast);
+    return {};
+  }
+
+  // rand() % len
+  auto rand_ty = LLVM::LLVMFunctionType::get(b.getI32Type(), {}, false);
+  auto rand_fn = declare_extern(ctx.mod, b, "rand", rand_ty);
+  Value r = b.create<LLVM::CallOp>(loc, rand_fn, ValueRange{}).getResult();
+
+  Value len_i32 =
+      b.create<LLVM::ConstantOp>(loc, b.getI32Type(), b.getI32IntegerAttr(len));
+  Value idx_i32 = b.create<LLVM::URemOp>(loc, r, len_i32);
+
+  Value idx_i64 = b.create<LLVM::ZExtOp>(loc, i64_ty, idx_i32);
+  Value stride =
+      b.create<LLVM::ConstantOp>(loc, i64_ty, b.getI64IntegerAttr(8));
+  Value idx_bytes = b.create<LLVM::MulOp>(loc, idx_i64, stride);
+  Value elem_off = b.create<LLVM::AddOp>(loc, arr, idx_bytes);
+
+  Value elem_ptr = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(),
+                                         ctx.state_ptr, ValueRange{elem_off});
+  Value new_val = b.create<LLVM::LoadOp>(loc, f64_ty, elem_ptr);
+
+  b.create<LLVM::StoreOp>(loc, new_val, out_val_ptr);
+
+  b.setInsertionPointAfter(if_op);
+  if (has_prev_ptr) {
+    b.create<LLVM::StoreOp>(loc, trig_sig, prev_ptr);
+  }
+  return b.create<LLVM::LoadOp>(loc, f64_ty, out_val_ptr);
 }
 
 struct InlinedCtx {
@@ -1186,33 +1450,8 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
       ctx.state_offset += 8 * len;
       ctx.array_states[n] = ArrayStateSpec{base, len};
 
-      // Record literal initializers for node-creation time.
-      for (int i = 0; i < len; i++) {
-        Ast *el = &arr->data.AST_LIST.items[i];
-        double v = 0.0;
-        if (el->tag == AST_DOUBLE) {
-          v = el->data.AST_DOUBLE.value;
-        } else if (el->tag == AST_FLOAT) {
-          v = (double)el->data.AST_FLOAT.value;
-        } else if (el->tag == AST_INT) {
-          v = (double)el->data.AST_INT.value;
-        } else {
-          fprintf(stderr,
-                  "Error: array literal elements must be numeric constants\n");
-          print_ast(el);
-          return {};
-        }
-
-        int off = base + (i * 8);
-        ctx.array_inits.push_back({off, v});
-      }
-
       // Emit the array value as its base offset (i64).
-      auto &b = ctx.b;
-      auto loc = ctx.loc;
-      auto i64_ty = b.getI64Type();
-      Value base_val =
-          b.create<LLVM::ConstantOp>(loc, i64_ty, b.getI64IntegerAttr(base));
+      Value base_val = emit_array_state(arr, ctx, n);
       ctx.locals[n] = base_val;
 
       if (ast->data.AST_LET.in_expr)
@@ -1558,6 +1797,10 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
       }
     }
     break;
+  }
+  case AST_ARRAY: {
+    std::string n = "anonymous_array::" + std::to_string(ctx.state_offset);
+    return emit_array_state(ast, ctx, n);
   }
   default:
     break;
@@ -1930,20 +2173,22 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
 
   // Wire external buffer-ref inlets (existing nodes plugged as hidden inputs).
   if (!result.buf_ref_inputs.empty()) {
-    LLVMTypeRef attach_params[] = {ptr_ty, i32_ty, ptr_ty};
+    LLVMTypeRef attach_params[] = {i32_ty, ptr_ty, ptr_ty};
     LLVMTypeRef attach_fn_ty = LLVMFunctionType(void_ty, attach_params, 3, 0);
     LLVMValueRef attach_fn =
-        LLVMGetNamedFunction(module_ref, "ylc_attach_node_inlet");
+        LLVMGetNamedFunction(module_ref, "plug_input_in_graph");
+
     if (!attach_fn) {
       attach_fn =
-          LLVMAddFunction(module_ref, "ylc_attach_node_inlet", attach_fn_ty);
+          LLVMAddFunction(module_ref, "plug_input_in_graph", attach_fn_ty);
       LLVMSetLinkage(attach_fn, LLVMExternalLinkage);
     }
+
     for (auto &bri : result.buf_ref_inputs) {
       LLVMValueRef source = bri.sym->val;
       if (bri.sym->type == STYPE_TOP_LEVEL_VAR && bri.sym->storage)
         source = LLVMBuildLoad2(builder, ptr_ty, bri.sym->storage, "buf_node");
-      LLVMValueRef args[] = {node_val, LLVMConstInt(i32_ty, bri.inlet_idx, 0),
+      LLVMValueRef args[] = {LLVMConstInt(i32_ty, bri.inlet_idx, 0), node_val,
                              source};
       LLVMBuildCall2(builder, attach_fn_ty, attach_fn, args, 3, "");
     }
@@ -2095,7 +2340,7 @@ __attribute__((constructor)) static void ylc_audio_jit_init() {
   DSP_BUILTIN("sin_osc", SinOscHandler, type_fn(&t_num, &t_num));
   DSP_BUILTIN("sq_osc", SqOscHandler, type_fn(&t_num, &t_num));
   DSP_BUILTIN("saw_osc", SawOscHandler, type_fn(&t_num, &t_num));
-  DSP_BUILTIN("trig", ImpulseHandler, type_fn(&t_num, &t_num));
+  DSP_BUILTIN("trig", PhasorTrigHandler, type_fn(&t_num, &t_num));
   DSP_BUILTIN(
       "linscale", LinscaleHandler,
       type_fn(&t_num,
@@ -2151,4 +2396,11 @@ __attribute__((constructor)) static void ylc_audio_jit_init() {
   DSP_BUILTIN("spf", SpfHandler, type_fn(&t_void, &t_num));
   DSP_BUILTIN("clampup", ClampHandler,
               type_fn(&t_num, type_fn(&t_num, &t_num)));
+
+  DSP_BUILTIN("trig_fn", TrigFnHandler, nullptr);
+  DSP_BUILTIN("trig_choose", TrigChooseHandler, nullptr);
+  DSP_BUILTIN(
+      "bufplay", BufPlayHandler,
+      type_fn(&t_ptr,
+              type_fn(&t_num, type_fn(&t_num, type_fn(&t_num, &t_num)))));
 }

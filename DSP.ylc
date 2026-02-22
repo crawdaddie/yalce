@@ -27,7 +27,14 @@ let bufref = extern fn Ptr -> Ptr;
 let bufread = extern fn Double -> Ptr -> Double;
 let lfnoise0 = extern fn Double -> Double -> Double -> Double;
 let lfnoise1 = extern fn Double -> Double -> Double -> Double;
+let trig_choose = extern fn Array of T -> Double -> T ;
 let spf = extern fn () -> Double;
+#                       buf    rate      start_pos trig
+let bufplay = extern fn Ptr -> Double -> Double -> Double -> Double;
+
+
+let compile_audio_fn = extern fn T -> Synth;
+let register_audio_op = extern fn T -> Int;
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
 
 import std/Math;
@@ -234,24 +241,25 @@ register_audio_op (
   ;
 );
 
-# register_audio_op (let pump = fn f sp-> 
-#   let cutoff = (phasor (-1. * sp) |> unipolar_scale 100. 800. ) in
-#   let ff = f + lfnoise1 0 10 1 in
-#   0.3 * (saw_osc ff + saw_osc (ff * 1.01) + saw_osc (ff * 1.02) + saw_osc (ff * 0.5))
-#   |> Filter.lpf cutoff 2.
-#   ;
-# );
-#
+register_audio_op (let pump = fn sp f-> 
+  let cutoff = phasor (-1. * sp) |> unipolar_scale 100. 800. in
+  let ff = f + lfnoise1 0 10 1 in
+  0.3 * (saw_osc ff + saw_osc (ff * 1.01) + saw_osc (ff * 1.02) + saw_osc (ff * 0.5))
+  |> Filter.lpf cutoff 2.
+  ;
+);
+
 # let _ = compile_audio_fn (fn () -> 
 #   pump (lfnoise0 100. 300. 8) 8
 # ) |> play_node
 #
 
 
-let _ = compile_audio_fn (fn () ->
-  let arr = [|200., 400., 300., 600., 800.|];
-  trig 4 |> trig_choose arr |> saw_osc  
-) |> play_node
+# let _ = compile_audio_fn (fn () ->
+#   trig 8
+#   |> trig_choose [|100., 200., 150., 300., 400., 50.|]
+#   |> pump 8
+# ) |> play_node
 
 # let _ = compile_audio_fn (fn () -> 
 #   let cutoff = (phasor -9. |> unipolar_scale 100. 800. ) in
@@ -259,7 +267,11 @@ let _ = compile_audio_fn (fn () ->
 #   |> Filter.ladder cutoff 40. 100.
 # ) |> play_node
 
-# let amen = load_soundfile "whisper.wav";
+# let amen = load_soundfile "fat_amen_mono_48000.wav";
+# let _ = compile_audio_fn (fn () -> 
+#   phasor 0.7 |> bufread (bufref amen)
+# ) |> play_node
+#
 
 
 
@@ -271,9 +283,4 @@ let _ = compile_audio_fn (fn () ->
 #     let saw_detune = fn f -> saw_osc f + saw_osc (f * 1.01);;
 #
 # );
-#
-# let _ = compile_audio_fn (fn () -> 
-#   let (sz, data) = bufdata amen;
-#   phasor 0.7 |> bufread sz data
-# ) |> play_node
 #

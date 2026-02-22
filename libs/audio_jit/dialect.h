@@ -21,7 +21,6 @@ namespace mlir {
 class InletOp;
 class OutletOp;
 class PhasorOp;
-class BufplayOp;
 class EnvAslrOp;
 class DelayOp;
 class Delay1Op;
@@ -29,6 +28,7 @@ class AllpassOp;
 class Allpass1Op;
 class WhiteNoiseOp;
 class BufReadOp;
+class PhasorTrigOp;
 
 // =============================================================================
 // DspDialect
@@ -140,6 +140,32 @@ public:
   }
 };
 
+// dsp.phasor_trig %state_ptr, %freq, %spf {state_offset}
+//                : (!llvm.ptr, f64, f64) -> (f64, f64)
+// Stateful phasor-backed trigger returning (trig, prev_trig).
+// State: phase f64 + prev_trig f64 (16 bytes).
+// trig is 1.0 when phase == 0.0 (initially and on wrap), else 0.0.
+class PhasorTrigOp
+    : public Op<PhasorTrigOp, OpTrait::ZeroRegions, OpTrait::NResults<2>::Impl,
+                OpTrait::ZeroSuccessors, OpTrait::NOperands<3>::Impl> {
+public:
+  using Op::Op;
+  static StringRef getOperationName() { return "dsp.phasor_trig"; }
+  static ArrayRef<StringRef> getAttributeNames() {
+    static StringRef n[] = {"state_offset"};
+    return n;
+  }
+  static void build(OpBuilder &b, OperationState &s, Value state_ptr,
+                    Value freq, Value spf, int32_t state_offset) {
+    s.addOperands({state_ptr, freq, spf});
+    s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
+    s.addTypes({b.getF64Type(), b.getF64Type()});
+  }
+  int32_t getStateOffset() {
+    return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();
+  }
+};
+
 class LinscaleOp
     : public Op<LinscaleOp, OpTrait::ZeroRegions, OpTrait::OneResult,
                 OpTrait::ZeroSuccessors, OpTrait::NOperands<5>::Impl> {
@@ -202,32 +228,6 @@ public:
   Value getPhase() { return getOperand(2); }
   Value getBufPtr() { return getOperand(1); }
   Value getSize() { return getOperand(0); }
-};
-
-// dsp.bufplay %state_ptr, %rate, %trig {state_offset} : (!llvm.ptr, f64, f64)
-// -> f64 Stateful buffer player. State: phase f64 + prev_trig f64 (16 bytes).
-class BufplayOp
-    : public Op<BufplayOp, OpTrait::ZeroRegions, OpTrait::OneResult,
-                OpTrait::ZeroSuccessors, OpTrait::NOperands<3>::Impl> {
-public:
-  using Op::Op;
-  static StringRef getOperationName() { return "dsp.bufplay"; }
-  static ArrayRef<StringRef> getAttributeNames() {
-    static StringRef n[] = {"state_offset"};
-    return n;
-  }
-  static void build(OpBuilder &b, OperationState &s, Value state_ptr,
-                    Value rate, Value trig, int32_t state_offset) {
-    s.addOperands({state_ptr, rate, trig});
-    s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
-    s.addTypes(b.getF64Type());
-  }
-  Value getStatePtr() { return getOperand(0); }
-  Value getRate() { return getOperand(1); }
-  Value getTrig() { return getOperand(2); }
-  int32_t getStateOffset() {
-    return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();
-  }
 };
 
 // dsp.env_aslr %state_ptr, %attack, %sus_lvl, %sus_dur, %release, %trig

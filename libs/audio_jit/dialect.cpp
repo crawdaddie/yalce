@@ -130,8 +130,8 @@ extern "C" double ylc_allpass1(void *state_raw, int32_t state_offset,
 
 DspDialect::DspDialect(MLIRContext *ctx)
     : Dialect("dsp", ctx, TypeID::get<DspDialect>()) {
-  addOperations<InletOp, OutletOp, PhasorOp, ImpulseOp, TableLookupOp,
-                BufReadOp, BufplayOp, EnvAslrOp, LinscaleOp, DelayOp, Delay1Op,
+  addOperations<InletOp, OutletOp, PhasorOp, ImpulseOp, PhasorTrigOp,
+                TableLookupOp, BufReadOp, LinscaleOp, DelayOp, Delay1Op,
                 AllpassOp, Allpass1Op, WhiteNoiseOp>();
 }
 
@@ -225,6 +225,63 @@ struct PhasorOpLowering : public ConversionPattern {
 
     r.create<LLVM::StoreOp>(loc, next, phase_ptr);
     r.replaceOp(op, phase); // return pre-advance phase
+    return success();
+  }
+};
+
+// PhasorTrigOp: phasor-backed trigger with prev_trig state.
+// State layout: [phase: f64][prev_trig: f64].
+// Returns (trig, prev_trig). trig = 1.0 when phase == 0.0 else 0.0.
+struct PhasorTrigOpLowering : public ConversionPattern {
+  PhasorTrigOpLowering(MLIRContext *ctx)
+      : ConversionPattern(PhasorTrigOp::getOperationName(), 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                                ConversionPatternRewriter &r) const override {
+    auto imp = cast<PhasorTrigOp>(op);
+    auto loc = op->getLoc();
+    auto ptr = LLVM::LLVMPointerType::get(op->getContext());
+    auto f64 = r.getF64Type();
+    auto i64 = r.getI64Type();
+
+    // GEP: state_ptr + state_offset → &phase
+    Value off_val = r.create<LLVM::ConstantOp>(
+        loc, i64, r.getI64IntegerAttr(imp.getStateOffset()));
+    Value phase_ptr = r.create<LLVM::GEPOp>(loc, ptr, r.getI8Type(),
+                                            operands[0], ValueRange{off_val});
+
+    // prev_trig is stored immediately after phase.
+    Value prev_off_val =
+        r.create<LLVM::ConstantOp>(loc, i64, r.getI64IntegerAttr(8));
+    Value prev_ptr = r.create<LLVM::GEPOp>(loc, ptr, r.getI8Type(), phase_ptr,
+                                           ValueRange{prev_off_val});
+
+    auto fmf =
+        LLVM::FastmathFlagsAttr::get(r.getContext(), LLVM::FastmathFlags::fast);
+
+    Value phase = r.create<LLVM::LoadOp>(loc, f64, phase_ptr);
+    Value prev_trig = r.create<LLVM::LoadOp>(loc, f64, prev_ptr);
+
+    // trig = (phase == 0.0) ? 1.0 : 0.0
+    Value zero = r.create<LLVM::ConstantOp>(loc, f64, r.getF64FloatAttr(0.0));
+    Value one = r.create<LLVM::ConstantOp>(loc, f64, r.getF64FloatAttr(1.0));
+    Value is_zero =
+        r.create<LLVM::FCmpOp>(loc, LLVM::FCmpPredicate::oeq, phase, zero);
+    Value trig = r.create<LLVM::UIToFPOp>(loc, f64, is_zero);
+
+    // Advance phase (same wrap semantics as PhasorOpLowering).
+    Value step = r.create<LLVM::FMulOp>(loc, operands[1], operands[2], fmf);
+    Value advanced = r.create<LLVM::FAddOp>(loc, phase, step, fmf);
+    Value ovf =
+        r.create<LLVM::FCmpOp>(loc, LLVM::FCmpPredicate::oge, advanced, one);
+    Value udf =
+        r.create<LLVM::FCmpOp>(loc, LLVM::FCmpPredicate::olt, advanced, zero);
+    Value next = r.create<LLVM::SelectOp>(loc, ovf, zero, advanced);
+    next = r.create<LLVM::SelectOp>(loc, udf, one, next);
+
+    r.create<LLVM::StoreOp>(loc, next, phase_ptr);
+    r.create<LLVM::StoreOp>(loc, trig, prev_ptr);
+
+    r.replaceOp(op, ValueRange{trig, prev_trig});
     return success();
   }
 };
@@ -531,28 +588,30 @@ struct WhiteNoiseLowering : public ConversionPattern {
     return success();
   }
 };
-// BufplayOp and EnvAslrOp: stub lowerings (TODO: full implementations).
-struct BufplayOpLowering : public ConversionPattern {
-  BufplayOpLowering(MLIRContext *ctx)
-      : ConversionPattern(BufplayOp::getOperationName(), 1, ctx) {}
-  LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value>,
-                                ConversionPatternRewriter &r) const override {
-    r.replaceOpWithNewOp<LLVM::ConstantOp>(op, r.getF64Type(),
-                                           r.getF64FloatAttr(0.0));
-    return success();
-  }
-};
-
-struct EnvAslrOpLowering : public ConversionPattern {
-  EnvAslrOpLowering(MLIRContext *ctx)
-      : ConversionPattern(EnvAslrOp::getOperationName(), 1, ctx) {}
-  LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value>,
-                                ConversionPatternRewriter &r) const override {
-    r.replaceOpWithNewOp<LLVM::ConstantOp>(op, r.getF64Type(),
-                                           r.getF64FloatAttr(1.0));
-    return success();
-  }
-};
+// // BufplayOp and EnvAslrOp: stub lowerings (TODO: full implementations).
+// struct BufplayOpLowering : public ConversionPattern {
+//   BufplayOpLowering(MLIRContext *ctx)
+//       : ConversionPattern(BufplayOp::getOperationName(), 1, ctx) {}
+//   LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value>,
+//                                 ConversionPatternRewriter &r) const override
+//                                 {
+//     r.replaceOpWithNewOp<LLVM::ConstantOp>(op, r.getF64Type(),
+//                                            r.getF64FloatAttr(0.0));
+//     return success();
+//   }
+// };
+//
+// struct EnvAslrOpLowering : public ConversionPattern {
+//   EnvAslrOpLowering(MLIRContext *ctx)
+//       : ConversionPattern(EnvAslrOp::getOperationName(), 1, ctx) {}
+//   LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value>,
+//                                 ConversionPatternRewriter &r) const override
+//                                 {
+//     r.replaceOpWithNewOp<LLVM::ConstantOp>(op, r.getF64Type(),
+//                                            r.getF64FloatAttr(1.0));
+//     return success();
+//   }
+// };
 
 // =============================================================================
 // DspToLLVMPass
@@ -570,8 +629,8 @@ struct DspToLLVMPass
     RewritePatternSet patterns(&getContext());
     patterns.add<InletOpLowering, OutletOpLowering, PhasorOpLowering,
                  // ImpulseOpLowering,
-                 LinscaleOpLowering, TableLookupOpLowering, BufReadOpLowering,
-                 BufplayOpLowering, EnvAslrOpLowering, DelayOpLowering,
+                 PhasorTrigOpLowering, LinscaleOpLowering,
+                 TableLookupOpLowering, BufReadOpLowering, DelayOpLowering,
                  Delay1OpLowering, AllpassOpLowering, Allpass1OpLowering,
                  WhiteNoiseLowering>(&getContext());
 

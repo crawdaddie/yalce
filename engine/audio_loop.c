@@ -593,8 +593,13 @@ void set_input_conf(char *conf) {
 void set_input_device(_String name) {
   preferred_input_device_name = name.chars;
 }
+static int audio_started = 0;
 
 int init_audio() {
+  if (audio_started) {
+    return 0;
+  }
+
   maketable_sq();
   maketable_sin();
   maketable_saw();
@@ -608,6 +613,7 @@ int init_audio() {
 
   scheduler_event_loop();
   gc_loop(get_audio_ctx());
+  audio_started = 1;
   // midi_setup();
 
   return 0;
