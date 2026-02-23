@@ -29,8 +29,11 @@ let lfnoise0 = extern fn Double -> Double -> Double -> Double;
 let lfnoise1 = extern fn Double -> Double -> Double -> Double;
 let trig_choose = extern fn Array of T -> Double -> T ;
 let spf = extern fn () -> Double;
+let sah = extern fn () -> Double -> Double -> Double;
 #                       buf    rate      start_pos trig
 let bufplay = extern fn Ptr -> Double -> Double -> Double -> Double;
+#                      max_grains   buf    rate      pos       width     trig
+let grains = extern fn Int ->       Ptr -> Double -> Double -> Double -> Double;
 
 
 let compile_audio_fn = extern fn T -> Synth;

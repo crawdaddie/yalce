@@ -2,10 +2,26 @@ open DSP;
 
 # open engine/bindings/Synth;
 
-let amen = load_soundfile "fat_amen_mono_48000.wav";
-let _ = compile_audio_fn (fn () -> 
-  let t = trig 32 in
-  t
-  |> bufplay (bufref amen) 1. (trig_choose [|0., 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875|] (trig 4))
-) |> play_node
+# let amen = load_soundfile "fat_amen_mono_48000.wav";
+# let _ = compile_audio_fn (fn () -> 
+#   let t = trig 32 in
+#   t
+#   |> bufplay (bufref amen) 1. (trig_choose [|0., 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875|] (trig 4))
+# ) |> play_node;
 
+let whispers = load_soundfile "whisper.wav";
+let _ = compile_audio_fn (fn () -> 
+  trig 30
+  |> grains 20
+  (bufref whispers)
+  1.
+  ((phasor 0.005) + ((sin_osc 0.1 |> bipolar_scale 0 1.) * lfnoise0 0. 0.01 30))
+  0.2 
+) |> play_node;
+
+# let _ = compile_audio_fn (fn () -> 
+#   let t = trig 16 in
+#   t
+#   |> bufplay (bufref amen) 1. @@ sin_osc 0.07
+# ) |> play_node
+#
