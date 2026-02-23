@@ -178,8 +178,6 @@ LLVMValueRef codegen_inline_module(Ast *binding, Ast *module_ast,
 
     module->ref = module_symbol;
   }
-  printf("CODEGEN INLINE MODULE\n");
-  print_ast(module_ast);
 
   // return module_symbol->val;
   return LLVMConstInt(LLVMInt32Type(), 0, 0);

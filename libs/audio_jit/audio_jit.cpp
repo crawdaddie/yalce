@@ -778,20 +778,21 @@ Value GrainsHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
       b.create<LLVM::CallOp>(loc, bufsize_fn, ValueRange{buf}).getResult();
 
   auto get_buf_ty = LLVM::LLVMFunctionType::get(ptr_ty, {ptr_ty}, false);
-  auto get_buf_fn = declare_extern(ctx.mod, b, "ylc_get_output_buf", get_buf_ty);
+  auto get_buf_fn =
+      declare_extern(ctx.mod, b, "ylc_get_output_buf", get_buf_ty);
   Value buf_ptr =
       b.create<LLVM::CallOp>(loc, get_buf_fn, ValueRange{buf}).getResult();
 
   Value max_grains_val =
       b.create<LLVM::ConstantOp>(loc, i32, b.getI32IntegerAttr(max_grains));
-  Value sample = b.create<LLVM::CallOp>(
-                      loc, fn,
-                      ValueRange{buf_ptr, buf_size_i64, trig, prev_trig, pos,
-                                 rate, width, ctx.spf, max_grains_val,
-                                 rates_ptr, phases_ptr, widths_ptr,
-                                 remaining_ptr, starts_ptr, active_ptr,
-                                 active_grains_ptr})
-                     .getResult();
+  Value sample =
+      b.create<LLVM::CallOp>(loc, fn,
+                             ValueRange{buf_ptr, buf_size_i64, trig, prev_trig,
+                                        pos, rate, width, ctx.spf,
+                                        max_grains_val, rates_ptr, phases_ptr,
+                                        widths_ptr, remaining_ptr, starts_ptr,
+                                        active_ptr, active_grains_ptr})
+          .getResult();
 
   if (has_prev_ptr) {
     b.create<LLVM::StoreOp>(loc, trig, prev_ptr);
