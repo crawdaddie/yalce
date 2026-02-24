@@ -141,12 +141,12 @@ public:
 };
 
 // dsp.phasor_trig %state_ptr, %freq, %spf {state_offset}
-//                : (!llvm.ptr, f64, f64) -> (f64, f64)
-// Stateful phasor-backed trigger returning (trig, prev_trig).
-// State: phase f64 + prev_trig f64 (16 bytes).
+//                : (!llvm.ptr, f64, f64) -> f64
+// Stateful phasor-backed trigger returning trig only.
+// State: phase f64 (8 bytes).
 // trig is 1.0 when phase == 0.0 (initially and on wrap), else 0.0.
 class PhasorTrigOp
-    : public Op<PhasorTrigOp, OpTrait::ZeroRegions, OpTrait::NResults<2>::Impl,
+    : public Op<PhasorTrigOp, OpTrait::ZeroRegions, OpTrait::OneResult,
                 OpTrait::ZeroSuccessors, OpTrait::NOperands<3>::Impl> {
 public:
   using Op::Op;
@@ -159,7 +159,7 @@ public:
                     Value freq, Value spf, int32_t state_offset) {
     s.addOperands({state_ptr, freq, spf});
     s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
-    s.addTypes({b.getF64Type(), b.getF64Type()});
+    s.addTypes(b.getF64Type());
   }
   int32_t getStateOffset() {
     return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();

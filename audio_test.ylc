@@ -20,6 +20,14 @@ let _ = compile_audio_fn (fn () ->
   ((phasor 0.005) + ((sin_osc 0.1 |> bipolar_scale 0 1.) * lfnoise0 0. 0.05 30))
   0.2 
 ) |> play_node;
+let buf = load_soundfile "./engine/assets/kick.wav";
+
+
+import std/Math;
+let _ = compile_audio_fn (fn () -> 
+  let s = trig 8 |> bufplay (bufref buf) (44100 / 48000) 0.  ;
+  s + Math.sin (7. * s)
+) |> play_node;
 
 # let _ = compile_audio_fn (fn () -> 
 #   let t = trig 16 in

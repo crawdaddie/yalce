@@ -229,9 +229,9 @@ struct PhasorOpLowering : public ConversionPattern {
   }
 };
 
-// PhasorTrigOp: phasor-backed trigger with prev_trig state.
-// State layout: [phase: f64][prev_trig: f64].
-// Returns (trig, prev_trig). trig = 1.0 when phase == 0.0 else 0.0.
+// PhasorTrigOp: phasor-backed trigger returning trig only.
+// State layout: [phase: f64].
+// Returns trig. trig = 1.0 when phase == 0.0 else 0.0.
 struct PhasorTrigOpLowering : public ConversionPattern {
   PhasorTrigOpLowering(MLIRContext *ctx)
       : ConversionPattern(PhasorTrigOp::getOperationName(), 1, ctx) {}
@@ -249,17 +249,10 @@ struct PhasorTrigOpLowering : public ConversionPattern {
     Value phase_ptr = r.create<LLVM::GEPOp>(loc, ptr, r.getI8Type(),
                                             operands[0], ValueRange{off_val});
 
-    // prev_trig is stored immediately after phase.
-    Value prev_off_val =
-        r.create<LLVM::ConstantOp>(loc, i64, r.getI64IntegerAttr(8));
-    Value prev_ptr = r.create<LLVM::GEPOp>(loc, ptr, r.getI8Type(), phase_ptr,
-                                           ValueRange{prev_off_val});
-
     auto fmf =
         LLVM::FastmathFlagsAttr::get(r.getContext(), LLVM::FastmathFlags::fast);
 
     Value phase = r.create<LLVM::LoadOp>(loc, f64, phase_ptr);
-    Value prev_trig = r.create<LLVM::LoadOp>(loc, f64, prev_ptr);
 
     // trig = (phase == 0.0) ? 1.0 : 0.0
     Value zero = r.create<LLVM::ConstantOp>(loc, f64, r.getF64FloatAttr(0.0));
@@ -279,9 +272,8 @@ struct PhasorTrigOpLowering : public ConversionPattern {
     next = r.create<LLVM::SelectOp>(loc, udf, one, next);
 
     r.create<LLVM::StoreOp>(loc, next, phase_ptr);
-    r.create<LLVM::StoreOp>(loc, trig, prev_ptr);
 
-    r.replaceOp(op, ValueRange{trig, prev_trig});
+    r.replaceOp(op, ValueRange{trig});
     return success();
   }
 };
@@ -627,12 +619,13 @@ struct DspToLLVMPass
     target.addIllegalDialect<DspDialect>();
 
     RewritePatternSet patterns(&getContext());
-    patterns.add<InletOpLowering, OutletOpLowering, PhasorOpLowering,
-                 // ImpulseOpLowering,
-                 PhasorTrigOpLowering, LinscaleOpLowering,
-                 TableLookupOpLowering, BufReadOpLowering, DelayOpLowering,
-                 Delay1OpLowering, AllpassOpLowering, Allpass1OpLowering,
-                 WhiteNoiseLowering>(&getContext());
+    patterns
+        .add<InletOpLowering, OutletOpLowering, PhasorOpLowering,
+             // ImpulseOpLowering,
+             PhasorTrigOpLowering, LinscaleOpLowering, TableLookupOpLowering,
+             BufReadOpLowering, DelayOpLowering, Delay1OpLowering,
+             AllpassOpLowering, Allpass1OpLowering, WhiteNoiseLowering>(
+            &getContext());
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))

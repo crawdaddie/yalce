@@ -557,13 +557,11 @@ Value ImpulseHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   return b.create<arith::UIToFPOp>(loc, b.getF64Type(), cmp);
 }
 
-// Like ImpulseHandler, but emits dsp.phasor_trig (trig, prev_trig).
-// Returns trig (result 0). prev_trig (result 1) is available to callers that
-// need it at the op level.
+// Like ImpulseHandler, but emits dsp.phasor_trig (trig only).
 Value PhasorTrigHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   Ast *args = ast->data.AST_APPLICATION.args;
   Value freq = build_dsp_expr(args, ctx, jit_ctx);
-  int off = reserve_state(ctx, 16); // phase + prev_trig (2x f64)
+  int off = reserve_state(ctx, 8); // phase
 
   auto &b = ctx.b;
   auto loc = ctx.loc;
@@ -609,8 +607,10 @@ Value BufRefHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   Value prev_trig;                                                             \
   Value prev_ptr;                                                              \
   bool has_prev_ptr = false;                                                   \
+  Value cmp;                                                                   \
   if (auto op = trig.getDefiningOp<PhasorTrigOp>()) {                          \
-    prev_trig = op->getResult(1);                                              \
+    auto one = b.create<arith::ConstantFloatOp>(loc, f64, APFloat(1.0));       \
+    cmp = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OEQ, trig, one);  \
   } else {                                                                     \
     int prev_off = ctx.state_offset;                                           \
     ctx.state_offset += 8;                                                     \
@@ -620,17 +620,16 @@ Value BufRefHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
                                      ctx.state_ptr, ValueRange{prev_off_val}); \
     prev_trig = b.create<LLVM::LoadOp>(loc, f64, prev_ptr)->getResult(0);      \
     has_prev_ptr = true;                                                       \
+    auto half = b.create<arith::ConstantFloatOp>(loc, f64, APFloat(0.5));      \
+                                                                               \
+    Value prev_lt = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OLT,    \
+                                            prev_trig, half);                  \
+    Value curr_ge =                                                            \
+        b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OGE, trig, half);   \
+    cmp = b.create<arith::AndIOp>(loc, prev_lt, curr_ge);                      \
   }                                                                            \
                                                                                \
-  auto half = b.create<arith::ConstantFloatOp>(loc, f64, APFloat(0.5));        \
-                                                                               \
-  Value prev_lt = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OLT,      \
-                                          prev_trig, half);                    \
-  Value curr_ge =                                                              \
-      b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OGE, trig, half);     \
-  Value rising = b.create<arith::AndIOp>(loc, prev_lt, curr_ge);               \
-                                                                               \
-  auto if_op = b.create<scf::IfOp>(loc, rising);                               \
+  auto if_op = b.create<scf::IfOp>(loc, cmp);                                  \
   auto &then_blk = if_op.getThenRegion().front();                              \
   b.setInsertionPointToStart(&then_blk);                                       \
   expr;                                                                        \
@@ -715,8 +714,8 @@ Value GrainsHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   Value prev_trig;
   Value prev_ptr;
   bool has_prev_ptr = false;
-  if (auto op = trig.getDefiningOp<PhasorTrigOp>()) {
-    prev_trig = op->getResult(1);
+  if (trig.getDefiningOp<PhasorTrigOp>()) {
+    prev_trig = b.create<arith::ConstantFloatOp>(loc, f64, APFloat(0.0));
   } else {
     int prev_off = reserve_state(ctx, 8);
     Value prev_off_val =
