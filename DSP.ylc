@@ -37,8 +37,9 @@ let grains = extern fn Int ->       Ptr -> Double -> Double -> Double -> Double;
 let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
 
 # let compile_audio_fn = extern fn T -> (Array of Double -> Ptr);
-type CompiledSynth = (Array of Double -> Synth, Int);
-let compile_audio_fn = extern fn T -> CompiledSynth;
+# type CompiledSynth = (Array of Double -> Synth, Int);
+
+let compile_audio_fn = extern fn T -> (cons: (Array of Double -> Synth),);
 
 let register_audio_op = extern fn T -> Int;
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
