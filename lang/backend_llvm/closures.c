@@ -53,6 +53,14 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
     JITSymbol *callable_sym =
         lookup_id_ast(expr->data.AST_APPLICATION.function, ctx);
 
+    // if (callable_sym->type == STYPE_GENERIC_FUNCTION &&
+    //     callable_sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
+    //
+    //   return
+    //   callable_sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
+    //       expr, ctx, module, builder);
+    // }
+
     if (!callable_sym) {
       fprintf(stderr, "Symbol to curry not found\n");
       return NULL;

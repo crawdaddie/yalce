@@ -199,6 +199,71 @@ extern "C" double grain_samp(double *buf, int64_t buf_size, double trig,
   return sample;
 }
 
+// ADSR envelope per-sample helper.
+// Phase constants: 0=IDLE, 1=ATTACK, 2=DECAY, 3=SUSTAIN, 4=RELEASE
+//
+// Gate/trigger semantics:
+//   Rising edge  → ATTACK
+//   ATTACK done  → DECAY
+//   DECAY done   → SUSTAIN (gate still held) or RELEASE (gate already low)
+//   Falling edge during SUSTAIN → RELEASE
+//   Falling edge during ATTACK/DECAY → no-op; RELEASE when DECAY completes
+//   This means a 1-sample trig naturally gives ATTACK→DECAY→RELEASE.
+//
+// Release rate is 1.0/release_time (from 1.0 to 0 in release_time seconds).
+// If release starts from a lower value the actual duration is proportionally
+// shorter, which is the common-sense musical expectation.
+extern "C" double adsr_samp(double trig, double prev_trig, double attack,
+                            double decay, double sustain, double release,
+                            double spf, double *value_ptr, double *phase_ptr,
+                            double *prev_trig_ptr) {
+  double value = *value_ptr;
+  double phase = *phase_ptr;
+
+  const double threshold = 0.5;
+  int rising = (prev_trig < threshold && trig >= threshold);
+  int falling = (prev_trig >= threshold && trig < threshold);
+
+  if (rising) {
+    phase = 1.0;                        // ATTACK
+  } else if (falling && phase == 3.0) { // falling edge during SUSTAIN
+    phase = 4.0;                        // RELEASE
+  }
+
+  if (phase == 1.0) { // ATTACK
+    double rate = (attack > 0.0) ? (1.0 / attack) : 1e6;
+    value += rate * spf;
+    if (value >= 1.0) {
+      value = 1.0;
+      phase = 2.0; // DECAY
+    }
+  } else if (phase == 2.0) { // DECAY
+    double rate = (decay > 0.0) ? ((1.0 - sustain) / decay) : 1e6;
+    value -= rate * spf;
+    if (value <= sustain) {
+      value = sustain;
+      // If gate is still held go to SUSTAIN; otherwise skip straight to RELEASE
+      phase = (trig >= threshold) ? 3.0 : 4.0;
+    }
+  } else if (phase == 3.0) { // SUSTAIN
+    value = sustain;
+  } else if (phase == 4.0) { // RELEASE
+    double rate = (release > 0.0) ? (1.0 / release) : 1e6;
+    value -= rate * spf;
+    if (value <= 0.0) {
+      value = 0.0;
+      phase = 0.0; // IDLE
+    }
+  } else { // IDLE
+    value = 0.0;
+  }
+
+  *value_ptr = value;
+  *phase_ptr = phase;
+  *prev_trig_ptr = trig;
+  return value;
+}
+
 // Return the element count of a buffer node.
 extern "C" int64_t ylc_bufsize(void *node_raw) {
   Node *node = reinterpret_cast<Node *>(node_raw);
@@ -557,14 +622,48 @@ Value ImpulseHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   return b.create<arith::UIToFPOp>(loc, b.getF64Type(), cmp);
 }
 
+static double ast_const_double(Ast *a);
+
 // Like ImpulseHandler, but emits dsp.phasor_trig (trig only).
+// Special case: if freq is a constant 0, emit a one-shot trigger
+// (1.0 on the first sample, 0.0 forever after) without a phasor.
 Value PhasorTrigHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   Ast *args = ast->data.AST_APPLICATION.args;
-  Value freq = build_dsp_expr(args, ctx, jit_ctx);
-  int off = reserve_state(ctx, 8); // phase
+
+  bool is_zero_freq =
+      ast_is_const(args, jit_ctx) && ast_const_double(args) == 0.0;
 
   auto &b = ctx.b;
   auto loc = ctx.loc;
+
+  if (is_zero_freq) {
+    // One-shot trigger: use 8 bytes of state as a "fired" flag (f64).
+    // State is zeroed on init, so flag starts at 0.0.
+    // Output: flag == 0.0 ? 1.0 : 0.0, then set flag = 1.0.
+    int off = reserve_state(ctx, 8);
+    auto f64 = b.getF64Type();
+    auto i64 = b.getI64Type();
+    auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
+
+    Value off_val =
+        b.create<LLVM::ConstantOp>(loc, i64, b.getI64IntegerAttr(off));
+    Value flag_ptr = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(),
+                                           ctx.state_ptr, ValueRange{off_val});
+    Value flag = b.create<LLVM::LoadOp>(loc, f64, flag_ptr);
+
+    Value zero = b.create<arith::ConstantFloatOp>(loc, f64, APFloat(0.0));
+    Value one = b.create<arith::ConstantFloatOp>(loc, f64, APFloat(1.0));
+    Value not_fired =
+        b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OEQ, flag, zero);
+    Value trig = b.create<arith::SelectOp>(loc, not_fired, one, zero);
+
+    // Mark as fired.
+    b.create<LLVM::StoreOp>(loc, one, flag_ptr);
+    return trig;
+  }
+
+  Value freq = build_dsp_expr(args, ctx, jit_ctx);
+  int off = reserve_state(ctx, 8); // phase
   auto op = b.create<PhasorTrigOp>(loc, ctx.state_ptr, freq, ctx.spf, off);
   return op->getResult(0);
 }
@@ -680,31 +779,6 @@ Value GrainsHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
   auto i64 = b.getI64Type();
 
-  // std::vector<HoistableCallArg> hc_args;
-  // auto arg = ast_to_const_arg(&args[0], &t_int);
-  // hc_args.push_back(*arg);
-  //
-  // HoistableCall::RetKind rk = HoistableCall::I32;
-  // // Allocate a state slot and record the call
-  // int slot = ctx.state_offset;
-  // ctx.state_offset += 8;
-  // ctx.hoistable_calls.push_back({slot, "", hc_args, rk});
-  //
-  // OpBuilder::InsertionGuard guard(b);
-  // b.restoreInsertionPoint(ctx.hoist_ip);
-  // Value slot_ptr = b.create<LLVM::GEPOp>(
-  //     loc, ptr_ty, b.getI8Type(), ctx.state_ptr,
-  //     ValueRange{b.create<LLVM::ConstantOp>(loc, b.getI64Type(),
-  //                                           b.getI64IntegerAttr(slot))});
-  // mlir::Type load_ty = (rk == HoistableCall::I32) ?
-  // (mlir::Type)b.getI32Type()
-  //                                                 :
-  //                                                 (mlir::Type)b.getF64Type();
-  // Value loaded = b.create<LLVM::LoadOp>(loc, load_ty, slot_ptr);
-  // ctx.hoist_ip = b.saveInsertionPoint();
-  // Value max_grains = loaded;
-  // Value max_grains= build_dsp_expr(&args[0], ctx, jit_ctx);
-
   Value buf = build_dsp_expr(&args[1], ctx, jit_ctx);
   Value rate = build_dsp_expr(&args[2], ctx, jit_ctx);
   Value pos = build_dsp_expr(&args[3], ctx, jit_ctx);
@@ -798,6 +872,59 @@ Value GrainsHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   }
 
   return sample;
+}
+// adsr attack decay sustain release trig → num
+// attack/decay/release are times in seconds; sustain is a level in [0,1].
+// The trig input is treated as a gate: a 1-sample pulse gives
+// ATTACK→DECAY→RELEASE; a held gate holds the SUSTAIN stage until the
+// gate falls.
+Value AdsrHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+  Ast *args = ast->data.AST_APPLICATION.args;
+
+  Value attack = build_dsp_expr(&args[0], ctx, jit_ctx);
+  Value decay = build_dsp_expr(&args[1], ctx, jit_ctx);
+  Value sustain = build_dsp_expr(&args[2], ctx, jit_ctx);
+  Value release = build_dsp_expr(&args[3], ctx, jit_ctx);
+  Value trig = build_dsp_expr(&args[4], ctx, jit_ctx);
+
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  auto f64 = b.getF64Type();
+  auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
+  auto i64 = b.getI64Type();
+
+  // State: value (f64), phase (f64), prev_trig (f64)
+  int value_off = reserve_state(ctx, 8);
+  int phase_off = reserve_state(ctx, 8);
+  int prev_trig_off = reserve_state(ctx, 8);
+
+  auto make_state_ptr = [&](int off) -> Value {
+    Value off_val =
+        b.create<LLVM::ConstantOp>(loc, i64, b.getI64IntegerAttr(off));
+    return b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), ctx.state_ptr,
+                                 ValueRange{off_val});
+  };
+
+  Value value_ptr = make_state_ptr(value_off);
+  Value phase_ptr = make_state_ptr(phase_off);
+  Value prev_trig_ptr = make_state_ptr(prev_trig_off);
+
+  // Load prev_trig from state for this sample
+  Value prev_trig =
+      b.create<LLVM::LoadOp>(loc, f64, prev_trig_ptr)->getResult(0);
+
+  // adsr_samp(trig, prev_trig, attack, decay, sustain, release, spf,
+  //           value_ptr, phase_ptr, prev_trig_ptr) → f64
+  auto fn_ty = LLVM::LLVMFunctionType::get(
+      f64, {f64, f64, f64, f64, f64, f64, f64, ptr_ty, ptr_ty, ptr_ty}, false);
+  auto fn = declare_extern(ctx.mod, b, "adsr_samp", fn_ty);
+
+  return b
+      .create<LLVM::CallOp>(loc, fn,
+                            ValueRange{trig, prev_trig, attack, decay, sustain,
+                                       release, ctx.spf, value_ptr, phase_ptr,
+                                       prev_trig_ptr})
+      .getResult();
 }
 
 Value BufPlayHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
@@ -2358,14 +2485,15 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
 
   // Count lambda params — used as num_inputs for the Node
   int num_inputs = 0;
-
   for (AstList *p = lambda->data.AST_LAMBDA.params; p; p = p->next) {
     if (p->ast->tag != AST_VOID) {
       num_inputs++;
     }
   }
 
-  std::string fn_name = "synth_perform_" + std::to_string(g_synth_id++);
+  int synth_id = g_synth_id++;
+  std::string fn_name = "synth_perform_" + std::to_string(synth_id);
+  std::string ctor_name = "synth_ctor_" + std::to_string(synth_id);
 
   MLIRContext *mlir_ctx = get_mlir_ctx();
   auto result = build_dsp_module(lambda, fn_name, jit_ctx, mlir_ctx);
@@ -2414,6 +2542,24 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
   LLVMTypeRef f64_ty = LLVMDoubleTypeInContext(llvm_ctx);
   LLVMTypeRef void_ty = LLVMVoidTypeInContext(llvm_ctx);
 
+  // YLC Array of Doubles: {i32 size, ptr data}
+  LLVMTypeRef arr_fields[] = {i32_ty, ptr_ty};
+  LLVMTypeRef ylc_arr_ty = LLVMStructTypeInContext(llvm_ctx, arr_fields, 2, 0);
+
+  // --- Emit a named constructor function: Node* synth_ctor_N({i32, ptr}
+  // params) All node-creation logic lives inside so callers can instantiate the
+  // synth multiple times with different parameter arrays.
+  LLVMTypeRef ctor_param_tys[] = {ylc_arr_ty};
+  LLVMTypeRef ctor_fn_ty = LLVMFunctionType(ptr_ty, ctor_param_tys, 1, 0);
+  LLVMValueRef ctor_fn =
+      LLVMAddFunction(module_ref, ctor_name.c_str(), ctor_fn_ty);
+  LLVMSetLinkage(ctor_fn, LLVMExternalLinkage);
+
+  LLVMBasicBlockRef ctor_bb =
+      LLVMAppendBasicBlockInContext(llvm_ctx, ctor_fn, "entry");
+  LLVMBuilderRef ctor_b = LLVMCreateBuilderInContext(llvm_ctx);
+  LLVMPositionBuilderAtEnd(ctor_b, ctor_bb);
+
   // --- ylc_create_audio_node(perform, num_total_inputs, state_bytes) → Node*
   LLVMTypeRef create_params[] = {ptr_ty, i32_ty, i32_ty};
   LLVMTypeRef create_fn_ty = LLVMFunctionType(ptr_ty, create_params, 3, 0);
@@ -2432,19 +2578,22 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
       LLVMConstInt(i32_ty, state_bytes, 0),
   };
   LLVMValueRef node_val =
-      LLVMBuildCall2(builder, create_fn_ty, create_fn, create_args, 3, "node");
+      LLVMBuildCall2(ctor_b, create_fn_ty, create_fn, create_args, 3, "node");
 
   // Wire delay-buffer inlets.
   if (!buf_inputs.empty())
-    wire_node_bufs(buf_inputs, node_val, module_ref, builder);
+    wire_node_bufs(buf_inputs, node_val, module_ref, ctor_b);
 
   // Wire external buffer-ref inlets (existing nodes plugged as hidden inputs).
+  // Top-level vars have globally-allocated storage accessible from any
+  // function. For locals captured at definition time, spill to a module-level
+  // global so the ctor can load them without referencing outer-function SSA
+  // values.
   if (!result.buf_ref_inputs.empty()) {
     LLVMTypeRef attach_params[] = {i32_ty, ptr_ty, ptr_ty};
     LLVMTypeRef attach_fn_ty = LLVMFunctionType(void_ty, attach_params, 3, 0);
     LLVMValueRef attach_fn =
         LLVMGetNamedFunction(module_ref, "plug_input_in_graph");
-
     if (!attach_fn) {
       attach_fn =
           LLVMAddFunction(module_ref, "plug_input_in_graph", attach_fn_ty);
@@ -2452,27 +2601,41 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
     }
 
     for (auto &bri : result.buf_ref_inputs) {
-      LLVMValueRef source = bri.sym->val;
-      if (bri.sym->type == STYPE_TOP_LEVEL_VAR && bri.sym->storage)
-        source = LLVMBuildLoad2(builder, ptr_ty, bri.sym->storage, "buf_node");
+      LLVMValueRef source;
+      if (bri.sym->type == STYPE_TOP_LEVEL_VAR && bri.sym->storage) {
+        // Global storage — directly loadable from inside the ctor.
+        source = LLVMBuildLoad2(ctor_b, ptr_ty, bri.sym->storage, "buf_node");
+      } else {
+        // Local SSA value — spill to a module global at definition time so the
+        // ctor can load it without crossing function boundaries.
+        std::string cap_name =
+            ctor_name + "_cap_" + std::to_string(bri.inlet_idx);
+        LLVMValueRef cap_global =
+            LLVMAddGlobal(module_ref, ptr_ty, cap_name.c_str());
+        LLVMSetLinkage(cap_global, LLVMInternalLinkage);
+        LLVMSetInitializer(cap_global, LLVMConstNull(ptr_ty));
+        LLVMBuildStore(builder, bri.sym->val, cap_global);
+        source = LLVMBuildLoad2(ctor_b, ptr_ty, cap_global, "buf_node");
+      }
       LLVMValueRef args[] = {LLVMConstInt(i32_ty, bri.inlet_idx, 0), node_val,
                              source};
-      LLVMBuildCall2(builder, attach_fn_ty, attach_fn, args, 3, "");
+      LLVMBuildCall2(ctor_b, attach_fn_ty, attach_fn, args, 3, "");
     }
   }
 
-  // --- Emit hoistable-call initialization ---
-  // For each call that was identified as having all-constant args, call the
-  // extern function now (at node-creation time) and store the result into the
-  // node's state buffer at the pre-allocated slot.
-  if (!result.hoistable_calls.empty()) {
-    hoist_constant_calls(result.hoistable_calls, node_val, module_ref, builder);
-  }
-  if (!result.array_inits.empty()) {
-    hoist_array_inits(result.array_inits, node_val, module_ref, builder);
-  }
+  // Hoist constant-call and array-literal initialization into the ctor.
+  if (!result.hoistable_calls.empty())
+    hoist_constant_calls(result.hoistable_calls, node_val, module_ref, ctor_b);
+  if (!result.array_inits.empty())
+    hoist_array_inits(result.array_inits, node_val, module_ref, ctor_b);
 
-  return node_val;
+  LLVMBuildRet(ctor_b, node_val);
+  LLVMDisposeBuilder(ctor_b);
+  LLVMDumpValue(ctor_fn);
+
+  // Return the constructor function — callers invoke it with a YLC Array of
+  // Doubles to create a Node*.
+  return ctor_fn;
 }
 
 extern "C" LLVMValueRef _register_let(Ast *let, JITLangCtx *jit_ctx,
@@ -2674,9 +2837,16 @@ __attribute__((constructor)) static void ylc_audio_jit_init() {
   DSP_BUILTIN("sah", SahHandler, type_fn(&t_num, type_fn(&t_num, &t_num)));
   DSP_BUILTIN(
       "grains", GrainsHandler,
-
       type_fn(
           &t_ptr,
+          type_fn(&t_num,
+                  type_fn(&t_num, type_fn(&t_num, type_fn(&t_num, &t_num))))));
+
+  // adsr attack decay sustain release trig → num
+  DSP_BUILTIN(
+      "adsr", AdsrHandler,
+      type_fn(
+          &t_num,
           type_fn(&t_num,
                   type_fn(&t_num, type_fn(&t_num, type_fn(&t_num, &t_num))))));
 }

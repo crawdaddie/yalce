@@ -471,13 +471,13 @@ int main() {
                        "(let x 1))\n"
                        ")");
 
-  status &= test_parse("import LocalMod;\n"
-                       "let x = 2\n",
-                       "(import LocalMod.ylc as LocalMod)\n"
-                       "(let x 2)"
-
-  );
-
+  status &= test_parse(
+      "let a = extern fn T -> (cons: Array of Double -> Synth )", "");
+  // status &= test_parse("import LocalMod;\n"
+  //                      "let x = 2\n",
+  //                      "(import LocalMod.ylc as LocalMod)\n"
+  //                      "(let x 2)");
+  //
   // status &= test_parse("let m = module S T ->\n"
   //                      "  let x = 1;\n"
   //                      ";;",

@@ -11,23 +11,27 @@ open DSP;
 
 
 # let whispers = load_soundfile "fat_amen_mono_48000.wav";
-let whispers = load_soundfile "whisper.wav";
-let _ = compile_audio_fn (fn () -> 
-  trig 30
-  |> grains 20
-  (bufref whispers)
-  1.
-  ((phasor 0.005) + ((sin_osc 0.1 |> bipolar_scale 0 1.) * lfnoise0 0. 0.05 30))
-  0.2 
-) |> play_node;
+# let whispers = load_soundfile "whisper.wav";
+# let _ = compile_audio_fn (fn () -> 
+#   trig 30
+#   |> grains 20
+#   (bufref whispers)
+#   1.
+#   ((phasor 0.005) + ((sin_osc 0.1 |> bipolar_scale 0 1.) * lfnoise0 0. 0.05 30))
+#   0.2 
+# ) |> play_node;
 let buf = load_soundfile "./engine/assets/kick.wav";
 
 
 import std/Math;
-let _ = compile_audio_fn (fn () -> 
-  let s = trig 8 |> bufplay (bufref buf) (44100 / 48000) 0.  ;
+
+let (f,_) = compile_audio_fn (fn () -> 
+  let t = trig 0;
+  let s = t |> bufplay (bufref buf) (44100 / 48000) 0. |> (*) (adsr 0 0.1 0.9 0.44 t);
   s + Math.sin (7. * s)
-) |> play_node;
+);
+
+f [| |] |> play_node;
 
 # let _ = compile_audio_fn (fn () -> 
 #   let t = trig 16 in

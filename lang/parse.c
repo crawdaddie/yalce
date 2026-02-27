@@ -672,6 +672,9 @@ Ast *ast_list(Ast *val) {
 }
 
 Ast *ast_list_push(Ast *list, Ast *val) {
+  if (!val) {
+    return list;
+  }
   Ast *items = list->data.AST_LIST.items;
   list->data.AST_LIST.len++;
   int len = list->data.AST_LIST.len;

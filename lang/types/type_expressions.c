@@ -49,6 +49,8 @@ Type *compute_fn_type(Ast *expr, TICtx *ctx) {
 }
 
 Type *compute_type_expression(Ast *expr, TICtx *ctx) {
+  printf("compute\n");
+  print_ast(expr);
   switch (expr->tag) {
   case AST_VOID: {
     return &t_void;
@@ -76,6 +78,8 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
   }
 
   case AST_TUPLE: {
+    print_ast("compute tuple??\n");
+    print_ast(expr);
     int len = expr->data.AST_LIST.len;
     Type **members = t_alloc(sizeof(Type *) * len);
     const char **names = NULL;

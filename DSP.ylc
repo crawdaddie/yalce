@@ -34,11 +34,15 @@ let sah = extern fn () -> Double -> Double -> Double;
 let bufplay = extern fn Ptr -> Double -> Double -> Double -> Double;
 #                      max_grains   buf    rate      pos       width     trig
 let grains = extern fn Int ->       Ptr -> Double -> Double -> Double -> Double;
+let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
 
+# let compile_audio_fn = extern fn T -> (Array of Double -> Ptr);
+type CompiledSynth = (Array of Double -> Synth, Int);
+let compile_audio_fn = extern fn T -> CompiledSynth;
 
-let compile_audio_fn = extern fn T -> Synth;
 let register_audio_op = extern fn T -> Int;
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
+# Array of Double -> Synth;
 
 import std/Math;
 
