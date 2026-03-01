@@ -270,6 +270,50 @@ extern "C" int64_t ylc_bufsize(void *node_raw) {
   return (int64_t)node->output.size;
 }
 
+// Create a constant-signal node without graph_embed.
+// This avoids polluting the chain tail when _graph is NULL.
+extern "C" Node *ylc_const_inlet(double val) {
+  AudioGraph *graph = _graph;
+  Node *node = allocate_node_in_graph(graph, 0);
+  int saved_idx = node->node_index;
+
+  *node = (Node){
+      .perform = NULL,
+      .node_index = saved_idx,
+      .num_inputs = 0,
+      .state_size = 0,
+      .state_offset = graph ? graph->state_memory_size : 0,
+      .output = (Signal){.layout = 1,
+                         .size = BUF_SIZE,
+                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
+      .meta = (char *)"jit_const_inlet",
+  };
+
+  for (int i = 0; i < BUF_SIZE; i++) {
+    node->output.buf[i] = val;
+  }
+
+  return node;
+}
+
+// Update a const inlet node's buffer.
+extern "C" void ylc_set_const_inlet(Node *node, double val) {
+  if (!node || !node->output.buf) {
+    return;
+  }
+  for (int i = 0; i < node->output.size * node->output.layout; i++) {
+    node->output.buf[i] = val;
+  }
+}
+
+// Fetch the connected input node for a synth inlet.
+extern "C" Node *ylc_get_input_node(Node *node, int32_t inlet_idx) {
+  if (!node) {
+    return NULL;
+  }
+  return (Node *)node->connections[inlet_idx].source_node_index;
+}
+
 // Describes a hidden delay-buffer inlet baked into a compiled synth.
 // Passed as a compile-time-constant array to ylc_create_audio_node so that
 // node creation, delay-buffer allocation, and inlet wiring all happen in one
@@ -2225,10 +2269,10 @@ static DspModuleResult build_dsp_module(Ast *lambda, const std::string &fn_name,
   auto *entry = fn.addEntryBlock(b);
   b.setInsertionPointToStart(entry);
 
-  // Count real (lambda param) inputs so hidden inlets start after them.
+  // Count real (identifier) inputs so hidden inlets start after them.
   int num_real_inputs = 0;
   for (AstList *p = lambda->data.AST_LAMBDA.params; p; p = p->next)
-    if (p->ast->tag != AST_VOID)
+    if (p->ast->tag == AST_IDENTIFIER)
       num_real_inputs++;
 
   DspBuildCtx ctx{b,
@@ -2264,8 +2308,7 @@ static DspModuleResult build_dsp_module(Ast *lambda, const std::string &fn_name,
 
   // Bind lambda params to inlet reads (each param → dsp.inlet idx)
   int inlet_idx = 0;
-  for (AstList *p = lambda->data.AST_LAMBDA.params; p;
-       p = p->next, inlet_idx++) {
+  for (AstList *p = lambda->data.AST_LAMBDA.params; p; p = p->next) {
     Ast *param = p->ast;
     if (param->tag != AST_IDENTIFIER)
       continue;
@@ -2276,6 +2319,7 @@ static DspModuleResult build_dsp_module(Ast *lambda, const std::string &fn_name,
             .create<InletOp>(loc, ctx.inputs_ptr, for_op.getInductionVar(),
                              inlet_idx)
             ->getResult(0);
+    inlet_idx++;
   }
 
   Value result = build_dsp_expr(lambda->data.AST_LAMBDA.body, ctx, jit_ctx);
@@ -2483,10 +2527,10 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
     return LLVMConstInt(LLVMInt32Type(), 0, 0);
   }
 
-  // Count lambda params — used as num_inputs for the Node
+  // Count real (identifier) params — used as num_inputs for the Node
   int num_inputs = 0;
   for (AstList *p = lambda->data.AST_LAMBDA.params; p; p = p->next) {
-    if (p->ast->tag != AST_VOID) {
+    if (p->ast->tag == AST_IDENTIFIER) {
       num_inputs++;
     }
   }
@@ -2539,6 +2583,7 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module_ref);
   LLVMTypeRef ptr_ty = LLVMPointerTypeInContext(llvm_ctx, 0);
   LLVMTypeRef i32_ty = LLVMInt32TypeInContext(llvm_ctx);
+  LLVMTypeRef i64_ty = LLVMInt64TypeInContext(llvm_ctx);
   LLVMTypeRef f64_ty = LLVMDoubleTypeInContext(llvm_ctx);
   LLVMTypeRef void_ty = LLVMVoidTypeInContext(llvm_ctx);
 
@@ -2579,6 +2624,53 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
   };
   LLVMValueRef node_val =
       LLVMBuildCall2(ctor_b, create_fn_ty, create_fn, create_args, 3, "node");
+
+  // Wire real (lambda) inlets from ctor params via ylc_const_inlet.
+  if (num_inputs > 0) {
+    LLVMValueRef ctor_arg0 = LLVMGetParam(ctor_fn, 0);
+    LLVMValueRef params_size =
+        LLVMBuildExtractValue(ctor_b, ctor_arg0, 0, "params_size");
+    LLVMValueRef params_data =
+        LLVMBuildExtractValue(ctor_b, ctor_arg0, 1, "params_data");
+
+    LLVMTypeRef const_inlet_params[] = {f64_ty};
+    LLVMTypeRef const_inlet_fn_ty =
+        LLVMFunctionType(ptr_ty, const_inlet_params, 1, 0);
+    LLVMValueRef const_inlet_fn =
+        LLVMGetNamedFunction(module_ref, "ylc_const_inlet");
+    if (!const_inlet_fn) {
+      const_inlet_fn =
+          LLVMAddFunction(module_ref, "ylc_const_inlet", const_inlet_fn_ty);
+      LLVMSetLinkage(const_inlet_fn, LLVMExternalLinkage);
+    }
+
+    LLVMTypeRef attach_params[] = {i32_ty, ptr_ty, ptr_ty};
+    LLVMTypeRef attach_fn_ty = LLVMFunctionType(void_ty, attach_params, 3, 0);
+    LLVMValueRef attach_fn =
+        LLVMGetNamedFunction(module_ref, "plug_input_in_graph");
+    if (!attach_fn) {
+      attach_fn =
+          LLVMAddFunction(module_ref, "plug_input_in_graph", attach_fn_ty);
+      LLVMSetLinkage(attach_fn, LLVMExternalLinkage);
+    }
+
+    LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+    LLVMValueRef params_data_f64 =
+        LLVMBuildBitCast(ctor_b, params_data, f64_ptr_ty, "params_data_f64");
+
+    for (int i = 0; i < num_inputs; i++) {
+      LLVMValueRef idx_i32 = LLVMConstInt(i32_ty, i, 0);
+      LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, i, 0);
+      LLVMValueRef elem_ptr = LLVMBuildGEP2(ctor_b, f64_ty, params_data_f64,
+                                            &idx_i64, 1, "param_ptr");
+      LLVMValueRef param_val =
+          LLVMBuildLoad2(ctor_b, f64_ty, elem_ptr, "param");
+      LLVMValueRef const_node = LLVMBuildCall2(
+          ctor_b, const_inlet_fn_ty, const_inlet_fn, &param_val, 1, "const_node");
+      LLVMValueRef args[] = {idx_i32, node_val, const_node};
+      LLVMBuildCall2(ctor_b, attach_fn_ty, attach_fn, args, 3, "");
+    }
+  }
 
   // Wire delay-buffer inlets.
   if (!buf_inputs.empty())
