@@ -349,7 +349,12 @@ extern "C" Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
     memset(node->state_ptr, 0, state_bytes);
   }
 
-  return graph_embed(node);
+  // Do NOT call graph_embed() here. The JIT synth is self-contained; all DSP
+  // is baked into its perform function. Adding it to _chain_head would cause
+  // play_node() to wrap it in a group node, returning the group instead of the
+  // JIT node — which breaks scalar/trig control messages (NODE_SET_SCALAR etc.)
+  // that need to target the actual synth node.
+  return node;
 }
 
 // Return the state buffer pointer of a node (used by JIT-generated init code).
@@ -2517,75 +2522,26 @@ void wire_node_bufs(std::vector<BufInputSpec> buf_inputs, LLVMValueRef node_val,
     LLVMBuildCall2(builder, attach_fn_ty, attach_fn, args, 3, "");
   }
 }
+LLVMValueRef build_ctor_fn(int synth_id, std::string perform_name,
+                           DspModuleResult &result, int num_inputs,
+                           JITLangCtx *jit_ctx, LLVMModuleRef module_ref,
+                           LLVMBuilderRef builder) {
 
-extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
-                                              LLVMModuleRef module_ref,
-                                              LLVMBuilderRef builder) {
-  Ast *lambda = ast->data.AST_APPLICATION.args;
-  if (!lambda || lambda->tag != AST_LAMBDA) {
-    fprintf(stderr, "compile_audio_fn: expected fn () -> ...\n");
-    return LLVMConstInt(LLVMInt32Type(), 0, 0);
-  }
-
-  // Count real (identifier) params — used as num_inputs for the Node
-  int num_inputs = 0;
-  for (AstList *p = lambda->data.AST_LAMBDA.params; p; p = p->next) {
-    if (p->ast->tag == AST_IDENTIFIER) {
-      num_inputs++;
-    }
-  }
-
-  int synth_id = g_synth_id++;
-  std::string fn_name = "synth_perform_" + std::to_string(synth_id);
-  std::string ctor_name = "synth_ctor_" + std::to_string(synth_id);
-
-  MLIRContext *mlir_ctx = get_mlir_ctx();
-  auto result = build_dsp_module(lambda, fn_name, jit_ctx, mlir_ctx);
   auto &mlir_mod = result.mod;
   int state_bytes = result.state_bytes;
   auto &buf_inputs = result.buf_inputs;
-  if (!mlir_mod) {
-    fprintf(stderr, "compile_audio_fn: DSP IR build failed\n");
-    return LLVMConstInt(LLVMInt32Type(), 0, 0);
-  }
 
-  fprintf(stderr, COLOR_MAGENTA STYLE_BOLD "=== DSP IR ===\n");
-  mlir_mod->dump();
-  fprintf(stderr, "==============\n" STYLE_RESET_ALL);
-
-  if (failed(runMLIRPasses(*mlir_mod, mlir_ctx))) {
-    fprintf(stderr, "compile_audio_fn: lowering failed\n");
-    return LLVMConstInt(LLVMInt32Type(), 0, 0);
-  }
-
-  llvm::Module *mcjit = reinterpret_cast<llvm::Module *>(module_ref);
-  auto llvm_mod = mlir::translateModuleToLLVMIR(*mlir_mod, mcjit->getContext());
-  if (!llvm_mod) {
-    fprintf(stderr, "compile_audio_fn: LLVM IR export failed\n");
-    return LLVMConstInt(LLVMInt32Type(), 0, 0);
-  }
-
-  runLLVMOptPasses(*llvm_mod);
-
-  if (llvm::Linker::linkModules(*mcjit, std::move(llvm_mod))) {
-    fprintf(stderr, "compile_audio_fn: link failed\n");
-    return LLVMConstInt(LLVMInt32Type(), 0, 0);
-  }
+  std::string ctor_name = "synth_ctor_" + std::to_string(synth_id);
 
   int num_total_inputs =
       num_inputs + (int)buf_inputs.size() + (int)result.buf_ref_inputs.size();
-  fprintf(stderr,
-          "compile_audio_fn: OK name=%s real_inputs=%d delay_bufs=%d "
-          "buf_refs=%d state=%d bytes\n",
-          fn_name.c_str(), num_inputs, (int)buf_inputs.size(),
-          (int)result.buf_ref_inputs.size(), state_bytes);
 
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module_ref);
   LLVMTypeRef ptr_ty = LLVMPointerTypeInContext(llvm_ctx, 0);
-  LLVMTypeRef i32_ty = LLVMInt32TypeInContext(llvm_ctx);
-  LLVMTypeRef i64_ty = LLVMInt64TypeInContext(llvm_ctx);
-  LLVMTypeRef f64_ty = LLVMDoubleTypeInContext(llvm_ctx);
-  LLVMTypeRef void_ty = LLVMVoidTypeInContext(llvm_ctx);
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef i64_ty = LLVMInt64Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef void_ty = LLVMVoidType();
 
   // YLC Array of Doubles: {i32 size, ptr data}
   LLVMTypeRef arr_fields[] = {i32_ty, ptr_ty};
@@ -2598,6 +2554,7 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
   LLVMTypeRef ctor_fn_ty = LLVMFunctionType(ptr_ty, ctor_param_tys, 1, 0);
   LLVMValueRef ctor_fn =
       LLVMAddFunction(module_ref, ctor_name.c_str(), ctor_fn_ty);
+
   LLVMSetLinkage(ctor_fn, LLVMExternalLinkage);
 
   LLVMBasicBlockRef ctor_bb =
@@ -2616,7 +2573,9 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
     LLVMSetLinkage(create_fn, LLVMExternalLinkage);
   }
 
-  LLVMValueRef dsp_fn = LLVMGetNamedFunction(module_ref, fn_name.c_str());
+  LLVMValueRef dsp_fn = LLVMGetNamedFunction(module_ref, perform_name.c_str());
+  LLVMDumpValue(dsp_fn);
+  printf("\n");
   LLVMValueRef create_args[] = {
       dsp_fn,
       LLVMConstInt(i32_ty, num_total_inputs, 0),
@@ -2665,8 +2624,9 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
                                             &idx_i64, 1, "param_ptr");
       LLVMValueRef param_val =
           LLVMBuildLoad2(ctor_b, f64_ty, elem_ptr, "param");
-      LLVMValueRef const_node = LLVMBuildCall2(
-          ctor_b, const_inlet_fn_ty, const_inlet_fn, &param_val, 1, "const_node");
+      LLVMValueRef const_node =
+          LLVMBuildCall2(ctor_b, const_inlet_fn_ty, const_inlet_fn, &param_val,
+                         1, "const_node");
       LLVMValueRef args[] = {idx_i32, node_val, const_node};
       LLVMBuildCall2(ctor_b, attach_fn_ty, attach_fn, args, 3, "");
     }
@@ -2723,11 +2683,316 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
 
   LLVMBuildRet(ctor_b, node_val);
   LLVMDisposeBuilder(ctor_b);
-  LLVMDumpValue(ctor_fn);
+  // LLVMDumpValue(ctor_fn);
 
   // Return the constructor function — callers invoke it with a YLC Array of
   // Doubles to create a Node*.
   return ctor_fn;
+}
+
+// Build a JIT function: i32 synth_inlet_index_N({i32 len, ptr data} str)
+// Returns the inlet index for a named real (lambda) parameter, or -1 if not
+// found. The name→index mapping is baked in at compile time via a memcmp chain.
+static LLVMValueRef
+build_inlet_index_fn(int synth_id, const std::vector<std::string> &param_names,
+                     LLVMModuleRef module_ref) {
+  std::string fn_name = "synth_inlet_index_" + std::to_string(synth_id);
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module_ref);
+  LLVMTypeRef ptr_ty = LLVMPointerTypeInContext(llvm_ctx, 0);
+  LLVMTypeRef i8_ty = LLVMInt8TypeInContext(llvm_ctx);
+  LLVMTypeRef i32_ty = LLVMInt32TypeInContext(llvm_ctx);
+  LLVMTypeRef i64_ty = LLVMInt64TypeInContext(llvm_ctx);
+
+  // YLC string: {i32 len, ptr data}
+  LLVMTypeRef str_fields[] = {i32_ty, ptr_ty};
+  LLVMTypeRef ylc_str_ty = LLVMStructTypeInContext(llvm_ctx, str_fields, 2, 0);
+
+  LLVMTypeRef param_tys[] = {ylc_str_ty};
+  LLVMTypeRef fn_ty = LLVMFunctionType(i32_ty, param_tys, 1, 0);
+  LLVMValueRef fn = LLVMAddFunction(module_ref, fn_name.c_str(), fn_ty);
+  LLVMSetLinkage(fn, LLVMExternalLinkage);
+
+  LLVMBuilderRef b = LLVMCreateBuilderInContext(llvm_ctx);
+
+  // entry: unpack the {i32, ptr} string argument
+  LLVMBasicBlockRef entry_bb =
+      LLVMAppendBasicBlockInContext(llvm_ctx, fn, "entry");
+  LLVMPositionBuilderAtEnd(b, entry_bb);
+
+  LLVMValueRef str_arg = LLVMGetParam(fn, 0);
+  LLVMValueRef len_val = LLVMBuildExtractValue(b, str_arg, 0, "len");
+  LLVMValueRef data_ptr = LLVMBuildExtractValue(b, str_arg, 1, "data");
+
+  // declare memcmp: i32 memcmp(ptr, ptr, i64)
+  LLVMTypeRef memcmp_param_tys[] = {ptr_ty, ptr_ty, i64_ty};
+  LLVMTypeRef memcmp_ty = LLVMFunctionType(i32_ty, memcmp_param_tys, 3, 0);
+  LLVMValueRef memcmp_fn = LLVMGetNamedFunction(module_ref, "memcmp");
+  if (!memcmp_fn) {
+    memcmp_fn = LLVMAddFunction(module_ref, "memcmp", memcmp_ty);
+    LLVMSetLinkage(memcmp_fn, LLVMExternalLinkage);
+  }
+
+  // not_found: return -1
+  LLVMBasicBlockRef not_found_bb =
+      LLVMAppendBasicBlockInContext(llvm_ctx, fn, "not_found");
+  LLVMPositionBuilderAtEnd(b, not_found_bb);
+  LLVMBuildRet(b, LLVMConstInt(i32_ty, (unsigned long long)-1, 0));
+
+  // build check chain starting from entry_bb
+  LLVMPositionBuilderAtEnd(b, entry_bb);
+
+  for (int i = 0; i < (int)param_names.size(); i++) {
+    const std::string &name = param_names[i];
+
+    // private global holding the param name bytes (no null terminator needed)
+    std::string gname =
+        "__pname_" + std::to_string(synth_id) + "_" + std::to_string(i);
+    LLVMTypeRef arr_ty = LLVMArrayType(i8_ty, (unsigned)name.size());
+    LLVMValueRef str_global = LLVMAddGlobal(module_ref, arr_ty, gname.c_str());
+    LLVMSetInitializer(str_global,
+                       LLVMConstString(name.c_str(), (unsigned)name.size(), 1));
+    LLVMSetLinkage(str_global, LLVMPrivateLinkage);
+    LLVMSetGlobalConstant(str_global, 1);
+
+    // check length first
+    LLVMValueRef expected_len = LLVMConstInt(i32_ty, name.size(), 0);
+    LLVMValueRef len_ok =
+        LLVMBuildICmp(b, LLVMIntEQ, len_val, expected_len, "len_ok");
+
+    LLVMBasicBlockRef cmp_bb = LLVMAppendBasicBlockInContext(
+        llvm_ctx, fn, ("cmp_" + std::to_string(i)).c_str());
+    LLVMBasicBlockRef next_bb =
+        (i + 1 < (int)param_names.size())
+            ? LLVMAppendBasicBlockInContext(
+                  llvm_ctx, fn, ("next_" + std::to_string(i)).c_str())
+            : not_found_bb;
+
+    LLVMBuildCondBr(b, len_ok, cmp_bb, next_bb);
+
+    // cmp: memcmp the data bytes
+    LLVMPositionBuilderAtEnd(b, cmp_bb);
+    LLVMValueRef memcmp_args[] = {data_ptr, str_global,
+                                  LLVMConstInt(i64_ty, name.size(), 0)};
+    LLVMValueRef cmp_result =
+        LLVMBuildCall2(b, memcmp_ty, memcmp_fn, memcmp_args, 3, "cmp");
+    LLVMValueRef is_match = LLVMBuildICmp(b, LLVMIntEQ, cmp_result,
+                                          LLVMConstInt(i32_ty, 0, 0), "match");
+
+    LLVMBasicBlockRef found_bb = LLVMAppendBasicBlockInContext(
+        llvm_ctx, fn, ("found_" + std::to_string(i)).c_str());
+    LLVMBuildCondBr(b, is_match, found_bb, next_bb);
+
+    LLVMPositionBuilderAtEnd(b, found_bb);
+    LLVMBuildRet(b, LLVMConstInt(i32_ty, i, 0));
+
+    if (next_bb != not_found_bb)
+      LLVMPositionBuilderAtEnd(b, next_bb);
+  }
+
+  if (param_names.empty())
+    LLVMBuildBr(b, not_found_bb);
+
+  LLVMDisposeBuilder(b);
+  return fn;
+}
+
+// Build: ptr synth_set_input_scalar_N(ptr synth, {i32,ptr} name, i64 fo, f64
+// val) Resolves name→index via inlet_index_fn, then calls
+// set_input_scalar_offset.
+static LLVMValueRef build_set_input_scalar_fn(int synth_id,
+                                              LLVMValueRef inlet_index_fn,
+                                              LLVMModuleRef module_ref) {
+  std::string fn_name = "synth_set_input_scalar_" + std::to_string(synth_id);
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module_ref);
+  LLVMTypeRef ptr_ty = LLVMPointerTypeInContext(llvm_ctx, 0);
+  LLVMTypeRef i32_ty = LLVMInt32TypeInContext(llvm_ctx);
+  LLVMTypeRef i64_ty = LLVMInt64TypeInContext(llvm_ctx);
+  LLVMTypeRef f64_ty = LLVMDoubleTypeInContext(llvm_ctx);
+
+  LLVMTypeRef str_fields[] = {i32_ty, ptr_ty};
+  LLVMTypeRef ylc_str_ty = LLVMStructTypeInContext(llvm_ctx, str_fields, 2, 0);
+
+  LLVMTypeRef param_tys[] = {ylc_str_ty, i64_ty, f64_ty, ptr_ty};
+  LLVMTypeRef fn_ty = LLVMFunctionType(ptr_ty, param_tys, 4, 0);
+  LLVMValueRef fn = LLVMAddFunction(module_ref, fn_name.c_str(), fn_ty);
+  LLVMSetLinkage(fn, LLVMExternalLinkage);
+
+  LLVMBuilderRef b = LLVMCreateBuilderInContext(llvm_ctx);
+  LLVMBasicBlockRef entry_bb =
+      LLVMAppendBasicBlockInContext(llvm_ctx, fn, "entry");
+  LLVMPositionBuilderAtEnd(b, entry_bb);
+
+  LLVMValueRef name_arg = LLVMGetParam(fn, 0);
+  LLVMValueRef fo_arg = LLVMGetParam(fn, 1);
+  LLVMValueRef val_arg = LLVMGetParam(fn, 2);
+  LLVMValueRef synth_arg = LLVMGetParam(fn, 3);
+
+  // resolve name → inlet index
+  LLVMTypeRef idx_fn_param_tys[] = {ylc_str_ty};
+  LLVMTypeRef idx_fn_ty = LLVMFunctionType(i32_ty, idx_fn_param_tys, 1, 0);
+  LLVMValueRef idx_args[] = {name_arg};
+  LLVMValueRef idx =
+      LLVMBuildCall2(b, idx_fn_ty, inlet_index_fn, idx_args, 1, "idx");
+
+  // declare set_input_scalar_offset: ptr (ptr, i32, i64, f64)
+  LLVMTypeRef siso_param_tys[] = {ptr_ty, i32_ty, i64_ty, f64_ty};
+  LLVMTypeRef siso_ty = LLVMFunctionType(ptr_ty, siso_param_tys, 4, 0);
+  LLVMValueRef siso_fn =
+      LLVMGetNamedFunction(module_ref, "set_input_scalar_offset");
+  if (!siso_fn) {
+    siso_fn = LLVMAddFunction(module_ref, "set_input_scalar_offset", siso_ty);
+    LLVMSetLinkage(siso_fn, LLVMExternalLinkage);
+  }
+
+  LLVMValueRef siso_args[] = {synth_arg, idx, fo_arg, val_arg};
+  LLVMValueRef result =
+      LLVMBuildCall2(b, siso_ty, siso_fn, siso_args, 4, "result");
+  LLVMBuildRet(b, result);
+
+  LLVMDisposeBuilder(b);
+  return fn;
+}
+
+// Build: ptr synth_set_input_trig_N(ptr synth, {i32,ptr} name, i64 fo)
+// Resolves name→index via inlet_index_fn, then calls set_input_trig_offset.
+static LLVMValueRef build_set_input_trig_fn(int synth_id,
+                                            LLVMValueRef inlet_index_fn,
+                                            LLVMModuleRef module_ref) {
+  std::string fn_name = "synth_set_input_trig_" + std::to_string(synth_id);
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module_ref);
+  LLVMTypeRef ptr_ty = LLVMPointerTypeInContext(llvm_ctx, 0);
+  LLVMTypeRef i32_ty = LLVMInt32TypeInContext(llvm_ctx);
+  LLVMTypeRef i64_ty = LLVMInt64TypeInContext(llvm_ctx);
+
+  LLVMTypeRef str_fields[] = {i32_ty, ptr_ty};
+  LLVMTypeRef ylc_str_ty = LLVMStructTypeInContext(llvm_ctx, str_fields, 2, 0);
+
+  LLVMTypeRef param_tys[] = {ylc_str_ty, i64_ty, ptr_ty};
+  LLVMTypeRef fn_ty = LLVMFunctionType(ptr_ty, param_tys, 3, 0);
+  LLVMValueRef fn = LLVMAddFunction(module_ref, fn_name.c_str(), fn_ty);
+  LLVMSetLinkage(fn, LLVMExternalLinkage);
+
+  LLVMBuilderRef b = LLVMCreateBuilderInContext(llvm_ctx);
+  LLVMBasicBlockRef entry_bb =
+      LLVMAppendBasicBlockInContext(llvm_ctx, fn, "entry");
+  LLVMPositionBuilderAtEnd(b, entry_bb);
+
+  LLVMValueRef name_arg = LLVMGetParam(fn, 0);
+  LLVMValueRef fo_arg = LLVMGetParam(fn, 1);
+  LLVMValueRef synth_arg = LLVMGetParam(fn, 2);
+
+  // resolve name → inlet index
+  LLVMTypeRef idx_fn_param_tys[] = {ylc_str_ty};
+  LLVMTypeRef idx_fn_ty = LLVMFunctionType(i32_ty, idx_fn_param_tys, 1, 0);
+  LLVMValueRef idx_args[] = {name_arg};
+  LLVMValueRef idx =
+      LLVMBuildCall2(b, idx_fn_ty, inlet_index_fn, idx_args, 1, "idx");
+
+  // declare set_input_trig_offset: ptr (ptr, i32, i64)
+  LLVMTypeRef sito_param_tys[] = {ptr_ty, i32_ty, i64_ty};
+  LLVMTypeRef sito_ty = LLVMFunctionType(ptr_ty, sito_param_tys, 3, 0);
+  LLVMValueRef sito_fn =
+      LLVMGetNamedFunction(module_ref, "set_input_trig_offset");
+  if (!sito_fn) {
+    sito_fn = LLVMAddFunction(module_ref, "set_input_trig_offset", sito_ty);
+    LLVMSetLinkage(sito_fn, LLVMExternalLinkage);
+  }
+
+  LLVMValueRef sito_args[] = {synth_arg, idx, fo_arg};
+  LLVMValueRef result =
+      LLVMBuildCall2(b, sito_ty, sito_fn, sito_args, 3, "result");
+  LLVMBuildRet(b, result);
+
+  LLVMDisposeBuilder(b);
+  return fn;
+}
+
+extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
+                                              LLVMModuleRef module_ref,
+                                              LLVMBuilderRef builder) {
+  Ast *lambda = ast->data.AST_APPLICATION.args;
+  if (!lambda || lambda->tag != AST_LAMBDA) {
+    fprintf(stderr, "compile_audio_fn: expected fn () -> ...\n");
+    return LLVMConstInt(LLVMInt32Type(), 0, 0);
+  }
+
+  // Count real (identifier) params and collect their names in inlet order.
+  int num_inputs = 0;
+  std::vector<std::string> param_names;
+  for (AstList *p = lambda->data.AST_LAMBDA.params; p; p = p->next) {
+    if (p->ast->tag == AST_IDENTIFIER) {
+      param_names.push_back(std::string(p->ast->data.AST_IDENTIFIER.value,
+                                        p->ast->data.AST_IDENTIFIER.length));
+      num_inputs++;
+    }
+  }
+
+  int synth_id = g_synth_id++;
+  std::string fn_name = "synth_perform_" + std::to_string(synth_id);
+
+  MLIRContext *mlir_ctx = get_mlir_ctx();
+  auto result = build_dsp_module(lambda, fn_name, jit_ctx, mlir_ctx);
+  auto &mlir_mod = result.mod;
+  int state_bytes = result.state_bytes;
+  auto &buf_inputs = result.buf_inputs;
+
+  if (!mlir_mod) {
+    fprintf(stderr, "compile_audio_fn: DSP IR build failed\n");
+    return LLVMConstInt(LLVMInt32Type(), 0, 0);
+  }
+
+  fprintf(stderr, COLOR_MAGENTA STYLE_BOLD "=== DSP IR ===\n");
+  mlir_mod->dump();
+  fprintf(stderr, "==============\n" STYLE_RESET_ALL);
+
+  if (failed(runMLIRPasses(*mlir_mod, mlir_ctx))) {
+    fprintf(stderr, "compile_audio_fn: lowering failed\n");
+    return LLVMConstInt(LLVMInt32Type(), 0, 0);
+  }
+
+  llvm::Module *mcjit = reinterpret_cast<llvm::Module *>(module_ref);
+  auto llvm_mod = mlir::translateModuleToLLVMIR(*mlir_mod, mcjit->getContext());
+  if (!llvm_mod) {
+    fprintf(stderr, "compile_audio_fn: LLVM IR export failed\n");
+    return LLVMConstInt(LLVMInt32Type(), 0, 0);
+  }
+
+  runLLVMOptPasses(*llvm_mod);
+
+  if (llvm::Linker::linkModules(*mcjit, std::move(llvm_mod))) {
+    fprintf(stderr, "compile_audio_fn: link failed\n");
+    return LLVMConstInt(LLVMInt32Type(), 0, 0);
+  }
+
+  int num_total_inputs =
+      num_inputs + (int)buf_inputs.size() + (int)result.buf_ref_inputs.size();
+
+  fprintf(stderr,
+          "compile_audio_fn: OK name=%s real_inputs=%d delay_bufs=%d "
+          "buf_refs=%d state=%d bytes\n",
+          fn_name.c_str(), num_inputs, (int)buf_inputs.size(),
+          (int)result.buf_ref_inputs.size(), state_bytes);
+
+  LLVMValueRef ctor_fn = build_ctor_fn(synth_id, fn_name, result, num_inputs,
+                                       jit_ctx, module_ref, builder);
+  LLVMValueRef inlet_index_fn =
+      build_inlet_index_fn(synth_id, param_names, module_ref);
+  LLVMValueRef set_scalar_fn =
+      build_set_input_scalar_fn(synth_id, inlet_index_fn, module_ref);
+  LLVMValueRef set_trig_fn =
+      build_set_input_trig_fn(synth_id, inlet_index_fn, module_ref);
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module_ref);
+  LLVMTypeRef ptr_ty = LLVMPointerTypeInContext(llvm_ctx, 0);
+  LLVMTypeRef synth_fns_fields[] = {ptr_ty, ptr_ty, ptr_ty, ptr_ty};
+  LLVMTypeRef synth_fns_ty =
+      LLVMStructTypeInContext(llvm_ctx, synth_fns_fields, 4, 0);
+  LLVMValueRef synth_fns[] = {ctor_fn, inlet_index_fn, set_scalar_fn,
+                              set_trig_fn};
+  return LLVMConstStructInContext(llvm_ctx, synth_fns, 4, 0);
 }
 
 extern "C" LLVMValueRef _register_let(Ast *let, JITLangCtx *jit_ctx,

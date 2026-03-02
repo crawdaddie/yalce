@@ -450,12 +450,12 @@ typedef struct close_payload {
 } close_payload;
 
 void close_gate(close_payload *p, uint64_t tick) {
-  push_msg(
-      &ctx.msg_queue,
-      (audio_instruction){
-          NODE_SET_SCALAR,
-          tick,
-          {.NODE_SET_SCALAR = {.target = p->target, .input = p->gate_input, .value = 0.}}});
+  push_msg(&ctx.msg_queue,
+           (audio_instruction){NODE_SET_SCALAR,
+                               tick,
+                               {.NODE_SET_SCALAR = {.target = p->target,
+                                                    .input = p->gate_input,
+                                                    .value = 0.}}});
   free(p);
 }
 
@@ -628,6 +628,7 @@ NodeRef set_input_buf_immediate(int input, NodeRef buf, NodeRef node) {
 
 NodeRef set_input_scalar_offset(NodeRef node, int input, uint64_t tick,
                                 double value) {
+
   push_msg(&ctx.msg_queue,
            (audio_instruction){NODE_SET_SCALAR,
                                tick,

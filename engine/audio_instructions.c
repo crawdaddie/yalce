@@ -4,6 +4,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// plug_input_in_graph stores either a raw Node* (when _graph==NULL) or a
+// node_index integer (when _graph!=NULL). Resolve back to a Node*.
+static Node *jit_inlet_node(Node *node, int input) {
+  uint64_t src = node->connections[input].source_node_index;
+  if (_graph) {
+    return &_graph->nodes[src];
+  }
+  return (Node *)src;
+}
+
 static void process_msg_pre(int frame_offset, audio_instruction msg) {
 
   switch (msg.type) {
@@ -29,12 +39,15 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
       }
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
-      // if (payload.value == 0.) {
-      //   printf("setting gate off %llu\n", msg.tick);
-      // }
       for (int i = frame_offset; i < BUF_SIZE; i++) {
-
         inlet_data.buf[i] = payload.value;
+      }
+    } else {
+      Node *inlet_node = jit_inlet_node(node, payload.input);
+      if (inlet_node && inlet_node->output.buf) {
+        for (int i = frame_offset; i < BUF_SIZE; i++) {
+          inlet_node->output.buf[i] = payload.value;
+        }
       }
     }
 
@@ -73,6 +86,11 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
       inlet_data.buf[frame_offset] = 1.0;
+    } else {
+      Node *inlet_node = jit_inlet_node(node, payload.input);
+      if (inlet_node && inlet_node->output.buf) {
+        inlet_node->output.buf[frame_offset] = 1.0;
+      }
     }
 
     break;
@@ -107,6 +125,13 @@ static void process_msg_post(int frame_offset, audio_instruction msg) {
       for (int i = 0; i < frame_offset; i++) {
         inlet_data.buf[i] = payload.value;
       }
+    } else {
+      Node *inlet_node = jit_inlet_node(node, payload.input);
+      if (inlet_node) {
+        for (int i = 0; i < frame_offset; i++) {
+          inlet_node->output.buf[i] = payload.value;
+        }
+      }
     }
 
     break;
@@ -125,6 +150,11 @@ static void process_msg_post(int frame_offset, audio_instruction msg) {
       Node *inlet_node = g->nodes + g->inlets[payload.input];
       Signal inlet_data = inlet_node->output;
       inlet_data.buf[frame_offset] = 0.0;
+    } else {
+      Node *inlet_node = jit_inlet_node(node, payload.input);
+      if (inlet_node && inlet_node->output.buf) {
+        inlet_node->output.buf[frame_offset] = 0.0;
+      }
     }
     break;
   }

@@ -49,8 +49,6 @@ Type *compute_fn_type(Ast *expr, TICtx *ctx) {
 }
 
 Type *compute_type_expression(Ast *expr, TICtx *ctx) {
-  printf("compute\n");
-  print_ast(expr);
   switch (expr->tag) {
   case AST_VOID: {
     return &t_void;

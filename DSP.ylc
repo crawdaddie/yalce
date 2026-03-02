@@ -39,7 +39,12 @@ let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
 # let compile_audio_fn = extern fn T -> (Array of Double -> Ptr);
 # type CompiledSynth = (Array of Double -> Synth, Int);
 
-let compile_audio_fn = extern fn T -> (cons: (Array of Double -> Synth),);
+let compile_audio_fn = extern fn T -> (
+  cons: (Array of Double -> Synth),
+  get_idx: (String -> Int),
+  set_scalar: (String -> Uint64 -> Double -> Synth -> Synth),
+  set_trig: (String -> Uint64 -> Double -> Synth -> Synth),
+);
 
 let register_audio_op = extern fn T -> Int;
 let get_input_node = extern fn Synth -> Int -> Synth;

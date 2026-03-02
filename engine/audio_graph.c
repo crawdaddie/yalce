@@ -62,12 +62,12 @@ char *state_ptr(AudioGraph *graph, NodeRef node) {
 void plug_input_in_graph(int idx, NodeRef node, NodeRef input) {
 
   if (_graph) {
-    // printf("plug input in graph [%s](%d)->[%s]\n", input->meta,
-    //        input->node_index, node->meta);
 
     node->connections[idx].source_node_index = input->node_index;
     return;
   }
+  // printf("no _graph plug input in graph - using raw ptr [%s](%d)->[%s]\n",
+  //        input->meta, input->node_index, node->meta);
 
   node->connections[idx].source_node_index = (uint64_t)input;
 }
