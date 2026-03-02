@@ -43,7 +43,7 @@ let compile_audio_fn = extern fn T -> (
   cons: (Array of Double -> Synth),
   get_idx: (String -> Int),
   set_scalar: (String -> Uint64 -> Double -> Synth -> Synth),
-  set_trig: (String -> Uint64 -> Double -> Synth -> Synth),
+  set_trig: (String -> Uint64 -> Synth -> Synth),
 );
 
 let register_audio_op = extern fn T -> Int;
