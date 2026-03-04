@@ -1615,6 +1615,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("cor_current", &cor_current_scheme, CurrentCorHandler);
   GENERIC_FN_SYMBOL("cor_try_opt", &cor_try_opt_scheme, CorUnwrapOrEndHandler);
   GENERIC_FN_SYMBOL("cor_zip", &cor_zip_scheme, CorZipHandler);
+  GENERIC_FN_SYMBOL("cor_zip_struct", &cor_zip_scheme, CorZipStructHandler);
 
   GENERIC_FN_SYMBOL("fn_composition", NULL, HandleFnComposition);
 

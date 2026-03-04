@@ -345,10 +345,10 @@ extern "C" Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
   node->num_inputs = num_inputs;
   node->state_size = state_bytes;
   node->meta = (char *)"audio_jit_synth";
-  node->output = (Signal){.layout = 1,
-                           .size = BUF_SIZE,
-                           .buf = (double *)((char *)node + sizeof(Node) +
-                                             state_bytes)};
+  node->output =
+      (Signal){.layout = 1,
+               .size = BUF_SIZE,
+               .buf = (double *)((char *)node + sizeof(Node) + state_bytes)};
 
   // Do NOT call graph_embed() here. The JIT synth is self-contained; all DSP
   // is baked into its perform function. Adding it to _chain_head would cause
@@ -360,7 +360,8 @@ extern "C" Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
 
 // Return the state buffer pointer of a node (used by JIT-generated init code).
 // JIT nodes use the inline layout [Node | state | buf] with state_ptr == NULL,
-// so fall back to (node + 1) which is where perform_graph also reads state from.
+// so fall back to (node + 1) which is where perform_graph also reads state
+// from.
 extern "C" void *ylc_node_get_state(Node *node) {
   return node->state_ptr ? node->state_ptr : (void *)(node + 1);
 }
@@ -1000,17 +1001,17 @@ Value KillOnEndHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   int prev_off = reserve_state(ctx, 8);
   Value prev_off_val =
       b.create<LLVM::ConstantOp>(loc, i64, b.getI64IntegerAttr(prev_off));
-  Value prev_ptr = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(),
-                                         ctx.state_ptr, ValueRange{prev_off_val});
+  Value prev_ptr = b.create<LLVM::GEPOp>(
+      loc, ptr_ty, b.getI8Type(), ctx.state_ptr, ValueRange{prev_off_val});
 
   Value prev_val = b.create<LLVM::LoadOp>(loc, f64, prev_ptr)->getResult(0);
 
   // Kill condition: was positive, now at or below zero (end of release).
   Value zero = b.create<LLVM::ConstantOp>(loc, f64, b.getF64FloatAttr(0.0));
-  Value prev_pos = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OGT,
-                                           prev_val, zero);
-  Value cur_zero = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OLE,
-                                           signal, zero);
+  Value prev_pos =
+      b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OGT, prev_val, zero);
+  Value cur_zero =
+      b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OLE, signal, zero);
   Value should_kill = b.create<arith::AndIOp>(loc, prev_pos, cur_zero);
 
   auto if_op = b.create<scf::IfOp>(loc, should_kill);
@@ -2624,8 +2625,8 @@ LLVMValueRef build_ctor_fn(int synth_id, std::string perform_name,
   }
 
   LLVMValueRef dsp_fn = LLVMGetNamedFunction(module_ref, perform_name.c_str());
-  LLVMDumpValue(dsp_fn);
-  printf("\n");
+  // LLVMDumpValue(dsp_fn);
+  // printf("\n");
   LLVMValueRef create_args[] = {
       dsp_fn,
       LLVMConstInt(i32_ty, num_total_inputs, 0),

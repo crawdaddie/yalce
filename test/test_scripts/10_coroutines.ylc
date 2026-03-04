@@ -290,20 +290,20 @@ let test_loop_iter_array = fn () ->
 ;;
 
 let test_zip = fn () ->
-  let a_ = fn () ->
+  let a = fn () ->
     yield 1;
     yield 2;
     yield 3
   ;;
 
 
-  let b_ = fn () ->
+  let b = fn () ->
     yield 1.;
     yield 2.;
     yield 3.;
     yield 3.
   ;;
-  let c = cor_zip (a_ ()) (b_ ());
+  let c = cor_zip (a ()) (b ());
   let x = c ();
 
   match x with

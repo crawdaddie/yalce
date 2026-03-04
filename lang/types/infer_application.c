@@ -156,6 +156,39 @@ Type *infer_constructor_application(TypeClass *constructor_tc, Type *cons,
   ast->data.AST_APPLICATION.function->type = expected_type;
   return res;
 }
+Type *transform_struct_of_coroutines(Type *a) {
+  if (a->kind != T_CONS) {
+    return NULL;
+  }
+  int num_fields = a->data.T_CONS.num_args;
+  Type **contained = t_alloc(sizeof(Type *) * num_fields);
+
+  bool has_names = a->data.T_CONS.names != NULL;
+  const char **names;
+  if (has_names) {
+    names = t_alloc(sizeof(char *) * num_fields);
+  }
+
+  for (int i = 0; i < num_fields; i++) {
+    print_type(a->data.T_CONS.args[i]);
+    Type *field_type = a->data.T_CONS.args[i];
+    if (is_coroutine_type(field_type)) {
+      contained[i] = field_type->data.T_CONS.args[0];
+    } else if (field_type->kind == T_FN &&
+               types_equal(field_type->data.T_FN.from, &t_void)) {
+      contained[i] = field_type->data.T_FN.to;
+    } else {
+      contained[i] = field_type;
+    }
+    if (has_names) {
+      names[i] = a->data.T_CONS.names[i];
+    }
+  }
+  Type *res_struct = create_tuple_type(num_fields, contained);
+  res_struct->data.T_CONS.names = names;
+
+  return create_coroutine_instance_type(res_struct);
+}
 
 // T-App: Γ ⊢ e₁ : τ₁    Γ ⊢ e₂ : τ₂    α fresh    S = unify(τ₁, τ₂ → α)
 //        ──────────────────────────────────────────────────────────────
@@ -205,6 +238,26 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
     Type *res = create_coroutine_instance_type(
         concat_tuples(cor_a->data.T_CONS.args[0], cor_b->data.T_CONS.args[0]));
     return res;
+  }
+
+  if (is_ident(ast, "cor_zip_struct")) {
+    Type *str = infer(ast->data.AST_APPLICATION.args, ctx);
+
+    Type *res = transform_struct_of_coroutines(str);
+    if (!res) {
+      fprintf(
+          stderr,
+          "Error: could not zip struct fields into single coroutine type\n");
+      return NULL;
+    }
+
+    return res;
+
+    // printf("handle zip tuple flattening???\n");
+    //
+    // print_ast(ast);
+    // print_type(cor_a->data.T_CONS.args[0]);
+    // print_type(cor_b->data.T_CONS.args[0]);
   }
 
   if (is_coroutine_type(func_type) &&
