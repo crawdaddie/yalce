@@ -99,15 +99,16 @@ extern int yydebug;
     FSTRING_INTERP_START = 300,    /* FSTRING_INTERP_START  */
     FSTRING_INTERP_END = 301,      /* FSTRING_INTERP_END  */
     FSTRING_TEXT = 302,            /* FSTRING_TEXT  */
-    DOUBLE_AMP = 303,              /* DOUBLE_AMP  */
-    DOUBLE_PIPE = 304,             /* DOUBLE_PIPE  */
-    GE = 305,                      /* GE  */
-    LE = 306,                      /* LE  */
-    EQ = 307,                      /* EQ  */
-    NE = 308,                      /* NE  */
-    MODULO = 309,                  /* MODULO  */
-    APPLICATION = 310,             /* APPLICATION  */
-    UMINUS = 311                   /* UMINUS  */
+    MATCH_BODY_PREC = 303,         /* MATCH_BODY_PREC  */
+    DOUBLE_AMP = 304,              /* DOUBLE_AMP  */
+    DOUBLE_PIPE = 305,             /* DOUBLE_PIPE  */
+    GE = 306,                      /* GE  */
+    LE = 307,                      /* LE  */
+    EQ = 308,                      /* EQ  */
+    NE = 309,                      /* NE  */
+    MODULO = 310,                  /* MODULO  */
+    APPLICATION = 311,             /* APPLICATION  */
+    UMINUS = 312                   /* UMINUS  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -161,15 +162,16 @@ extern int yydebug;
 #define FSTRING_INTERP_START 300
 #define FSTRING_INTERP_END 301
 #define FSTRING_TEXT 302
-#define DOUBLE_AMP 303
-#define DOUBLE_PIPE 304
-#define GE 305
-#define LE 306
-#define EQ 307
-#define NE 308
-#define MODULO 309
-#define APPLICATION 310
-#define UMINUS 311
+#define MATCH_BODY_PREC 303
+#define DOUBLE_AMP 304
+#define DOUBLE_PIPE 305
+#define GE 306
+#define LE 307
+#define EQ 308
+#define NE 309
+#define MODULO 310
+#define APPLICATION 311
+#define UMINUS 312
 
 /* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
@@ -185,7 +187,7 @@ union YYSTYPE
     float vfloat;
     char vchar;
 
-#line 189 "lang/y.tab.h"
+#line 191 "lang/y.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

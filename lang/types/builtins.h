@@ -72,4 +72,5 @@ extern Type sizeof_scheme;
 extern Type asbytes_scheme;
 
 extern Type typeof_scheme;
+extern Type cor_zip_scheme;
 #endif

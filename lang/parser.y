@@ -76,6 +76,7 @@ extern char *yytext;
 
 
 %left '|'
+%nonassoc MATCH_BODY_PREC
 %left PIPE
 %left DOUBLE_AT
 %left DOUBLE_AMP DOUBLE_PIPE
@@ -331,9 +332,9 @@ match_test_clause:
   | expr IF expr { $$ = ast_match_guard_clause($1, $3);}
 
 match_branches:
-    '|' match_test_clause ARROW expr                 {$$ = ast_match_branches(NULL, $2, $4);}
-  | match_branches '|' match_test_clause ARROW expr  {$$ = ast_match_branches($1, $3, $5);}
-  | match_branches '|' '_' ARROW expr   {$$ = ast_match_branches($1, Ast_new(AST_PLACEHOLDER_ID), $5);}
+    '|' match_test_clause ARROW expr %prec MATCH_BODY_PREC                 {$$ = ast_match_branches(NULL, $2, $4);}
+  | match_branches '|' match_test_clause ARROW expr %prec MATCH_BODY_PREC  {$$ = ast_match_branches($1, $3, $5);}
+  | match_branches '|' '_' ARROW expr %prec MATCH_BODY_PREC   {$$ = ast_match_branches($1, Ast_new(AST_PLACEHOLDER_ID), $5);}
   ;
 
 fstring: FSTRING_START fstring_parts FSTRING_END { $$ = $2; }

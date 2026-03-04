@@ -270,6 +270,15 @@ extern "C" int64_t ylc_bufsize(void *node_raw) {
   return (int64_t)node->output.size;
 }
 
+// Kill the enclosing JIT synth node.
+// Called from within a perform function (arg0 = Node*) when an envelope
+// finishes its release phase. Sets trig_end = true so audio_graph propagates
+// the kill signal up to the ensemble node, which zeroes the output and marks
+// itself done for the node GC.
+extern "C" void ylc_kill_node(void *node_raw) {
+  reinterpret_cast<Node *>(node_raw)->trig_end = true;
+}
+
 // Create a constant-signal node without graph_embed.
 // This avoids polluting the chain tail when _graph is NULL.
 extern "C" Node *ylc_const_inlet(double val) {
@@ -327,27 +336,19 @@ struct BufInputSpec {
 // in a Node and register it in the audio graph.
 extern "C" Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
                                        int state_bytes) {
-  AudioGraph *graph = _graph;
-  Node *node = allocate_node_in_graph(graph, state_bytes);
-  int saved_idx = node->node_index;
-  int state_off =
-      state_bytes > 0 ? state_offset_ptr_in_graph(graph, state_bytes) : 0;
-  *node = (Node){
-      .perform = perform,
-      .node_index = saved_idx,
-      .num_inputs = num_inputs,
-      .output = (Signal){.layout = 1,
-                         .size = BUF_SIZE,
-                         .buf = allocate_buffer_from_pool(graph, BUF_SIZE)},
-      .state_size = state_bytes,
-      .state_offset = state_off,
-      .meta = (char *)"audio_jit_synth",
-  };
-
-  if (state_bytes > 0) {
-    node->state_ptr = state_ptr(graph, node);
-    memset(node->state_ptr, 0, state_bytes);
-  }
+  // Single calloc: [Node | state (state_bytes) | output buf (BUF_SIZE doubles)]
+  // state_ptr stays NULL so perform_graph uses (head+1) for state and the GC
+  // hits the plain else branch → free(node) releases the whole block.
+  size_t total = sizeof(Node) + state_bytes + BUF_SIZE * sizeof(double);
+  Node *node = (Node *)calloc(1, total);
+  node->perform = perform;
+  node->num_inputs = num_inputs;
+  node->state_size = state_bytes;
+  node->meta = (char *)"audio_jit_synth";
+  node->output = (Signal){.layout = 1,
+                           .size = BUF_SIZE,
+                           .buf = (double *)((char *)node + sizeof(Node) +
+                                             state_bytes)};
 
   // Do NOT call graph_embed() here. The JIT synth is self-contained; all DSP
   // is baked into its perform function. Adding it to _chain_head would cause
@@ -358,7 +359,11 @@ extern "C" Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
 }
 
 // Return the state buffer pointer of a node (used by JIT-generated init code).
-extern "C" void *ylc_node_get_state(Node *node) { return node->state_ptr; }
+// JIT nodes use the inline layout [Node | state | buf] with state_ptr == NULL,
+// so fall back to (node + 1) which is where perform_graph also reads state from.
+extern "C" void *ylc_node_get_state(Node *node) {
+  return node->state_ptr ? node->state_ptr : (void *)(node + 1);
+}
 
 // Wire one hidden delay-buffer inlet into a freshly created DSP node.
 // Creates a zeroed circular buffer of max_delay_sec duration and plugs it as
@@ -974,6 +979,51 @@ Value AdsrHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
                                        release, ctx.spf, value_ptr, phase_ptr,
                                        prev_trig_ptr})
       .getResult();
+}
+
+// kill_on_end signal → signal
+// Passes the input signal through unchanged. If the signal transitions from
+// > 0 to <= 0 (i.e. an envelope finishes its release), calls ylc_kill_node
+// on the enclosing JIT node. State: prev_val (f64, 8 bytes).
+Value KillOnEndHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+  Ast *args = ast->data.AST_APPLICATION.args;
+  Value signal = build_dsp_expr(&args[0], ctx, jit_ctx);
+
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  auto f64 = b.getF64Type();
+  auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
+  auto i64 = b.getI64Type();
+  auto void_ty = LLVM::LLVMVoidType::get(b.getContext());
+
+  // Reserve state slot for previous sample value.
+  int prev_off = reserve_state(ctx, 8);
+  Value prev_off_val =
+      b.create<LLVM::ConstantOp>(loc, i64, b.getI64IntegerAttr(prev_off));
+  Value prev_ptr = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(),
+                                         ctx.state_ptr, ValueRange{prev_off_val});
+
+  Value prev_val = b.create<LLVM::LoadOp>(loc, f64, prev_ptr)->getResult(0);
+
+  // Kill condition: was positive, now at or below zero (end of release).
+  Value zero = b.create<LLVM::ConstantOp>(loc, f64, b.getF64FloatAttr(0.0));
+  Value prev_pos = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OGT,
+                                           prev_val, zero);
+  Value cur_zero = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OLE,
+                                           signal, zero);
+  Value should_kill = b.create<arith::AndIOp>(loc, prev_pos, cur_zero);
+
+  auto if_op = b.create<scf::IfOp>(loc, should_kill);
+  b.setInsertionPointToStart(&if_op.getThenRegion().front());
+  {
+    auto kill_ty = LLVM::LLVMFunctionType::get(void_ty, {ptr_ty}, false);
+    auto kill_fn = declare_extern(ctx.mod, b, "ylc_kill_node", kill_ty);
+    b.create<LLVM::CallOp>(loc, kill_fn, ValueRange{ctx.node_ptr});
+  }
+  b.setInsertionPointAfter(if_op);
+
+  b.create<LLVM::StoreOp>(loc, signal, prev_ptr);
+  return signal;
 }
 
 Value BufPlayHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
@@ -3206,4 +3256,7 @@ __attribute__((constructor)) static void ylc_audio_jit_init() {
           &t_num,
           type_fn(&t_num,
                   type_fn(&t_num, type_fn(&t_num, type_fn(&t_num, &t_num))))));
+
+  // kill_on_end signal → signal  (passthrough; kills node when signal hits 0)
+  DSP_BUILTIN("kill_on_end", KillOnEndHandler, type_fn(&t_num, &t_num));
 }

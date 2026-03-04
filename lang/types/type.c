@@ -444,6 +444,68 @@ Type *get_struct_member_type(const char *member_name, Type *type) {
   return NULL;
 }
 
+Type *concat_tuples(Type *a, Type *b) {
+  bool a_is_tuple =
+      (a->kind == T_CONS && strcmp(a->data.T_CONS.name, TYPE_NAME_TUPLE) == 0);
+  bool b_is_tuple =
+      (b->kind == T_CONS && strcmp(b->data.T_CONS.name, TYPE_NAME_TUPLE) == 0);
+
+  int lena = a_is_tuple ? a->data.T_CONS.num_args : 1;
+  int lenb = b_is_tuple ? b->data.T_CONS.num_args : 1;
+  int len = lena + lenb;
+
+  Type **args = t_alloc(sizeof(Type *) * len);
+
+  bool a_has_names = a_is_tuple && a->data.T_CONS.names != NULL;
+  bool b_has_names = b_is_tuple && b->data.T_CONS.names != NULL;
+  const char **names = NULL;
+  if (a_has_names || b_has_names) {
+    names = t_alloc(sizeof(char *) * len);
+  }
+
+  if (a_is_tuple) {
+    for (int i = 0; i < lena; i++) {
+      args[i] = a->data.T_CONS.args[i];
+      if (names) {
+        names[i] = a_has_names ? a->data.T_CONS.names[i] : NULL;
+      }
+    }
+  } else {
+    args[0] = a;
+    if (names) {
+      names[0] = NULL;
+    }
+  }
+
+  if (b_is_tuple) {
+    for (int i = 0; i < lenb; i++) {
+      args[lena + i] = b->data.T_CONS.args[i];
+      if (names) {
+        names[lena + i] = b_has_names ? b->data.T_CONS.names[i] : NULL;
+      }
+    }
+  } else {
+    args[lena] = b;
+    if (names) {
+      names[lena] = NULL;
+    }
+  }
+
+  Type *result = empty_type();
+  result->kind = T_CONS;
+  result->data.T_CONS.name = TYPE_NAME_TUPLE;
+  result->data.T_CONS.args = args;
+  result->data.T_CONS.num_args = len;
+  result->data.T_CONS.names = names;
+  // print_type(result);
+  // for (int i = 0; result->data.T_CONS.names && i <
+  // result->data.T_CONS.num_args;
+  //      i++) {
+  //   printf("field: %s\n", result->data.T_CONS.names[i]);
+  // }
+  return result;
+}
+
 Type *concat_struct_types(Type *a, Type *b) {
   if (a->kind == T_VOID) {
     return b;

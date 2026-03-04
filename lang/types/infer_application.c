@@ -85,6 +85,11 @@ const char *find_constructor_method(Type *cons_mod, int len, Type **inputs,
 
   return NULL;
 }
+bool is_ident(Ast *ast, const char *name) {
+  return ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+         CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+                  name);
+}
 
 Type *infer_constructor_application(TypeClass *constructor_tc, Type *cons,
                                     Ast *ast, TICtx *ctx) {
@@ -166,9 +171,10 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
     return type_error(ast, "Cannot infer type of applicable");
   }
 
-  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
-      CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-               "iter")) {
+  // if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+  //     CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+  //              "iter")) {
+  if (is_ident(ast, "iter")) {
     Type *iterable = infer(ast->data.AST_APPLICATION.args, ctx);
 
     // TODO: replace with "implements trait 'iter' ? "
@@ -184,6 +190,21 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
     fprintf(stderr, "does not implement Iter");
     print_ast_err(ast->data.AST_APPLICATION.args);
     return NULL;
+  }
+
+  if (is_ident(ast, "cor_zip")) {
+    Type *cor_a = infer(ast->data.AST_APPLICATION.args, ctx);
+    Type *cor_b = infer(ast->data.AST_APPLICATION.args + 1, ctx);
+
+    // printf("handle zip tuple flattening???\n");
+    //
+    // print_ast(ast);
+    // print_type(cor_a->data.T_CONS.args[0]);
+    // print_type(cor_b->data.T_CONS.args[0]);
+
+    Type *res = create_coroutine_instance_type(
+        concat_tuples(cor_a->data.T_CONS.args[0], cor_b->data.T_CONS.args[0]));
+    return res;
   }
 
   if (is_coroutine_type(func_type) &&
@@ -281,7 +302,8 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     }
   }
 
-  // if (CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+  // if
+  // (CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
   //              ">")) {
   //   print_ast(ast);
   //   print_type(expected_type);

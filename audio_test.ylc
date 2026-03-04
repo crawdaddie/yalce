@@ -25,21 +25,23 @@ let buf = load_soundfile "./engine/assets/kick.wav";
 
 
 import std/Math;
-let f = compile_audio_fn (fn t -> 
-  let s = t |> bufplay (bufref buf) (44100 / 48000) 0. |> (*) (adsr 0 0.5 1. 0.1 t);
+let f = compile_audio_fn (fn () -> 
+  let t = trig 0;
+  let s = t |> bufplay (bufref buf) (44100 / 48000) 0. |> (*) (adsr 0 0.5 1. 0.8 t |> kill_on_end );
   s + Math.sin (7. * s)
 );
 
 let x = f.cons [| 0.,|] |> play_node;
+# x |> f.set_trig "t" (get_tl_tick ()); 
 
-let q = 60. / 130.;
+# let q = 60. / 130.;
 
-defer_quant q (fn t -> 
-  iter_of_array [|3., 3., 3., 4., 3.|]  
-  |> cor_loop
-  |> cor_map (fn d -> x |> f.set_trig "t" (get_tl_tick ()); d * q * 0.25)
-  |> play_routine t schedule_event
-)
+# defer_quant q (fn t -> 
+#   iter_of_array [|3., 3., 3., 4., 3.|]  
+#   |> cor_loop
+#   |> cor_map (fn d -> x |> f.set_trig "t" (get_tl_tick ()); d * q * 0.25)l
+#   |> play_routine t schedule_event
+# )
 
 #
 # let ro = fn () ->

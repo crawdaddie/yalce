@@ -35,6 +35,7 @@ let bufplay = extern fn Ptr -> Double -> Double -> Double -> Double;
 #                      max_grains   buf    rate      pos       width     trig
 let grains = extern fn Int ->       Ptr -> Double -> Double -> Double -> Double;
 let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
+let kill_on_end = extern fn Double -> Double;
 
 # let compile_audio_fn = extern fn T -> (Array of Double -> Ptr);
 # type CompiledSynth = (Array of Double -> Synth, Int);

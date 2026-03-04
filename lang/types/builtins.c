@@ -476,6 +476,31 @@ Type create_cor_combine_scheme() {
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
+Type cor_zip_scheme;
+Type create_cor_zip_scheme() {
+  Type *a = tvar("a");
+  Type *ca = create_coroutine_instance_type(a);
+
+  Type *b = tvar("b");
+  Type *cb = create_coroutine_instance_type(a);
+  Type **cont = t_alloc(sizeof(Type *) * 2);
+  cont[0] = a;
+  cont[1] = b;
+
+  Type *res = create_tuple_type(2, cont);
+
+  Type *f = ca;
+  f = type_fn(cb, f);
+  f = type_fn(res, f);
+
+  TypeList *vars_mem = t_alloc(sizeof(TypeList) * 2);
+  vars_mem[0] = vlist_of_typevar(a);
+  vars_mem[1] = vlist_of_typevar(b);
+  vars_mem[0].next = vars_mem + 1;
+  return (Type){T_SCHEME,
+                {.T_SCHEME = {.num_vars = 2, .vars = vars_mem, .type = f}}};
+}
+
 Type cor_loop_scheme;
 Type loop_cor_scheme;
 Type create_cor_loop_scheme() {
@@ -833,6 +858,9 @@ void initialize_builtin_types() {
 
   typeof_scheme = create_str_fmt_scheme();
   add_builtin("typeof", &typeof_scheme);
+
+  cor_zip_scheme = create_cor_zip_scheme();
+  add_builtin("cor_zip", &cor_zip_scheme);
 
   // print_builtin_types();
 }

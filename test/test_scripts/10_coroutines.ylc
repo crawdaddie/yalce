@@ -286,8 +286,31 @@ let test_loop_iter_array = fn () ->
   && x () == Some 1
   && x () == Some 2
   && x () == Some 3
+
 ;;
 
+let test_zip = fn () ->
+  let a_ = fn () ->
+    yield 1;
+    yield 2;
+    yield 3
+  ;;
+
+
+  let b_ = fn () ->
+    yield 1.;
+    yield 2.;
+    yield 3.;
+    yield 3.
+  ;;
+  let c = cor_zip (a_ ()) (b_ ());
+  let x = c ();
+
+  match x with
+    | Some (1, 1.) -> true
+    | _ -> false
+
+;;
 #
 # #
 # let test_chaining = fn () ->

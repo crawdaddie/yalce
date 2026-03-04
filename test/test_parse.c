@@ -474,6 +474,20 @@ int main() {
   status &=
       test_parse("type Foo = (cons: (Array of Double -> Synth), )",
                  "(let Foo ((let cons ((cons Array Double) -> Synth)), ))");
+  status &= test_parse("let fib = fn x ->\n"
+                       "  match x with\n"
+                       "  | 0 -> 0\n"
+                       "  | 1 -> 1\n"
+                       "  | _ -> (fib (x - 1)) + (fib (x - 2))\n"
+                       ";;\n",
+                       "(let fib (fib x -> \n"
+                       "(match x with\n"
+                       "	0 -> 0\n"
+                       "	1 -> 1\n"
+                       "	_ -> ((+ (fib ((- x) 1))) (fib ((- x) 2)))\n"
+                       "))\n"
+                       ")");
+
   // ""); status &= test_parse("import LocalMod;\n"
   //                      "let x = 2\n",
   //                      "(import LocalMod.ylc as LocalMod)\n"

@@ -320,6 +320,7 @@ int get_struct_member_idx(const char *member_name, Type *type);
 
 Type *get_struct_member_type(const char *member_name, Type *type);
 
+Type *concat_tuples(Type *a, Type *b);
 Type *concat_struct_types(Type *a, Type *b);
 
 bool is_struct_of_coroutines(Type *fn_type);

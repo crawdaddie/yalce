@@ -2354,7 +2354,13 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMValueRef _handle = LLVMGetParam(func, 0);
   LLVMValueRef _u64ts = LLVMGetParam(func, 1);
-  LLVMTypeRef yield_type = LLVMDoubleType();
+
+  // Determine yield type from the coroutine: if tuple, field 0 is the duration
+  Type *cor_yield_type_t = cor_ast->type->data.T_CONS.args[0];
+  bool yield_is_tuple = (cor_yield_type_t->kind == T_CONS &&
+                         strcmp(cor_yield_type_t->data.T_CONS.name,
+                                TYPE_NAME_TUPLE) == 0);
+  LLVMTypeRef yield_type = type_to_llvm_type(cor_yield_type_t, ctx, module);
 
   LLVMValueRef resume_result =
       codegen_handle_resume(_handle, yield_type, ctx, module, builder);
@@ -2368,22 +2374,28 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMBuildCondBr(builder, is_done, finished, not_finished);
 
-  // coroutine not finished - take yielded double and schedule next to happen at
-  // u64ts + yielded
+  // coroutine not finished - extract dur from yielded value and schedule next
   LLVMPositionBuilderAtEnd(builder, not_finished);
   LLVMValueRef promise_ptr_raw = GET_PROMISE_PTR_RAW(_handle);
   LLVMValueRef yield_ptr = LLVMBuildBitCast(
       builder, promise_ptr_raw, LLVMPointerType(yield_type, 0), "promise.ptr");
 
-  // Load the yielded value
-  LLVMValueRef yielded_value =
-      LLVMBuildLoad2(builder, yield_type, yield_ptr, "yielded");
+  LLVMValueRef yielded_raw =
+      LLVMBuildLoad2(builder, yield_type, yield_ptr, "yielded.raw");
+
+  // If the yield type is a tuple, field 0 is the duration double
+  LLVMValueRef dur_value;
+  if (yield_is_tuple) {
+    dur_value = LLVMBuildExtractValue(builder, yielded_raw, 0, "dur");
+  } else {
+    dur_value = yielded_raw;
+  }
 
   LLVMValueRef scheduler_call =
       LLVMBuildCall2(builder, schedule_event_type, schedule_event,
                      (LLVMValueRef[]){
                          _u64ts,
-                         yielded_value,
+                         dur_value,
                          func,
                          _handle,
                      },
@@ -2654,4 +2666,313 @@ Ast *optimise_coro_combinators(Ast *ast) {
   }
 
   return changed ? result : NULL;
+}
+
+LLVMValueRef CorZipHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  // Get the two coroutine arguments
+  Ast *a_ast = ast->data.AST_APPLICATION.args;
+  Ast *b_ast = ast->data.AST_APPLICATION.args + 1;
+
+  // Extract yield types from Coroutine<A> and Coroutine<B>
+  Type *a_yield_type = a_ast->type->data.T_CONS.args[0];
+  Type *b_yield_type = b_ast->type->data.T_CONS.args[0];
+
+  // Compute result yield type using concat_tuples spreading semantics
+  Type *result_yield_type = concat_tuples(a_yield_type, b_yield_type);
+
+  // Determine if either yield type is a tuple (for field spreading)
+  bool a_is_tuple =
+      (a_yield_type->kind == T_CONS &&
+       strcmp(a_yield_type->data.T_CONS.name, TYPE_NAME_TUPLE) == 0);
+  bool b_is_tuple =
+      (b_yield_type->kind == T_CONS &&
+       strcmp(b_yield_type->data.T_CONS.name, TYPE_NAME_TUPLE) == 0);
+  int a_lena = a_is_tuple ? a_yield_type->data.T_CONS.num_args : 1;
+  int b_lenb = b_is_tuple ? b_yield_type->data.T_CONS.num_args : 1;
+
+  // Convert to LLVM types
+  LLVMTypeRef llvm_a_type = type_to_llvm_type(a_yield_type, ctx, module);
+  LLVMTypeRef llvm_b_type = type_to_llvm_type(b_yield_type, ctx, module);
+  LLVMTypeRef llvm_result_type =
+      type_to_llvm_type(result_yield_type, ctx, module);
+
+  // Codegen both coroutine handles in the current block
+  LLVMValueRef a_handle = codegen(a_ast, ctx, module, builder);
+  LLVMValueRef b_handle = codegen(b_ast, ctx, module, builder);
+
+  // Create wrapper coroutine: (i64* frame_size_out, i8* a, i8* b) -> i8*
+  LLVMTypeRef wrapper_fn_type =
+      LLVMFunctionType(GENERIC_PTR,
+                       (LLVMTypeRef[]){LLVMPointerType(LLVMInt64Type(), 0),
+                                       GENERIC_PTR, GENERIC_PTR},
+                       3, 0);
+  LLVMValueRef wrapper_fn =
+      LLVMAddFunction(module, "coro_zip", wrapper_fn_type);
+  LLVMSetLinkage(wrapper_fn, LLVMExternalLinkage);
+
+  COROUTINE_ATTR_MARKING(wrapper_fn)
+  COROUTINE_BASIC_BLOCKS(wrapper_fn)
+
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+
+  // === ENTRY BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, entry_bb);
+
+  LLVMTypeRef promise_type = CORO_PROMISE_TYPE(llvm_result_type);
+  LLVMValueRef promise_alloca =
+      LLVMBuildAlloca(builder, promise_type, "promise");
+
+  // Initialize is_done to false
+  LLVMValueRef is_done_gep = LLVMBuildStructGEP2(
+      builder, promise_type, promise_alloca, 1, "is_done_ptr");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_done_gep);
+
+  PROMISE_SET_RESET_FN(promise_alloca, promise_type,
+                       LLVMConstNull(GENERIC_PTR));
+  PROMISE_SET_ARGS_PTR(promise_alloca, promise_type,
+                       LLVMConstNull(GENERIC_PTR));
+
+  LLVMValueRef id = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
+      get_coro_id_intrinsic(module),
+      (LLVMValueRef[]){LLVMConstInt(LLVMInt32Type(), 0, 0), promise_alloca,
+                       LLVMConstNull(GENERIC_PTR), LLVMConstNull(GENERIC_PTR)},
+      4, "coro.id");
+
+  LLVMValueRef size = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_size_intrinsic(module)),
+      get_coro_size_intrinsic(module), NULL, 0, "coro.size");
+
+  LLVMValueRef frame_size_out_param = LLVMGetParam(wrapper_fn, 0);
+  LLVMBuildStore(builder, size, frame_size_out_param);
+
+  LLVMValueRef frame =
+      LLVMBuildArrayMalloc(builder, LLVMInt8Type(), size, "coro.frame");
+
+  LLVMValueRef handle = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_begin_intrinsic(module)),
+      get_coro_begin_intrinsic(module), (LLVMValueRef[]){id, frame}, 2,
+      "coro.handle");
+
+  // Initial suspend
+  LLVMValueRef initial_save = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "initial.save");
+
+  LLVMValueRef initial_suspend = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){initial_save, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2,
+      "initial.suspend");
+
+  LLVMValueRef init_switch =
+      LLVMBuildSwitch(builder, initial_suspend, initial_return_bb, 2);
+  LLVMAddCase(init_switch, LLVMConstInt(LLVMInt8Type(), 0, 0), start_bb);
+  LLVMAddCase(init_switch, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, initial_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // === START BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, start_bb);
+
+  LLVMValueRef a_handle_param = LLVMGetParam(wrapper_fn, 1);
+  LLVMSetValueName(a_handle_param, "a_handle");
+  LLVMValueRef b_handle_param = LLVMGetParam(wrapper_fn, 2);
+  LLVMSetValueName(b_handle_param, "b_handle");
+
+  // === ZIP LOOP ===
+  LLVMBasicBlockRef zip_check_a_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "zip.check_a");
+  LLVMBasicBlockRef zip_check_b_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "zip.check_b");
+  LLVMBasicBlockRef zip_resume_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "zip.resume");
+  LLVMBasicBlockRef zip_check_a_done_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "zip.check_a_done");
+  LLVMBasicBlockRef zip_check_b_done_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "zip.check_b_done");
+  LLVMBasicBlockRef zip_values_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "zip.values");
+  LLVMBasicBlockRef zip_loop_resume_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "zip.loop_resume");
+  LLVMBasicBlockRef zip_exit_bb = LLVMAppendBasicBlock(wrapper_fn, "zip.exit");
+
+  LLVMBuildBr(builder, zip_check_a_bb);
+
+  // zip.check_a: if a done before resume → exit
+  LLVMPositionBuilderAtEnd(builder, zip_check_a_bb);
+  LLVMValueRef a_done_before = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){a_handle_param}, 1,
+      "a.done.before");
+  LLVMBuildCondBr(builder, a_done_before, zip_exit_bb, zip_check_b_bb);
+
+  // zip.check_b: if b done before resume → exit
+  LLVMPositionBuilderAtEnd(builder, zip_check_b_bb);
+  LLVMValueRef b_done_before = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){b_handle_param}, 1,
+      "b.done.before");
+  LLVMBuildCondBr(builder, b_done_before, zip_exit_bb, zip_resume_bb);
+
+  // zip.resume: resume both coroutines
+  LLVMPositionBuilderAtEnd(builder, zip_resume_bb);
+  LLVMBuildCall2(builder,
+                 LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
+                 get_coro_resume_intrinsic(module),
+                 (LLVMValueRef[]){a_handle_param}, 1, "");
+  LLVMBuildCall2(builder,
+                 LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
+                 get_coro_resume_intrinsic(module),
+                 (LLVMValueRef[]){b_handle_param}, 1, "");
+  LLVMBuildBr(builder, zip_check_a_done_bb);
+
+  // zip.check_a_done: if a done after resume → exit
+  LLVMPositionBuilderAtEnd(builder, zip_check_a_done_bb);
+  LLVMValueRef a_done_after = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){a_handle_param}, 1,
+      "a.done.after");
+  LLVMBuildCondBr(builder, a_done_after, zip_exit_bb, zip_check_b_done_bb);
+
+  // zip.check_b_done: if b done after resume → exit
+  LLVMPositionBuilderAtEnd(builder, zip_check_b_done_bb);
+  LLVMValueRef b_done_after = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
+      get_coro_done_intrinsic(module), (LLVMValueRef[]){b_handle_param}, 1,
+      "b.done.after");
+  LLVMBuildCondBr(builder, b_done_after, zip_exit_bb, zip_values_bb);
+
+  // zip.values: read both promises, build combined value, yield
+  LLVMPositionBuilderAtEnd(builder, zip_values_bb);
+
+  // Read a's yield value from its promise (field 0)
+  LLVMValueRef a_prom_raw = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),
+      get_coro_promise_intrinsic(module),
+      (LLVMValueRef[]){a_handle_param, LLVMConstInt(LLVMInt32Type(), 0, 0),
+                       LLVMConstInt(LLVMInt1Type(), 0, 0)},
+      3, "a.prom.raw");
+  LLVMValueRef a_prom_ptr = LLVMBuildBitCast(
+      builder, a_prom_raw, LLVMPointerType(llvm_a_type, 0), "a.prom.ptr");
+  LLVMValueRef a_val =
+      LLVMBuildLoad2(builder, llvm_a_type, a_prom_ptr, "a.val");
+
+  // Read b's yield value from its promise (field 0)
+  LLVMValueRef b_prom_raw = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),
+      get_coro_promise_intrinsic(module),
+      (LLVMValueRef[]){b_handle_param, LLVMConstInt(LLVMInt32Type(), 0, 0),
+                       LLVMConstInt(LLVMInt1Type(), 0, 0)},
+      3, "b.prom.raw");
+  LLVMValueRef b_prom_ptr = LLVMBuildBitCast(
+      builder, b_prom_raw, LLVMPointerType(llvm_b_type, 0), "b.prom.ptr");
+  LLVMValueRef b_val =
+      LLVMBuildLoad2(builder, llvm_b_type, b_prom_ptr, "b.val");
+
+  // Build combined result using concat_tuples spreading: spread tuples, insert
+  // scalars
+  LLVMValueRef result_val = LLVMGetUndef(llvm_result_type);
+  if (a_is_tuple) {
+    for (int i = 0; i < a_lena; i++) {
+      LLVMValueRef field = LLVMBuildExtractValue(builder, a_val, i, "a.field");
+      result_val = LLVMBuildInsertValue(builder, result_val, field, i, "res.a");
+    }
+  } else {
+    result_val = LLVMBuildInsertValue(builder, result_val, a_val, 0, "res.a");
+  }
+  if (b_is_tuple) {
+    for (int i = 0; i < b_lenb; i++) {
+      LLVMValueRef field = LLVMBuildExtractValue(builder, b_val, i, "b.field");
+      result_val =
+          LLVMBuildInsertValue(builder, result_val, field, a_lena + i, "res.b");
+    }
+  } else {
+    result_val =
+        LLVMBuildInsertValue(builder, result_val, b_val, a_lena, "res.b");
+  }
+
+  // Store combined value to promise (overwrites field 0 at offset 0)
+  LLVMBuildStore(builder, result_val, promise_alloca);
+
+  // Suspend
+  LLVMValueRef save_token = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "coro.save");
+  LLVMValueRef suspend_result = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){save_token, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2,
+      "coro.suspend");
+
+  LLVMBasicBlockRef suspend_return_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "zip.suspend_return");
+  LLVMValueRef switch_inst =
+      LLVMBuildSwitch(builder, suspend_result, suspend_return_bb, 2);
+  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 0, 0),
+              zip_loop_resume_bb);
+  LLVMAddCase(switch_inst, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, suspend_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  LLVMPositionBuilderAtEnd(builder, zip_loop_resume_bb);
+  LLVMBuildBr(builder, zip_check_a_bb);
+
+  // zip.exit: final suspend when either coroutine is exhausted
+  LLVMPositionBuilderAtEnd(builder, zip_exit_bb);
+
+  LLVMValueRef final_save = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "final.save");
+  LLVMValueRef final_suspend = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){final_save, LLVMConstInt(LLVMInt1Type(), 1, 0)}, 2,
+      "final.suspend");
+
+  LLVMBasicBlockRef final_return_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "final.return");
+  LLVMValueRef final_switch =
+      LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
+  LLVMAddCase(final_switch, LLVMConstInt(LLVMInt8Type(), 0, 0),
+              final_return_bb);
+  LLVMAddCase(final_switch, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, final_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // === CLEANUP BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, cleanup_bb);
+  LLVMValueRef mem = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_free_intrinsic(module)),
+      get_coro_free_intrinsic(module), (LLVMValueRef[]){id, handle}, 2,
+      "coro.free");
+  LLVMBuildFree(builder, mem);
+  LLVMBuildBr(builder, suspend_bb);
+
+  // === SUSPEND BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, suspend_bb);
+  LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
+      get_coro_end_intrinsic(module),
+      (LLVMValueRef[]){handle, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2, "");
+  LLVMBuildRet(builder, handle);
+
+  // === BACK IN ORIGINAL BLOCK ===
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  LLVMValueRef frame_size_alloca =
+      LLVMBuildAlloca(builder, LLVMInt64Type(), "frame_size.ignored");
+
+  LLVMValueRef zip_handle = LLVMBuildCall2(
+      builder, wrapper_fn_type, wrapper_fn,
+      (LLVMValueRef[]){frame_size_alloca, a_handle, b_handle}, 3, "zip.handle");
+
+  return zip_handle;
 }
