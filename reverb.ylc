@@ -1,0 +1,60 @@
+open DSP;
+open engine/bindings/Sched; 
+
+let f = compile_audio_fn (fn freq -> 
+  sin_osc freq
+  |> (*) (adsr 0.001 0.1 1. 1. (trig 0) |> kill_on_end)
+);
+
+import std/Math;
+let rr = compile_audio_fn (fn inp size ->
+  let s = size;
+
+  let x =
+    inp
+    |> Filter.hpf 180. 0.707
+    |> allpass1 (0.05 * s) 0.6 0.70
+    |> allpass1 (0.11 * s) 0.6 0.65
+    |> allpass1 (0.17 * s) 0.8 0.60
+    |> allpass1 (0.23 * s) 0.8 0.55
+    # |> allpass1 (0.029 * s) 0.08 0.55
+    ;
+
+  let c1 = delay1 (0.0297 * s) 0.12 0.80 x;
+  let c2 = delay1 (0.0371 * s) 0.12 0.77 x;
+  let c3 = delay1 (0.0411 * s) 0.12 0.74 x;
+  let c4 = delay1 (0.0437 * s) 0.12 0.72 x;
+
+  let wet = 0.25 * (c1 + c2 + c3 + c4)
+    |> Filter.lpf (7000.0 - 2500.0 * size) 0.707
+    |> Filter.hpf 120. 0.707
+    ;
+
+  0.75 * inp + 0.25 * wet
+);
+
+let rfx = rr.cons [| 0., 1. |] |> play_node;
+
+let q = 60. / 50.;
+
+defer_quant q (fn t -> 
+  (dur: 1., freq: 300.)
+  |> cor_zip_struct
+  |> cor_map (fn (d, freq) -> 
+
+    f.cons [| freq, |] |> play_into rfx;
+    d
+  ) 
+  |> play_routine t schedule_event
+);
+
+
+# let b = summed_bus () |> play_node;
+# b |> pipe_into_input rfx 0;
+
+    # print_audio_graph ();
+    # let v = f.cons [| freq, |] |> play_node_before b;
+    # v |> pipe_into_bus b;
+    # d 
+    # let v = f.cons [| freq, |] |> play_node_before b;
+    # v |> pipe_into_bus b;

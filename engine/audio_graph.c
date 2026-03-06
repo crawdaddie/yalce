@@ -196,6 +196,7 @@ void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
   while (node_count--) {
 
     if (node->perform) {
+      printf("perform %p\n", node);
       __node_get_inputs(node, graph, inputs);
       char *state = __node_get_state(node, graph);
       node->perform(node, state, inputs, nframes, spf);
@@ -210,6 +211,9 @@ void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
         _node->trig_end = true;
         memset(_node->output.buf, 0,
                _node->output.size * _node->output.layout * sizeof(double));
+      }
+      if (node->bus) {
+        printf("copy node output of %p to bus\n", node);
       }
     }
 

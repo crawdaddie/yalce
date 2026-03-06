@@ -47,6 +47,8 @@ let hw_inlet = extern fn Int -> Synth;
 let multi_chan_inlet = extern fn Int -> Double -> Synth;
 let buf_ref = extern fn Synth -> Synth;
 let play_node = extern fn Synth -> Synth;
+let play_node_before = extern fn Synth -> Synth -> Synth;
+let play_into = extern fn Synth -> Synth -> Synth;
 let play_node_dur = extern fn Uint64 -> Double -> Int -> Synth -> Synth;
 let set_input_scalar_offset = extern fn Synth -> Int -> Uint64 -> Double -> Synth;
 let set_input_scalar = extern fn Synth -> Int -> Double -> Synth;
@@ -193,5 +195,3 @@ let get_saw_tabsize = extern fn () -> Int;
 
 
 let set_main_vol = extern fn Double -> ();
-
-

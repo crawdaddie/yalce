@@ -42,6 +42,44 @@ void audio_ctx_add(Node *node) {
   }
 }
 
+void audio_ctx_add_before(Node *target, Node *node) {
+  node->write_to_output = true;
+  node_group_state *ctx = &get_audio_ctx()->graph;
+
+  if (ctx->head == NULL) {
+    node->next = NULL;
+    ctx->head = node;
+    ctx->tail = node;
+    return;
+  }
+
+  Node *prev = NULL;
+  Node *current = ctx->head;
+  while (current != NULL && current != target) {
+    prev = current;
+    current = current->next;
+  }
+
+  if (current == NULL) {
+    current = ctx->head;
+    while (current->next != NULL) {
+      current = current->next;
+    }
+    current->next = node;
+    node->next = NULL;
+    return;
+  }
+
+  if (prev == NULL) {
+    node->next = ctx->head;
+    ctx->head = node;
+    return;
+  }
+
+  node->next = prev->next;
+  prev->next = node;
+}
+
 Node *add_to_dac(Node *node) {
   // return NULL;
   // node->type = OUTPUT;

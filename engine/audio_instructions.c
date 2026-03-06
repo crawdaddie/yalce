@@ -29,6 +29,13 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
     break;
   }
 
+  case NODE_ADD_BEFORE: {
+    struct NODE_ADD_BEFORE payload = msg.payload.NODE_ADD_BEFORE;
+    payload.node->frame_offset = frame_offset;
+    audio_ctx_add_before(payload.target, payload.node);
+    break;
+  }
+
   case NODE_SET_SCALAR: {
     struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
     Node *node = payload.target;
@@ -167,6 +174,11 @@ void print_msg(audio_instruction *msg) {
   switch (msg->type) {
   case NODE_ADD: {
     printf(" node_add %p", msg->payload.NODE_ADD.target);
+    break;
+  }
+  case NODE_ADD_BEFORE: {
+    printf(" node_add_before %p <- %p", msg->payload.NODE_ADD_BEFORE.target,
+           msg->payload.NODE_ADD_BEFORE.node);
     break;
   }
   // case GROUP_ADD,

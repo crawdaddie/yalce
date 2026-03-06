@@ -12,6 +12,8 @@ NodeRef hw_inlet(int idx);
 NodeRef multi_chan_inlet(int layout, double default_val);
 NodeRef buf_ref(NodeRef buf);
 NodeRef play_node(NodeRef s);
+NodeRef play_node_before(NodeRef target, NodeRef node);
+NodeRef play_into(NodeRef target, NodeRef node);
 NodeRef play_node_dur(uint64_t tick, double dur, int gate_in, NodeRef s);
 NodeRef set_input_scalar_offset(NodeRef target, int input, uint64_t tick,
                                 double val);

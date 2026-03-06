@@ -5,6 +5,7 @@
 typedef struct {
   enum {
     NODE_ADD,
+    NODE_ADD_BEFORE,
     GROUP_ADD,
     NODE_SET_SCALAR,
     NODE_SET_TRIG,
@@ -19,6 +20,11 @@ typedef struct {
       Node *target;
       Node *group;
     } NODE_ADD;
+
+    struct NODE_ADD_BEFORE {
+      Node *target;
+      Node *node;
+    } NODE_ADD_BEFORE;
 
     struct GROUP_ADD {
       Node *group;

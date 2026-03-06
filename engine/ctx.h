@@ -42,5 +42,6 @@ double ctx_spf();
 
 
 void audio_ctx_add(Node *ensemble);
+void audio_ctx_add_before(Node *target, Node *node);
 
 #endif

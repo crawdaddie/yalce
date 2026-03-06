@@ -93,14 +93,16 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
 
     __node_get_inputs_raw(head, inputs);
     head->perform(head, state, inputs, frame_count, spf);
-    // if (head->bus) {
-    //   NodeRef bus = head->bus;
-    //   double *bus_buf = bus->output.buf;
-    //   int layout = bus->output.layout;
-    //   write_to_dac(layout, bus_buf + (head->frame_offset * layout),
-    //                head->output.layout, head->output.buf, 1,
-    //                frame_count - head->frame_offset);
-    // } else
+
+    if (head->bus) {
+
+      NodeRef bus = head->bus;
+      double *bus_buf = bus->output.buf;
+      int layout = bus->output.layout;
+      write_to_dac(layout, bus_buf + (head->frame_offset * layout),
+                   head->output.layout, head->output.buf, 1,
+                   frame_count - head->frame_offset);
+    }
     // printf("perform graph %d %d\n", frame_count, head->output.layout);
     if (head->write_to_output) {
       write_to_dac(layout, dac_buf + (head->frame_offset * layout),
@@ -515,6 +517,78 @@ NodeRef play_node(NodeRef s) {
   }
 
   return play_node_offset(get_frame_offset(), s);
+}
+
+NodeRef play_node_before(NodeRef target, NodeRef node) {
+  push_msg(&ctx.msg_queue,
+           (audio_instruction){
+               NODE_ADD_BEFORE,
+               get_frame_offset(),
+               {.NODE_ADD_BEFORE = {.target = target, .node = node}}});
+  return node;
+}
+
+static void *play_into_mixer_zero_perform(Node *node, void *state,
+                                          Node *inputs[], int nframes,
+                                          double spf) {
+  int active = nframes - node->frame_offset;
+  if (active < 0)
+    active = 0;
+  if (active > node->output.size)
+    active = node->output.size;
+  if (node->output.buf && active > 0) {
+    memset(node->output.buf, 0, sizeof(double) * node->output.layout * active);
+  }
+  return node->output.buf;
+}
+
+static NodeRef ensure_play_into_mixer_inlet(NodeRef target, int inlet_idx) {
+  if (!target || inlet_idx < 0 || inlet_idx >= target->num_inputs) {
+    return NULL;
+  }
+
+  NodeRef existing = (NodeRef)target->connections[inlet_idx].source_node_index;
+  if (existing && existing->meta &&
+      strcmp(existing->meta, "play_into_mixer_inlet") == 0) {
+    return existing;
+  }
+
+  int layout =
+      (existing && existing->output.layout > 0) ? existing->output.layout : 1;
+
+  NodeRef inlet = allocate_node_in_graph(_graph, 0);
+  *inlet = (Node){
+      .perform = (perform_func_t)play_into_mixer_zero_perform,
+      .num_inputs = 0,
+      .output =
+          (Signal){
+              .layout = layout,
+              .size = BUF_SIZE,
+              .buf = calloc(layout * BUF_SIZE, sizeof(double)),
+          },
+      .write_to_output = false,
+      .meta = "play_into_mixer_inlet",
+      .next = NULL,
+  };
+
+  if (target->next) {
+    play_node_before(target->next, inlet);
+  } else {
+    play_node_offset(get_frame_offset(), inlet);
+  }
+  plug_input_in_graph(inlet_idx, target, inlet);
+  return inlet;
+}
+
+NodeRef play_into(NodeRef target, NodeRef node) {
+  if (target && node && target->num_inputs > 0) {
+    NodeRef mixer = ensure_play_into_mixer_inlet(target, 0);
+    if (mixer) {
+      node->bus = mixer;
+      node->write_to_output = false;
+    }
+  }
+  return play_node_before(target, node);
 }
 
 int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
