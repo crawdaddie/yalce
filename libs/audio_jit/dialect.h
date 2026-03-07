@@ -256,7 +256,7 @@ public:
 };
 
 // dsp.delay %state_ptr, %inputs_ptr, %input, %fb, %spf, %delay_time
-//           {state_offset, inlet_idx}
+//           {state_offset, buf_offset, buf_size}
 //           : (!llvm.ptr, !llvm.ptr, f64, f64, f64, f64) -> f64
 // Feedback delay. State (4 bytes used at state_offset): [write_pos: i32].
 // delay_time is a per-sample f64 (seconds); delay_samps = (i32)(delay_time/spf)
@@ -268,22 +268,27 @@ public:
   using Op::Op;
   static StringRef getOperationName() { return "dsp.delay"; }
   static ArrayRef<StringRef> getAttributeNames() {
-    static StringRef n[] = {"state_offset", "inlet_idx"};
+    static StringRef n[] = {"state_offset", "buf_offset", "buf_size"};
     return n;
   }
   static void build(OpBuilder &b, OperationState &s, Value state_ptr,
                     Value inputs_ptr, Value input, Value fb, Value spf,
-                    Value delay_time, int32_t state_offset, int32_t inlet_idx) {
+                    Value delay_time, int32_t state_offset, int32_t buf_offset,
+                    int32_t buf_size) {
     s.addOperands({state_ptr, inputs_ptr, input, fb, spf, delay_time});
     s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
-    s.addAttribute("inlet_idx", b.getI32IntegerAttr(inlet_idx));
+    s.addAttribute("buf_offset", b.getI32IntegerAttr(buf_offset));
+    s.addAttribute("buf_size", b.getI32IntegerAttr(buf_size));
     s.addTypes(b.getF64Type());
   }
   int32_t getStateOffset() {
     return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();
   }
-  int32_t getInletIdx() {
-    return (*this)->getAttrOfType<IntegerAttr>("inlet_idx").getInt();
+  int32_t getBufOffset() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf_offset").getInt();
+  }
+  int32_t getBufSize() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf_size").getInt();
   }
 };
 
@@ -294,27 +299,32 @@ public:
   using Op::Op;
   static StringRef getOperationName() { return "dsp.delay1"; }
   static ArrayRef<StringRef> getAttributeNames() {
-    static StringRef n[] = {"state_offset", "inlet_idx"};
+    static StringRef n[] = {"state_offset", "buf_offset", "buf_size"};
     return n;
   }
   static void build(OpBuilder &b, OperationState &s, Value state_ptr,
                     Value inputs_ptr, Value input, Value fb, Value spf,
-                    Value delay_time, int32_t state_offset, int32_t inlet_idx) {
+                    Value delay_time, int32_t state_offset, int32_t buf_offset,
+                    int32_t buf_size) {
     s.addOperands({state_ptr, inputs_ptr, input, fb, spf, delay_time});
     s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
-    s.addAttribute("inlet_idx", b.getI32IntegerAttr(inlet_idx));
+    s.addAttribute("buf_offset", b.getI32IntegerAttr(buf_offset));
+    s.addAttribute("buf_size", b.getI32IntegerAttr(buf_size));
     s.addTypes(b.getF64Type());
   }
   int32_t getStateOffset() {
     return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();
   }
-  int32_t getInletIdx() {
-    return (*this)->getAttrOfType<IntegerAttr>("inlet_idx").getInt();
+  int32_t getBufOffset() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf_offset").getInt();
+  }
+  int32_t getBufSize() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf_size").getInt();
   }
 };
 
 // dsp.allpass %state_ptr, %inputs_ptr, %input, %g, %spf, %delay_time
-//             {state_offset, inlet_idx}
+//             {state_offset, buf_offset, buf_size}
 //             : (!llvm.ptr, !llvm.ptr, f64, f64, f64, f64) -> f64
 // Schroeder allpass: w = input + g*delayed; out = delayed - g*input.
 // Flat magnitude response — safe to chain. g=0 degenerates to pure ff delay.
@@ -325,22 +335,27 @@ public:
   using Op::Op;
   static StringRef getOperationName() { return "dsp.allpass"; }
   static ArrayRef<StringRef> getAttributeNames() {
-    static StringRef n[] = {"state_offset", "inlet_idx"};
+    static StringRef n[] = {"state_offset", "buf_offset", "buf_size"};
     return n;
   }
   static void build(OpBuilder &b, OperationState &s, Value state_ptr,
                     Value inputs_ptr, Value input, Value g, Value spf,
-                    Value delay_time, int32_t state_offset, int32_t inlet_idx) {
+                    Value delay_time, int32_t state_offset, int32_t buf_offset,
+                    int32_t buf_size) {
     s.addOperands({state_ptr, inputs_ptr, input, g, spf, delay_time});
     s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
-    s.addAttribute("inlet_idx", b.getI32IntegerAttr(inlet_idx));
+    s.addAttribute("buf_offset", b.getI32IntegerAttr(buf_offset));
+    s.addAttribute("buf_size", b.getI32IntegerAttr(buf_size));
     s.addTypes(b.getF64Type());
   }
   int32_t getStateOffset() {
     return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();
   }
-  int32_t getInletIdx() {
-    return (*this)->getAttrOfType<IntegerAttr>("inlet_idx").getInt();
+  int32_t getBufOffset() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf_offset").getInt();
+  }
+  int32_t getBufSize() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf_size").getInt();
   }
 };
 
@@ -351,22 +366,27 @@ public:
   using Op::Op;
   static StringRef getOperationName() { return "dsp.allpass1"; }
   static ArrayRef<StringRef> getAttributeNames() {
-    static StringRef n[] = {"state_offset", "inlet_idx"};
+    static StringRef n[] = {"state_offset", "buf_offset", "buf_size"};
     return n;
   }
   static void build(OpBuilder &b, OperationState &s, Value state_ptr,
                     Value inputs_ptr, Value input, Value g, Value spf,
-                    Value delay_time, int32_t state_offset, int32_t inlet_idx) {
+                    Value delay_time, int32_t state_offset, int32_t buf_offset,
+                    int32_t buf_size) {
     s.addOperands({state_ptr, inputs_ptr, input, g, spf, delay_time});
     s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
-    s.addAttribute("inlet_idx", b.getI32IntegerAttr(inlet_idx));
+    s.addAttribute("buf_offset", b.getI32IntegerAttr(buf_offset));
+    s.addAttribute("buf_size", b.getI32IntegerAttr(buf_size));
     s.addTypes(b.getF64Type());
   }
   int32_t getStateOffset() {
     return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();
   }
-  int32_t getInletIdx() {
-    return (*this)->getAttrOfType<IntegerAttr>("inlet_idx").getInt();
+  int32_t getBufOffset() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf_offset").getInt();
+  }
+  int32_t getBufSize() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf_size").getInt();
   }
 };
 

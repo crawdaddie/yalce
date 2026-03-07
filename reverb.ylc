@@ -3,42 +3,95 @@ open engine/bindings/Sched;
 
 let f = compile_audio_fn (fn freq -> 
   sin_osc freq
-  |> (*) (adsr 0.001 0.1 1. 1. (trig 0) |> kill_on_end)
+  |> (*) (adsr 0.001 0.1 1. 0.2 (trig 0) |> kill_on_end)
 );
 
 import std/Math;
+# let rr = compile_audio_fn (fn inp size ->
+#   let s = size;
+#
+#   let x =
+#     inp
+#     |> Filter.hpf 180. 0.707
+#     |> allpass1 (0.05 * s) 0.6 0.70
+#     |> allpass1 (0.11 * s) 0.6 0.65
+#     |> allpass1 (0.17 * s) 0.8 0.60
+#     |> allpass1 (0.23 * s) 0.8 0.55
+#     # |> allpass1 (0.029 * s) 0.08 0.55
+#     ;
+#
+#   let c1 = delay1 (0.0297 * s) 0.12 0.80 x;
+#   let c2 = delay1 (0.0371 * s) 0.12 0.77 x;
+#   let c3 = delay1 (0.0411 * s) 0.12 0.74 x;
+#   let c4 = delay1 (0.0437 * s) 0.12 0.72 x;
+#
+#   let wet = 0.25 * (c1 + c2 + c3 + c4)
+#     |> Filter.lpf (7000.0 - 2500.0 * size) 0.707
+#     |> Filter.hpf 120. 0.707
+#     ;
+#
+#   0.75 * inp + 0.25 * wet
+# );
+
+# James McCartney SC2 example:
+# (
+# {
+# var s, z, y;
+#     // 10 voices of a random sine percussion sound :
+# s = Mix.ar(Array.fill(10, { Resonz.ar(Dust.ar(0.2, 50), 200 + 3000.0.rand, 0.003)}) );
+#     // reverb predelay time :
+# z = DelayN.ar(s, 0.048);
+#     // 7 length modulated comb delays in parallel :
+# y = Mix.ar(Array.fill(7,{ CombL.ar(z, 0.1, LFNoise1.kr(0.1.rand, 0.04, 0.05), 15) }));
+#     // two parallel chains of 4 allpass delays (8 total) :
+# 4.do({ y = AllpassN.ar(y, 0.050, [0.050.rand, 0.050.rand], 1) });
+#     // add original sound to reverb and play it :
+# s+(0.2*y)
+# }.scope
+# )
+
+  # let x =
+  #   inp
+  #   |> Filter.hpf 180. 0.707
+  #   |> allpass1 (0.05 * s) 0.6 0.70
+  #   |> allpass1 (0.11 * s) 0.6 0.65
+  #   |> allpass1 (0.17 * s) 0.8 0.60
+  #   |> allpass1 (0.23 * s) 0.8 0.55
+  #   # |> allpass1 (0.029 * s) 0.08 0.55
+  #   ;
+  # let c1 = delay1 (lfnoise1 0.1 0.04 0.05) 0.12 0.9 inp;
+  # let c2 = delay1 (lfnoise1 0.1 0.04 0.05) 0.12 0.9 inp;
+  # let c3 = delay1 (lfnoise1 0.1 0.04 0.05) 0.12 0.9 inp;
+  # let c4 = delay1 (lfnoise1 0.1 0.04 0.05) 0.12 0.9 inp;
+import std/Lists;
 let rr = compile_audio_fn (fn inp size ->
-  let s = size;
 
-  let x =
-    inp
-    |> Filter.hpf 180. 0.707
-    |> allpass1 (0.05 * s) 0.6 0.70
-    |> allpass1 (0.11 * s) 0.6 0.65
-    |> allpass1 (0.17 * s) 0.8 0.60
-    |> allpass1 (0.23 * s) 0.8 0.55
-    # |> allpass1 (0.029 * s) 0.08 0.55
-    ;
+  let s = Lists.fold (fn s i -> 
+    s + delay1 (lfnoise1 0.1 0.04 0.05) 0.12 0.7 inp;
+  ) inp [0,1,2,3,4,5,6,7,8,9];
 
-  let c1 = delay1 (0.0297 * s) 0.12 0.80 x;
-  let c2 = delay1 (0.0371 * s) 0.12 0.77 x;
-  let c3 = delay1 (0.0411 * s) 0.12 0.74 x;
-  let c4 = delay1 (0.0437 * s) 0.12 0.72 x;
+  let s1 = 0.2 * Lists.fold (fn s i -> allpass1 (Math.rand_double_range 0. 0.1) 0.2 0.8 s) s [0,1,2,3]; 
+  let s2 = 0.2 * Lists.fold (fn s i -> allpass1 (Math.rand_double_range 0. 0.1) 0.2 0.8 s) s [0,1,2,3]; 
+  # let s2 = Lists.fold (fn s i -> allpass1 (Math.rand_double_range 0. 0.05) 0.05 0.7 s) s [0,1,2,3]; 
+  # let s2 = 0.;
 
-  let wet = 0.25 * (c1 + c2 + c3 + c4)
+
+
+  let wet = 0.0625 * (s1 + s2)
     |> Filter.lpf (7000.0 - 2500.0 * size) 0.707
     |> Filter.hpf 120. 0.707
     ;
 
-  0.75 * inp + 0.25 * wet
+  0.5 * inp + 0.5 * wet
 );
-
-let rfx = rr.cons [| 0., 1. |] |> play_node;
+let rfx = rr.cons [| 0., 2. |] |> play_node;
 
 let q = 60. / 50.;
 
+let pitches = [|100., 300., 600., 1200., 1200., 1300., 800.|];
+let times = [| 0.5, 0.25, 0.25, 0.5, 1. |];
 defer_quant q (fn t -> 
-  (dur: 1., freq: 300.)
+  (dur: (fn () -> Math.array_choose times), freq: (fn () -> Math.array_choose pitches))
   |> cor_zip_struct
   |> cor_map (fn (d, freq) -> 
 

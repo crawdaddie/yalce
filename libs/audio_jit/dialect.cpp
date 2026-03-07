@@ -19,108 +19,108 @@ extern "C" {
 using namespace mlir;
 
 // Feedback delay.
-// State at state_offset: [write_pos: i32] (4 bytes used, 8 allocated).
-// inputs[inlet_idx] is the delay-buffer node; its output.buf is the delay line.
-// read_pos is computed as (write_pos - delay_samps + buf_sz) % buf_sz so the
-// read head is always exactly delay_samps behind the write head.
-extern "C" double ylc_delay_fb(void *state_raw, int32_t state_offset,
-                               void *inputs_raw, int32_t inlet_idx,
-                               double input, double fb, int32_t delay_samps) {
+// State layout:
+//   state_offset: [write_pos: i32] (4 bytes used, 8 allocated)
+//   buf_offset:   [delay ring buffer: f64[buf_size]]
+// read_pos is computed as (write_pos - delay_samps + buf_size) % buf_size so
+// the read head is always exactly delay_samps behind the write head.
+extern "C" double ylc_delay_fb_state(void *state_raw, int32_t state_offset,
+                                     int32_t buf_offset, int32_t buf_size,
+                                     double input, double fb,
+                                     int32_t delay_samps) {
   int32_t *write_pos = (int32_t *)((char *)state_raw + state_offset);
-  Node **inputs = (Node **)inputs_raw;
-  double *buf = inputs[inlet_idx]->output.buf;
-  int32_t buf_sz = inputs[inlet_idx]->output.size;
+  double *buf = (double *)((char *)state_raw + buf_offset);
   if (delay_samps <= 0) {
     delay_samps = 1;
   }
-  if (delay_samps >= buf_sz) {
-    delay_samps = buf_sz - 1;
+  if (delay_samps >= buf_size) {
+    delay_samps = buf_size - 1;
   }
-  int32_t read_pos = (*write_pos - delay_samps + buf_sz) % buf_sz;
+  int32_t read_pos = (*write_pos - delay_samps + buf_size) % buf_size;
   double delayed = buf[read_pos];
   double out = input + delayed;
   buf[*write_pos] = fb * out;
-  *write_pos = (*write_pos + 1) % buf_sz;
+  *write_pos = (*write_pos + 1) % buf_size;
   return out;
 }
 
 // Lerp Feedback delay.
-// State at state_offset: [write_pos: i32] (4 bytes used, 8 allocated).
-// inputs[inlet_idx] is the delay-buffer node; its output.buf is the delay line.
+// State layout:
+//   state_offset: [write_pos: i32] (4 bytes used, 8 allocated)
+//   buf_offset:   [delay ring buffer: f64[buf_size]]
 // delay_secs is divided by spf to get a fractional sample count; linear
 // interpolation between adjacent buffer samples gives sub-sample accuracy.
-extern "C" double ylc_delay1_fb(void *state_raw, int32_t state_offset,
-                                void *inputs_raw, int32_t inlet_idx,
-                                double input, double fb, double delay_secs,
-                                double spf) {
+extern "C" double ylc_delay1_fb_state(void *state_raw, int32_t state_offset,
+                                      int32_t buf_offset, int32_t buf_size,
+                                      double input, double fb,
+                                      double delay_secs, double spf) {
   int32_t *write_pos = (int32_t *)((char *)state_raw + state_offset);
-  Node **inputs = (Node **)inputs_raw;
-  double *buf = inputs[inlet_idx]->output.buf;
-  int32_t buf_sz = inputs[inlet_idx]->output.size;
+  double *buf = (double *)((char *)state_raw + buf_offset);
   double delay_samps_f = delay_secs / spf;
   if (delay_samps_f < 1.0)
     delay_samps_f = 1.0;
-  if (delay_samps_f >= buf_sz)
-    delay_samps_f = buf_sz - 1;
+  if (delay_samps_f >= buf_size)
+    delay_samps_f = buf_size - 1;
   int32_t delay_samps_i = (int32_t)delay_samps_f;
   double frac = delay_samps_f - delay_samps_i;
   // read_pos0 is floor(delay) samples behind write_pos,
   // read_pos1 is one sample further back for the lerp upper bound.
-  int32_t read_pos0 = (*write_pos - delay_samps_i + buf_sz) % buf_sz;
-  int32_t read_pos1 = (read_pos0 - 1 + buf_sz) % buf_sz;
+  int32_t read_pos0 = (*write_pos - delay_samps_i + buf_size) % buf_size;
+  int32_t read_pos1 = (read_pos0 - 1 + buf_size) % buf_size;
   double delayed = buf[read_pos0] * (1.0 - frac) + buf[read_pos1] * frac;
   double out = input + delayed;
   buf[*write_pos] = fb * out;
-  *write_pos = (*write_pos + 1) % buf_sz;
+  *write_pos = (*write_pos + 1) % buf_size;
   return out;
 }
 
 // Schroeder allpass delay.
-// State at state_offset: [write_pos: i32] (4 bytes used, 8 allocated).
+// State layout:
+//   state_offset: [write_pos: i32] (4 bytes used, 8 allocated)
+//   buf_offset:   [delay ring buffer: f64[buf_size]]
 // w = input + g * delayed;  out = delayed - g * input;  buf[write_pos] = w.
 // Flat magnitude response: safe to chain. g=0 is a pure feedforward delay.
-extern "C" double ylc_allpass(void *state_raw, int32_t state_offset,
-                              void *inputs_raw, int32_t inlet_idx, double input,
-                              double g, int32_t delay_samps) {
+extern "C" double ylc_allpass_state(void *state_raw, int32_t state_offset,
+                                    int32_t buf_offset, int32_t buf_size,
+                                    double input, double g,
+                                    int32_t delay_samps) {
   int32_t *write_pos = (int32_t *)((char *)state_raw + state_offset);
-  Node **inputs = (Node **)inputs_raw;
-  double *buf = inputs[inlet_idx]->output.buf;
-  int32_t buf_sz = inputs[inlet_idx]->output.size;
+  double *buf = (double *)((char *)state_raw + buf_offset);
   if (delay_samps <= 0)
     delay_samps = 1;
-  if (delay_samps >= buf_sz)
-    delay_samps = buf_sz - 1;
-  int32_t read_pos = (*write_pos - delay_samps + buf_sz) % buf_sz;
+  if (delay_samps >= buf_size)
+    delay_samps = buf_size - 1;
+  int32_t read_pos = (*write_pos - delay_samps + buf_size) % buf_size;
   double delayed = buf[read_pos];
   buf[*write_pos] = input + g * delayed;
-  *write_pos = (*write_pos + 1) % buf_sz;
+  *write_pos = (*write_pos + 1) % buf_size;
   return delayed - g * input;
 }
 
 // Schroeder allpass with linear interpolation.
-// State at state_offset: [write_pos: i32] (4 bytes used, 8 allocated).
+// State layout:
+//   state_offset: [write_pos: i32] (4 bytes used, 8 allocated)
+//   buf_offset:   [delay ring buffer: f64[buf_size]]
 // delay_secs is divided by spf to get a fractional sample count; lerp between
 // adjacent buffer samples gives sub-sample accuracy.
-extern "C" double ylc_allpass1(void *state_raw, int32_t state_offset,
-                               void *inputs_raw, int32_t inlet_idx,
-                               double input, double g, double delay_secs,
-                               double spf) {
+extern "C" double ylc_allpass1_state(void *state_raw, int32_t state_offset,
+                                     int32_t buf_offset, int32_t buf_size,
+                                     double input, double g,
+                                     double delay_secs, double spf) {
   int32_t *write_pos = (int32_t *)((char *)state_raw + state_offset);
-  Node **inputs = (Node **)inputs_raw;
-  double *buf = inputs[inlet_idx]->output.buf;
-  int32_t buf_sz = inputs[inlet_idx]->output.size;
+  double *buf = (double *)((char *)state_raw + buf_offset);
   double delay_samps_f = delay_secs / spf;
   if (delay_samps_f < 1.0)
     delay_samps_f = 1.0;
-  if (delay_samps_f >= buf_sz)
-    delay_samps_f = buf_sz - 1;
+  if (delay_samps_f >= buf_size)
+    delay_samps_f = buf_size - 1;
   int32_t delay_samps_i = (int32_t)delay_samps_f;
   double frac = delay_samps_f - delay_samps_i;
-  int32_t read_pos0 = (*write_pos - delay_samps_i + buf_sz) % buf_sz;
-  int32_t read_pos1 = (read_pos0 - 1 + buf_sz) % buf_sz;
+  int32_t read_pos0 = (*write_pos - delay_samps_i + buf_size) % buf_size;
+  int32_t read_pos1 = (read_pos0 - 1 + buf_size) % buf_size;
   double delayed = buf[read_pos0] * (1.0 - frac) + buf[read_pos1] * frac;
   buf[*write_pos] = input + g * delayed;
-  *write_pos = (*write_pos + 1) % buf_sz;
+  *write_pos = (*write_pos + 1) % buf_size;
   return delayed - g * input;
 }
 
@@ -410,8 +410,8 @@ struct BufReadOpLowering : public ConversionPattern {
   }
 };
 
-// DelayOp: calls ylc_delay_fb(state_raw, state_offset, inputs_raw, inlet_idx,
-//          input, fb, delay_samps) → f64
+// DelayOp: calls ylc_delay_fb_state(state_raw, state_offset, buf_offset,
+//          buf_size, input, fb, delay_samps) → f64
 // operands: [state_ptr, inputs_ptr, input, fb, spf, delay_time]
 struct DelayOpLowering : public ConversionPattern {
   DelayOpLowering(MLIRContext *ctx)
@@ -425,16 +425,18 @@ struct DelayOpLowering : public ConversionPattern {
     auto f64 = r.getF64Type();
     auto i32 = r.getI32Type();
 
-    // ylc_delay_fb(state_raw, state_offset, inputs_raw, inlet_idx,
-    //              input, fb, delay_samps) -> f64
+    // ylc_delay_fb_state(state_raw, state_offset, buf_offset, buf_size,
+    //                    input, fb, delay_samps) -> f64
     auto fn_ty = LLVM::LLVMFunctionType::get(
-        f64, {ptr, i32, ptr, i32, f64, f64, i32}, false);
-    auto fn = declare_extern(mod, r, "ylc_delay_fb", fn_ty);
+        f64, {ptr, i32, i32, i32, f64, f64, i32}, false);
+    auto fn = declare_extern(mod, r, "ylc_delay_fb_state", fn_ty);
 
     Value state_off = r.create<LLVM::ConstantOp>(
         loc, i32, r.getI32IntegerAttr(delay.getStateOffset()));
-    Value inlet_idx = r.create<LLVM::ConstantOp>(
-        loc, i32, r.getI32IntegerAttr(delay.getInletIdx()));
+    Value buf_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(delay.getBufOffset()));
+    Value buf_size = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(delay.getBufSize()));
 
     auto fmf = arith::FastMathFlagsAttr::get(r.getContext(),
                                              arith::FastMathFlags::fast);
@@ -443,7 +445,7 @@ struct DelayOpLowering : public ConversionPattern {
 
     r.replaceOpWithNewOp<LLVM::CallOp>(
         op, fn,
-        ValueRange{operands[0], state_off, operands[1], inlet_idx, operands[2],
+        ValueRange{operands[0], state_off, buf_off, buf_size, operands[2],
                    operands[3], delay_samps});
     return success();
   }
@@ -461,30 +463,32 @@ struct Delay1OpLowering : public ConversionPattern {
     auto f64 = r.getF64Type();
     auto i32 = r.getI32Type();
 
-    // ylc_delay1_fb(state_raw, state_offset, inputs_raw, inlet_idx,
-    //              input, fb, delay_secs, spf) -> f64
+    // ylc_delay1_fb_state(state_raw, state_offset, buf_offset, buf_size,
+    //                     input, fb, delay_secs, spf) -> f64
     auto fn_ty = LLVM::LLVMFunctionType::get(
-        f64, {ptr, i32, ptr, i32, f64, f64, f64, f64}, false);
-    auto fn = declare_extern(mod, r, "ylc_delay1_fb", fn_ty);
+        f64, {ptr, i32, i32, i32, f64, f64, f64, f64}, false);
+    auto fn = declare_extern(mod, r, "ylc_delay1_fb_state", fn_ty);
 
     Value state_off = r.create<LLVM::ConstantOp>(
         loc, i32, r.getI32IntegerAttr(delay.getStateOffset()));
-    Value inlet_idx = r.create<LLVM::ConstantOp>(
-        loc, i32, r.getI32IntegerAttr(delay.getInletIdx()));
+    Value buf_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(delay.getBufOffset()));
+    Value buf_size = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(delay.getBufSize()));
 
     auto fmf = arith::FastMathFlagsAttr::get(r.getContext(),
                                              arith::FastMathFlags::fast);
 
     r.replaceOpWithNewOp<LLVM::CallOp>(
         op, fn,
-        ValueRange{operands[0], state_off, operands[1], inlet_idx, operands[2],
+        ValueRange{operands[0], state_off, buf_off, buf_size, operands[2],
                    operands[3], operands[5], operands[4]});
     return success();
   }
 };
 
-// AllpassOp: calls ylc_allpass(state_raw, state_offset, inputs_raw, inlet_idx,
-//            input, g, delay_samps) → f64
+// AllpassOp: calls ylc_allpass_state(state_raw, state_offset, buf_offset,
+//            buf_size, input, g, delay_samps) → f64
 // operands: [state_ptr, inputs_ptr, input, g, spf, delay_time]
 struct AllpassOpLowering : public ConversionPattern {
   AllpassOpLowering(MLIRContext *ctx)
@@ -498,16 +502,18 @@ struct AllpassOpLowering : public ConversionPattern {
     auto f64 = r.getF64Type();
     auto i32 = r.getI32Type();
 
-    // ylc_allpass(state_raw, state_offset, inputs_raw, inlet_idx,
-    //             input, g, delay_samps) -> f64
+    // ylc_allpass_state(state_raw, state_offset, buf_offset, buf_size,
+    //                   input, g, delay_samps) -> f64
     auto fn_ty = LLVM::LLVMFunctionType::get(
-        f64, {ptr, i32, ptr, i32, f64, f64, i32}, false);
-    auto fn = declare_extern(mod, r, "ylc_allpass", fn_ty);
+        f64, {ptr, i32, i32, i32, f64, f64, i32}, false);
+    auto fn = declare_extern(mod, r, "ylc_allpass_state", fn_ty);
 
     Value state_off = r.create<LLVM::ConstantOp>(
         loc, i32, r.getI32IntegerAttr(ap.getStateOffset()));
-    Value inlet_idx = r.create<LLVM::ConstantOp>(
-        loc, i32, r.getI32IntegerAttr(ap.getInletIdx()));
+    Value buf_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(ap.getBufOffset()));
+    Value buf_size = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(ap.getBufSize()));
 
     auto fmf = arith::FastMathFlagsAttr::get(r.getContext(),
                                              arith::FastMathFlags::fast);
@@ -516,14 +522,14 @@ struct AllpassOpLowering : public ConversionPattern {
 
     r.replaceOpWithNewOp<LLVM::CallOp>(
         op, fn,
-        ValueRange{operands[0], state_off, operands[1], inlet_idx, operands[2],
+        ValueRange{operands[0], state_off, buf_off, buf_size, operands[2],
                    operands[3], delay_samps});
     return success();
   }
 };
 
-// Allpass1Op: calls ylc_allpass1(state_raw, state_offset, inputs_raw,
-//             inlet_idx, input, g, delay_secs, spf) → f64
+// Allpass1Op: calls ylc_allpass1_state(state_raw, state_offset, buf_offset,
+//             buf_size, input, g, delay_secs, spf) → f64
 // operands: [state_ptr, inputs_ptr, input, g, spf, delay_time]
 struct Allpass1OpLowering : public ConversionPattern {
   Allpass1OpLowering(MLIRContext *ctx)
@@ -537,21 +543,23 @@ struct Allpass1OpLowering : public ConversionPattern {
     auto f64 = r.getF64Type();
     auto i32 = r.getI32Type();
 
-    // ylc_allpass1(state_raw, state_offset, inputs_raw, inlet_idx,
-    //              input, g, delay_secs, spf) -> f64
+    // ylc_allpass1_state(state_raw, state_offset, buf_offset, buf_size,
+    //                    input, g, delay_secs, spf) -> f64
     auto fn_ty = LLVM::LLVMFunctionType::get(
-        f64, {ptr, i32, ptr, i32, f64, f64, f64, f64}, false);
-    auto fn = declare_extern(mod, r, "ylc_allpass1", fn_ty);
+        f64, {ptr, i32, i32, i32, f64, f64, f64, f64}, false);
+    auto fn = declare_extern(mod, r, "ylc_allpass1_state", fn_ty);
 
     Value state_off = r.create<LLVM::ConstantOp>(
         loc, i32, r.getI32IntegerAttr(ap.getStateOffset()));
-    Value inlet_idx = r.create<LLVM::ConstantOp>(
-        loc, i32, r.getI32IntegerAttr(ap.getInletIdx()));
+    Value buf_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(ap.getBufOffset()));
+    Value buf_size = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(ap.getBufSize()));
 
     // operands[5]=delay_time, operands[4]=spf
     r.replaceOpWithNewOp<LLVM::CallOp>(
         op, fn,
-        ValueRange{operands[0], state_off, operands[1], inlet_idx, operands[2],
+        ValueRange{operands[0], state_off, buf_off, buf_size, operands[2],
                    operands[3], operands[5], operands[4]});
     return success();
   }

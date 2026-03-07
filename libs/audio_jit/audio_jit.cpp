@@ -323,15 +323,6 @@ extern "C" Node *ylc_get_input_node(Node *node, int32_t inlet_idx) {
   return (Node *)node->connections[inlet_idx].source_node_index;
 }
 
-// Describes a hidden delay-buffer inlet baked into a compiled synth.
-// Passed as a compile-time-constant array to ylc_create_audio_node so that
-// node creation, delay-buffer allocation, and inlet wiring all happen in one
-// place.
-struct BufInputSpec {
-  int inlet_idx;
-  double max_delay_sec;
-};
-
 // Called at runtime (from JIT'd code) to wrap a compiled perform function
 // in a Node and register it in the audio graph.
 extern "C" Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
@@ -364,30 +355,6 @@ extern "C" Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
 // from.
 extern "C" void *ylc_node_get_state(Node *node) {
   return node->state_ptr ? node->state_ptr : (void *)(node + 1);
-}
-
-// Wire one hidden delay-buffer inlet into a freshly created DSP node.
-// Creates a zeroed circular buffer of max_delay_sec duration and plugs it as
-// inputs[inlet_idx].  We allocate the Node directly (without graph_embed) so
-// the delay buffer does NOT get appended to _chain_head/_chain_tail — if it
-// did, play_node() would see a non-NULL chain tail, call chain(), and set
-// write_to_output on the zero-buffer node instead of the JIT synth node,
-// producing silence.
-extern "C" void ylc_attach_buf_inlet(Node *node, int32_t inlet_idx,
-                                     double max_delay_sec) {
-  int max_sz = (int)(max_delay_sec / ctx_spf());
-  if (max_sz <= 0)
-    max_sz = 1;
-  Node *buf = (Node *)calloc(1, sizeof(Node));
-  *buf = (Node){
-      .perform = NULL,
-      .num_inputs = 0,
-      .output = (Signal){.layout = 1,
-                         .size = max_sz,
-                         .buf = (double *)calloc(max_sz, sizeof(double))},
-      .meta = (char *)"delay_buf",
-  };
-  plug_input_in_graph(inlet_idx, node, buf);
 }
 
 // =============================================================================
@@ -474,7 +441,6 @@ struct DspBuildCtx {
   int state_offset = 0;
   int next_hidden_inlet = 0; // next inlet index beyond the real lambda params
   std::unordered_map<std::string, Value> locals;
-  std::vector<BufInputSpec> buf_inputs;
   // Insertion point before the scf.for loop — used to hoist values (e.g.
   // table pointers) that are loop-invariant.  Set after the ForOp is created;
   // updated each time a new hoisted op is emitted.
@@ -494,6 +460,12 @@ struct DspBuildCtx {
 static int reserve_state(DspBuildCtx &ctx, int bytes) {
   int off = ctx.state_offset;
   ctx.state_offset += bytes;
+  return off;
+}
+
+static int reserve_state_aligned(DspBuildCtx &ctx, int bytes, int align) {
+  int off = (ctx.state_offset + (align - 1)) & ~(align - 1);
+  ctx.state_offset = off + bytes;
   return off;
 }
 
@@ -1258,9 +1230,22 @@ static double ast_const_double(Ast *a) {
   return 0.0;
 }
 
+static int max_delay_samples(double max_delay_sec) {
+  double spf = ctx_spf();
+  if (spf <= 0.0) {
+    spf = 1.0 / 48000.0;
+  }
+  int samples = (int)(max_delay_sec / spf);
+  if (samples < 2) {
+    samples = 2;
+  }
+  return samples;
+}
+
 // delay delay_time max_delay fb input → f64
-// Creates a hidden inlet holding the circular delay buffer.
-// State: [write_pos: i32] (4 bytes used, 8 allocated for alignment).
+// State layout:
+//   [write_pos: i32] at state_offset (8 bytes reserved for alignment)
+//   [ring buffer: f64[max_delay_samples]] at buf_offset.
 // delay_time is a per-sample f64 value (may vary within the loop).
 // read_pos is derived at runtime as (write_pos - delay_samps + buf_sz) %
 // buf_sz.
@@ -1273,27 +1258,20 @@ static Value DelayHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   Value fb = build_dsp_expr(&args[2], ctx, jit_ctx);
   Value input = build_dsp_expr(&args[3], ctx, jit_ctx);
 
-  if (strcmp(fn->data.AST_IDENTIFIER.value, "delay1") == 0) {
-    int off = ctx.state_offset;
-    ctx.state_offset +=
-        8; // 8 bytes for alignment; only write_pos (i32) is used
-    int hidden_idx = ctx.next_hidden_inlet++;
-    ctx.buf_inputs.push_back({hidden_idx, max_delay});
+  int off = reserve_state_aligned(ctx, 8, 8);
+  int buf_size = max_delay_samples(max_delay);
+  int buf_off = reserve_state_aligned(ctx, buf_size * (int)sizeof(double), 8);
 
+  if (strcmp(fn->data.AST_IDENTIFIER.value, "delay1") == 0) {
     return ctx.b
         .create<Delay1Op>(ctx.loc, ctx.state_ptr, ctx.inputs_ptr, input, fb,
-                          ctx.spf, delay_time, off, hidden_idx)
+                          ctx.spf, delay_time, off, buf_off, buf_size)
         ->getResult(0);
   }
 
-  int off = ctx.state_offset;
-  ctx.state_offset += 8; // 8 bytes for alignment; only write_pos (i32) is used
-  int hidden_idx = ctx.next_hidden_inlet++;
-  ctx.buf_inputs.push_back({hidden_idx, max_delay});
-
   return ctx.b
       .create<DelayOp>(ctx.loc, ctx.state_ptr, ctx.inputs_ptr, input, fb,
-                       ctx.spf, delay_time, off, hidden_idx)
+                       ctx.spf, delay_time, off, buf_off, buf_size)
       ->getResult(0);
 }
 
@@ -1306,14 +1284,13 @@ static Value AllpassHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   Value g = build_dsp_expr(&args[2], ctx, jit_ctx);
   Value input = build_dsp_expr(&args[3], ctx, jit_ctx);
 
-  int off = ctx.state_offset;
-  ctx.state_offset += 8; // 8 bytes for alignment; only write_pos (i32) is used
-  int hidden_idx = ctx.next_hidden_inlet++;
-  ctx.buf_inputs.push_back({hidden_idx, max_delay});
+  int off = reserve_state_aligned(ctx, 8, 8);
+  int buf_size = max_delay_samples(max_delay);
+  int buf_off = reserve_state_aligned(ctx, buf_size * (int)sizeof(double), 8);
 
   return ctx.b
       .create<AllpassOp>(ctx.loc, ctx.state_ptr, ctx.inputs_ptr, input, g,
-                         ctx.spf, delay_time, off, hidden_idx)
+                         ctx.spf, delay_time, off, buf_off, buf_size)
       ->getResult(0);
 }
 
@@ -1324,14 +1301,13 @@ static Value Allpass1Handler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   Value g = build_dsp_expr(&args[2], ctx, jit_ctx);
   Value input = build_dsp_expr(&args[3], ctx, jit_ctx);
 
-  int off = ctx.state_offset;
-  ctx.state_offset += 8; // 8 bytes for alignment; only write_pos (i32) is used
-  int hidden_idx = ctx.next_hidden_inlet++;
-  ctx.buf_inputs.push_back({hidden_idx, max_delay});
+  int off = reserve_state_aligned(ctx, 8, 8);
+  int buf_size = max_delay_samples(max_delay);
+  int buf_off = reserve_state_aligned(ctx, buf_size * (int)sizeof(double), 8);
 
   return ctx.b
       .create<Allpass1Op>(ctx.loc, ctx.state_ptr, ctx.inputs_ptr, input, g,
-                          ctx.spf, delay_time, off, hidden_idx)
+                          ctx.spf, delay_time, off, buf_off, buf_size)
       ->getResult(0);
 }
 
@@ -1646,8 +1622,6 @@ struct InlinedCtx {
     parent.array_inits = std::move(child.array_inits);
     parent.state_offset = child.state_offset;
     parent.next_hidden_inlet = child.next_hidden_inlet;
-    parent.buf_inputs.insert(parent.buf_inputs.end(), child.buf_inputs.begin(),
-                             child.buf_inputs.end());
     parent.hoistable_calls.insert(parent.hoistable_calls.end(),
                                   child.hoistable_calls.begin(),
                                   child.hoistable_calls.end());
@@ -1744,9 +1718,9 @@ Value list_expr_handlers(Ast *ast, const char *fn_name, DspBuildCtx &ctx,
     Value acc = build_dsp_expr(init_ast, ctx, jit_ctx);
 
     // For each list element, inline the fold body with acc and el bound.
-    // InlinedCtx snapshots state_offset/buf_inputs from ctx and propagates
-    // them back on destruction, so stateful ops (allpass, delay…) in the
-    // body get unique state slots across iterations.
+    // InlinedCtx snapshots state_offset from ctx and propagates it back on
+    // destruction, so stateful ops (allpass, delay...) in the body get unique
+    // state slots across iterations.
     Ast *items = list_ast->data.AST_LIST.items;
     size_t len = list_ast->data.AST_LIST.len;
     for (size_t i = 0; i < len; i++) {
@@ -1758,7 +1732,7 @@ Value list_expr_handlers(Ast *ast, const char *fn_name, DspBuildCtx &ctx,
         inlined.child.locals[el_name] = el;
         acc = build_dsp_expr(fold_fn->data.AST_LAMBDA.body, inlined.child,
                              jit_ctx);
-      } // destructor writes state_offset and buf_inputs back to ctx
+      } // destructor writes state_offset back to ctx
     }
 
     return acc;
@@ -2296,7 +2270,6 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
 struct DspModuleResult {
   OwningOpRef<ModuleOp> mod;
   int state_bytes;
-  std::vector<BufInputSpec> buf_inputs;
   std::vector<HoistableCall> hoistable_calls;
   std::vector<ArrayInitSpec> array_inits;
   std::vector<BufRefSpec> buf_ref_inputs;
@@ -2397,8 +2370,8 @@ static DspModuleResult build_dsp_module(Ast *lambda, const std::string &fn_name,
           .getResult();
   b.create<LLVM::ReturnOp>(loc, ValueRange{out_buf});
 
-  return {std::move(module_ref), state_bytes,     ctx.buf_inputs,
-          ctx.hoistable_calls,   ctx.array_inits, ctx.buf_ref_inputs};
+  return {std::move(module_ref), state_bytes, ctx.hoistable_calls,
+          ctx.array_inits,       ctx.buf_ref_inputs};
 }
 
 // =============================================================================
@@ -2547,32 +2520,6 @@ void hoist_array_inits(std::vector<ArrayInitSpec> inits, LLVMValueRef node_val,
     LLVMBuildStore(builder, LLVMConstReal(f64_ty, init.value), slot_ptr);
   }
 }
-void wire_node_bufs(std::vector<BufInputSpec> buf_inputs, LLVMValueRef node_val,
-                    LLVMModuleRef module_ref, LLVMBuilderRef builder) {
-
-  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module_ref);
-  LLVMTypeRef ptr_ty = LLVMPointerTypeInContext(llvm_ctx, 0);
-  LLVMTypeRef i32_ty = LLVMInt32TypeInContext(llvm_ctx);
-  LLVMTypeRef f64_ty = LLVMDoubleTypeInContext(llvm_ctx);
-  LLVMTypeRef void_ty = LLVMVoidTypeInContext(llvm_ctx);
-  LLVMTypeRef attach_params[] = {ptr_ty, i32_ty, f64_ty};
-  LLVMTypeRef attach_fn_ty = LLVMFunctionType(void_ty, attach_params, 3, 0);
-  LLVMValueRef attach_fn =
-      LLVMGetNamedFunction(module_ref, "ylc_attach_buf_inlet");
-  if (!attach_fn) {
-    attach_fn =
-        LLVMAddFunction(module_ref, "ylc_attach_buf_inlet", attach_fn_ty);
-    LLVMSetLinkage(attach_fn, LLVMExternalLinkage);
-  }
-  for (auto &buf : buf_inputs) {
-    LLVMValueRef args[] = {
-        node_val,
-        LLVMConstInt(i32_ty, buf.inlet_idx, 0),
-        LLVMConstReal(f64_ty, buf.max_delay_sec),
-    };
-    LLVMBuildCall2(builder, attach_fn_ty, attach_fn, args, 3, "");
-  }
-}
 LLVMValueRef build_ctor_fn(int synth_id, std::string perform_name,
                            DspModuleResult &result, int num_inputs,
                            JITLangCtx *jit_ctx, LLVMModuleRef module_ref,
@@ -2580,12 +2527,10 @@ LLVMValueRef build_ctor_fn(int synth_id, std::string perform_name,
 
   auto &mlir_mod = result.mod;
   int state_bytes = result.state_bytes;
-  auto &buf_inputs = result.buf_inputs;
 
   std::string ctor_name = "synth_ctor_" + std::to_string(synth_id);
 
-  int num_total_inputs =
-      num_inputs + (int)buf_inputs.size() + (int)result.buf_ref_inputs.size();
+  int num_total_inputs = num_inputs + (int)result.buf_ref_inputs.size();
 
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module_ref);
   LLVMTypeRef ptr_ty = LLVMPointerTypeInContext(llvm_ctx, 0);
@@ -2682,10 +2627,6 @@ LLVMValueRef build_ctor_fn(int synth_id, std::string perform_name,
       LLVMBuildCall2(ctor_b, attach_fn_ty, attach_fn, args, 3, "");
     }
   }
-
-  // Wire delay-buffer inlets.
-  if (!buf_inputs.empty())
-    wire_node_bufs(buf_inputs, node_val, module_ref, ctor_b);
 
   // Wire external buffer-ref inlets (existing nodes plugged as hidden inputs).
   // Top-level vars have globally-allocated storage accessible from any
@@ -2988,7 +2929,6 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
   auto result = build_dsp_module(lambda, fn_name, jit_ctx, mlir_ctx);
   auto &mlir_mod = result.mod;
   int state_bytes = result.state_bytes;
-  auto &buf_inputs = result.buf_inputs;
 
   if (!mlir_mod) {
     fprintf(stderr, "compile_audio_fn: DSP IR build failed\n");
@@ -3018,13 +2958,10 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
     return LLVMConstInt(LLVMInt32Type(), 0, 0);
   }
 
-  int num_total_inputs =
-      num_inputs + (int)buf_inputs.size() + (int)result.buf_ref_inputs.size();
-
   fprintf(stderr,
-          "compile_audio_fn: OK name=%s real_inputs=%d delay_bufs=%d "
+          "compile_audio_fn: OK name=%s real_inputs=%d "
           "buf_refs=%d state=%d bytes\n",
-          fn_name.c_str(), num_inputs, (int)buf_inputs.size(),
+          fn_name.c_str(), num_inputs,
           (int)result.buf_ref_inputs.size(), state_bytes);
 
   LLVMValueRef ctor_fn = build_ctor_fn(synth_id, fn_name, result, num_inputs,

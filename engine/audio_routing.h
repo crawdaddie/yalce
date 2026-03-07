@@ -1,9 +1,9 @@
 #ifndef _ENGINE_AUDIO_ROUTING_H
 #define _ENGINE_AUDIO_ROUTING_H
 
+#include "common.h"
 #include <soundio/soundio.h>
 
-#define MAX_INPUTS 16
 #define MAX_SIGNALS 16
 
 typedef struct {
