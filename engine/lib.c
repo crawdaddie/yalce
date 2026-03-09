@@ -588,6 +588,7 @@ NodeRef play_into(NodeRef target, NodeRef node) {
       node->write_to_output = false;
     }
   }
+
   return play_node_before(target, node);
 }
 

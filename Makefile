@@ -69,7 +69,7 @@ LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 LANG_CPP_OBJS := $(LANG_CPP_SRCS:$(LANG_SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
 LANG_OBJS += $(LANG_CPP_OBJS)
 
-.PHONY: all clean engine test wasm serve_docs engine_bindings gui cor
+.PHONY: all clean engine audio_jit test wasm serve_docs engine_bindings gui cor
 
 all: $(BUILD_DIR)/ylc
 
@@ -78,6 +78,10 @@ debug: all
 engine:
 	@echo "######### MAKE ENGINE------------"
 	$(MAKE) -C engine
+
+audio_jit: engine
+	@echo "######### MAKE AUDIO_JIT------------"
+	$(MAKE) -C libs/audio_jit
 
 gui:
 	@echo "######### MAKE GUI------------"
@@ -112,7 +116,7 @@ $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.cpp | $(BUILD_DIR)
 	$(LANG_CXX) -c -o $@ $<
 
 # Build the final executable (use C++ linker since we have C++ objects)
-$(BUILD_DIR)/ylc: $(LANG_OBJS) | engine gui
+$(BUILD_DIR)/ylc: $(LANG_OBJS) | audio_jit gui
 	$(LANG_CXX) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
 ifeq ($(shell uname -s),Darwin)
 	otool -L $(BUILD_DIR)/ylc

@@ -185,8 +185,9 @@ Type *tvar(const char *name) {
     fprintf(stderr, "Error allocating memory for type");
   }
   mem->kind = T_VAR;
-  mem->data.T_VAR = t_alloc(sizeof(char) * strlen(name));
-  memcpy(mem->data.T_VAR, name, strlen(name));
+  size_t name_len = strlen(name);
+  mem->data.T_VAR = t_alloc(sizeof(char) * (name_len + 1));
+  memcpy(mem->data.T_VAR, name, name_len + 1);
   return mem;
 }
 

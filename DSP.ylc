@@ -22,6 +22,12 @@ let delay = extern fn Double -> Double -> Double -> Double -> Double;
 let delay1 = extern fn Double -> Double -> Double -> Double -> Double; # delay with linearly interpolated reads
 let allpass = extern fn Double -> Double -> Double -> Double -> Double;
 let allpass1 = extern fn Double -> Double -> Double -> Double -> Double; # linearly interpolating
+let alloc_delay = extern fn Double -> Array of Double;
+let tabread = extern fn Array of Double -> Double -> Double;
+let tabread1 = extern fn Array of Double -> Double -> Double;
+let tabwrite = extern fn Array of Double -> Double -> Double -> Double;
+let fdn4 = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double; # d1 d2 d3 d4 max_delay fb input
+let fdn4m = extern fn Array of Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double; # matrix16 d1 d2 d3 d4 max_delay fb input
 let white = extern fn () -> Double;
 let bufref = extern fn Ptr -> Ptr;
 let bufread = extern fn Double -> Ptr -> Double;
@@ -36,6 +42,9 @@ let bufplay = extern fn Ptr -> Double -> Double -> Double -> Double;
 let grains = extern fn Int ->       Ptr -> Double -> Double -> Double -> Double;
 let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
 let kill_on_end = extern fn Double -> Double;
+
+let dsp_mmul_op = extern fn Array of Double -> Array of Double -> Array of Double -> ();
+let dsp_array_sum = extern fn Array of Double -> Double;
 
 # let compile_audio_fn = extern fn T -> (Array of Double -> Ptr);
 # type CompiledSynth = (Array of Double -> Synth, Int);
@@ -233,6 +242,24 @@ register_audio_op (
       y
     ;;
 
+    # one-pole lowpass: frequency in Hz
+    let lpf1p = fn freq x ->
+      let Z = [| 0. |];
+      let g = clampup 0.999 (2.0 * Math.PI * freq * (spf ())) in
+      let y = Z[0] |> pole g x in
+      Z[0] := y;
+      y
+    ;;
+
+    # one-pole highpass: HP = input - LP(input)
+    let hpf1p = fn freq x ->
+      let Z = [| 0. |];
+      let g = clampup 0.999 (2.0 * Math.PI * freq * (spf ())) in
+      let lp = Z[0] |> pole g x in
+      Z[0] := lp;
+      x - lp
+    ;;
+
     # 4‑pole ladder with feedback + tanh drive
     let ladder = fn cutoff res drive x ->
       let Z = [| 0., 0., 0., 0. |];  # z1..z4
@@ -256,47 +283,63 @@ register_audio_op (
     ;
   ;
 );
+import std/Math;
+import std/Lists;
 
-register_audio_op (let pump = fn sp f-> 
-  let cutoff = phasor (-1. * sp) |> unipolar_scale 100. 800. in
-  let ff = f + lfnoise1 0 10 1 in
-  0.3 * (saw_osc ff + saw_osc (ff * 1.01) + saw_osc (ff * 1.02) + saw_osc (ff * 0.5))
-  |> Filter.lpf cutoff 2.
-  ;
-);
+let Reverb = module () -> 
+  import std/Lists;
+  let mccartney = compile_audio_fn (fn inp size ->
+    let inp_scale = 0.2 * inp in
 
-# let _ = compile_audio_fn (fn () -> 
-#   pump (lfnoise0 100. 300. 8) 8
-# ) |> play_node
-#
+    # James McCartney SC2 example:
+    # The next example is by James McCartney. It comes from the Why Supercollider 2.0? document that was part of the SuperCollider2 distribution.
+    #
+    # The example is more or less a Schroeder reverb - a signal passed through a parallel bank of comb filters which then pass through a series of allpass filters.
+    # ```supercollider
+    # (
+    # {
+    # var s, z, y;
+    #     // 10 voices of a random sine percussion sound :
+    # s = Mix.ar(Array.fill(10, { Resonz.ar(Dust.ar(0.2, 50), 200 + 3000.0.rand, 0.003)}) );
+    #     // reverb predelay time :
+    # z = DelayN.ar(s, 0.048);
+    #     // 7 length modulated comb delays in parallel :
+    # y = Mix.ar(Array.fill(7,{ CombL.ar(z, 0.1, LFNoise1.kr(0.1.rand, 0.04, 0.05), 15) }));
+    #     // two parallel chains of 4 allpass delays (8 total) :
+    # 4.do({ y = AllpassN.ar(y, 0.050, [0.050.rand, 0.050.rand], 1) });
+    #     // add original sound to reverb and play it :
+    # s+(0.2*y)
+    # }.scope
+    # )
+    # ``` 
 
+    let s = (1 / 8.) * Lists.fold (fn s i -> 
+      s + delay1 (lfnoise1 0.1 0.04 0.12) 0.12 0.6 (0.2 * inp_scale);
+    ) 0. [0,1,2,3,4,5,6,7];
 
-# let _ = compile_audio_fn (fn () ->
-#   trig 8
-#   |> trig_choose [|100., 200., 150., 300., 400., 50.|]
-#   |> pump 8
-# ) |> play_node
+    let s1 = Lists.fold (fn s i -> s |> allpass1 (Math.rand_double_range 0. 0.2) 0.2 0.9) s [0,1,2,3]; 
+    let s2 = Lists.fold (fn s i -> s |> allpass1 (Math.rand_double_range 0. 0.2) 0.2 0.9) s [0,1,2,3]; 
 
-# let _ = compile_audio_fn (fn () -> 
-#   let cutoff = (phasor -9. |> unipolar_scale 100. 800. ) in
-#   (saw_osc 100 + saw_osc 101. + saw_osc 102.)
-#   |> Filter.ladder cutoff 40. 100.
-# ) |> play_node
+    let wet = 0.4 * (s1 + s2 + s)
+      |> Filter.lpf (7000.0 - 2500.0 * size) 0.707
+      |> Filter.hpf 120. 0.707
+      ;
 
-# let amen = load_soundfile "fat_amen_mono_48000.wav";
-# let _ = compile_audio_fn (fn () -> 
-#   phasor 0.7 |> bufread (bufref amen)
-# ) |> play_node
-#
+    0.25 * inp + 0.75 * wet
+  );
 
+  let fdn4 = compile_audio_fn (fn inp ->
+    0.7 * inp + 0.3 * fdn4 0.067 0.079 0.089 0.101 0.16 0.92 inp
+  );
+  let fdn4m = compile_audio_fn (fn inp -> 
+    let m = [|
+        -0.5, 0.5, 0.5, 0.5,
+         0.5,-0.5, 0.5, 0.5,
+         0.5, 0.5,-0.5, 0.5,
+         0.5, 0.5, 0.5,-0.5
+      |];
 
-
-
-
-# register_audio_op (
-#   let SynthFuncs = module () ->
-#     let sq_detune = fn f -> sq_osc f + sq_osc (f * 1.01);;
-#     let saw_detune = fn f -> saw_osc f + saw_osc (f * 1.01);;
-#
-# );
-#
+    let wet = fdn4m m 0.067 0.079 0.089 0.101 0.16 0.9 inp;
+    0.7 * inp + 0.3 * wet
+  );
+;

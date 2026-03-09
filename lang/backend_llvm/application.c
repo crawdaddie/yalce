@@ -225,6 +225,7 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
   if (!callable) {
     fprintf(stderr, "Error: callable not found for\n");
     print_ast_err(ast->data.AST_APPLICATION.function);
+    (void)callable_type;
     print_location(ast);
     return NULL;
   }
@@ -244,10 +245,13 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
 
 Type *resolve_sym_type(Type *exp, Type *sym_type, TypeEnv *env) {
   TICtx ctx = {};
-  unify(exp, sym_type, &ctx);
+  // Unification can mutate its inputs; never mutate shared AST/symbol types.
+  Type *exp_copy = deep_copy_type(exp);
+  Type *sym_copy = deep_copy_type(sym_type);
+  unify(exp_copy, sym_copy, &ctx);
   Subst *subst = solve_constraints(ctx.constraints);
   env = create_env_from_subst(env, subst);
-  Type *res = deep_copy_type(sym_type);
+  Type *res = deep_copy_type(sym_copy);
   return resolve_type_in_env(res, env);
 }
 

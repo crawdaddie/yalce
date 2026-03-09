@@ -124,6 +124,105 @@ extern "C" double ylc_allpass1_state(void *state_raw, int32_t state_offset,
   return delayed - g * input;
 }
 
+static inline int32_t clamp_delay_samps(double delay_secs, double spf,
+                                        int32_t buf_size) {
+  double ds = delay_secs / spf;
+  if (ds < 1.0)
+    ds = 1.0;
+  if (ds >= (double)buf_size)
+    ds = (double)(buf_size - 1);
+  return (int32_t)ds;
+}
+
+extern "C" double ylc_fdn4_householder_state(
+    void *state_raw, int32_t state_offset, int32_t buf0_offset,
+    int32_t buf1_offset, int32_t buf2_offset, int32_t buf3_offset,
+    int32_t buf_size, double input, double fb, double d1_secs, double d2_secs,
+    double d3_secs, double d4_secs, double spf) {
+  int32_t *w = (int32_t *)((char *)state_raw + state_offset);
+  double *b0 = (double *)((char *)state_raw + buf0_offset);
+  double *b1 = (double *)((char *)state_raw + buf1_offset);
+  double *b2 = (double *)((char *)state_raw + buf2_offset);
+  double *b3 = (double *)((char *)state_raw + buf3_offset);
+
+  int32_t d1 = clamp_delay_samps(d1_secs, spf, buf_size);
+  int32_t d2 = clamp_delay_samps(d2_secs, spf, buf_size);
+  int32_t d3 = clamp_delay_samps(d3_secs, spf, buf_size);
+  int32_t d4 = clamp_delay_samps(d4_secs, spf, buf_size);
+
+  double y0 = b0[(w[0] - d1 + buf_size) % buf_size];
+  double y1 = b1[(w[1] - d2 + buf_size) % buf_size];
+  double y2 = b2[(w[2] - d3 + buf_size) % buf_size];
+  double y3 = b3[(w[3] - d4 + buf_size) % buf_size];
+
+  double g = fb;
+  if (g > 0.999)
+    g = 0.999;
+  if (g < -0.999)
+    g = -0.999;
+
+  // Householder A = (2/N)11^T - I with N=4: v_i = 0.5*sum(y) - y_i
+  double sum = y0 + y1 + y2 + y3;
+  b0[w[0]] = input + g * (0.5 * sum - y0);
+  b1[w[1]] = input + g * (0.5 * sum - y1);
+  b2[w[2]] = input + g * (0.5 * sum - y2);
+  b3[w[3]] = input + g * (0.5 * sum - y3);
+
+  w[0] = (w[0] + 1) % buf_size;
+  w[1] = (w[1] + 1) % buf_size;
+  w[2] = (w[2] + 1) % buf_size;
+  w[3] = (w[3] + 1) % buf_size;
+
+  return 0.25 * sum;
+}
+
+extern "C" double ylc_fdn4m_state(
+    void *state_raw, int32_t state_offset, int32_t buf0_offset,
+    int32_t buf1_offset, int32_t buf2_offset, int32_t buf3_offset,
+    int32_t buf_size, int64_t matrix_offset, double input, double fb,
+    double d1_secs, double d2_secs, double d3_secs, double d4_secs,
+    double spf) {
+  int32_t *w = (int32_t *)((char *)state_raw + state_offset);
+  double *b0 = (double *)((char *)state_raw + buf0_offset);
+  double *b1 = (double *)((char *)state_raw + buf1_offset);
+  double *b2 = (double *)((char *)state_raw + buf2_offset);
+  double *b3 = (double *)((char *)state_raw + buf3_offset);
+  double *m = (double *)((char *)state_raw + matrix_offset);
+
+  int32_t d1 = clamp_delay_samps(d1_secs, spf, buf_size);
+  int32_t d2 = clamp_delay_samps(d2_secs, spf, buf_size);
+  int32_t d3 = clamp_delay_samps(d3_secs, spf, buf_size);
+  int32_t d4 = clamp_delay_samps(d4_secs, spf, buf_size);
+
+  double y0 = b0[(w[0] - d1 + buf_size) % buf_size];
+  double y1 = b1[(w[1] - d2 + buf_size) % buf_size];
+  double y2 = b2[(w[2] - d3 + buf_size) % buf_size];
+  double y3 = b3[(w[3] - d4 + buf_size) % buf_size];
+
+  double g = fb;
+  if (g > 0.999)
+    g = 0.999;
+  if (g < -0.999)
+    g = -0.999;
+
+  double v0 = m[0] * y0 + m[1] * y1 + m[2] * y2 + m[3] * y3;
+  double v1 = m[4] * y0 + m[5] * y1 + m[6] * y2 + m[7] * y3;
+  double v2 = m[8] * y0 + m[9] * y1 + m[10] * y2 + m[11] * y3;
+  double v3 = m[12] * y0 + m[13] * y1 + m[14] * y2 + m[15] * y3;
+
+  b0[w[0]] = input + g * v0;
+  b1[w[1]] = input + g * v1;
+  b2[w[2]] = input + g * v2;
+  b3[w[3]] = input + g * v3;
+
+  w[0] = (w[0] + 1) % buf_size;
+  w[1] = (w[1] + 1) % buf_size;
+  w[2] = (w[2] + 1) % buf_size;
+  w[3] = (w[3] + 1) % buf_size;
+
+  return 0.25 * (y0 + y1 + y2 + y3);
+}
+
 // =============================================================================
 // DspDialect constructor — registers all ops.
 // =============================================================================
@@ -132,7 +231,7 @@ DspDialect::DspDialect(MLIRContext *ctx)
     : Dialect("dsp", ctx, TypeID::get<DspDialect>()) {
   addOperations<InletOp, OutletOp, PhasorOp, ImpulseOp, PhasorTrigOp,
                 TableLookupOp, BufReadOp, LinscaleOp, DelayOp, Delay1Op,
-                AllpassOp, Allpass1Op, WhiteNoiseOp>();
+                AllpassOp, Allpass1Op, Fdn4Op, Fdn4mOp, WhiteNoiseOp>();
 }
 
 // =============================================================================
@@ -565,6 +664,88 @@ struct Allpass1OpLowering : public ConversionPattern {
   }
 };
 
+struct Fdn4OpLowering : public ConversionPattern {
+  Fdn4OpLowering(MLIRContext *ctx)
+      : ConversionPattern(Fdn4Op::getOperationName(), 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                                ConversionPatternRewriter &r) const override {
+    auto fdn = cast<Fdn4Op>(op);
+    auto loc = op->getLoc();
+    auto mod = op->getParentOfType<ModuleOp>();
+    auto ptr = LLVM::LLVMPointerType::get(op->getContext());
+    auto f64 = r.getF64Type();
+    auto i32 = r.getI32Type();
+
+    auto fn_ty = LLVM::LLVMFunctionType::get(
+        f64, {ptr, i32, i32, i32, i32, i32, i32, f64, f64, f64, f64, f64, f64,
+              f64},
+        false);
+    auto fn = declare_extern(mod, r, "ylc_fdn4_householder_state", fn_ty);
+
+    Value state_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(fdn.getStateOffset()));
+    Value buf0_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(fdn.getBuf0Offset()));
+    Value buf1_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(fdn.getBuf1Offset()));
+    Value buf2_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(fdn.getBuf2Offset()));
+    Value buf3_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(fdn.getBuf3Offset()));
+    Value buf_size = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(fdn.getBufSize()));
+
+    r.replaceOpWithNewOp<LLVM::CallOp>(
+        op, fn,
+        ValueRange{operands[0], state_off, buf0_off, buf1_off, buf2_off,
+                   buf3_off,  buf_size,  operands[2], operands[3], operands[5],
+                   operands[6], operands[7], operands[8], operands[4]});
+    return success();
+  }
+};
+
+struct Fdn4mOpLowering : public ConversionPattern {
+  Fdn4mOpLowering(MLIRContext *ctx)
+      : ConversionPattern(Fdn4mOp::getOperationName(), 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                                ConversionPatternRewriter &r) const override {
+    auto fdn = cast<Fdn4mOp>(op);
+    auto loc = op->getLoc();
+    auto mod = op->getParentOfType<ModuleOp>();
+    auto ptr = LLVM::LLVMPointerType::get(op->getContext());
+    auto f64 = r.getF64Type();
+    auto i32 = r.getI32Type();
+    auto i64 = r.getI64Type();
+
+    auto fn_ty = LLVM::LLVMFunctionType::get(
+        f64, {ptr, i32, i32, i32, i32, i32, i32, i64, f64, f64, f64, f64, f64,
+              f64, f64},
+        false);
+    auto fn = declare_extern(mod, r, "ylc_fdn4m_state", fn_ty);
+
+    Value state_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(fdn.getStateOffset()));
+    Value buf0_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(fdn.getBuf0Offset()));
+    Value buf1_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(fdn.getBuf1Offset()));
+    Value buf2_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(fdn.getBuf2Offset()));
+    Value buf3_off = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(fdn.getBuf3Offset()));
+    Value buf_size = r.create<LLVM::ConstantOp>(
+        loc, i32, r.getI32IntegerAttr(fdn.getBufSize()));
+
+    r.replaceOpWithNewOp<LLVM::CallOp>(
+        op, fn,
+        ValueRange{operands[0], state_off, buf0_off, buf1_off, buf2_off,
+                   buf3_off,  buf_size,  operands[9], operands[2], operands[3],
+                   operands[5], operands[6], operands[7], operands[8],
+                   operands[4]});
+    return success();
+  }
+};
+
 extern "C" double white_noise_sample() {
   int rand_int = rand();
   double rand_double = (double)rand_int / RAND_MAX;
@@ -632,7 +813,9 @@ struct DspToLLVMPass
              // ImpulseOpLowering,
              PhasorTrigOpLowering, LinscaleOpLowering, TableLookupOpLowering,
              BufReadOpLowering, DelayOpLowering, Delay1OpLowering,
-             AllpassOpLowering, Allpass1OpLowering, WhiteNoiseLowering>(
+             AllpassOpLowering, Allpass1OpLowering, Fdn4OpLowering,
+             Fdn4mOpLowering,
+             WhiteNoiseLowering>(
             &getContext());
 
     if (failed(applyPartialConversion(getOperation(), target,

@@ -357,6 +357,18 @@ extern "C" void *ylc_node_get_state(Node *node) {
   return node->state_ptr ? node->state_ptr : (void *)(node + 1);
 }
 
+extern "C" void ylc_zero_state_range(Node *node, int64_t base_off,
+                                     int64_t len) {
+  if (!node || len <= 0) {
+    return;
+  }
+  char *state = (char *)ylc_node_get_state(node);
+  double *buf = (double *)(state + base_off);
+  for (int64_t i = 0; i < len; i++) {
+    buf[i] = 0.0;
+  }
+}
+
 // =============================================================================
 // Global MLIR context
 // =============================================================================
@@ -422,6 +434,15 @@ struct ArrayInitSpec {
 struct ArrayStateSpec {
   int base_offset;
   int len;
+  bool dynamic = false;
+  int ptr_slot_offset = 0;
+  int len_slot_offset = 0;
+};
+
+struct DynamicDelayAllocSpec {
+  int ptr_slot_offset;
+  int len_slot_offset;
+  int inlet_idx;
 };
 
 // =============================================================================
@@ -453,9 +474,27 @@ struct DspBuildCtx {
   std::vector<HoistableCall> hoistable_calls;
   // Literal array element initializers to emit at node-creation time.
   std::vector<ArrayInitSpec> array_inits;
+  // alloc_delay buffers whose sizes are computed in ctor from synth params.
+  std::vector<DynamicDelayAllocSpec> dynamic_delay_allocs;
   // External buffer nodes wired as hidden inlets at node-creation time.
   std::vector<BufRefSpec> buf_ref_inputs;
 };
+
+static ArrayStateSpec make_static_array_state(int base, int len) {
+  ArrayStateSpec s{};
+  s.base_offset = base;
+  s.len = len;
+  s.dynamic = false;
+  return s;
+}
+
+static ArrayStateSpec make_dynamic_array_state(int ptr_slot, int len_slot) {
+  ArrayStateSpec s{};
+  s.dynamic = true;
+  s.ptr_slot_offset = ptr_slot;
+  s.len_slot_offset = len_slot;
+  return s;
+}
 
 static int reserve_state(DspBuildCtx &ctx, int bytes) {
   int off = ctx.state_offset;
@@ -476,7 +515,7 @@ static Value emit_array_state(Ast *array_ast, DspBuildCtx &ctx,
   int arr_base = ctx.state_offset;
   ctx.state_offset += 8 * len;
 
-  ctx.array_states[name] = ArrayStateSpec{arr_base, len};
+  ctx.array_states[name] = make_static_array_state(arr_base, len);
 
   // Record literal initializers for node-creation time.
   for (int i = 0; i < len; i++) {
@@ -509,6 +548,136 @@ static Value emit_array_state(Ast *array_ast, DspBuildCtx &ctx,
 // =============================================================================
 
 static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx);
+static Value hoist_array_fill_const_expr(Ast *args, DspBuildCtx &ctx,
+                                         JITLangCtx *jit_ctx,
+                                         LLVMModuleRef module_ref,
+                                         LLVMBuilderRef builder);
+static Value hoist_alloc_delay_expr(Ast *delay_sec_ast, DspBuildCtx &ctx,
+                                    JITLangCtx *jit_ctx, int64_t *out_len);
+
+static void flatten_application(Ast *app, Ast *&callee,
+                                std::vector<Ast *> &args_out) {
+  if (!app || app->tag != AST_APPLICATION) {
+    callee = app;
+    return;
+  }
+  Ast *fn = app->data.AST_APPLICATION.function;
+  if (fn && fn->tag == AST_APPLICATION) {
+    flatten_application(fn, callee, args_out);
+  } else {
+    callee = fn;
+  }
+  for (size_t i = 0; i < app->data.AST_APPLICATION.len; i++) {
+    args_out.push_back(&app->data.AST_APPLICATION.args[i]);
+  }
+}
+
+static bool extract_const_f64_from_value(Value v, double &out) {
+  if (!v) {
+    return false;
+  }
+  if (auto c = v.getDefiningOp<arith::ConstantFloatOp>()) {
+    out = c.value().convertToDouble();
+    return true;
+  }
+  if (auto c = v.getDefiningOp<arith::ConstantIntOp>()) {
+    out = (double)c.value();
+    return true;
+  }
+  if (auto c = v.getDefiningOp<LLVM::ConstantOp>()) {
+    auto attr = c.getValueAttr();
+    if (auto fa = dyn_cast<FloatAttr>(attr)) {
+      out = fa.getValueAsDouble();
+      return true;
+    }
+    if (auto ia = dyn_cast<IntegerAttr>(attr)) {
+      out = (double)ia.getInt();
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool extract_const_i64_from_value(Value v, int64_t &out) {
+  double d = 0.0;
+  if (!extract_const_f64_from_value(v, d)) {
+    return false;
+  }
+  double di = floor(d);
+  if (fabs(d - di) > 1e-9) {
+    return false;
+  }
+  out = (int64_t)di;
+  return true;
+}
+
+static bool eval_const_f64_ast(Ast *a, DspBuildCtx &ctx, JITLangCtx *jit_ctx,
+                               double &out) {
+  if (!a) {
+    return false;
+  }
+  switch (a->tag) {
+  case AST_DOUBLE:
+    out = a->data.AST_DOUBLE.value;
+    return true;
+  case AST_FLOAT:
+    out = (double)a->data.AST_FLOAT.value;
+    return true;
+  case AST_INT:
+    out = (double)a->data.AST_INT.value;
+    return true;
+  case AST_IDENTIFIER: {
+    std::string n(a->data.AST_IDENTIFIER.value, a->data.AST_IDENTIFIER.length);
+    auto it = ctx.locals.find(n);
+    if (it != ctx.locals.end()) {
+      return extract_const_f64_from_value(it->second, out);
+    }
+    return false;
+  }
+  case AST_APPLICATION: {
+    Ast *callee = nullptr;
+    std::vector<Ast *> flat_args;
+    flatten_application(a, callee, flat_args);
+    if (!callee || callee->tag != AST_IDENTIFIER) {
+      return false;
+    }
+    if (strcmp(callee->data.AST_IDENTIFIER.value, "spf") == 0 &&
+        (flat_args.empty() ||
+         (flat_args.size() == 1 && flat_args[0]->tag == AST_VOID))) {
+      out = ctx_spf();
+      return true;
+    }
+    if (flat_args.size() != 2) {
+      return false;
+    }
+    const char *op = callee->data.AST_IDENTIFIER.value;
+    double x = 0.0, y = 0.0;
+    if (!eval_const_f64_ast(flat_args[0], ctx, jit_ctx, x) ||
+        !eval_const_f64_ast(flat_args[1], ctx, jit_ctx, y)) {
+      return false;
+    }
+    if (strcmp(op, "+") == 0) {
+      out = x + y;
+      return true;
+    }
+    if (strcmp(op, "-") == 0) {
+      out = x - y;
+      return true;
+    }
+    if (strcmp(op, "*") == 0) {
+      out = x * y;
+      return true;
+    }
+    if (strcmp(op, "/") == 0) {
+      out = x / y;
+      return true;
+    }
+    return false;
+  }
+  default:
+    return false;
+  }
+}
 
 // Check if an AST subtree is a compile-time constant (delegates to the type
 // system's is_constant_expr, using jit_ctx->env for scope lookup).
@@ -1242,6 +1411,458 @@ static int max_delay_samples(double max_delay_sec) {
   return samples;
 }
 
+static std::optional<int64_t> resolve_array_len(Ast *base_ast,
+                                                DspBuildCtx &ctx) {
+  if (!base_ast || base_ast->tag != AST_IDENTIFIER) {
+    return std::nullopt;
+  }
+  std::string arr_name(base_ast->data.AST_IDENTIFIER.value,
+                       base_ast->data.AST_IDENTIFIER.length);
+  auto it = ctx.array_states.find(arr_name);
+  if (it == ctx.array_states.end()) {
+    return std::nullopt;
+  }
+  if (it->second.dynamic) {
+    return std::nullopt;
+  }
+  return (int64_t)it->second.len;
+}
+
+static std::optional<ArrayStateSpec> resolve_array_state(Ast *base_ast,
+                                                         DspBuildCtx &ctx) {
+  if (!base_ast || base_ast->tag != AST_IDENTIFIER) {
+    return std::nullopt;
+  }
+  std::string arr_name(base_ast->data.AST_IDENTIFIER.value,
+                       base_ast->data.AST_IDENTIFIER.length);
+  auto it = ctx.array_states.find(arr_name);
+  if (it == ctx.array_states.end()) {
+    return std::nullopt;
+  }
+  return it->second;
+}
+
+static Value load_i64_state_slot(int slot_offset, DspBuildCtx &ctx) {
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
+  Value off = b.create<LLVM::ConstantOp>(loc, b.getI64Type(),
+                                         b.getI64IntegerAttr(slot_offset));
+  Value slot_ptr = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(),
+                                         ctx.state_ptr, ValueRange{off});
+  return b.create<LLVM::LoadOp>(loc, b.getI64Type(), slot_ptr);
+}
+
+static bool get_array_base_ptr_len(const ArrayStateSpec &st, DspBuildCtx &ctx,
+                                   Value &base_ptr, Value &len_i64,
+                                   int64_t &known_len) {
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
+  if (!st.dynamic) {
+    Value off = b.create<LLVM::ConstantOp>(loc, b.getI64Type(),
+                                           b.getI64IntegerAttr(st.base_offset));
+    base_ptr = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), ctx.state_ptr,
+                                     ValueRange{off});
+    len_i64 = b.create<LLVM::ConstantOp>(loc, b.getI64Type(),
+                                         b.getI64IntegerAttr(st.len));
+    known_len = st.len;
+    return st.len > 0;
+  }
+  Value ptr_i64 = load_i64_state_slot(st.ptr_slot_offset, ctx);
+  base_ptr = b.create<LLVM::IntToPtrOp>(loc, ptr_ty, ptr_i64);
+  len_i64 = load_i64_state_slot(st.len_slot_offset, ctx);
+  known_len = -1;
+  return true;
+}
+
+static Value to_i64_index(Value idx_v, DspBuildCtx &ctx) {
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  if (!idx_v) {
+    return {};
+  }
+  mlir::Type t = idx_v.getType();
+  if (mlir::isa<mlir::IndexType>(t)) {
+    return b.create<arith::IndexCastOp>(loc, b.getI64Type(), idx_v);
+  }
+  if (mlir::isa<mlir::IntegerType>(t)) {
+    unsigned w = mlir::cast<mlir::IntegerType>(t).getWidth();
+    if (w == 64) {
+      return idx_v;
+    }
+    return b.create<arith::ExtSIOp>(loc, b.getI64Type(), idx_v);
+  }
+  if (mlir::isa<mlir::FloatType>(t)) {
+    return b.create<LLVM::FPToSIOp>(loc, b.getI64Type(), idx_v);
+  }
+  fprintf(stderr,
+          "Error: index must be Int/Index/Double for tabread/tabwrite\n");
+  return Value();
+}
+
+static Value to_f64_index(Value idx_v, DspBuildCtx &ctx) {
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  if (!idx_v) {
+    return {};
+  }
+  mlir::Type t = idx_v.getType();
+  if (mlir::isa<mlir::FloatType>(t)) {
+    return idx_v;
+  }
+  if (mlir::isa<mlir::IntegerType>(t)) {
+    return b.create<arith::SIToFPOp>(loc, b.getF64Type(), idx_v);
+  }
+  if (mlir::isa<mlir::IndexType>(t)) {
+    Value as_i64 = b.create<arith::IndexCastOp>(loc, b.getI64Type(), idx_v);
+    return b.create<arith::SIToFPOp>(loc, b.getF64Type(), as_i64);
+  }
+  fprintf(
+      stderr,
+      "Error: index must be Int/Index/Double for tabread/tabread1/tabwrite\n");
+  return Value();
+}
+
+static Value wrap_array_index(Value idx_i64, int64_t len, DspBuildCtx &ctx) {
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  Value len_val =
+      b.create<LLVM::ConstantOp>(loc, b.getI64Type(), b.getI64IntegerAttr(len));
+  Value rem0 = b.create<arith::RemSIOp>(loc, idx_i64, len_val);
+  Value rem1 = b.create<arith::AddIOp>(loc, rem0, len_val);
+  return b.create<arith::RemSIOp>(loc, rem1, len_val);
+}
+
+static Value wrap_array_index(Value idx_i64, Value len_val_i64,
+                              DspBuildCtx &ctx) {
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  Value rem0 = b.create<arith::RemSIOp>(loc, idx_i64, len_val_i64);
+  Value rem1 = b.create<arith::AddIOp>(loc, rem0, len_val_i64);
+  return b.create<arith::RemSIOp>(loc, rem1, len_val_i64);
+}
+
+// tabread array idx -> f64
+static Value TabReadHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+  Ast *args = ast->data.AST_APPLICATION.args;
+  size_t nargs = ast->data.AST_APPLICATION.len;
+  if (nargs != 2) {
+    fprintf(stderr, "Error: tabread expects (state, idx)\n");
+    print_ast(ast);
+    return {};
+  }
+
+  auto st_opt = resolve_array_state(&args[0], ctx);
+  if (!st_opt) {
+    fprintf(stderr, "Error: tabread requires a named hoisted array base\n");
+    print_ast(ast);
+    return {};
+  }
+  Value base_ptr{};
+  Value len_i64{};
+  int64_t known_len = -1;
+  if (!get_array_base_ptr_len(*st_opt, ctx, base_ptr, len_i64, known_len)) {
+    fprintf(stderr, "Error: tabread invalid array state\n");
+    print_ast(ast);
+    return {};
+  }
+
+  Value idx_raw = build_dsp_expr(&args[1], ctx, jit_ctx);
+  Value idx_i64 = to_i64_index(idx_raw, ctx);
+  if (!idx_i64) {
+    print_ast(ast);
+    return {};
+  }
+  Value idx_mod = (known_len > 0) ? wrap_array_index(idx_i64, known_len, ctx)
+                                  : wrap_array_index(idx_i64, len_i64, ctx);
+
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  Value stride =
+      b.create<LLVM::ConstantOp>(loc, b.getI64Type(), b.getI64IntegerAttr(8));
+  Value idx_bytes = b.create<LLVM::MulOp>(loc, idx_mod, stride);
+  auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
+  Value slot_ptr = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), base_ptr,
+                                         ValueRange{idx_bytes});
+  return b.create<LLVM::LoadOp>(loc, b.getF64Type(), slot_ptr);
+}
+
+// tabread1 array idx -> f64
+// Linearly interpolating read: y = y0 + frac * (y1 - y0).
+static Value TabRead1Handler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+  Ast *args = ast->data.AST_APPLICATION.args;
+  size_t nargs = ast->data.AST_APPLICATION.len;
+  if (nargs != 2) {
+    fprintf(stderr, "Error: tabread1 expects (state, idx)\n");
+    print_ast(ast);
+    return {};
+  }
+
+  auto st_opt = resolve_array_state(&args[0], ctx);
+  if (!st_opt) {
+    fprintf(stderr, "Error: tabread1 requires a named hoisted array base\n");
+    print_ast(ast);
+    return {};
+  }
+
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  Value base_ptr{};
+  Value len_i64{};
+  int64_t known_len = -1;
+  if (!get_array_base_ptr_len(*st_opt, ctx, base_ptr, len_i64, known_len)) {
+    fprintf(stderr, "Error: tabread1 invalid array state\n");
+    print_ast(ast);
+    return {};
+  }
+
+  Value idx_raw = build_dsp_expr(&args[1], ctx, jit_ctx);
+  Value idx_f = to_f64_index(idx_raw, ctx);
+  if (!idx_f) {
+    print_ast(ast);
+    return {};
+  }
+
+  Value len_f = b.create<arith::SIToFPOp>(loc, b.getF64Type(), len_i64);
+
+  auto floor_fn = declare_extern(
+      ctx.mod, b, "llvm.floor.f64",
+      LLVM::LLVMFunctionType::get(b.getF64Type(), {b.getF64Type()}, false));
+
+  // wrapped = idx - len * floor(idx/len), for idx in R and len > 0
+  Value q = b.create<LLVM::CallOp>(
+                 loc, floor_fn,
+                 ValueRange{b.create<arith::DivFOp>(loc, idx_f, len_f)})
+                .getResult();
+  Value wrapped = b.create<arith::SubFOp>(
+      loc, idx_f, b.create<arith::MulFOp>(loc, len_f, q));
+
+  Value i0f =
+      b.create<LLVM::CallOp>(loc, floor_fn, ValueRange{wrapped}).getResult();
+  Value frac = b.create<arith::SubFOp>(loc, wrapped, i0f);
+  Value i0 = b.create<LLVM::FPToSIOp>(loc, b.getI64Type(), i0f);
+  Value one_i64 =
+      b.create<LLVM::ConstantOp>(loc, b.getI64Type(), b.getI64IntegerAttr(1));
+  Value i1 = b.create<arith::AddIOp>(loc, i0, one_i64);
+  i1 = (known_len > 0) ? wrap_array_index(i1, known_len, ctx)
+                       : wrap_array_index(i1, len_i64, ctx);
+
+  Value stride =
+      b.create<LLVM::ConstantOp>(loc, b.getI64Type(), b.getI64IntegerAttr(8));
+  Value off0 = b.create<arith::MulIOp>(loc, i0, stride);
+  Value off1 = b.create<arith::MulIOp>(loc, i1, stride);
+
+  auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
+  Value ptr0 = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), base_ptr,
+                                     ValueRange{off0});
+  Value ptr1 = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), base_ptr,
+                                     ValueRange{off1});
+
+  Value y0 = b.create<LLVM::LoadOp>(loc, b.getF64Type(), ptr0);
+  Value y1 = b.create<LLVM::LoadOp>(loc, b.getF64Type(), ptr1);
+  return b.create<arith::AddFOp>(
+      loc, y0,
+      b.create<arith::MulFOp>(loc, frac, b.create<arith::SubFOp>(loc, y1, y0)));
+}
+
+// tabwrite array idx value -> value
+static Value TabWriteHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+  Ast *args = ast->data.AST_APPLICATION.args;
+  size_t nargs = ast->data.AST_APPLICATION.len;
+  if (nargs != 3) {
+    fprintf(stderr, "Error: tabwrite expects (state, idx, val)\n");
+    print_ast(ast);
+    return {};
+  }
+
+  auto st_opt = resolve_array_state(&args[0], ctx);
+  if (!st_opt) {
+    fprintf(stderr, "Error: tabwrite requires a named hoisted array base\n");
+    print_ast(ast);
+    return {};
+  }
+  Value base_ptr{};
+  Value len_i64{};
+  int64_t known_len = -1;
+  if (!get_array_base_ptr_len(*st_opt, ctx, base_ptr, len_i64, known_len)) {
+    fprintf(stderr, "Error: tabwrite invalid array state\n");
+    print_ast(ast);
+    return {};
+  }
+
+  Value idx_raw = build_dsp_expr(&args[1], ctx, jit_ctx);
+  Value idx_i64 = to_i64_index(idx_raw, ctx);
+  if (!idx_i64) {
+    print_ast(ast);
+    return {};
+  }
+  Value idx_mod = (known_len > 0) ? wrap_array_index(idx_i64, known_len, ctx)
+                                  : wrap_array_index(idx_i64, len_i64, ctx);
+
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  Value stride =
+      b.create<LLVM::ConstantOp>(loc, b.getI64Type(), b.getI64IntegerAttr(8));
+  Value idx_bytes = b.create<LLVM::MulOp>(loc, idx_mod, stride);
+  auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
+  Value slot_ptr = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), base_ptr,
+                                         ValueRange{idx_bytes});
+  Value val = build_dsp_expr(&args[2], ctx, jit_ctx);
+  if (!val) {
+    return {};
+  }
+  b.create<LLVM::StoreOp>(loc, val, slot_ptr);
+  return val;
+}
+
+// dsp_array_sum arr -> f64
+// Sums a named hoisted array. Currently requires static known length.
+static Value DspArraySumHandler(Ast *ast, DspBuildCtx &ctx,
+                                JITLangCtx *jit_ctx) {
+  Ast *args = ast->data.AST_APPLICATION.args;
+  size_t nargs = ast->data.AST_APPLICATION.len;
+  if (nargs != 1) {
+    fprintf(stderr, "Error: dsp_array_sum expects (arr)\n");
+    print_ast(ast);
+    return {};
+  }
+
+  auto st_opt = resolve_array_state(&args[0], ctx);
+  if (!st_opt) {
+    fprintf(stderr, "Error: dsp_array_sum requires a named hoisted array\n");
+    print_ast(ast);
+    return {};
+  }
+
+  Value base_ptr{};
+  Value len_i64{};
+  int64_t known_len = -1;
+  if (!get_array_base_ptr_len(*st_opt, ctx, base_ptr, len_i64, known_len) ||
+      known_len <= 0) {
+    fprintf(stderr, "Error: dsp_array_sum currently requires static array len\n");
+    print_ast(ast);
+    return {};
+  }
+
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
+  Value sum = b.create<arith::ConstantFloatOp>(loc, b.getF64Type(), APFloat(0.0));
+  Value stride =
+      b.create<LLVM::ConstantOp>(loc, b.getI64Type(), b.getI64IntegerAttr(8));
+
+  for (int64_t i = 0; i < known_len; i++) {
+    Value idx = b.create<LLVM::ConstantOp>(loc, b.getI64Type(),
+                                           b.getI64IntegerAttr(i));
+    Value off = b.create<arith::MulIOp>(loc, idx, stride);
+    Value ptr = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), base_ptr,
+                                      ValueRange{off});
+    Value v = b.create<LLVM::LoadOp>(loc, b.getF64Type(), ptr);
+    sum = b.create<arith::AddFOp>(loc, sum, v);
+  }
+  return sum;
+}
+
+// dsp_mmul_op m y out -> f64
+// m is row-major NxN, y is N-vector, out is N-vector; writes out = m * y.
+// Returns 0.0 (use as statement).
+static Value DspMmulOpHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+  (void)jit_ctx;
+  Ast *args = ast->data.AST_APPLICATION.args;
+  size_t nargs = ast->data.AST_APPLICATION.len;
+  if (nargs != 3) {
+    fprintf(stderr, "Error: dsp_mmul_op expects (m, y, out)\n");
+    print_ast(ast);
+    return {};
+  }
+
+  auto m_st = resolve_array_state(&args[0], ctx);
+  auto y_st = resolve_array_state(&args[1], ctx);
+  auto o_st = resolve_array_state(&args[2], ctx);
+  if (!m_st || !y_st || !o_st) {
+    fprintf(stderr, "Error: dsp_mmul_op requires named hoisted arrays\n");
+    print_ast(ast);
+    return {};
+  }
+
+  Value m_ptr{}, y_ptr{}, o_ptr{};
+  Value m_len_i64{}, y_len_i64{}, o_len_i64{};
+  int64_t m_len = -1, y_len = -1, o_len = -1;
+  if (!get_array_base_ptr_len(*m_st, ctx, m_ptr, m_len_i64, m_len) ||
+      !get_array_base_ptr_len(*y_st, ctx, y_ptr, y_len_i64, y_len) ||
+      !get_array_base_ptr_len(*o_st, ctx, o_ptr, o_len_i64, o_len)) {
+    fprintf(stderr, "Error: dsp_mmul_op invalid array state\n");
+    print_ast(ast);
+    return {};
+  }
+
+  if (m_len <= 0 || y_len <= 0 || o_len <= 0 || y_len != o_len ||
+      m_len != (y_len * y_len)) {
+    fprintf(stderr, "Error: dsp_mmul_op expects static sizes m=N*N, y=N, out=N\n");
+    print_ast(ast);
+    return {};
+  }
+
+  auto &b = ctx.b;
+  auto loc = ctx.loc;
+  auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
+  Value stride =
+      b.create<LLVM::ConstantOp>(loc, b.getI64Type(), b.getI64IntegerAttr(8));
+
+  for (int64_t i = 0; i < y_len; i++) {
+    Value acc =
+        b.create<arith::ConstantFloatOp>(loc, b.getF64Type(), APFloat(0.0));
+    for (int64_t j = 0; j < y_len; j++) {
+      int64_t midx = i * y_len + j;
+      Value midx_v = b.create<LLVM::ConstantOp>(loc, b.getI64Type(),
+                                                b.getI64IntegerAttr(midx));
+      Value yidx_v = b.create<LLVM::ConstantOp>(loc, b.getI64Type(),
+                                                b.getI64IntegerAttr(j));
+      Value m_off = b.create<arith::MulIOp>(loc, midx_v, stride);
+      Value y_off = b.create<arith::MulIOp>(loc, yidx_v, stride);
+      Value m_gep = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), m_ptr,
+                                          ValueRange{m_off});
+      Value y_gep = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), y_ptr,
+                                          ValueRange{y_off});
+      Value m_val = b.create<LLVM::LoadOp>(loc, b.getF64Type(), m_gep);
+      Value y_val = b.create<LLVM::LoadOp>(loc, b.getF64Type(), y_gep);
+      Value prod = b.create<arith::MulFOp>(loc, m_val, y_val);
+      acc = b.create<arith::AddFOp>(loc, acc, prod);
+    }
+    Value oidx_v = b.create<LLVM::ConstantOp>(loc, b.getI64Type(),
+                                              b.getI64IntegerAttr(i));
+    Value o_off = b.create<arith::MulIOp>(loc, oidx_v, stride);
+    Value o_gep = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), o_ptr,
+                                        ValueRange{o_off});
+    b.create<LLVM::StoreOp>(loc, acc, o_gep);
+  }
+
+  return b.create<arith::ConstantFloatOp>(loc, b.getF64Type(), APFloat(0.0));
+}
+
+// alloc_delay max_delay_seconds -> i64(state base offset)
+// Allocates a zero-initialized ring buffer in node state.
+static Value AllocDelayHandler(Ast *ast, DspBuildCtx &ctx,
+                               JITLangCtx *jit_ctx) {
+  Ast *args = ast->data.AST_APPLICATION.args;
+  size_t nargs = ast->data.AST_APPLICATION.len;
+  if (nargs != 1) {
+    fprintf(stderr, "Error: alloc_delay expects (max_delay_seconds)\n");
+    print_ast(ast);
+    return {};
+  }
+  int64_t len = 0;
+  Value base = hoist_alloc_delay_expr(&args[0], ctx, jit_ctx, &len);
+  if (!base || len <= 0) {
+    fprintf(stderr, "Error: alloc_delay argument must reduce to constant "
+                    "seconds in audio_jit\n");
+    print_ast(ast);
+    return {};
+  }
+  return base;
+}
+
 // delay delay_time max_delay fb input → f64
 // State layout:
 //   [write_pos: i32] at state_offset (8 bytes reserved for alignment)
@@ -1308,6 +1929,84 @@ static Value Allpass1Handler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   return ctx.b
       .create<Allpass1Op>(ctx.loc, ctx.state_ptr, ctx.inputs_ptr, input, g,
                           ctx.spf, delay_time, off, buf_off, buf_size)
+      ->getResult(0);
+}
+
+// fdn4 d1 d2 d3 d4 max_delay fb input -> f64
+static Value Fdn4Handler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+  Ast *args = ast->data.AST_APPLICATION.args;
+  double max_delay = ast_const_double(&args[4]);
+  if (max_delay <= 0.0) {
+    max_delay = 0.25;
+  }
+
+  Value d1 = build_dsp_expr(&args[0], ctx, jit_ctx);
+  Value d2 = build_dsp_expr(&args[1], ctx, jit_ctx);
+  Value d3 = build_dsp_expr(&args[2], ctx, jit_ctx);
+  Value d4 = build_dsp_expr(&args[3], ctx, jit_ctx);
+  Value fb = build_dsp_expr(&args[5], ctx, jit_ctx);
+  Value input = build_dsp_expr(&args[6], ctx, jit_ctx);
+
+  int state_off = reserve_state_aligned(ctx, 4 * (int)sizeof(int32_t), 8);
+  int buf_size = max_delay_samples(max_delay);
+  int buf0_off = reserve_state_aligned(ctx, buf_size * (int)sizeof(double), 8);
+  int buf1_off = reserve_state_aligned(ctx, buf_size * (int)sizeof(double), 8);
+  int buf2_off = reserve_state_aligned(ctx, buf_size * (int)sizeof(double), 8);
+  int buf3_off = reserve_state_aligned(ctx, buf_size * (int)sizeof(double), 8);
+
+  return ctx.b
+      .create<Fdn4Op>(ctx.loc, ctx.state_ptr, ctx.inputs_ptr, input, fb,
+                      ctx.spf, d1, d2, d3, d4, state_off, buf0_off, buf1_off,
+                      buf2_off, buf3_off, buf_size)
+      ->getResult(0);
+}
+
+// fdn4m matrix16 d1 d2 d3 d4 max_delay fb input -> f64
+static Value Fdn4mHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+  Ast *args = ast->data.AST_APPLICATION.args;
+
+  int matrix_len = -1;
+  if (args[0].tag == AST_IDENTIFIER) {
+    std::string name(args[0].data.AST_IDENTIFIER.value,
+                     args[0].data.AST_IDENTIFIER.length);
+    auto it = ctx.array_states.find(name);
+    if (it != ctx.array_states.end()) {
+      matrix_len = it->second.len;
+    }
+  } else if (args[0].tag == AST_ARRAY) {
+    matrix_len = (int)args[0].data.AST_LIST.len;
+  }
+  if (matrix_len != 16) {
+    fprintf(stderr,
+            "fdn4m: matrix must be a 16-element array literal/hoisted array\n");
+    print_ast(ast);
+    return {};
+  }
+
+  Value matrix_off = build_dsp_expr(&args[0], ctx, jit_ctx);
+  double max_delay = ast_const_double(&args[5]);
+  if (max_delay <= 0.0) {
+    max_delay = 0.25;
+  }
+
+  Value d1 = build_dsp_expr(&args[1], ctx, jit_ctx);
+  Value d2 = build_dsp_expr(&args[2], ctx, jit_ctx);
+  Value d3 = build_dsp_expr(&args[3], ctx, jit_ctx);
+  Value d4 = build_dsp_expr(&args[4], ctx, jit_ctx);
+  Value fb = build_dsp_expr(&args[6], ctx, jit_ctx);
+  Value input = build_dsp_expr(&args[7], ctx, jit_ctx);
+
+  int state_off = reserve_state_aligned(ctx, 4 * (int)sizeof(int32_t), 8);
+  int buf_size = max_delay_samples(max_delay);
+  int buf0_off = reserve_state_aligned(ctx, buf_size * (int)sizeof(double), 8);
+  int buf1_off = reserve_state_aligned(ctx, buf_size * (int)sizeof(double), 8);
+  int buf2_off = reserve_state_aligned(ctx, buf_size * (int)sizeof(double), 8);
+  int buf3_off = reserve_state_aligned(ctx, buf_size * (int)sizeof(double), 8);
+
+  return ctx.b
+      .create<Fdn4mOp>(ctx.loc, ctx.state_ptr, ctx.inputs_ptr, input, fb,
+                       ctx.spf, d1, d2, d3, d4, matrix_off, state_off, buf0_off,
+                       buf1_off, buf2_off, buf3_off, buf_size)
       ->getResult(0);
 }
 
@@ -1601,25 +2300,28 @@ struct InlinedCtx {
   DspBuildCtx &parent;
 
   explicit InlinedCtx(DspBuildCtx &parent)
-      : parent(parent), child{.b = parent.b,
-                              .mod = parent.mod,
-                              .loc = parent.loc,
-                              .node_ptr = parent.node_ptr,
-                              .state_ptr = parent.state_ptr,
-                              .inputs_ptr = parent.inputs_ptr,
-                              .spf = parent.spf,
-                              .frame_idx = parent.frame_idx,
-                              .state_offset = parent.state_offset,
-                              .next_hidden_inlet = parent.next_hidden_inlet,
-                              .hoist_ip = parent.hoist_ip,
-                              .array_states = parent.array_states,
-                              .array_inits = parent.array_inits} {}
+      : parent(parent),
+        child{.b = parent.b,
+              .mod = parent.mod,
+              .loc = parent.loc,
+              .node_ptr = parent.node_ptr,
+              .state_ptr = parent.state_ptr,
+              .inputs_ptr = parent.inputs_ptr,
+              .spf = parent.spf,
+              .frame_idx = parent.frame_idx,
+              .state_offset = parent.state_offset,
+              .next_hidden_inlet = parent.next_hidden_inlet,
+              .hoist_ip = parent.hoist_ip,
+              .array_states = parent.array_states,
+              .array_inits = parent.array_inits,
+              .dynamic_delay_allocs = parent.dynamic_delay_allocs} {}
 
   ~InlinedCtx() {
     parent.b = child.b;
     parent.hoist_ip = child.hoist_ip;
     parent.array_states = std::move(child.array_states);
     parent.array_inits = std::move(child.array_inits);
+    parent.dynamic_delay_allocs = std::move(child.dynamic_delay_allocs);
     parent.state_offset = child.state_offset;
     parent.next_hidden_inlet = child.next_hidden_inlet;
     parent.hoistable_calls.insert(parent.hoistable_calls.end(),
@@ -1902,7 +2604,7 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
       int len = (int)arr->data.AST_LIST.len;
       int base = ctx.state_offset;
       ctx.state_offset += 8 * len;
-      ctx.array_states[n] = ArrayStateSpec{base, len};
+      ctx.array_states[n] = make_static_array_state(base, len);
 
       // Emit the array value as its base offset (i64).
       Value base_val = emit_array_state(arr, ctx, n);
@@ -1911,6 +2613,81 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
       if (ast->data.AST_LET.in_expr)
         return build_dsp_expr(ast->data.AST_LET.in_expr, ctx, jit_ctx);
       return base_val;
+    }
+
+    // Hoist array_fill_const lets into state and register as named arrays for
+    // tabread/tabwrite.
+    if (ast->data.AST_LET.binding &&
+        ast->data.AST_LET.binding->tag == AST_IDENTIFIER &&
+        ast->data.AST_LET.expr &&
+        ast->data.AST_LET.expr->tag == AST_APPLICATION) {
+      Ast *afc_callee = nullptr;
+      std::vector<Ast *> afc_flat_args;
+      flatten_application(ast->data.AST_LET.expr, afc_callee, afc_flat_args);
+      bool is_array_fill_const =
+          afc_callee && afc_callee->tag == AST_IDENTIFIER &&
+          strcmp(afc_callee->data.AST_IDENTIFIER.value, "array_fill_const") ==
+              0;
+      bool is_alloc_delay =
+          afc_callee && afc_callee->tag == AST_IDENTIFIER &&
+          strcmp(afc_callee->data.AST_IDENTIFIER.value, "alloc_delay") == 0;
+      if (is_array_fill_const && afc_flat_args.size() >= 2) {
+        std::string n(ast->data.AST_LET.binding->data.AST_IDENTIFIER.value,
+                      ast->data.AST_LET.binding->data.AST_IDENTIFIER.length);
+        Ast afc_args_arr[2] = {*afc_flat_args[0], *afc_flat_args[1]};
+
+        Value base_val = hoist_array_fill_const_expr(afc_args_arr, ctx, jit_ctx,
+                                                     nullptr, nullptr);
+        if (!base_val || base_val.getType() != b.getI64Type()) {
+          fprintf(stderr, "Error: array_fill_const length/value must reduce to "
+                          "constants in audio_jit\n");
+          print_ast(ast->data.AST_LET.expr);
+          return {};
+        }
+        int64_t len_i64 = 0;
+        int64_t base_i64 = 0;
+        Value len_v = build_dsp_expr(afc_flat_args[0], ctx, jit_ctx);
+        if (extract_const_i64_from_value(len_v, len_i64) &&
+            extract_const_i64_from_value(base_val, base_i64) && len_i64 > 0) {
+          ctx.array_states[n] =
+              make_static_array_state((int)base_i64, (int)len_i64);
+        } else {
+          fprintf(stderr,
+                  "Error: could not resolve array_fill_const length/base\n");
+          print_ast(ast->data.AST_LET.expr);
+          return {};
+        }
+        ctx.locals[n] = base_val;
+
+        if (ast->data.AST_LET.in_expr)
+          return build_dsp_expr(ast->data.AST_LET.in_expr, ctx, jit_ctx);
+        return base_val;
+      }
+
+      if (is_alloc_delay && afc_flat_args.size() >= 1) {
+        std::string n(ast->data.AST_LET.binding->data.AST_IDENTIFIER.value,
+                      ast->data.AST_LET.binding->data.AST_IDENTIFIER.length);
+
+        int64_t len_i64 = 0;
+        Value base_val =
+            hoist_alloc_delay_expr(afc_flat_args[0], ctx, jit_ctx, &len_i64);
+        int64_t base_i64 = 0;
+        if (base_val && extract_const_i64_from_value(base_val, base_i64) &&
+            len_i64 > 0) {
+          ctx.array_states[n] =
+              make_static_array_state((int)base_i64, (int)len_i64);
+          ctx.locals[n] = base_val;
+
+          if (ast->data.AST_LET.in_expr)
+            return build_dsp_expr(ast->data.AST_LET.in_expr, ctx, jit_ctx);
+          return base_val;
+        }
+
+        fprintf(stderr, "Error: alloc_delay seconds must reduce to constant in "
+                        "audio_jit\n");
+        print_ast(ast->data.AST_LET.expr);
+        return {};
+      }
     }
 
     Value val = build_dsp_expr(ast->data.AST_LET.expr, ctx, jit_ctx);
@@ -1963,6 +2740,13 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
       return {};
     }
 
+    // if (f && fn->tag == AST_IDENTIFIER &&
+    //     strcmp(fn->data.AST_IDENTIFIER.value, "array_fill_cons") == 0) {
+    //   printf("hoistable array cons??\n");
+    //   print_ast(ast);
+    //   return {};
+    // }
+
     if (f && f->type == STYPE_AUDIO_JIT_BUILTIN_HANDLER &&
         f->symbol_data._USER_DEFINED_SYMBOL) {
       BuiltinDSPHandler handler =
@@ -1975,6 +2759,7 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
     }
 
     if (f && f->symbol_type->kind == T_FN) {
+
       const char *fn_name = nullptr;
 
       if (f->type == STYPE_GENERIC_FUNCTION) {
@@ -1984,6 +2769,18 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
                              strcmp(list_fn_name, "map") == 0 ||
                              strcmp(list_fn_name, "sum") == 0)) {
           return list_expr_handlers(ast, list_fn_name, ctx, jit_ctx);
+        }
+
+        if (strcmp(fn->data.AST_IDENTIFIER.value, "array_fill_const") == 0) {
+          Value arr_off =
+              hoist_array_fill_const_expr(args, ctx, jit_ctx, nullptr, nullptr);
+          if (!arr_off || arr_off.getType() != b.getI64Type()) {
+            fprintf(stderr, "Error: array_fill_const length/value must reduce "
+                            "to constants in audio_jit\n");
+            print_ast(ast);
+            return {};
+          }
+          return arr_off;
         }
 
         fprintf(stderr, "Error: generic function instantiation in audio "
@@ -2169,7 +2966,7 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
           print_ast(ast);
           return {};
         }
-        if (args[1].tag != AST_INT) {
+        if (!types_equal(args[1].type, &t_int)) {
           fprintf(stderr, "Error: array_set index must be an int literal\n");
           print_ast(ast);
           return {};
@@ -2218,19 +3015,42 @@ static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
           print_ast(ast);
           return {};
         }
-        if (args[1].tag != AST_INT) {
-          fprintf(stderr, "Error: array_at index must be an int literal\n");
+        if (!types_equal(args[1].type, &t_int)) {
+          fprintf(stderr,
+                  "Error: array_at index must be an int constant expression\n");
           print_ast(ast);
           return {};
         }
-        int idx = (int)args[1].data.AST_INT.value;
+
+        int64_t idx_i64 = 0;
+        Value idx_v = build_dsp_expr(&args[1], ctx, jit_ctx);
+        if (!extract_const_i64_from_value(idx_v, idx_i64)) {
+          double idx_f = 0.0;
+          if (!eval_const_f64_ast(&args[1], ctx, jit_ctx, idx_f)) {
+            fprintf(stderr, "Error: array_at index must reduce to an int "
+                            "constant expression\n");
+            print_ast(ast);
+            return {};
+          }
+          double di = floor(idx_f);
+          if (fabs(idx_f - di) > 1e-9) {
+            fprintf(stderr,
+                    "Error: array_at index constant must be integer-valued\n");
+            print_ast(ast);
+            return {};
+          }
+          idx_i64 = (int64_t)di;
+        }
+        int idx = (int)idx_i64;
+
         if (args[0].tag == AST_IDENTIFIER) {
           std::string name(args[0].data.AST_IDENTIFIER.value,
                            args[0].data.AST_IDENTIFIER.length);
           auto it = ctx.array_states.find(name);
           if (it != ctx.array_states.end()) {
             if (idx < 0 || idx >= it->second.len) {
-              fprintf(stderr, "Error: array_at index out of bounds\n");
+              fprintf(stderr, "Error: array_at index out of bounds %d / %d\n",
+                      idx, it->second.len);
               print_ast(ast);
               return {};
             }
@@ -2272,6 +3092,7 @@ struct DspModuleResult {
   int state_bytes;
   std::vector<HoistableCall> hoistable_calls;
   std::vector<ArrayInitSpec> array_inits;
+  std::vector<DynamicDelayAllocSpec> dynamic_delay_allocs;
   std::vector<BufRefSpec> buf_ref_inputs;
 };
 
@@ -2370,8 +3191,9 @@ static DspModuleResult build_dsp_module(Ast *lambda, const std::string &fn_name,
           .getResult();
   b.create<LLVM::ReturnOp>(loc, ValueRange{out_buf});
 
-  return {std::move(module_ref), state_bytes, ctx.hoistable_calls,
-          ctx.array_inits,       ctx.buf_ref_inputs};
+  return {std::move(module_ref),    state_bytes,
+          ctx.hoistable_calls,      ctx.array_inits,
+          ctx.dynamic_delay_allocs, ctx.buf_ref_inputs};
 }
 
 // =============================================================================
@@ -2534,6 +3356,7 @@ LLVMValueRef build_ctor_fn(int synth_id, std::string perform_name,
 
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module_ref);
   LLVMTypeRef ptr_ty = LLVMPointerTypeInContext(llvm_ctx, 0);
+  LLVMTypeRef i8_ty = LLVMInt8TypeInContext(llvm_ctx);
   LLVMTypeRef i32_ty = LLVMInt32Type();
   LLVMTypeRef i64_ty = LLVMInt64Type();
   LLVMTypeRef f64_ty = LLVMDoubleType();
@@ -2558,6 +3381,16 @@ LLVMValueRef build_ctor_fn(int synth_id, std::string perform_name,
   LLVMBuilderRef ctor_b = LLVMCreateBuilderInContext(llvm_ctx);
   LLVMPositionBuilderAtEnd(ctor_b, ctor_bb);
 
+  LLVMValueRef ctor_arg0 = LLVMGetParam(ctor_fn, 0);
+  LLVMValueRef params_size =
+      LLVMBuildExtractValue(ctor_b, ctor_arg0, 0, "params_size");
+  LLVMValueRef params_data =
+      LLVMBuildExtractValue(ctor_b, ctor_arg0, 1, "params_data");
+
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+  LLVMValueRef params_data_f64 =
+      LLVMBuildBitCast(ctor_b, params_data, f64_ptr_ty, "params_data_f64");
+
   // --- ylc_create_audio_node(perform, num_total_inputs, state_bytes) → Node*
   LLVMTypeRef create_params[] = {ptr_ty, i32_ty, i32_ty};
   LLVMTypeRef create_fn_ty = LLVMFunctionType(ptr_ty, create_params, 3, 0);
@@ -2572,22 +3405,109 @@ LLVMValueRef build_ctor_fn(int synth_id, std::string perform_name,
   LLVMValueRef dsp_fn = LLVMGetNamedFunction(module_ref, perform_name.c_str());
   // LLVMDumpValue(dsp_fn);
   // printf("\n");
+  LLVMValueRef state_bytes_val = LLVMConstInt(i32_ty, state_bytes, 0);
+
+  std::vector<LLVMValueRef> dyn_base_vals;
+  std::vector<LLVMValueRef> dyn_len_vals;
+
+  if (!result.dynamic_delay_allocs.empty()) {
+    LLVMTypeRef spf_fn_ty = LLVMFunctionType(f64_ty, nullptr, 0, 0);
+    LLVMValueRef spf_fn = LLVMGetNamedFunction(module_ref, "ctx_spf");
+    if (!spf_fn) {
+      spf_fn = LLVMAddFunction(module_ref, "ctx_spf", spf_fn_ty);
+      LLVMSetLinkage(spf_fn, LLVMExternalLinkage);
+    }
+    LLVMValueRef spf_raw =
+        LLVMBuildCall2(ctor_b, spf_fn_ty, spf_fn, nullptr, 0, "ctx_spf");
+    LLVMValueRef zero_f = LLVMConstReal(f64_ty, 0.0);
+    LLVMValueRef spf_ok =
+        LLVMBuildFCmp(ctor_b, LLVMRealOGT, spf_raw, zero_f, "spf_ok");
+    LLVMValueRef spf_val = LLVMBuildSelect(
+        ctor_b, spf_ok, spf_raw, LLVMConstReal(f64_ty, 1.0 / 48000.0), "spf");
+
+    LLVMTypeRef floor_param_tys[] = {f64_ty};
+    LLVMTypeRef floor_fn_ty = LLVMFunctionType(f64_ty, floor_param_tys, 1, 0);
+    LLVMValueRef floor_fn = LLVMGetNamedFunction(module_ref, "llvm.floor.f64");
+    if (!floor_fn) {
+      floor_fn = LLVMAddFunction(module_ref, "llvm.floor.f64", floor_fn_ty);
+      LLVMSetLinkage(floor_fn, LLVMExternalLinkage);
+    }
+
+    LLVMValueRef cur_base = LLVMConstInt(i64_ty, (uint64_t)state_bytes, 0);
+    LLVMValueRef dyn_total = LLVMConstInt(i64_ty, 0, 0);
+    LLVMValueRef two_i64 = LLVMConstInt(i64_ty, 2, 0);
+    LLVMValueRef eight_i64 = LLVMConstInt(i64_ty, 8, 0);
+
+    for (auto &d : result.dynamic_delay_allocs) {
+      LLVMValueRef idx_i32 = LLVMConstInt(i32_ty, d.inlet_idx, 0);
+      LLVMValueRef has_param =
+          LLVMBuildICmp(ctor_b, LLVMIntSGT, params_size, idx_i32, "has_param");
+      LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)d.inlet_idx, 0);
+      LLVMValueRef param_ptr = LLVMBuildGEP2(ctor_b, f64_ty, params_data_f64,
+                                             &idx_i64, 1, "param_ptr");
+      LLVMValueRef param_sec =
+          LLVMBuildLoad2(ctor_b, f64_ty, param_ptr, "param");
+      LLVMValueRef sec =
+          LLVMBuildSelect(ctor_b, has_param, param_sec,
+                          LLVMConstReal(f64_ty, 0.0), "delay_sec");
+
+      LLVMValueRef samples_f = LLVMBuildFDiv(ctor_b, sec, spf_val, "samples_f");
+      LLVMValueRef samples_floor = LLVMBuildCall2(
+          ctor_b, floor_fn_ty, floor_fn, &samples_f, 1, "samples_floor");
+      LLVMValueRef len_raw =
+          LLVMBuildFPToSI(ctor_b, samples_floor, i64_ty, "delay_len_raw");
+      LLVMValueRef len_lt_2 =
+          LLVMBuildICmp(ctor_b, LLVMIntSLT, len_raw, two_i64, "len_lt_2");
+      LLVMValueRef len =
+          LLVMBuildSelect(ctor_b, len_lt_2, two_i64, len_raw, "delay_len");
+      LLVMValueRef bytes = LLVMBuildMul(ctor_b, len, eight_i64, "delay_bytes");
+
+      dyn_base_vals.push_back(cur_base);
+      dyn_len_vals.push_back(len);
+      dyn_total = LLVMBuildAdd(ctor_b, dyn_total, bytes, "dyn_total");
+      cur_base = LLVMBuildAdd(ctor_b, cur_base, bytes, "cur_base");
+    }
+
+    LLVMValueRef total_i64 =
+        LLVMBuildAdd(ctor_b, LLVMConstInt(i64_ty, (uint64_t)state_bytes, 0),
+                     dyn_total, "state_bytes_i64");
+    state_bytes_val = LLVMBuildTrunc(ctor_b, total_i64, i32_ty, "state_bytes");
+  }
+
   LLVMValueRef create_args[] = {
       dsp_fn,
       LLVMConstInt(i32_ty, num_total_inputs, 0),
-      LLVMConstInt(i32_ty, state_bytes, 0),
+      state_bytes_val,
   };
   LLVMValueRef node_val =
       LLVMBuildCall2(ctor_b, create_fn_ty, create_fn, create_args, 3, "node");
 
+  if (!result.dynamic_delay_allocs.empty()) {
+    LLVMTypeRef get_state_params[] = {ptr_ty};
+    LLVMTypeRef get_state_fn_ty =
+        LLVMFunctionType(ptr_ty, get_state_params, 1, 0);
+    LLVMValueRef get_state_fn =
+        LLVMGetNamedFunction(module_ref, "ylc_node_get_state");
+    if (!get_state_fn) {
+      get_state_fn =
+          LLVMAddFunction(module_ref, "ylc_node_get_state", get_state_fn_ty);
+      LLVMSetLinkage(get_state_fn, LLVMExternalLinkage);
+    }
+    LLVMValueRef state_ptr_val = LLVMBuildCall2(
+        ctor_b, get_state_fn_ty, get_state_fn, &node_val, 1, "state_ptr");
+
+    LLVMTypeRef zero_fn_tys[] = {ptr_ty, i64_ty, i64_ty};
+    LLVMTypeRef zero_fn_ty = LLVMFunctionType(void_ty, zero_fn_tys, 3, 0);
+    LLVMValueRef zero_fn =
+        LLVMGetNamedFunction(module_ref, "ylc_zero_state_range");
+    if (!zero_fn) {
+      zero_fn = LLVMAddFunction(module_ref, "ylc_zero_state_range", zero_fn_ty);
+      LLVMSetLinkage(zero_fn, LLVMExternalLinkage);
+    }
+  }
+
   // Wire real (lambda) inlets from ctor params via ylc_const_inlet.
   if (num_inputs > 0) {
-    LLVMValueRef ctor_arg0 = LLVMGetParam(ctor_fn, 0);
-    LLVMValueRef params_size =
-        LLVMBuildExtractValue(ctor_b, ctor_arg0, 0, "params_size");
-    LLVMValueRef params_data =
-        LLVMBuildExtractValue(ctor_b, ctor_arg0, 1, "params_data");
-
     LLVMTypeRef const_inlet_params[] = {f64_ty};
     LLVMTypeRef const_inlet_fn_ty =
         LLVMFunctionType(ptr_ty, const_inlet_params, 1, 0);
@@ -2608,10 +3528,6 @@ LLVMValueRef build_ctor_fn(int synth_id, std::string perform_name,
           LLVMAddFunction(module_ref, "plug_input_in_graph", attach_fn_ty);
       LLVMSetLinkage(attach_fn, LLVMExternalLinkage);
     }
-
-    LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
-    LLVMValueRef params_data_f64 =
-        LLVMBuildBitCast(ctor_b, params_data, f64_ptr_ty, "params_data_f64");
 
     for (int i = 0; i < num_inputs; i++) {
       LLVMValueRef idx_i32 = LLVMConstInt(i32_ty, i, 0);
@@ -2902,6 +3818,80 @@ static LLVMValueRef build_set_input_trig_fn(int synth_id,
   return fn;
 }
 
+Value hoist_array_fill_const_expr(Ast *args, DspBuildCtx &ctx,
+                                  JITLangCtx *jit_ctx, LLVMModuleRef module_ref,
+                                  LLVMBuilderRef builder) {
+  (void)module_ref;
+  (void)builder;
+
+  Value len_val = build_dsp_expr(&args[0], ctx, jit_ctx);
+  Value fill_val = build_dsp_expr(&args[1], ctx, jit_ctx);
+
+  int64_t len = 0;
+  double fill_d = 0.0;
+  if (!extract_const_i64_from_value(len_val, len)) {
+    double len_f = 0.0;
+    if (!eval_const_f64_ast(&args[0], ctx, jit_ctx, len_f)) {
+      return {};
+    }
+    double di = floor(len_f);
+    if (fabs(len_f - di) > 1e-9) {
+      return {};
+    }
+    len = (int64_t)di;
+  }
+  if (!extract_const_f64_from_value(fill_val, fill_d)) {
+    if (!eval_const_f64_ast(&args[1], ctx, jit_ctx, fill_d)) {
+      return {};
+    }
+  }
+
+  if (len <= 0 || len > (int64_t)INT32_MAX) {
+    return {};
+  }
+
+  int arr_base = ctx.state_offset;
+  ctx.state_offset += (int)(8 * len);
+
+  for (int64_t i = 0; i < len; i++) {
+    int off = arr_base + (int)(i * 8);
+    ctx.array_inits.push_back({off, fill_d});
+  }
+
+  return ctx.b.create<LLVM::ConstantOp>(ctx.loc, ctx.b.getI64Type(),
+                                        ctx.b.getI64IntegerAttr(arr_base));
+}
+
+Value hoist_alloc_delay_expr(Ast *delay_sec_ast, DspBuildCtx &ctx,
+                             JITLangCtx *jit_ctx, int64_t *out_len) {
+  Value sec_val = build_dsp_expr(delay_sec_ast, ctx, jit_ctx);
+  double sec = 0.0;
+  if (!extract_const_f64_from_value(sec_val, sec)) {
+    if (!eval_const_f64_ast(delay_sec_ast, ctx, jit_ctx, sec)) {
+      return {};
+    }
+  }
+  if (sec <= 0.0) {
+    return {};
+  }
+
+  int64_t len = (int64_t)max_delay_samples(sec);
+  if (len <= 0 || len > (int64_t)INT32_MAX) {
+    return {};
+  }
+
+  int arr_base = reserve_state_aligned(ctx, (int)(8 * len), 8);
+  for (int64_t i = 0; i < len; i++) {
+    ctx.array_inits.push_back({arr_base + (int)(i * 8), 0.0});
+  }
+
+  if (out_len) {
+    *out_len = len;
+  }
+  return ctx.b.create<LLVM::ConstantOp>(ctx.loc, ctx.b.getI64Type(),
+                                        ctx.b.getI64IntegerAttr(arr_base));
+}
+
 extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
                                               LLVMModuleRef module_ref,
                                               LLVMBuilderRef builder) {
@@ -2910,6 +3900,7 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
     fprintf(stderr, "compile_audio_fn: expected fn () -> ...\n");
     return LLVMConstInt(LLVMInt32Type(), 0, 0);
   }
+  // printf("compile %s\n", lambda->data.AST_LAMBDA.fn_name.chars);
 
   // Count real (identifier) params and collect their names in inlet order.
   int num_inputs = 0;
@@ -2961,15 +3952,25 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
   fprintf(stderr,
           "compile_audio_fn: OK name=%s real_inputs=%d "
           "buf_refs=%d state=%d bytes\n",
-          fn_name.c_str(), num_inputs,
-          (int)result.buf_ref_inputs.size(), state_bytes);
+          fn_name.c_str(), num_inputs, (int)result.buf_ref_inputs.size(),
+          state_bytes);
+  fprintf(stderr, "compile_audio_fn: dynamic_delay_allocs=%zu\n",
+          result.dynamic_delay_allocs.size());
+  for (size_t i = 0; i < result.dynamic_delay_allocs.size(); i++) {
+    auto &d = result.dynamic_delay_allocs[i];
+    fprintf(stderr, "  dyn[%zu]: inlet=%d ptr_slot=%d len_slot=%d\n", i,
+            d.inlet_idx, d.ptr_slot_offset, d.len_slot_offset);
+  }
 
   LLVMValueRef ctor_fn = build_ctor_fn(synth_id, fn_name, result, num_inputs,
                                        jit_ctx, module_ref, builder);
+
   LLVMValueRef inlet_index_fn =
       build_inlet_index_fn(synth_id, param_names, module_ref);
+
   LLVMValueRef set_scalar_fn =
       build_set_input_scalar_fn(synth_id, inlet_index_fn, module_ref);
+
   LLVMValueRef set_trig_fn =
       build_set_input_trig_fn(synth_id, inlet_index_fn, module_ref);
 
@@ -2980,6 +3981,7 @@ extern "C" LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *jit_ctx,
       LLVMStructTypeInContext(llvm_ctx, synth_fns_fields, 4, 0);
   LLVMValueRef synth_fns[] = {ctor_fn, inlet_index_fn, set_scalar_fn,
                               set_trig_fn};
+
   return LLVMConstStructInContext(llvm_ctx, synth_fns, 4, 0);
 }
 
@@ -3053,6 +4055,8 @@ extern "C" LLVMValueRef RegisterAudioOpHandler(Ast *ast, JITLangCtx *jit_ctx,
     Ast *expr = ast->data.AST_APPLICATION.args->data.AST_LET.expr;
 
     if (expr->tag == AST_LAMBDA) {
+      // print_ast(ast);
+      // printf("register audio op\n");
       return _register_let(ast->data.AST_APPLICATION.args, jit_ctx, module_ref,
                            builder);
     }
@@ -3160,6 +4164,26 @@ __attribute__((constructor)) static void ylc_audio_jit_init() {
       "allpass1", Allpass1Handler,
       type_fn(&t_num,
               type_fn(&t_num, type_fn(&t_num, type_fn(&t_num, &t_num)))));
+
+  DSP_BUILTIN("tabread", TabReadHandler, nullptr);
+  DSP_BUILTIN("tabread1", TabRead1Handler, nullptr);
+  DSP_BUILTIN("tabwrite", TabWriteHandler, nullptr);
+  DSP_BUILTIN("dsp_array_sum", DspArraySumHandler, nullptr);
+  DSP_BUILTIN("dsp_mmul_op", DspMmulOpHandler, nullptr);
+  DSP_BUILTIN("alloc_delay", AllocDelayHandler, nullptr);
+
+  DSP_BUILTIN(
+      "fdn4", Fdn4Handler,
+      type_fn(&t_num,
+              type_fn(&t_num,
+                      type_fn(&t_num,
+                              type_fn(&t_num,
+                                      type_fn(&t_num,
+                                              type_fn(&t_num,
+                                                      type_fn(&t_num,
+                                                              &t_num))))))));
+
+  DSP_BUILTIN("fdn4m", Fdn4mHandler, nullptr);
 
   DSP_BUILTIN("white", WhiteNoiseHandler, type_fn(&t_void, &t_num));
   DSP_BUILTIN("lfnoise0", LFNoiseHandler,

@@ -26,6 +26,8 @@ class DelayOp;
 class Delay1Op;
 class AllpassOp;
 class Allpass1Op;
+class Fdn4Op;
+class Fdn4mOp;
 class WhiteNoiseOp;
 class BufReadOp;
 class PhasorTrigOp;
@@ -384,6 +386,107 @@ public:
   }
   int32_t getBufOffset() {
     return (*this)->getAttrOfType<IntegerAttr>("buf_offset").getInt();
+  }
+  int32_t getBufSize() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf_size").getInt();
+  }
+};
+
+// dsp.fdn4 %state_ptr, %inputs_ptr, %input, %fb, %spf, %d1, %d2, %d3, %d4
+//          {state_offset, buf0_offset, buf1_offset, buf2_offset, buf3_offset, buf_size}
+//          : (!llvm.ptr, !llvm.ptr, f64, f64, f64, f64, f64, f64, f64) -> f64
+class Fdn4Op
+    : public Op<Fdn4Op, OpTrait::ZeroRegions, OpTrait::OneResult,
+                OpTrait::ZeroSuccessors, OpTrait::NOperands<9>::Impl> {
+public:
+  using Op::Op;
+  static StringRef getOperationName() { return "dsp.fdn4"; }
+  static ArrayRef<StringRef> getAttributeNames() {
+    static StringRef n[] = {"state_offset", "buf0_offset", "buf1_offset",
+                            "buf2_offset", "buf3_offset", "buf_size"};
+    return n;
+  }
+  static void build(OpBuilder &b, OperationState &s, Value state_ptr,
+                    Value inputs_ptr, Value input, Value fb, Value spf,
+                    Value d1, Value d2, Value d3, Value d4, int32_t state_offset,
+                    int32_t buf0_offset, int32_t buf1_offset, int32_t buf2_offset,
+                    int32_t buf3_offset, int32_t buf_size) {
+    s.addOperands({state_ptr, inputs_ptr, input, fb, spf, d1, d2, d3, d4});
+    s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
+    s.addAttribute("buf0_offset", b.getI32IntegerAttr(buf0_offset));
+    s.addAttribute("buf1_offset", b.getI32IntegerAttr(buf1_offset));
+    s.addAttribute("buf2_offset", b.getI32IntegerAttr(buf2_offset));
+    s.addAttribute("buf3_offset", b.getI32IntegerAttr(buf3_offset));
+    s.addAttribute("buf_size", b.getI32IntegerAttr(buf_size));
+    s.addTypes(b.getF64Type());
+  }
+  int32_t getStateOffset() {
+    return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();
+  }
+  int32_t getBuf0Offset() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf0_offset").getInt();
+  }
+  int32_t getBuf1Offset() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf1_offset").getInt();
+  }
+  int32_t getBuf2Offset() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf2_offset").getInt();
+  }
+  int32_t getBuf3Offset() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf3_offset").getInt();
+  }
+  int32_t getBufSize() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf_size").getInt();
+  }
+};
+
+// dsp.fdn4m %state_ptr, %inputs_ptr, %input, %fb, %spf, %d1, %d2, %d3, %d4,
+// %moff
+//           {state_offset, buf0_offset, buf1_offset, buf2_offset, buf3_offset,
+//           buf_size}
+//           : (!llvm.ptr, !llvm.ptr, f64, f64, f64, f64, f64, f64, f64, i64) ->
+//           f64
+class Fdn4mOp
+    : public Op<Fdn4mOp, OpTrait::ZeroRegions, OpTrait::OneResult,
+                OpTrait::ZeroSuccessors, OpTrait::NOperands<10>::Impl> {
+public:
+  using Op::Op;
+  static StringRef getOperationName() { return "dsp.fdn4m"; }
+  static ArrayRef<StringRef> getAttributeNames() {
+    static StringRef n[] = {"state_offset", "buf0_offset", "buf1_offset",
+                            "buf2_offset", "buf3_offset", "buf_size"};
+    return n;
+  }
+  static void build(OpBuilder &b, OperationState &s, Value state_ptr,
+                    Value inputs_ptr, Value input, Value fb, Value spf, Value d1,
+                    Value d2, Value d3, Value d4, Value matrix_offset,
+                    int32_t state_offset, int32_t buf0_offset,
+                    int32_t buf1_offset, int32_t buf2_offset,
+                    int32_t buf3_offset, int32_t buf_size) {
+    s.addOperands(
+        {state_ptr, inputs_ptr, input, fb, spf, d1, d2, d3, d4, matrix_offset});
+    s.addAttribute("state_offset", b.getI32IntegerAttr(state_offset));
+    s.addAttribute("buf0_offset", b.getI32IntegerAttr(buf0_offset));
+    s.addAttribute("buf1_offset", b.getI32IntegerAttr(buf1_offset));
+    s.addAttribute("buf2_offset", b.getI32IntegerAttr(buf2_offset));
+    s.addAttribute("buf3_offset", b.getI32IntegerAttr(buf3_offset));
+    s.addAttribute("buf_size", b.getI32IntegerAttr(buf_size));
+    s.addTypes(b.getF64Type());
+  }
+  int32_t getStateOffset() {
+    return (*this)->getAttrOfType<IntegerAttr>("state_offset").getInt();
+  }
+  int32_t getBuf0Offset() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf0_offset").getInt();
+  }
+  int32_t getBuf1Offset() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf1_offset").getInt();
+  }
+  int32_t getBuf2Offset() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf2_offset").getInt();
+  }
+  int32_t getBuf3Offset() {
+    return (*this)->getAttrOfType<IntegerAttr>("buf3_offset").getInt();
   }
   int32_t getBufSize() {
     return (*this)->getAttrOfType<IntegerAttr>("buf_size").getInt();

@@ -27,13 +27,15 @@ DYNAMIC_LIB = $(LIB_NAME).so
 
 SOURCES = audio_jit.cpp dialect.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
+ENGINE_HEADERS = $(wildcard ../../engine/*.h ../../engine/faust/*.h)
+ENGINE_LIB = ../../engine/build/libyalce_synth.so
 
 all: $(DYNAMIC_LIB)
 
 $(DYNAMIC_LIB): $(OBJECTS)
 	$(CXX) $(LDFLAGS) -o $@ $^
 
-%.o: %.cpp
+%.o: %.cpp $(ENGINE_HEADERS) $(ENGINE_LIB)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
