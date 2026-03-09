@@ -28,6 +28,8 @@ extern "C" {
 #include "../../lang/types/inference.h"
 }
 
+#include "codegen_context.h"
+#include "codegen_utils.h"
 #include "dialect.h"
 
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
@@ -418,85 +420,6 @@ static Location ast_loc(Ast *ast, MLIRContext *ctx) {
   return mlir::UnknownLoc::get(ctx);
 }
 
-// =============================================================================
-// Hoistable call — an extern function call with all-constant args that should
-// be evaluated once at node-creation time and stored in the state buffer.
-// =============================================================================
-
-struct HoistableCallArg {
-  enum Kind { F64, I32 } kind;
-  double f64val;
-  int32_t i32val;
-};
-
-struct HoistableCall {
-  int state_offset;
-  std::string fn_name;
-  std::vector<HoistableCallArg> args;
-  enum RetKind { F64, I32 } ret_kind;
-};
-
-// Records a reference to an external buffer node that should be wired as a
-// hidden inlet at node-creation time (via ylc_attach_node_inlet).
-struct BufRefSpec {
-  int inlet_idx;
-  JITSymbol *sym; // resolved at build_dsp_expr time
-};
-
-struct ArrayInitSpec {
-  int offset;
-  double value;
-};
-
-struct ArrayStateSpec {
-  int base_offset;
-  int len;
-  bool dynamic = false;
-  int ptr_slot_offset = 0;
-  int len_slot_offset = 0;
-};
-
-struct DynamicDelayAllocSpec {
-  int ptr_slot_offset;
-  int len_slot_offset;
-  int inlet_idx;
-};
-
-// =============================================================================
-// Build context threaded through AST → DSP op emission
-// =============================================================================
-
-struct DspBuildCtx {
-  OpBuilder b; // by value — callback rebinds this without corrupting the outer
-               // builder
-  ModuleOp mod;
-  Location loc;
-  Value node_ptr;   // !llvm.ptr  — the Node* itself
-  Value state_ptr;  // !llvm.ptr  — opaque state block
-  Value inputs_ptr; // !llvm.ptr  — Node** inputs array
-  Value spf;        // f64        — seconds per frame
-  Value frame_idx;  // index      — loop induction variable (set per-frame)
-  int state_offset = 0;
-  int next_hidden_inlet = 0; // next inlet index beyond the real lambda params
-  std::unordered_map<std::string, Value> locals;
-  // Insertion point before the scf.for loop — used to hoist values (e.g.
-  // table pointers) that are loop-invariant.  Set after the ForOp is created;
-  // updated each time a new hoisted op is emitted.
-  OpBuilder::InsertPoint hoist_ip;
-
-  // Array literals hoisted into the state buffer (name -> base offset/len).
-  std::unordered_map<std::string, ArrayStateSpec> array_states;
-  // Extern function calls with all-constant args, recorded during
-  // build_dsp_expr and emitted as LLVM init calls in CompileAudioFnHandler.
-  std::vector<HoistableCall> hoistable_calls;
-  // Literal array element initializers to emit at node-creation time.
-  std::vector<ArrayInitSpec> array_inits;
-  // alloc_delay buffers whose sizes are computed in ctor from synth params.
-  std::vector<DynamicDelayAllocSpec> dynamic_delay_allocs;
-  // External buffer nodes wired as hidden inlets at node-creation time.
-  std::vector<BufRefSpec> buf_ref_inputs;
-};
-
 static ArrayStateSpec make_static_array_state(int base, int len) {
   ArrayStateSpec s{};
   s.base_offset = base;
@@ -513,13 +436,13 @@ static ArrayStateSpec make_dynamic_array_state(int ptr_slot, int len_slot) {
   return s;
 }
 
-static int reserve_state(DspBuildCtx &ctx, int bytes) {
+int reserve_state(DspBuildCtx &ctx, int bytes) {
   int off = ctx.state_offset;
   ctx.state_offset += bytes;
   return off;
 }
 
-static int reserve_state_aligned(DspBuildCtx &ctx, int bytes, int align) {
+int reserve_state_aligned(DspBuildCtx &ctx, int bytes, int align) {
   int off = (ctx.state_offset + (align - 1)) & ~(align - 1);
   ctx.state_offset = off + bytes;
   return off;
@@ -564,7 +487,7 @@ static Value emit_array_state(Ast *array_ast, DspBuildCtx &ctx,
 // AST → DSP ops
 // =============================================================================
 
-static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx);
+Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx);
 static Value hoist_array_fill_const_expr(Ast *args, DspBuildCtx &ctx,
                                          JITLangCtx *jit_ctx,
                                          LLVMModuleRef module_ref,
@@ -779,9 +702,6 @@ static LLVM::LLVMFunctionType ylc_fn_to_mlir(::Type *t,
   }
   return LLVM::LLVMFunctionType::get(ylc_to_mlir_type(t, ctx), params, false);
 }
-
-typedef Value (*BuiltinDSPHandler)(Ast *, DspBuildCtx &ctx,
-                                   JITLangCtx *jit_ctx);
 
 Value SinOscHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   Ast *args = ast->data.AST_APPLICATION.args;
@@ -1757,7 +1677,8 @@ static Value DspArraySumHandler(Ast *ast, DspBuildCtx &ctx,
   int64_t known_len = -1;
   if (!get_array_base_ptr_len(*st_opt, ctx, base_ptr, len_i64, known_len) ||
       known_len <= 0) {
-    fprintf(stderr, "Error: dsp_array_sum currently requires static array len\n");
+    fprintf(stderr,
+            "Error: dsp_array_sum currently requires static array len\n");
     print_ast(ast);
     return {};
   }
@@ -1765,13 +1686,14 @@ static Value DspArraySumHandler(Ast *ast, DspBuildCtx &ctx,
   auto &b = ctx.b;
   auto loc = ctx.loc;
   auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
-  Value sum = b.create<arith::ConstantFloatOp>(loc, b.getF64Type(), APFloat(0.0));
+  Value sum =
+      b.create<arith::ConstantFloatOp>(loc, b.getF64Type(), APFloat(0.0));
   Value stride =
       b.create<LLVM::ConstantOp>(loc, b.getI64Type(), b.getI64IntegerAttr(8));
 
   for (int64_t i = 0; i < known_len; i++) {
-    Value idx = b.create<LLVM::ConstantOp>(loc, b.getI64Type(),
-                                           b.getI64IntegerAttr(i));
+    Value idx =
+        b.create<LLVM::ConstantOp>(loc, b.getI64Type(), b.getI64IntegerAttr(i));
     Value off = b.create<arith::MulIOp>(loc, idx, stride);
     Value ptr = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), base_ptr,
                                       ValueRange{off});
@@ -1816,7 +1738,8 @@ static Value DspMmulOpHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
 
   if (m_len <= 0 || y_len <= 0 || o_len <= 0 || y_len != o_len ||
       m_len != (y_len * y_len)) {
-    fprintf(stderr, "Error: dsp_mmul_op expects static sizes m=N*N, y=N, out=N\n");
+    fprintf(stderr,
+            "Error: dsp_mmul_op expects static sizes m=N*N, y=N, out=N\n");
     print_ast(ast);
     return {};
   }
@@ -1828,8 +1751,8 @@ static Value DspMmulOpHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
       LLVM::LLVMVoidType::get(b.getContext()),
       {ptr_ty, ptr_ty, ptr_ty, b.getI64Type()}, false);
   auto mmul_fn = declare_extern(ctx.mod, b, "ylc_mmul_f64", mmul_ty);
-  Value n_val =
-      b.create<LLVM::ConstantOp>(loc, b.getI64Type(), b.getI64IntegerAttr(y_len));
+  Value n_val = b.create<LLVM::ConstantOp>(loc, b.getI64Type(),
+                                           b.getI64IntegerAttr(y_len));
   b.create<LLVM::CallOp>(loc, mmul_fn, ValueRange{m_ptr, y_ptr, o_ptr, n_val});
 
   return b.create<arith::ConstantFloatOp>(loc, b.getF64Type(), APFloat(0.0));
@@ -2530,7 +2453,7 @@ Value list_expr_handlers(Ast *ast, const char *fn_name, DspBuildCtx &ctx,
   return {};
 }
 
-static Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
+Value build_dsp_expr(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   if (!ast)
     return {};
   auto &b = ctx.b;
@@ -3196,10 +3119,10 @@ static DspModuleResult build_dsp_module(Ast *lambda, const std::string &fn_name,
 
 static LogicalResult runMLIRPasses(ModuleOp mod, MLIRContext *ctx) {
   PassManager pm(ctx);
-  pm.addPass(createDspToLLVMPass());                // dsp.* → LLVM dialect
-  pm.addPass(createCanonicalizerPass());            // fold/canonicalize early
-  pm.addPass(createCSEPass());                      // dedup repeated constants/ops
-  pm.addPass(createSCFToControlFlowPass());         // scf.for → cf
+  pm.addPass(createDspToLLVMPass());        // dsp.* → LLVM dialect
+  pm.addPass(createCanonicalizerPass());    // fold/canonicalize early
+  pm.addPass(createCSEPass());              // dedup repeated constants/ops
+  pm.addPass(createSCFToControlFlowPass()); // scf.for → cf
   pm.addPass(createConvertControlFlowToLLVMPass()); // cf → llvm
   pm.addPass(createArithToLLVMConversionPass());    // arith.* → llvm
   pm.addPass(createCanonicalizerPass());            // cleanup after lowering

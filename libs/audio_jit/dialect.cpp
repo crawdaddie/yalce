@@ -105,8 +105,8 @@ extern "C" double ylc_allpass_state(void *state_raw, int32_t state_offset,
 // adjacent buffer samples gives sub-sample accuracy.
 extern "C" double ylc_allpass1_state(void *state_raw, int32_t state_offset,
                                      int32_t buf_offset, int32_t buf_size,
-                                     double input, double g,
-                                     double delay_secs, double spf) {
+                                     double input, double g, double delay_secs,
+                                     double spf) {
   int32_t *write_pos = (int32_t *)((char *)state_raw + state_offset);
   double *buf = (double *)((char *)state_raw + buf_offset);
   double delay_samps_f = delay_secs / spf;
@@ -176,12 +176,13 @@ extern "C" double ylc_fdn4_householder_state(
   return 0.25 * sum;
 }
 
-extern "C" double ylc_fdn4m_state(
-    void *state_raw, int32_t state_offset, int32_t buf0_offset,
-    int32_t buf1_offset, int32_t buf2_offset, int32_t buf3_offset,
-    int32_t buf_size, int64_t matrix_offset, double input, double fb,
-    double d1_secs, double d2_secs, double d3_secs, double d4_secs,
-    double spf) {
+extern "C" double ylc_fdn4m_state(void *state_raw, int32_t state_offset,
+                                  int32_t buf0_offset, int32_t buf1_offset,
+                                  int32_t buf2_offset, int32_t buf3_offset,
+                                  int32_t buf_size, int64_t matrix_offset,
+                                  double input, double fb, double d1_secs,
+                                  double d2_secs, double d3_secs,
+                                  double d4_secs, double spf) {
   int32_t *w = (int32_t *)((char *)state_raw + state_offset);
   double *b0 = (double *)((char *)state_raw + buf0_offset);
   double *b1 = (double *)((char *)state_raw + buf1_offset);
@@ -677,8 +678,8 @@ struct Fdn4OpLowering : public ConversionPattern {
     auto i32 = r.getI32Type();
 
     auto fn_ty = LLVM::LLVMFunctionType::get(
-        f64, {ptr, i32, i32, i32, i32, i32, i32, f64, f64, f64, f64, f64, f64,
-              f64},
+        f64,
+        {ptr, i32, i32, i32, i32, i32, i32, f64, f64, f64, f64, f64, f64, f64},
         false);
     auto fn = declare_extern(mod, r, "ylc_fdn4_householder_state", fn_ty);
 
@@ -698,7 +699,7 @@ struct Fdn4OpLowering : public ConversionPattern {
     r.replaceOpWithNewOp<LLVM::CallOp>(
         op, fn,
         ValueRange{operands[0], state_off, buf0_off, buf1_off, buf2_off,
-                   buf3_off,  buf_size,  operands[2], operands[3], operands[5],
+                   buf3_off, buf_size, operands[2], operands[3], operands[5],
                    operands[6], operands[7], operands[8], operands[4]});
     return success();
   }
@@ -717,10 +718,11 @@ struct Fdn4mOpLowering : public ConversionPattern {
     auto i32 = r.getI32Type();
     auto i64 = r.getI64Type();
 
-    auto fn_ty = LLVM::LLVMFunctionType::get(
-        f64, {ptr, i32, i32, i32, i32, i32, i32, i64, f64, f64, f64, f64, f64,
-              f64, f64},
-        false);
+    auto fn_ty =
+        LLVM::LLVMFunctionType::get(f64,
+                                    {ptr, i32, i32, i32, i32, i32, i32, i64,
+                                     f64, f64, f64, f64, f64, f64, f64},
+                                    false);
     auto fn = declare_extern(mod, r, "ylc_fdn4m_state", fn_ty);
 
     Value state_off = r.create<LLVM::ConstantOp>(
@@ -739,7 +741,7 @@ struct Fdn4mOpLowering : public ConversionPattern {
     r.replaceOpWithNewOp<LLVM::CallOp>(
         op, fn,
         ValueRange{operands[0], state_off, buf0_off, buf1_off, buf2_off,
-                   buf3_off,  buf_size,  operands[9], operands[2], operands[3],
+                   buf3_off, buf_size, operands[9], operands[2], operands[3],
                    operands[5], operands[6], operands[7], operands[8],
                    operands[4]});
     return success();
@@ -808,15 +810,13 @@ struct DspToLLVMPass
     target.addIllegalDialect<DspDialect>();
 
     RewritePatternSet patterns(&getContext());
-    patterns
-        .add<InletOpLowering, OutletOpLowering, PhasorOpLowering,
-             // ImpulseOpLowering,
-             PhasorTrigOpLowering, LinscaleOpLowering, TableLookupOpLowering,
-             BufReadOpLowering, DelayOpLowering, Delay1OpLowering,
-             AllpassOpLowering, Allpass1OpLowering, Fdn4OpLowering,
-             Fdn4mOpLowering,
-             WhiteNoiseLowering>(
-            &getContext());
+    patterns.add<InletOpLowering, OutletOpLowering, PhasorOpLowering,
+                 // ImpulseOpLowering,
+                 PhasorTrigOpLowering, LinscaleOpLowering,
+                 TableLookupOpLowering, BufReadOpLowering, DelayOpLowering,
+                 Delay1OpLowering, AllpassOpLowering, Allpass1OpLowering,
+                 Fdn4OpLowering, Fdn4mOpLowering, WhiteNoiseLowering>(
+        &getContext());
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))
