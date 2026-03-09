@@ -46,6 +46,7 @@ extern "C" {
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/Passes.h"
 
 #include "llvm-c/Core.h"
 #include "llvm/IR/Module.h"
@@ -142,6 +143,22 @@ extern "C" double ylc_bufread(void *node_raw, double phase) {
   double b_val = buf[(index + 1) % sz];
 
   return a + frac * (b_val - a);
+}
+
+// Dense row-major matrix-vector multiply: out = m * y, where m is n x n.
+extern "C" void ylc_mmul_f64(const double *m, const double *y, double *out,
+                             int64_t n) {
+  if (!m || !y || !out || n <= 0) {
+    return;
+  }
+  for (int64_t i = 0; i < n; ++i) {
+    const double *row = m + (i * n);
+    double acc = 0.0;
+    for (int64_t j = 0; j < n; ++j) {
+      acc += row[j] * y[j];
+    }
+    out[i] = acc;
+  }
 }
 
 extern "C" double grain_samp(double *buf, int64_t buf_size, double trig,
@@ -1807,36 +1824,13 @@ static Value DspMmulOpHandler(Ast *ast, DspBuildCtx &ctx, JITLangCtx *jit_ctx) {
   auto &b = ctx.b;
   auto loc = ctx.loc;
   auto ptr_ty = LLVM::LLVMPointerType::get(b.getContext());
-  Value stride =
-      b.create<LLVM::ConstantOp>(loc, b.getI64Type(), b.getI64IntegerAttr(8));
-
-  for (int64_t i = 0; i < y_len; i++) {
-    Value acc =
-        b.create<arith::ConstantFloatOp>(loc, b.getF64Type(), APFloat(0.0));
-    for (int64_t j = 0; j < y_len; j++) {
-      int64_t midx = i * y_len + j;
-      Value midx_v = b.create<LLVM::ConstantOp>(loc, b.getI64Type(),
-                                                b.getI64IntegerAttr(midx));
-      Value yidx_v = b.create<LLVM::ConstantOp>(loc, b.getI64Type(),
-                                                b.getI64IntegerAttr(j));
-      Value m_off = b.create<arith::MulIOp>(loc, midx_v, stride);
-      Value y_off = b.create<arith::MulIOp>(loc, yidx_v, stride);
-      Value m_gep = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), m_ptr,
-                                          ValueRange{m_off});
-      Value y_gep = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), y_ptr,
-                                          ValueRange{y_off});
-      Value m_val = b.create<LLVM::LoadOp>(loc, b.getF64Type(), m_gep);
-      Value y_val = b.create<LLVM::LoadOp>(loc, b.getF64Type(), y_gep);
-      Value prod = b.create<arith::MulFOp>(loc, m_val, y_val);
-      acc = b.create<arith::AddFOp>(loc, acc, prod);
-    }
-    Value oidx_v = b.create<LLVM::ConstantOp>(loc, b.getI64Type(),
-                                              b.getI64IntegerAttr(i));
-    Value o_off = b.create<arith::MulIOp>(loc, oidx_v, stride);
-    Value o_gep = b.create<LLVM::GEPOp>(loc, ptr_ty, b.getI8Type(), o_ptr,
-                                        ValueRange{o_off});
-    b.create<LLVM::StoreOp>(loc, acc, o_gep);
-  }
+  auto mmul_ty = LLVM::LLVMFunctionType::get(
+      LLVM::LLVMVoidType::get(b.getContext()),
+      {ptr_ty, ptr_ty, ptr_ty, b.getI64Type()}, false);
+  auto mmul_fn = declare_extern(ctx.mod, b, "ylc_mmul_f64", mmul_ty);
+  Value n_val =
+      b.create<LLVM::ConstantOp>(loc, b.getI64Type(), b.getI64IntegerAttr(y_len));
+  b.create<LLVM::CallOp>(loc, mmul_fn, ValueRange{m_ptr, y_ptr, o_ptr, n_val});
 
   return b.create<arith::ConstantFloatOp>(loc, b.getF64Type(), APFloat(0.0));
 }
@@ -3203,9 +3197,13 @@ static DspModuleResult build_dsp_module(Ast *lambda, const std::string &fn_name,
 static LogicalResult runMLIRPasses(ModuleOp mod, MLIRContext *ctx) {
   PassManager pm(ctx);
   pm.addPass(createDspToLLVMPass());                // dsp.* → LLVM dialect
+  pm.addPass(createCanonicalizerPass());            // fold/canonicalize early
+  pm.addPass(createCSEPass());                      // dedup repeated constants/ops
   pm.addPass(createSCFToControlFlowPass());         // scf.for → cf
   pm.addPass(createConvertControlFlowToLLVMPass()); // cf → llvm
   pm.addPass(createArithToLLVMConversionPass());    // arith.* → llvm
+  pm.addPass(createCanonicalizerPass());            // cleanup after lowering
+  pm.addPass(createCSEPass());                      // remove new duplicates
   pm.addPass(createReconcileUnrealizedCastsPass());
   return pm.run(mod);
 }
