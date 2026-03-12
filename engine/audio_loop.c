@@ -168,6 +168,12 @@ static void write_callback(struct SoundIoOutStream *outstream,
     read_ptr = NULL;
   }
 
+  if (frame_count_max > ctx->output_buf_capacity) {
+    fprintf(stderr,
+            "audio callback exceeds output buffer: min=%d max=%d capacity=%d\n",
+            frame_count_min, frame_count_max, ctx->output_buf_capacity);
+  }
+
   // Process input data from ring buffer using the new mapping system
   if (read_ptr && ring_buffer) {
     int bytes_per_frame = req_hardware_inputs * outstream->bytes_per_sample;
@@ -217,6 +223,12 @@ static void write_callback(struct SoundIoOutStream *outstream,
 
     if (!frame_count)
       break;
+
+    if (frame_count > ctx->output_buf_capacity) {
+      fprintf(stderr,
+              "audio callback block exceeds output buffer: frames=%d capacity=%d\n",
+              frame_count, ctx->output_buf_capacity);
+    }
 
     const struct SoundIoChannelLayout *layout = &outstream->layout;
 
@@ -515,6 +527,17 @@ int start_audio() {
   }
 
   double actual_latency = outstream->software_latency;
+  int output_buf_frames = (int)(actual_latency * outstream->sample_rate + 0.999999);
+  if (output_buf_frames < BUF_SIZE) {
+    output_buf_frames = BUF_SIZE;
+  }
+  double *new_output_buf =
+      realloc(ctx.output_buf, sizeof(double) * output_buf_frames * LAYOUT);
+  if (!new_output_buf) {
+    panic("unable to allocate output buffer");
+  }
+  ctx.output_buf = new_output_buf;
+  ctx.output_buf_capacity = output_buf_frames;
   fprintf(stderr, ANSI_COLOR_RED "Actual output latency: %.4f sec\n",
           actual_latency);
 

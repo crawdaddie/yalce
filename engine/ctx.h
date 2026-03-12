@@ -11,7 +11,8 @@ typedef struct {
 } node_group_state;
 
 typedef struct {
-  double output_buf[BUF_SIZE * LAYOUT];
+  double *output_buf;
+  int output_buf_capacity;
   int num_input_signals;
   Signal *input_signals;
 

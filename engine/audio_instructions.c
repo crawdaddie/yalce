@@ -39,6 +39,7 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
   case NODE_SET_SCALAR: {
     struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
     Node *node = payload.target;
+
     if ((char *)node->perform == (char *)perform_audio_graph) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
       if (node->state_ptr) {

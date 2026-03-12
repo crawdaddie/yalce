@@ -4,11 +4,15 @@ let compile_audio_fn = extern fn T -> T;
 let play = extern fn Synth -> Synth; 
 
 let sin_osc = extern fn Double -> Double;
+let sq_osc = extern fn Double -> Double;
+let saw_osc = extern fn Double -> Double;
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
 
 
 compile_audio_fn (
-  let x = fn () -> sin_osc 200.  
+  let x = fn () ->
+  sq_osc 100
+  |> (*) 0.2
   ;
 );
 

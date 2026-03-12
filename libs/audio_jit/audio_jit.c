@@ -8,12 +8,37 @@
 #include "../../lang/common.h"
 #include "../../lang/ht.h"
 #include "../../lang/serde.h"
+#include "../../lang/types/builtins.h"
 #include "../../lang/types/type_ser.h"
 
 #include <llvm-c/Core.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef SIN_TABSIZE
+#define SIN_TABSIZE (1 << 11)
+#endif
+
+const double ylc_sin_table[SIN_TABSIZE] = {
+#include "../../engine/assets/sin_table.csv"
+};
+
+#ifndef SQ_TABSIZE
+#define SQ_TABSIZE (1 << 11)
+#endif
+const double ylc_sq_table[SQ_TABSIZE] = {
+#include "../../engine/assets/sq_table.csv"
+};
+
+#ifndef SAW_TABSIZE
+#define SAW_TABSIZE (1 << 11)
+#endif
+
+const double ylc_saw_table[SAW_TABSIZE] = {
+#include "../../engine/assets/saw_table.csv"
+};
 
 int STYPE_AUDIO_JIT_SYM;
 int STYPE_AUDIO_JIT_INLINE_SYM;
@@ -130,6 +155,24 @@ static LLVMBasicBlockRef dsp_build_perform_loop(LLVMValueRef perform_fn,
   return exit_bb;
 }
 
+static LLVMValueRef get_table_global_ptr(const char *sym_name,
+                                         int32_t table_size,
+                                         LLVMModuleRef module,
+                                         LLVMBuilderRef builder) {
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef arr_ty = LLVMArrayType(f64_ty, table_size);
+  LLVMValueRef global = LLVMGetNamedGlobal(module, sym_name);
+  if (!global) {
+    global = LLVMAddGlobal(module, arr_ty, sym_name);
+    LLVMSetLinkage(global, LLVMExternalLinkage);
+  }
+
+  LLVMValueRef zero = LLVMConstInt(i32_ty, 0, 0);
+  LLVMValueRef idxs[] = {zero, zero};
+  return LLVMBuildGEP2(builder, arr_ty, global, idxs, 2, "tab.base");
+}
+
 LLVMValueRef builtin_phasor(LLVMValueRef freq, DspBuildCtx *dsp_ctx,
                             JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
@@ -165,17 +208,62 @@ LLVMValueRef builtin_phasor(LLVMValueRef freq, DspBuildCtx *dsp_ctx,
   return phase;
 }
 
-LLVMValueRef builtin_sin_osc(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
+static LLVMValueRef pow2_tabread(LLVMValueRef phasor, LLVMValueRef table_ptr,
+                                 int32_t table_size, LLVMBuilderRef builder) {
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef i64_ty = LLVMInt64Type();
+  LLVMValueRef scaled =
+      LLVMBuildFMul(builder, phasor, LLVMConstReal(f64_ty, (double)table_size),
+                    "tab.scaled_idx");
+  LLVMValueRef index = LLVMBuildFPToSI(builder, scaled, i32_ty, "tab.index");
+  LLVMValueRef index_f = LLVMBuildSIToFP(builder, index, f64_ty, "tab.index_f");
+  LLVMValueRef frac = LLVMBuildFSub(builder, scaled, index_f, "tab.frac");
+
+  LLVMValueRef mask = LLVMConstInt(i32_ty, table_size - 1, 0);
+  LLVMValueRef one_i32 = LLVMConstInt(i32_ty, 1, 0);
+  LLVMValueRef idx0 = LLVMBuildAnd(builder, index, mask, "tab.idx0");
+  LLVMValueRef idx1 = LLVMBuildAnd(
+      builder, LLVMBuildAdd(builder, index, one_i32, "tab.idx1_raw"), mask,
+      "tab.idx1");
+
+  LLVMValueRef idx0_i64 = LLVMBuildZExt(builder, idx0, i64_ty, "tab.idx0.i64");
+  LLVMValueRef idx1_i64 = LLVMBuildZExt(builder, idx1, i64_ty, "tab.idx1.i64");
+
+  LLVMValueRef a_ptr =
+      LLVMBuildGEP2(builder, f64_ty, table_ptr, &idx0_i64, 1, "tab.a.ptr");
+  LLVMValueRef b_ptr =
+      LLVMBuildGEP2(builder, f64_ty, table_ptr, &idx1_i64, 1, "tab.b.ptr");
+  LLVMValueRef a = LLVMBuildLoad2(builder, f64_ty, a_ptr, "tab.a");
+  LLVMValueRef b = LLVMBuildLoad2(builder, f64_ty, b_ptr, "tab.b");
+
+  LLVMValueRef inv_frac =
+      LLVMBuildFSub(builder, LLVMConstReal(f64_ty, 1.0), frac, "tab.inv_frac");
+  LLVMValueRef a_term = LLVMBuildFMul(builder, inv_frac, a, "tab.a_term");
+  LLVMValueRef b_term = LLVMBuildFMul(builder, frac, b, "tab.b_term");
+  return LLVMBuildFAdd(builder, a_term, b_term, "tab.sample");
+}
+LLVMValueRef ensure_float(Type *in_type, LLVMValueRef val,
+                          LLVMBuilderRef builder) {
+
+  if (types_equal(in_type, &t_int)) {
+    return LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "freq.f64");
+  }
+  return val;
+}
+
+LLVMValueRef builtin_tab_osc(const char *tab_sym, int32_t tabsize, Ast *ast,
+                             DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                              LLVMModuleRef module, LLVMBuilderRef builder) {
-  printf("builtin sin osc\n");
-  print_ast(ast);
+  Type *in_type = ast->data.AST_APPLICATION.args->type;
 
   LLVMValueRef freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
                                      ctx, module, builder);
-
-  LLVMDumpValue(freq);
+  freq = ensure_float(in_type, freq, builder);
   LLVMValueRef phasor = builtin_phasor(freq, dsp_ctx, ctx, module, builder);
-  return phasor;
+  LLVMValueRef table_ptr =
+      get_table_global_ptr(tab_sym, tabsize, module, builder);
+  return pow2_tabread(phasor, table_ptr, tabsize, builder);
 }
 
 LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
@@ -184,6 +272,8 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   case AST_BODY: {
   }
   case AST_IDENTIFIER: {
+    printf("get identifier\n");
+    print_ast(ast);
     return NULL;
   }
   case AST_DOUBLE: {
@@ -194,8 +284,94 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
   case AST_APPLICATION: {
     Ast *f = ast->data.AST_APPLICATION.function;
+
     if (strcmp(f->data.AST_IDENTIFIER.value, "sin_osc") == 0) {
-      return builtin_sin_osc(ast, dsp_ctx, ctx, module, builder);
+      return builtin_tab_osc("ylc_sin_table", SIN_TABSIZE, ast, dsp_ctx, ctx,
+                             module, builder);
+    }
+
+    if (strcmp(f->data.AST_IDENTIFIER.value, "sq_osc") == 0) {
+      return builtin_tab_osc("ylc_sq_table", SQ_TABSIZE, ast, dsp_ctx, ctx,
+                             module, builder);
+    }
+    if (strcmp(f->data.AST_IDENTIFIER.value, "saw_osc") == 0) {
+      return builtin_tab_osc("ylc_saw_table", SAW_TABSIZE, ast, dsp_ctx, ctx,
+                             module, builder);
+    }
+    if (strcmp(f->data.AST_IDENTIFIER.value, "+") == 0) {
+      LLVMValueRef l =
+          ensure_float(ast->data.AST_APPLICATION.args->type,
+                       dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                      ctx, module, builder),
+                       builder);
+
+      LLVMValueRef r =
+          ensure_float(ast->data.AST_APPLICATION.args[1].type,
+                       dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
+                                      dsp_ctx, ctx, module, builder),
+                       builder);
+      return LLVMBuildFAdd(builder, l, r, "signal.add");
+    }
+    if (strcmp(f->data.AST_IDENTIFIER.value, "-") == 0) {
+
+      LLVMValueRef l =
+          ensure_float(ast->data.AST_APPLICATION.args->type,
+                       dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                      ctx, module, builder),
+                       builder);
+
+      LLVMValueRef r =
+          ensure_float(ast->data.AST_APPLICATION.args[1].type,
+                       dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
+                                      dsp_ctx, ctx, module, builder),
+                       builder);
+
+      return LLVMBuildFSub(builder, l, r, "signal.sub");
+    }
+    if (strcmp(f->data.AST_IDENTIFIER.value, "*") == 0) {
+
+      LLVMValueRef l =
+          ensure_float(ast->data.AST_APPLICATION.args->type,
+                       dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                      ctx, module, builder),
+                       builder);
+
+      LLVMValueRef r =
+          ensure_float(ast->data.AST_APPLICATION.args[1].type,
+                       dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
+                                      dsp_ctx, ctx, module, builder),
+                       builder);
+
+      return LLVMBuildFMul(builder, l, r, "signal.mul");
+    }
+    if (strcmp(f->data.AST_IDENTIFIER.value, "/") == 0) {
+      LLVMValueRef l =
+          ensure_float(ast->data.AST_APPLICATION.args->type,
+                       dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                      ctx, module, builder),
+                       builder);
+
+      LLVMValueRef r =
+          ensure_float(ast->data.AST_APPLICATION.args[1].type,
+                       dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
+                                      dsp_ctx, ctx, module, builder),
+                       builder);
+      return LLVMBuildFDiv(builder, l, r, "signal.div");
+    }
+    if (strcmp(f->data.AST_IDENTIFIER.value, "%") == 0) {
+
+      LLVMValueRef l =
+          ensure_float(ast->data.AST_APPLICATION.args->type,
+                       dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                      ctx, module, builder),
+                       builder);
+
+      LLVMValueRef r =
+          ensure_float(ast->data.AST_APPLICATION.args[1].type,
+                       dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
+                                      dsp_ctx, ctx, module, builder),
+                       builder);
+      return LLVMBuildFRem(builder, l, r, "signal.fmod");
     }
     return NULL;
   }

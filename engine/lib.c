@@ -512,6 +512,7 @@ NodeRef chain(NodeRef _t) {
 }
 
 NodeRef play_node(NodeRef s) {
+  printf("play node %p\n", s);
   if ((strcmp(s->meta, "ensemble") != 0) && (_chain_head != NULL)) {
     return play_node_offset(get_frame_offset(), chain(s));
   }
