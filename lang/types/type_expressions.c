@@ -76,8 +76,8 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
   }
 
   case AST_TUPLE: {
-    print_ast("compute tuple??\n");
-    print_ast(expr);
+    // print_ast("compute tuple??\n");
+    // print_ast(expr);
     int len = expr->data.AST_LIST.len;
     Type **members = t_alloc(sizeof(Type *) * len);
     const char **names = NULL;

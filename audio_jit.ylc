@@ -1,1 +1,15 @@
-open DSP;
+open engine/bindings/Synth;
+
+let compile_audio_fn = extern fn T -> T;
+let play = extern fn Synth -> Synth; 
+
+let sin_osc = extern fn Double -> Double;
+let _ = dlopen "libs/audio_jit/libaudio_jit.so";
+
+
+compile_audio_fn (
+  let x = fn () -> sin_osc 200.  
+  ;
+);
+
+x () |> play

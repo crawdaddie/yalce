@@ -42,7 +42,7 @@ Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
   return node;
 }
 
-void ylc_write_output(void *node_raw, int64_t frame, double val) {
+void dsp_write_output(void *node_raw, int64_t frame, double val) {
   ((Node *)node_raw)->output.buf[frame] = val;
 }
 
@@ -235,7 +235,7 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
   // Build Synth Perform func scaffold
   LLVMTypeRef perf_ty =
-      LLVMFunctionType(LLVMVoidType(),
+      LLVMFunctionType(GENERIC_PTR,
                        (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR,
                                        LLVMInt32Type(), LLVMDoubleType()},
                        5, 0);
@@ -277,9 +277,9 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
     LLVMTypeRef f64_ty = LLVMDoubleType();
     LLVMTypeRef write_param_tys[] = {GENERIC_PTR, i64_ty, f64_ty};
     LLVMTypeRef write_fn_ty = LLVMFunctionType(void_ty, write_param_tys, 3, 0);
-    LLVMValueRef write_fn = LLVMGetNamedFunction(module, "ylc_write_output");
+    LLVMValueRef write_fn = LLVMGetNamedFunction(module, "dsp_write_output");
     if (!write_fn) {
-      write_fn = LLVMAddFunction(module, "ylc_write_output", write_fn_ty);
+      write_fn = LLVMAddFunction(module, "dsp_write_output", write_fn_ty);
       LLVMSetLinkage(write_fn, LLVMExternalLinkage);
     }
 
@@ -302,7 +302,7 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   LLVMPositionBuilderAtEnd(dsp_ctx.perform_builder, perf_exit_bb);
   if (!LLVMGetBasicBlockTerminator(
           LLVMGetInsertBlock(dsp_ctx.perform_builder))) {
-    LLVMBuildRetVoid(dsp_ctx.perform_builder);
+    LLVMBuildRet(dsp_ctx.perform_builder, LLVMConstNull(GENERIC_PTR));
   }
 
   if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(dsp_ctx.ctor_builder))) {
