@@ -1,11 +1,11 @@
 #ifndef _LANG_BACKEND_LLVM_COMMON_H
 #define _LANG_BACKEND_LLVM_COMMON_H
 
-#include "./escape_analysis.h"
-#include "ht.h"
-#include "parse.h"
-#include "types/inference.h"
-#include "types/type.h"
+#include "../escape_analysis.h"
+#include "../ht.h"
+#include "../parse.h"
+#include "../types/inference.h"
+#include "../types/type.h"
 #include <llvm-c/Types.h>
 
 #define STACK_MAX 256
@@ -63,12 +63,10 @@ typedef enum symbol_type {
   STYPE_LOCAL_VAR,
   STYPE_FUNCTION,
   STYPE_LAZY_EXTERN_FUNCTION,
-  STYPE_GENERIC_FUNCTION,
   STYPE_MODULE,
   STYPE_VARIANT_TYPE,
-  STYPE_COROUTINE_CONSTRUCTOR,
   STYPE_GENERIC_CONSTRUCTOR,
-  STYPE_CONSTRUCTOR_MODULE,
+  STYPE_GENERIC_FUNCTION,
 } symbol_type;
 
 extern int REGISTERED_JIT_SYMBOL_TYPE;

@@ -1,7 +1,7 @@
 #ifndef YLC_LIB_REGISTRY_H
 #define YLC_LIB_REGISTRY_H
 
-#include "backend_llvm/common.h"
+#include "./common.h"
 #include <llvm-c/Types.h>
 
 /*
@@ -32,8 +32,8 @@
  *       ht_set_hash(stack, name, hash_string(name, strlen(name)), sym);
  *   }
  */
-extern JITLangCtx    *ylc_jit_ctx;
-extern LLVMModuleRef  ylc_jit_module;
+extern JITLangCtx *ylc_jit_ctx;
+extern LLVMModuleRef ylc_jit_module;
 extern LLVMBuilderRef ylc_jit_builder;
 
 #endif

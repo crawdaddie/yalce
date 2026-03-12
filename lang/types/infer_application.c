@@ -170,7 +170,7 @@ Type *transform_struct_of_coroutines(Type *a) {
   }
 
   for (int i = 0; i < num_fields; i++) {
-    print_type(a->data.T_CONS.args[i]);
+    // print_type(a->data.T_CONS.args[i]);
     Type *field_type = a->data.T_CONS.args[i];
     if (is_coroutine_type(field_type)) {
       contained[i] = field_type->data.T_CONS.args[0];

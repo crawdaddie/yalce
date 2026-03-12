@@ -196,7 +196,6 @@ void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
   while (node_count--) {
 
     if (node->perform) {
-      printf("perform %p\n", node);
       __node_get_inputs(node, graph, inputs);
       char *state = __node_get_state(node, graph);
       node->perform(node, state, inputs, nframes, spf);

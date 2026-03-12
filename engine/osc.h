@@ -61,8 +61,4 @@ extern double grain_win[GRAIN_WINDOW_TABSIZE];
 #define SQ_TABSIZE (1 << 11)
 #define SIN_TABSIZE (1 << 11)
 #define SAW_TABSIZE (1 << 11)
-
-extern double sin_table[SIN_TABSIZE];
-extern double sq_table[SQ_TABSIZE];
-extern double saw_table[SAW_TABSIZE];
 #endif

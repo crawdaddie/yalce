@@ -30,11 +30,11 @@ int save_table_to_file(double *table, int size, const char *filename) {
 
 #define SQ_TABSIZE (1 << 11)
 #ifdef READ_WTABLES
-double sq_table[SQ_TABSIZE] = {
+static double sq_table[SQ_TABSIZE] = {
 #include "./assets/sq_table.csv"
 };
 #else
-double sq_table[SQ_TABSIZE];
+static double sq_table[SQ_TABSIZE];
 #endif
 
 void maketable_sq(void) {
@@ -59,11 +59,11 @@ uint32_t get_sq_tabsize() { return SQ_TABSIZE; }
 
 #define SIN_TABSIZE (1 << 11)
 #ifdef READ_WTABLES
-double sin_table[SIN_TABSIZE] = {
+static double sin_table[SIN_TABSIZE] = {
 #include "./assets/sin_table.csv"
 };
 #else
-double sin_table[SIN_TABSIZE];
+static double sin_table[SIN_TABSIZE];
 #endif
 
 void maketable_sin(void) {
@@ -1668,11 +1668,11 @@ Node *pm_node(Node *freq_input, Node *mod_index_input, Node *mod_ratio_input) {
 }
 #define SAW_TABSIZE (1 << 11)
 #ifdef READ_WTABLES
-double saw_table[SAW_TABSIZE] = {
+static double saw_table[SAW_TABSIZE] = {
 #include "./assets/saw_table.csv"
 };
 #else
-double saw_table[SQ_TABSIZE];
+static double saw_table[SAW_TABSIZE];
 #endif
 
 void maketable_saw(void) {

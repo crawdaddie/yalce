@@ -362,7 +362,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   Type *symbol_type = sym->symbol_type;
 
-  if (sym->type == STYPE_GENERIC_FUNCTION &&
+  if (sym->type >= STYPE_GENERIC_FUNCTION &&
       sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
 
     return sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(

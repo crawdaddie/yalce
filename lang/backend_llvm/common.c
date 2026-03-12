@@ -59,4 +59,4 @@ LLVMValueRef STRUCT(LLVMTypeRef type, LLVMBuilderRef builder, int num_values,
   return result;
 }
 
-int REGISTERED_JIT_SYMBOL_TYPE = STYPE_CONSTRUCTOR_MODULE + 1;
+int REGISTERED_JIT_SYMBOL_TYPE = STYPE_GENERIC_FUNCTION + 1;

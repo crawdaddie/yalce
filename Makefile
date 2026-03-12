@@ -129,6 +129,7 @@ clean:
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(MAKE) -C engine clean
 	$(MAKE) -C gui clean
+	$(MAKE) -C libs/audio_jit clean
 
 test:
 	$(MAKE) -C test

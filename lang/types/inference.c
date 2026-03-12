@@ -1278,8 +1278,8 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md bmd_type,
       if (btype->kind == T_CONS && binding->data.AST_APPLICATION.len == 1 &&
           (binding->data.AST_APPLICATION.args->tag == AST_TUPLE)) {
 
-        print_ast(binding);
-        print_type(btype);
+        // print_ast(binding);
+        // print_type(btype);
 
         bind_type_in_ctx(binding->data.AST_APPLICATION.args, btype, bmd_type,
                          ctx);
