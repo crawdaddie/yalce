@@ -27,6 +27,7 @@ import std/Math;
 #     |> (*) (Math.db_amp -15)
 #   ;
 # );
+# x 200 |> play;
 
 # let amen = load_soundfile "fat_amen_mono_48000.wav";
 # compile_audio_fn (
@@ -54,9 +55,37 @@ import std/Math;
 #     sin_osc (z[0])
 #   ;
 # );
+
+# one‑pole with softclip
+compile_audio_fn (
+let pole = fn g x z ->
+  let y = z + g * (x - z) in
+  y
+;
+);
+
+# one-pole lowpass: frequency in Hz
+compile_audio_fn (
+let lpf1p = fn freq x ->
+  let Z = [| 0. |];
+  let g = 2.0 * Math.PI * freq * (spf ());
+  let y = Z[0] |> pole g x;
+  Z[0] := y;
+  y
+;
+);
+compile_audio_fn (
+let hpf1p = fn freq x ->
+  let Z = [| 0. |];
+  let g = 2.0 * Math.PI * freq * (spf ());
+  let lp = Z[0] |> pole g x;
+  Z[0] := lp;
+  x - lp
+;
+);
 compile_audio_fn (
   let osc = fn f -> 
-    4 * sin_osc f |> Math.tanh
+    saw_osc f |> Math.tanh
   ;
 );
 
@@ -68,8 +97,11 @@ compile_audio_fn (
     |> trig
     |> decay 0.08
     |> scale 60 800
-    |> osc
+    |> saw_osc
+    |> lpf1p 100.
     |> (*) (Math.db_amp -10)
   ;
 );
 x () |> play;
+#
+#

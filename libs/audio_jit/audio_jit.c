@@ -148,9 +148,38 @@ static LLVMValueRef get_table_global_ptr(const char *sym_name,
   LLVMTypeRef i32_ty = LLVMInt32Type();
   LLVMTypeRef arr_ty = LLVMArrayType(f64_ty, table_size);
   LLVMValueRef global = LLVMGetNamedGlobal(module, sym_name);
+
   if (!global) {
     global = LLVMAddGlobal(module, arr_ty, sym_name);
-    LLVMSetLinkage(global, LLVMExternalLinkage);
+    const double *table_data = NULL;
+    if (strcmp(sym_name, "ylc_sin_table") == 0 && table_size == SIN_TABSIZE) {
+      table_data = ylc_sin_table;
+    } else if (strcmp(sym_name, "ylc_sq_table") == 0 &&
+               table_size == SQ_TABSIZE) {
+      table_data = ylc_sq_table;
+    } else if (strcmp(sym_name, "ylc_saw_table") == 0 &&
+               table_size == SAW_TABSIZE) {
+      table_data = ylc_saw_table;
+    }
+
+    if (table_data) {
+      LLVMValueRef *elems =
+          malloc(sizeof(LLVMValueRef) * (size_t)table_size);
+      if (elems) {
+        for (int32_t i = 0; i < table_size; i++) {
+          elems[i] = LLVMConstReal(f64_ty, table_data[i]);
+        }
+        LLVMValueRef init = LLVMConstArray(f64_ty, elems, (unsigned)table_size);
+        LLVMSetInitializer(global, init);
+        LLVMSetGlobalConstant(global, 1);
+        LLVMSetLinkage(global, LLVMPrivateLinkage);
+        free(elems);
+      } else {
+        LLVMSetLinkage(global, LLVMExternalLinkage);
+      }
+    } else {
+      LLVMSetLinkage(global, LLVMExternalLinkage);
+    }
   }
 
   LLVMValueRef zero = LLVMConstInt(i32_ty, 0, 0);
@@ -274,14 +303,14 @@ LLVMValueRef builtin_phasor_sinc(LLVMValueRef freq, LLVMValueRef trig,
 
   LLVMValueRef off_val = LLVMConstInt(i32_ty, (uint64_t)off, 0);
   LLVMValueRef prev_off_val = LLVMConstInt(i32_ty, (uint64_t)(off + 8), 0);
-  if (dsp_ctx->ctor_state_ptr) {
+  if (dsp_ctx->init_state_ptr) {
     LLVMValueRef prev_init_ptr_i8 =
-        LLVMBuildGEP2(dsp_ctx->ctor_builder, i8_ty, dsp_ctx->ctor_state_ptr,
+        LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, dsp_ctx->init_state_ptr,
                       &prev_off_val, 1, "phasor.prev_trig_init_ptr");
     LLVMValueRef prev_init_ptr = LLVMBuildBitCast(
-        dsp_ctx->ctor_builder, prev_init_ptr_i8, LLVMPointerType(f64_ty, 0),
+        dsp_ctx->init_builder, prev_init_ptr_i8, LLVMPointerType(f64_ty, 0),
         "phasor.prev_trig_init_f64_ptr");
-    LLVMBuildStore(dsp_ctx->ctor_builder, LLVMConstReal(f64_ty, 0.0),
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, 0.0),
                    prev_init_ptr);
   }
 
@@ -529,23 +558,23 @@ LLVMValueRef build_exp_decay(LLVMValueRef T, LLVMValueRef trig,
 
   LLVMValueRef off_val = LLVMConstInt(i32_ty, (uint64_t)off, 0);
   LLVMValueRef prev_off_val = LLVMConstInt(i32_ty, (uint64_t)(off + 8), 0);
-  if (dsp_ctx->ctor_state_ptr) {
+  if (dsp_ctx->init_state_ptr) {
     LLVMValueRef val_init_ptr_i8 =
-        LLVMBuildGEP2(dsp_ctx->ctor_builder, i8_ty, dsp_ctx->ctor_state_ptr,
+        LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, dsp_ctx->init_state_ptr,
                       &off_val, 1, "exp_decay.val_init_ptr");
     LLVMValueRef val_init_ptr =
-        LLVMBuildBitCast(dsp_ctx->ctor_builder, val_init_ptr_i8, f64_ptr_ty,
+        LLVMBuildBitCast(dsp_ctx->init_builder, val_init_ptr_i8, f64_ptr_ty,
                          "exp_decay.val_init_f64_ptr");
-    LLVMBuildStore(dsp_ctx->ctor_builder, LLVMConstReal(f64_ty, 0.0),
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, 0.0),
                    val_init_ptr);
 
     LLVMValueRef prev_init_ptr_i8 =
-        LLVMBuildGEP2(dsp_ctx->ctor_builder, i8_ty, dsp_ctx->ctor_state_ptr,
+        LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, dsp_ctx->init_state_ptr,
                       &prev_off_val, 1, "exp_decay.prev_trig_init_ptr");
     LLVMValueRef prev_init_ptr =
-        LLVMBuildBitCast(dsp_ctx->ctor_builder, prev_init_ptr_i8, f64_ptr_ty,
+        LLVMBuildBitCast(dsp_ctx->init_builder, prev_init_ptr_i8, f64_ptr_ty,
                          "exp_decay.prev_trig_init_f64_ptr");
-    LLVMBuildStore(dsp_ctx->ctor_builder, LLVMConstReal(f64_ty, 0.0),
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, 0.0),
                    prev_init_ptr);
   }
 
@@ -609,22 +638,28 @@ LLVMValueRef call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
   LLVMTypeRef i32_ty = LLVMInt32Type();
 
   LLVMValueRef off_i32 = LLVMConstInt(i32_ty, (uint64_t)off, 0);
-  LLVMValueRef state_ptr =
-      LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr, &off_i32, 1,
-                    "reg_synth.state_ptr");
+  LLVMValueRef state_ptr = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
+                                         &off_i32, 1, "reg_synth.state_ptr");
+  if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr && rec.init_fn) {
+    LLVMValueRef init_state_ptr =
+        LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, dsp_ctx->init_state_ptr,
+                      &off_i32, 1, "reg_synth.init_state_ptr");
+    LLVMTypeRef init_fn_ty = LLVMGlobalGetValueType(rec.init_fn);
+    LLVMBuildCall2(dsp_ctx->init_builder, init_fn_ty, rec.init_fn,
+                   (LLVMValueRef[]){init_state_ptr}, 1, "reg_synth.init_call");
+  }
 
   LLVMValueRef frame_fn = rec.frame_fn;
   LLVMTypeRef frame_fn_ty = LLVMGlobalGetValueType(frame_fn);
+
   unsigned formal_count = LLVMCountParamTypes(frame_fn_ty);
   if (formal_count == 0) {
     fprintf(stderr, "audio_jit: malformed frame_fn signature\n");
     return LLVMConstReal(LLVMDoubleType(), 0.0);
   }
 
-  LLVMTypeRef *formal_tys =
-      formal_count ? alloca(sizeof(LLVMTypeRef) * formal_count) : NULL;
-  LLVMValueRef *frame_args =
-      formal_count ? alloca(sizeof(LLVMValueRef) * formal_count) : NULL;
+  LLVMTypeRef formal_tys[formal_count];
+  LLVMValueRef frame_args[formal_count];
   LLVMGetParamTypes(frame_fn_ty, formal_tys);
 
   frame_args[0] = state_ptr;
@@ -634,7 +669,8 @@ LLVMValueRef call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
     int arg_idx = (int)i - 1;
     if (arg_idx < arg_count) {
       Ast *arg_ast = ast->data.AST_APPLICATION.args + arg_idx;
-      LLVMValueRef arg_val = dsp_build_expr(arg_ast, dsp_ctx, ctx, module, builder);
+      LLVMValueRef arg_val =
+          dsp_build_expr(arg_ast, dsp_ctx, ctx, module, builder);
       if (LLVMGetTypeKind(formal_tys[i]) == LLVMDoubleTypeKind) {
         arg_val = ensure_float(arg_ast->type, arg_val, builder);
       }
@@ -644,8 +680,8 @@ LLVMValueRef call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
     }
   }
 
-  return LLVMBuildCall2(builder, frame_fn_ty, frame_fn, frame_args, formal_count,
-                        "reg_synth.frame_call");
+  return LLVMBuildCall2(builder, frame_fn_ty, frame_fn, frame_args,
+                        formal_count, "reg_synth.frame_call");
 }
 
 LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
@@ -667,35 +703,43 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     int len = binding->data.AST_IDENTIFIER.length;
     Ast *expr = ast->data.AST_LET.expr;
     Ast *in_expr = ast->data.AST_LET.in_expr;
-    JITLangCtx cont_ctx = *ctx;
+    JITLangCtx *work_ctx = ctx;
+    JITLangCtx inner_ctx;
+    bool pushed_ctx = false;
 
     if (in_expr) {
-      STACK_ALLOC_CTX_PUSH(inner_ctx, ctx)
-      cont_ctx = inner_ctx;
+      STACK_ALLOC_CTX_PUSH(_inner_ctx, ctx)
+      inner_ctx = _inner_ctx;
+      work_ctx = &inner_ctx;
+      pushed_ctx = true;
     }
+    fprintf(stderr, "dsp_let enter: %.*s scope=%d in_expr=%d\n", len, chars,
+            ctx->stack_ptr, in_expr ? 1 : 0);
+
     if (expr->tag == AST_LAMBDA) {
 
       JITSymbol *sym =
           new_symbol(STYPE_AUDIO_JIT_INLINE_LAMBDA, expr->type, NULL, NULL);
       sym->symbol_data._USER_DEFINED_SYMBOL = expr;
 
-      ht_set_hash((&cont_ctx)->frame->table, chars, hash_string(chars, len),
-                  sym);
+      ht_set_hash(work_ctx->frame->table, chars, hash_string(chars, len), sym);
 
       if (in_expr) {
 
         LLVMValueRef e_val =
-            dsp_build_expr(in_expr, dsp_ctx, &cont_ctx, module, builder);
+            dsp_build_expr(in_expr, dsp_ctx, work_ctx, module, builder);
 
-        destroy_ctx(&cont_ctx);
+        if (pushed_ctx) {
+          destroy_ctx(work_ctx);
+        }
         return e_val;
       }
 
       return NULL;
     }
 
-    LLVMValueRef val =
-        dsp_build_expr(expr, dsp_ctx, &cont_ctx, module, builder);
+    fprintf(stderr, "dsp_let eval expr: %.*s\n", len, chars);
+    LLVMValueRef val = dsp_build_expr(expr, dsp_ctx, work_ctx, module, builder);
 
     if (!val) {
       fprintf(stderr, "Error: could not compute dsp val for binding\n");
@@ -705,18 +749,20 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
     JITSymbol *sym =
         new_symbol(STYPE_LOCAL_VAR, expr->type, val, LLVMTypeOf(val));
-    ht_set_hash((&cont_ctx)->frame->table, chars, hash_string(chars, len), sym);
+    ht_set_hash(work_ctx->frame->table, chars, hash_string(chars, len), sym);
 
     if (in_expr) {
-
+      fprintf(stderr, "dsp_let eval in_expr: %.*s\n", len, chars);
       LLVMValueRef e_val =
-          dsp_build_expr(in_expr, dsp_ctx, &cont_ctx, module, builder);
+          dsp_build_expr(in_expr, dsp_ctx, work_ctx, module, builder);
 
-      destroy_ctx(&cont_ctx);
+      if (pushed_ctx) {
+        destroy_ctx(work_ctx);
+      }
       return e_val;
     }
 
-    destroy_ctx(&cont_ctx);
+    fprintf(stderr, "dsp_let exit(no-in): %.*s\n", len, chars);
     return val;
   }
   case AST_IDENTIFIER: {
@@ -748,8 +794,18 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   case AST_INT: {
     return codegen(ast, ctx, module, builder);
   }
+  case AST_RECORD_ACCESS: {
+    return codegen(ast, ctx, module, builder);
+  }
   case AST_APPLICATION: {
     Ast *f = ast->data.AST_APPLICATION.function;
+
+    fprintf(stderr, "dsp_app: %s (scope=%d)\n", f->data.AST_IDENTIFIER.value,
+            ctx->stack_ptr);
+
+    if (strcmp(f->data.AST_IDENTIFIER.value, "spf") == 0) {
+      return dsp_ctx->spf;
+    }
 
     if (strcmp(f->data.AST_IDENTIFIER.value, "sin_osc") == 0) {
       return builtin_tab_osc("ylc_sin_table", SIN_TABSIZE, ast, dsp_ctx, ctx,
@@ -760,6 +816,7 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       return builtin_tab_osc("ylc_sq_table", SQ_TABSIZE, ast, dsp_ctx, ctx,
                              module, builder);
     }
+
     if (strcmp(f->data.AST_IDENTIFIER.value, "saw_osc") == 0) {
       return builtin_tab_osc("ylc_saw_table", SAW_TABSIZE, ast, dsp_ctx, ctx,
                              module, builder);
@@ -837,6 +894,11 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                        dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
                                       dsp_ctx, ctx, module, builder),
                        builder);
+      if (!l || !r) {
+        fprintf(stderr, "audio_jit: null operand in '*' expression\n");
+        print_ast(ast);
+        return NULL;
+      }
 
       return LLVMBuildFMul(builder, l, r, "signal.mul");
     }
@@ -899,6 +961,8 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
     if (strcmp(f->data.AST_IDENTIFIER.value, "array_set") == 0) {
       print_ast(ast);
+      // print_type((ast->data.AST_APPLICATION.args + 2)->type);
+
       LLVMValueRef arr = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
                                         ctx, module, builder);
       LLVMValueRef index = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
@@ -1063,20 +1127,20 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
       LLVMValueRef off_i32 = LLVMConstInt(i32_ty, (uint64_t)off, 0);
       LLVMValueRef ctor_base_i8 =
-          LLVMBuildGEP2(dsp_ctx->ctor_builder, i8_ty, dsp_ctx->ctor_state_ptr,
+          LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, dsp_ctx->init_state_ptr,
                         &off_i32, 1, "array.ctor.base");
       LLVMValueRef ctor_base = LLVMBuildBitCast(
-          dsp_ctx->ctor_builder, ctor_base_i8, f64_ptr_ty, "array.ctor.data");
+          dsp_ctx->init_builder, ctor_base_i8, f64_ptr_ty, "array.ctor.data");
 
       for (int i = 0; i < len; i++) {
         Ast *item = ast->data.AST_LIST.items + i;
         LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
         LLVMValueRef elem_ptr =
-            LLVMBuildGEP2(dsp_ctx->ctor_builder, f64_ty, ctor_base, &idx_i64, 1,
+            LLVMBuildGEP2(dsp_ctx->init_builder, f64_ty, ctor_base, &idx_i64, 1,
                           "array.init.ptr");
-        LLVMValueRef elem = codegen(item, ctx, module, dsp_ctx->ctor_builder);
-        elem = ensure_float(item->type, elem, dsp_ctx->ctor_builder);
-        LLVMBuildStore(dsp_ctx->ctor_builder, elem, elem_ptr);
+        LLVMValueRef elem = codegen(item, ctx, module, dsp_ctx->init_builder);
+        elem = ensure_float(item->type, elem, dsp_ctx->init_builder);
+        LLVMBuildStore(dsp_ctx->init_builder, elem, elem_ptr);
       }
 
       LLVMValueRef run_base_i8 = LLVMBuildGEP2(

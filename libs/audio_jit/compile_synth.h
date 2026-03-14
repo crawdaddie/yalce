@@ -12,7 +12,7 @@ typedef struct {
   // state_ptr
   LLVMValueRef node_ptr;  // !llvm.ptr  — the Node* itself
   LLVMValueRef state_ptr; // !llvm.ptr  — opaque state block
-  LLVMValueRef ctor_state_ptr;
+  LLVMValueRef init_state_ptr;
   LLVMValueRef inputs_ptr; // !llvm.ptr  — Node** inputs array
   LLVMValueRef spf;        // frame seconds value
   LLVMValueRef frame_idx;  // index      — loop induction variable (eg 0 .. 256)
@@ -22,6 +22,7 @@ typedef struct {
   LLVMBasicBlockRef frame_cond_bb;
   int state_offset;
   LLVMBuilderRef ctor_builder;
+  LLVMBuilderRef init_builder;
   LLVMBuilderRef perform_builder;
 } DspBuildCtx;
 LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
@@ -35,6 +36,7 @@ int audio_sym_synth_id(JITSymbol *sym);
 typedef struct SynthRecord {
   const char *name;
   LLVMValueRef ctor;
+  LLVMValueRef init_fn;
   LLVMValueRef frame_fn;
   LLVMValueRef perform_fn;
   int state_bytes;

@@ -196,6 +196,11 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   char frame_name[32];
   sprintf(frame_name, "%s.frame", name);
   LLVMValueRef frame_fn = LLVMAddFunction(module, frame_name, frame_ty);
+  char init_name[32];
+  sprintf(init_name, "%s.init", name);
+  LLVMTypeRef init_ty =
+      LLVMFunctionType(LLVMVoidType(), (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+  LLVMValueRef init_fn = LLVMAddFunction(module, init_name, init_ty);
 
   // Build synth cons func scaffold
   LLVMTypeRef i32_ty = LLVMInt32Type();
@@ -224,14 +229,20 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
       LLVMAppendBasicBlockInContext(llvm_ctx, perf_fn, "entry");
   LLVMBasicBlockRef frame_bb =
       LLVMAppendBasicBlockInContext(llvm_ctx, frame_fn, "entry");
+  LLVMBasicBlockRef init_bb =
+      LLVMAppendBasicBlockInContext(llvm_ctx, init_fn, "entry");
+  LLVMBuilderRef init_b = LLVMCreateBuilderInContext(llvm_ctx);
+  LLVMPositionBuilderAtEnd(init_b, init_bb);
 
   DspBuildCtx dsp_ctx = {
       .ctor_builder = ctor_b,
+      .init_builder = init_b,
       .perform_builder = LLVMCreateBuilderInContext(llvm_ctx),
       .perf_fn = perf_fn,
   };
   DspBuildCtx frame_ctx = {
       .ctor_builder = ctor_b,
+      .init_builder = init_b,
       .perform_builder = LLVMCreateBuilderInContext(llvm_ctx),
       .perf_fn = frame_fn,
   };
@@ -262,12 +273,13 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef state_base_off = LLVMConstInt(i32_ty, (uint64_t)sizeof(Node), 0);
   LLVMValueRef ctor_state_ptr =
       LLVMBuildGEP2(ctor_b, i8_ty, node_i8, &state_base_off, 1, "node.state");
+  LLVMValueRef init_state_ptr = LLVMGetParam(init_fn, 0);
 
   dsp_ctx.create_call = node_val;
   frame_ctx.create_call = node_val;
 
-  dsp_ctx.ctor_state_ptr = ctor_state_ptr;
-  frame_ctx.ctor_state_ptr = ctor_state_ptr;
+  dsp_ctx.init_state_ptr = init_state_ptr;
+  frame_ctx.init_state_ptr = init_state_ptr;
 
   LLVMPositionBuilderAtEnd(dsp_ctx.perform_builder, perf_bb);
   LLVMBasicBlockRef perf_exit_bb =
@@ -311,6 +323,7 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef expr =
       dsp_build_expr(lambda->data.AST_LAMBDA.body, &frame_ctx, &fn_ctx, module,
                      frame_ctx.perform_builder);
+  fprintf(stderr, "compile_audio_fn: body built for %s\n", name);
 
   if (expr) {
     expr = ensure_float(lambda->data.AST_LAMBDA.body->type, expr,
@@ -320,6 +333,9 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   if (!LLVMGetBasicBlockTerminator(
           LLVMGetInsertBlock(frame_ctx.perform_builder))) {
     LLVMBuildRet(frame_ctx.perform_builder, LLVMConstReal(f64_ty, 0.0));
+  }
+  if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(frame_ctx.init_builder))) {
+    LLVMBuildRetVoid(frame_ctx.init_builder);
   }
 
   LLVMTypeRef ptr_ptr_ty = LLVMPointerType(GENERIC_PTR, 0);
@@ -382,12 +398,14 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
           LLVMGetInsertBlock(dsp_ctx.perform_builder))) {
     LLVMBuildRet(dsp_ctx.perform_builder, LLVMConstNull(GENERIC_PTR));
   }
-  int state_bytes;
+  int state_bytes = 0;
 
   if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(dsp_ctx.ctor_builder))) {
     state_bytes = (frame_ctx.state_offset + 7) & ~7;
     LLVMSetOperand(dsp_ctx.create_call, 2,
                    LLVMConstInt(i32_ty, (uint64_t)state_bytes, 0));
+    LLVMBuildCall2(dsp_ctx.ctor_builder, init_ty, init_fn,
+                   (LLVMValueRef[]){ctor_state_ptr}, 1, "node.init");
 
     if (num_inputs > 0) {
       LLVMTypeRef const_inlet_fn_ty =
@@ -439,6 +457,7 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   int synth_id =
       extend_synth_registry((SynthRecord){.name = name,
                                           .ctor = cons_fn,
+                                          .init_fn = init_fn,
                                           .frame_fn = frame_fn,
                                           .perform_fn = perf_fn,
                                           .state_bytes = state_bytes});
@@ -448,6 +467,7 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   fprintf(stderr, "libaudio_jit: audio fn symbol %s\n", name);
 
   LLVMDisposeBuilder(dsp_ctx.ctor_builder);
+  LLVMDisposeBuilder(dsp_ctx.init_builder);
   LLVMDisposeBuilder(dsp_ctx.perform_builder);
   LLVMDisposeBuilder(frame_ctx.perform_builder);
   destroy_ctx(&fn_ctx);

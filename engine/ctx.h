@@ -41,7 +41,6 @@ Node *add_to_dac(Node *node);
 int ctx_sample_rate();
 double ctx_spf();
 
-
 void audio_ctx_add(Node *ensemble);
 void audio_ctx_add_before(Node *target, Node *node);
 

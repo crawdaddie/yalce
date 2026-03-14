@@ -22,6 +22,7 @@ BUILD_DIR   = build
 
 SOURCES = audio_jit.c compile_synth.c
 OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(SOURCES))
+LOCAL_HEADERS = $(wildcard *.h)
 ENGINE_HEADERS = $(wildcard ../../engine/*.h)
 ENGINE_LIB = ../../engine/build/libyalce_synth.so
 
@@ -33,7 +34,7 @@ $(DYNAMIC_LIB): $(OBJECTS)
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(BUILD_DIR)/%.o: %.c $(ENGINE_HEADERS) $(ENGINE_LIB) | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: %.c $(LOCAL_HEADERS) $(ENGINE_HEADERS) $(ENGINE_LIB) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
