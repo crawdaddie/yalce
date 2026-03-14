@@ -6,14 +6,70 @@ let play = extern fn Synth -> Synth;
 let sin_osc = extern fn Double -> Double;
 let sq_osc = extern fn Double -> Double;
 let saw_osc = extern fn Double -> Double;
+let white = extern fn () -> Double;
+let phasor = extern fn Double -> Double;
+let phasor_sinc = extern fn Double -> Double -> Double;
+let trig = extern fn Double -> Double;
+let tabread1 = extern fn Array of Double -> Double -> Double;
+let decay = extern fn Double -> Double -> Double;
+let scale = extern fn Double -> Double -> Double -> Double;
+let scale_bp = extern fn Double -> Double -> Double -> Double;
+let array_of_buf = extern fn Ptr -> Array of Double;
+let bufsize = extern fn Ptr -> Int;
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
 
+import std/Math;
 
+# compile_audio_fn (
+#   let x = fn f ->
+#     sq_osc f
+#     |> (+) (sq_osc (f * 1.01))
+#     |> (*) (Math.db_amp -15)
+#   ;
+# );
+
+# let amen = load_soundfile "fat_amen_mono_48000.wav";
+# compile_audio_fn (
+#   let x = fn rate ->
+#
+#
+#     let z = [| 32., |];
+#     z[0] := z[0] * 0.99997;
+#
+#     trig (z[0])
+#     |> phasor_sinc rate
+#     |> tabread1 (array_of_buf amen)
+#     ;
+# );
+  #   phasor (0.6 + 0.2 * sin_osc 0.2)
+  #   |> tabread1 (array_of_buf amen)
+  #   # # |> (+) (sq_osc (f * 1.01))
+  #   |> (*) (Math.db_amp -15)
+  # ;
+
+# compile_audio_fn (
+#   let x = fn () ->
+#     let z = [| 1000., |];
+#     z[0] := z[0] * 0.999;
+#     sin_osc (z[0])
+#   ;
+# );
 compile_audio_fn (
-  let x = fn () ->
-  sq_osc 100
-  |> (*) 0.2
+  let osc = fn f -> 
+    4 * sin_osc f |> Math.tanh
   ;
 );
 
-x () |> play
+compile_audio_fn (
+  let x = fn () ->
+    trig 0
+    |> decay 5
+    |> scale 1.5 64
+    |> trig
+    |> decay 0.08
+    |> scale 60 800
+    |> osc
+    |> (*) (Math.db_amp -10)
+  ;
+);
+x () |> play;

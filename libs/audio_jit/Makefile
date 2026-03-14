@@ -20,7 +20,7 @@ LIB_NAME    = libaudio_jit
 DYNAMIC_LIB = $(LIB_NAME).so
 BUILD_DIR   = build
 
-SOURCES = audio_jit.c
+SOURCES = audio_jit.c compile_synth.c
 OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(SOURCES))
 ENGINE_HEADERS = $(wildcard ../../engine/*.h)
 ENGINE_LIB = ../../engine/build/libyalce_synth.so

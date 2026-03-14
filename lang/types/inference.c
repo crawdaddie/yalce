@@ -1587,6 +1587,15 @@ bool is_constant_expr(Ast *expr, TICtx *ctx) {
   if (expr->tag >= AST_INT && expr->tag <= AST_BOOL) {
     return true;
   }
+  if (expr->tag == AST_ARRAY || expr->tag == AST_LIST) {
+    for (int i = 0; i < expr->data.AST_LIST.len; i++) {
+      Ast *arg = expr->data.AST_LIST.items + i;
+      if (!is_constant_expr(arg, ctx)) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   if (expr->tag == AST_IDENTIFIER) {
 

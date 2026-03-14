@@ -4,7 +4,6 @@
 #include "audio_routing.h"
 #include "ext_lib.h"
 #include "group.h"
-#include <stdio.h>
 #include <stdlib.h>
 
 Ctx ctx = {};
@@ -33,7 +32,6 @@ void audio_ctx_add(Node *node) {
 
   // Add to existing chain
   if (ctx->head == NULL) {
-    printf("set ctx->head : %p\n", node);
     ctx->head = node;
     ctx->tail = ctx->head;
   } else {

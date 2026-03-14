@@ -156,57 +156,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
   double float_sample_rate = outstream->sample_rate;
   double seconds_per_frame = 1.0 / float_sample_rate;
   int frames_left;
-  int frame_count;
   int err;
-
-  char *read_ptr;
-  int fill_bytes;
-  if (ring_buffer) {
-    read_ptr = soundio_ring_buffer_read_ptr(ring_buffer);
-    fill_bytes = soundio_ring_buffer_fill_count(ring_buffer);
-  } else {
-    read_ptr = NULL;
-  }
-
-  if (frame_count_max > ctx->output_buf_capacity) {
-    fprintf(stderr,
-            "audio callback exceeds output buffer: min=%d max=%d capacity=%d\n",
-            frame_count_min, frame_count_max, ctx->output_buf_capacity);
-  }
-
-  // Process input data from ring buffer using the new mapping system
-  if (read_ptr && ring_buffer) {
-    int bytes_per_frame = req_hardware_inputs * outstream->bytes_per_sample;
-    int available_frames = fill_bytes / bytes_per_frame;
-    int read_frames = min_int(frame_count_max, available_frames);
-
-    // Copy data from ring buffer to signal buffers using input mappings
-    for (int frame = 0; frame < read_frames; frame++) {
-      for (int i = 0; i < num_input_mappings; i++) {
-        InputMapping *mapping = &input_mappings[i];
-
-        // Calculate position in ring buffer for this hardware input
-        char *sample_ptr = read_ptr + (frame * req_hardware_inputs + i) *
-                                          outstream->bytes_per_sample;
-
-        // Get the sample value
-        float fsample = *(float *)sample_ptr;
-        double sample = (double)fsample;
-
-        // Store in the correct signal buffer
-        Signal *sig = &ctx->input_signals[mapping->signal_index];
-        int buffer_index = frame * sig->layout + mapping->signal_channel;
-
-        if (buffer_index < BUF_SIZE * sig->layout) {
-          sig->buf[buffer_index] = sample;
-        }
-      }
-    }
-
-    // Advance ring buffer read pointer
-    soundio_ring_buffer_advance_read_ptr(ring_buffer,
-                                         read_frames * bytes_per_frame);
-  }
 
   frames_left = frame_count_max;
 
@@ -224,29 +174,58 @@ static void write_callback(struct SoundIoOutStream *outstream,
     if (!frame_count)
       break;
 
-    if (frame_count > ctx->output_buf_capacity) {
-      fprintf(stderr,
-              "audio callback block exceeds output buffer: frames=%d capacity=%d\n",
-              frame_count, ctx->output_buf_capacity);
-    }
+    int frames_remaining = frame_count;
+    int area_frame_offset = 0;
+    uint64_t subblock_start_sample = buffer_start_sample;
 
-    const struct SoundIoChannelLayout *layout = &outstream->layout;
+    while (frames_remaining > 0) {
+      int subframes = min_int(frames_remaining, BUF_SIZE);
 
-    set_block_time(&block_time);
+      // Process input data in BUF_SIZE-bounded chunks.
+      if (ring_buffer) {
+        char *read_ptr = soundio_ring_buffer_read_ptr(ring_buffer);
+        int fill_bytes = soundio_ring_buffer_fill_count(ring_buffer);
+        int bytes_per_frame = req_hardware_inputs * outstream->bytes_per_sample;
+        int available_frames = fill_bytes / bytes_per_frame;
+        int read_frames = min_int(subframes, available_frames);
 
-    user_ctx_callback(ctx, buffer_start_sample, frame_count, seconds_per_frame);
+        for (int frame = 0; frame < read_frames; frame++) {
+          for (int i = 0; i < num_input_mappings; i++) {
+            InputMapping *mapping = &input_mappings[i];
+            char *sample_ptr = read_ptr + (frame * req_hardware_inputs + i) *
+                                              outstream->bytes_per_sample;
+            float fsample = *(float *)sample_ptr;
+            double sample = (double)fsample;
+            Signal *sig = &ctx->input_signals[mapping->signal_index];
+            int buffer_index = frame * sig->layout + mapping->signal_channel;
+            sig->buf[buffer_index] = sample;
+          }
+        }
 
-    int sample_idx;
-    double sample;
-    for (int channel = 0; channel < 2; channel += 1) {
-      for (int frame = 0; frame < frame_count; frame += 1) {
-
-        sample_idx = LAYOUT * frame + channel;
-        sample = ctx->output_buf[sample_idx];
-
-        write_sample(areas[channel].ptr, ctx->main_vol * sample);
-        areas[channel].ptr += areas[channel].step;
+        soundio_ring_buffer_advance_read_ptr(ring_buffer,
+                                             read_frames * bytes_per_frame);
       }
+
+      set_block_time(&block_time);
+      user_ctx_callback(ctx, subblock_start_sample, subframes,
+                        seconds_per_frame);
+
+      int sample_idx;
+      double sample;
+      for (int channel = 0; channel < 2; channel += 1) {
+        char *write_ptr =
+            areas[channel].ptr + (area_frame_offset * areas[channel].step);
+        for (int frame = 0; frame < subframes; frame += 1) {
+          sample_idx = LAYOUT * frame + channel;
+          sample = ctx->output_buf[sample_idx];
+          write_sample(write_ptr, ctx->main_vol * sample);
+          write_ptr += areas[channel].step;
+        }
+      }
+
+      frames_remaining -= subframes;
+      area_frame_offset += subframes;
+      subblock_start_sample += subframes;
     }
 
     if ((err = soundio_outstream_end_write(outstream))) {
@@ -527,7 +506,8 @@ int start_audio() {
   }
 
   double actual_latency = outstream->software_latency;
-  int output_buf_frames = (int)(actual_latency * outstream->sample_rate + 0.999999);
+  int output_buf_frames =
+      (int)(actual_latency * outstream->sample_rate + 0.999999);
   if (output_buf_frames < BUF_SIZE) {
     output_buf_frames = BUF_SIZE;
   }

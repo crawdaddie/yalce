@@ -2,10 +2,14 @@
 #define AUDIO_JIT_H
 
 #include "../../lang/backend_llvm/common.h"
-extern int STYPE_AUDIO_JIT_SYM;
 
-LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
-                                   LLVMModuleRef module,
-                                   LLVMBuilderRef builder);
+LLVMValueRef ensure_float(Type *in_type, LLVMValueRef val,
+                          LLVMBuilderRef builder);
+
+extern int STYPE_AUDIO_JIT_SYM;
+extern int STYPE_AUDIO_JIT_INLINE_SYM;
+extern int STYPE_AUDIO_JIT_BUILTIN_HANDLER;
+extern int STYPE_AUDIO_JIT_INLINE_LAMBDA;
+extern int STYPE_AUDIO_JIT_SYNTH_INLET;
 
 #endif
