@@ -16,6 +16,8 @@ let scale = extern fn Double -> Double -> Double -> Double;
 let scale_bp = extern fn Double -> Double -> Double -> Double;
 let array_of_buf = extern fn Ptr -> Array of Double;
 let bufsize = extern fn Ptr -> Int;
+let lfnoise = extern fn Double -> Double -> Double -> Double;
+let lfnoise0 = extern fn Double -> Double -> Double -> Double;
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
 
 import std/Math;
@@ -83,24 +85,34 @@ let hpf1p = fn freq x ->
   x - lp
 ;
 );
-compile_audio_fn (
-  let osc = fn f -> 
-    saw_osc f |> Math.tanh
-  ;
-);
+# compile_audio_fn (
+#   let osc = fn f -> 
+#     saw_osc f |> Math.tanh
+#   ;
+# );
+#
+# compile_audio_fn (
+#   let x = fn () ->
+#     trig 0
+#     |> decay 5
+#     |> scale 1.5 64
+#     |> trig
+#     |> decay 0.3
+#     |> scale 60 800
+#     |> sin_osc
+#     |> (*) (Math.db_amp -10)
+#   ;
+# );
+# x () |> play;
+#
+#
 
 compile_audio_fn (
-  let x = fn () ->
-    trig 0
-    |> decay 5
-    |> scale 1.5 64
-    |> trig
-    |> decay 0.3
-    |> scale 60 800
-    |> sin_osc
+  let osc = fn () -> 
+    lfnoise0 8 200 400
+    |> saw_osc
     |> (*) (Math.db_amp -10)
   ;
 );
-x () |> play;
-#
-#
+
+osc () |> play

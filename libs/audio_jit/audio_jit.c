@@ -19,7 +19,7 @@
 #include "../../lang/types/type_ser.h"
 #include "../../lang/ylc_datatypes.h"
 #include "./compile_synth.h"
-#include "./dsp_application.h"
+#include "./dsp_fn_application.h"
 
 #include <llvm-c/Core.h>
 #include <math.h>
@@ -210,7 +210,7 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return codegen(ast, ctx, module, builder);
   }
   case AST_APPLICATION: {
-    return dsp_build_application(ast, dsp_ctx, ctx, module, builder);
+    return dsp_fn_application(ast, dsp_ctx, ctx, module, builder);
     // Ast *f = ast->data.AST_APPLICATION.function;
     //
     // fprintf(stderr, "dsp_app: %s (scope=%d)\n", f->data.AST_IDENTIFIER.value,

@@ -10,7 +10,9 @@
 #include "./audio_jit.h"
 #include "./compile_synth.h"
 #include <llvm-c/Types.h>
+
 #include <string.h>
+#define is_ident(f, name) strcmp(f->data.AST_IDENTIFIER.value, name) == 0
 
 #define _EPSILON 0.0001
 double exp_decay_multiplier(double T) {
@@ -599,10 +601,112 @@ LLVMValueRef call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
   return LLVMBuildCall2(builder, frame_fn_ty, frame_fn, frame_args,
                         formal_count, "reg_synth.frame_call");
 }
+LLVMValueRef build_lfnoise_lin(LLVMValueRef freq, LLVMValueRef lo,
+                               LLVMValueRef hi, DspBuildCtx *dsp_ctx,
+                               JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+  // builtin_trig uses 8 bytes of state for phasor phase
+  LLVMValueRef trig = builtin_trig(freq, false, dsp_ctx, ctx, module, builder);
 
-LLVMValueRef dsp_build_application(Ast *ast, DspBuildCtx *dsp_ctx,
-                                   JITLangCtx *ctx, LLVMModuleRef module,
-                                   LLVMBuilderRef builder) {
+  // State: cur_val(8) + slope(8) = 16 bytes
+  int off = dsp_ctx->state_offset;
+  dsp_ctx->state_offset += 16;
+
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+
+  LLVMValueRef val_off = LLVMConstInt(i32_ty, (uint64_t)off, 0);
+  LLVMValueRef slp_off = LLVMConstInt(i32_ty, (uint64_t)(off + 8), 0);
+
+  LLVMValueRef val_ptr = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
+                                       &val_off, 1, "lfnlin.val_ptr");
+  LLVMValueRef slp_ptr = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
+                                       &slp_off, 1, "lfnlin.slp_ptr");
+
+  LLVMValueRef cur_val =
+      LLVMBuildLoad2(builder, f64_ty, val_ptr, "lfnlin.cur_val");
+  LLVMValueRef cur_slope =
+      LLVMBuildLoad2(builder, f64_ty, slp_ptr, "lfnlin.cur_slope");
+
+  // LLVMValueRef lo = LLVMConstReal(f64_ty, 0.0);
+  // LLVMValueRef hi = LLVMConstReal(f64_ty, 1.0);
+
+  // Random function
+  LLVMTypeRef rdr_ty =
+      LLVMFunctionType(f64_ty, (LLVMTypeRef[]){f64_ty, f64_ty}, 2, 0);
+  LLVMValueRef rdr_fn = LLVMGetNamedFunction(module, "rand_double_range");
+  if (!rdr_fn) {
+    rdr_fn = LLVMAddFunction(module, "rand_double_range", rdr_ty);
+    LLVMSetLinkage(rdr_fn, LLVMExternalLinkage);
+  }
+  LLVMValueRef new_target =
+      LLVMBuildCall2(builder, rdr_ty, rdr_fn, (LLVMValueRef[]){lo, hi}, 2,
+                     "lfnlin.new_target");
+
+  // new_slope = (new_target - cur_val) * freq * spf
+  // = distance to travel, normalized to per-sample steps over one period
+  LLVMValueRef dist =
+      LLVMBuildFSub(builder, new_target, cur_val, "lfnlin.dist");
+  LLVMValueRef freq_spf =
+      LLVMBuildFMul(builder, freq, dsp_ctx->spf, "lfnlin.freq_spf");
+  LLVMValueRef new_slope =
+      LLVMBuildFMul(builder, dist, freq_spf, "lfnlin.new_slope");
+
+  // On trig: adopt new slope; otherwise keep current slope
+  LLVMValueRef trig_hi = LLVMBuildFCmp(
+      builder, LLVMRealOGE, trig, LLVMConstReal(f64_ty, 0.5), "lfnlin.trig_hi");
+  LLVMValueRef slope =
+      LLVMBuildSelect(builder, trig_hi, new_slope, cur_slope, "lfnlin.slope");
+
+  // Advance cur_val by slope, store for next sample
+  LLVMValueRef next_val =
+      LLVMBuildFAdd(builder, cur_val, slope, "lfnlin.next_val");
+  LLVMBuildStore(builder, next_val, val_ptr);
+  LLVMBuildStore(builder, slope, slp_ptr);
+
+  return cur_val;
+}
+
+LLVMValueRef build_lfnoise_step(LLVMValueRef freq, LLVMValueRef lo,
+                                LLVMValueRef hi, DspBuildCtx *dsp_ctx,
+                                JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  LLVMValueRef trig = builtin_trig(freq, false, dsp_ctx, ctx, module, builder);
+
+  // State: cur_val(8)
+  int off = dsp_ctx->state_offset;
+  dsp_ctx->state_offset += 8;
+
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+
+  LLVMValueRef off_val = LLVMConstInt(i32_ty, (uint64_t)off, 0);
+  LLVMValueRef val_ptr = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
+                                       &off_val, 1, "lfn0.val_ptr");
+  LLVMValueRef cur_val =
+      LLVMBuildLoad2(builder, f64_ty, val_ptr, "lfn0.cur_val");
+
+  LLVMTypeRef rdr_ty =
+      LLVMFunctionType(f64_ty, (LLVMTypeRef[]){f64_ty, f64_ty}, 2, 0);
+  LLVMValueRef rdr_fn = LLVMGetNamedFunction(module, "rand_double_range");
+  if (!rdr_fn) {
+    rdr_fn = LLVMAddFunction(module, "rand_double_range", rdr_ty);
+    LLVMSetLinkage(rdr_fn, LLVMExternalLinkage);
+  }
+  LLVMValueRef new_rand = LLVMBuildCall2(
+      builder, rdr_ty, rdr_fn, (LLVMValueRef[]){lo, hi}, 2, "lfn0.new_rand");
+
+  LLVMValueRef trig_hi = LLVMBuildFCmp(
+      builder, LLVMRealOGE, trig, LLVMConstReal(f64_ty, 0.5), "lfn0.trig_hi");
+  LLVMValueRef next_val =
+      LLVMBuildSelect(builder, trig_hi, new_rand, cur_val, "lfn0.next_val");
+  LLVMBuildStore(builder, next_val, val_ptr);
+  return next_val;
+}
+LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
+                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
   Ast *f = ast->data.AST_APPLICATION.function;
 
@@ -852,6 +956,41 @@ LLVMValueRef dsp_build_application(Ast *ast, DspBuildCtx *dsp_ctx,
     return LLVMBuildFAdd(builder, lo, scaled, "scale.out");
   }
 
+  if (is_ident(f, "lfnoise")) {
+    // linearly interpolated noise [0, 1)
+    LLVMValueRef freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                       ctx, module, builder);
+
+    LLVMValueRef lo = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
+                                     dsp_ctx, ctx, module, builder);
+
+    LLVMValueRef hi = dsp_build_expr(ast->data.AST_APPLICATION.args + 2,
+                                     dsp_ctx, ctx, module, builder);
+    freq = ensure_float(ast->data.AST_APPLICATION.args->type, freq, builder);
+    lo = ensure_float((ast->data.AST_APPLICATION.args + 1)->type, lo, builder);
+    hi = ensure_float((ast->data.AST_APPLICATION.args + 2)->type, hi, builder);
+
+    return build_lfnoise_lin(freq, lo, hi, dsp_ctx, ctx, module, builder);
+  }
+
+  if (is_ident(f, "lfnoise0")) {
+
+    // step noise [0, 1)
+
+    LLVMValueRef freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                       ctx, module, builder);
+
+    LLVMValueRef lo = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
+                                     dsp_ctx, ctx, module, builder);
+
+    LLVMValueRef hi = dsp_build_expr(ast->data.AST_APPLICATION.args + 2,
+                                     dsp_ctx, ctx, module, builder);
+    freq = ensure_float(ast->data.AST_APPLICATION.args->type, freq, builder);
+    lo = ensure_float((ast->data.AST_APPLICATION.args + 1)->type, lo, builder);
+    hi = ensure_float((ast->data.AST_APPLICATION.args + 2)->type, hi, builder);
+
+    return build_lfnoise_step(freq, lo, hi, dsp_ctx, ctx, module, builder);
+  }
   JITSymbol *callable_sym =
       lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
 
