@@ -95,10 +95,9 @@ compile_audio_fn (
     |> decay 5
     |> scale 1.5 64
     |> trig
-    |> decay 0.08
+    |> decay 0.3
     |> scale 60 800
-    |> saw_osc
-    |> lpf1p 100.
+    |> sin_osc
     |> (*) (Math.db_amp -10)
   ;
 );
