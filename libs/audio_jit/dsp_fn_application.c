@@ -15,6 +15,28 @@
 #define is_ident(f, name) strcmp(f->data.AST_IDENTIFIER.value, name) == 0
 
 #define _EPSILON 0.0001
+#define BUILD_ON_TRIG(builder, trig, f64_ty, label_prefix, ...)                \
+  do {                                                                         \
+    LLVMValueRef trig_hi__ =                                                   \
+        LLVMBuildFCmp(builder, LLVMRealOGE, trig, LLVMConstReal(f64_ty, 0.5),  \
+                      label_prefix ".trig_hi");                                \
+    LLVMBasicBlockRef cur_bb__ = LLVMGetInsertBlock(builder);                  \
+    LLVMValueRef fn__ = LLVMGetBasicBlockParent(cur_bb__);                     \
+    LLVMBasicBlockRef then_bb__ =                                              \
+        LLVMAppendBasicBlock(fn__, label_prefix ".trig");                      \
+    LLVMBasicBlockRef else_bb__ =                                              \
+        LLVMAppendBasicBlock(fn__, label_prefix ".cont");                      \
+    LLVMBasicBlockRef merge_bb__ =                                             \
+        LLVMAppendBasicBlock(fn__, label_prefix ".merge");                     \
+    LLVMBuildCondBr(builder, trig_hi__, then_bb__, else_bb__);                 \
+    LLVMPositionBuilderAtEnd(builder, then_bb__);                              \
+    __VA_ARGS__;                                                               \
+    LLVMBuildBr(builder, merge_bb__);                                          \
+    LLVMPositionBuilderAtEnd(builder, else_bb__);                              \
+    LLVMBuildBr(builder, merge_bb__);                                          \
+    LLVMPositionBuilderAtEnd(builder, merge_bb__);                             \
+  } while (0)
+
 double exp_decay_multiplier(double T) {
   const double epsilon = _EPSILON;
   double spf = ctx_spf();
@@ -538,6 +560,101 @@ LLVMValueRef build_exp_decay(LLVMValueRef T, LLVMValueRef trig,
 
   return cur_val;
 }
+
+LLVMValueRef build_adsr(LLVMValueRef attack, LLVMValueRef decay,
+                        LLVMValueRef sustain, LLVMValueRef release,
+                        LLVMValueRef trig, DspBuildCtx *dsp_ctx,
+                        LLVMModuleRef module, LLVMBuilderRef builder) {
+  int off = (dsp_ctx->state_offset + 7) & ~7;
+  dsp_ctx->state_offset = off + 24;
+
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+
+  LLVMValueRef value_off = LLVMConstInt(i32_ty, (uint64_t)off, 0);
+  LLVMValueRef phase_off = LLVMConstInt(i32_ty, (uint64_t)(off + 8), 0);
+  LLVMValueRef prev_off = LLVMConstInt(i32_ty, (uint64_t)(off + 16), 0);
+
+  LLVMValueRef value_ptr_i8 = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
+                                            &value_off, 1, "adsr.value_ptr_i8");
+  LLVMValueRef phase_ptr_i8 = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
+                                            &phase_off, 1, "adsr.phase_ptr_i8");
+  LLVMValueRef prev_ptr_i8 = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
+                                           &prev_off, 1, "adsr.prev_ptr_i8");
+
+  LLVMValueRef value_ptr =
+      LLVMBuildBitCast(builder, value_ptr_i8, f64_ptr_ty, "adsr.value_ptr");
+  LLVMValueRef phase_ptr =
+      LLVMBuildBitCast(builder, phase_ptr_i8, f64_ptr_ty, "adsr.phase_ptr");
+  LLVMValueRef prev_ptr =
+      LLVMBuildBitCast(builder, prev_ptr_i8, f64_ptr_ty, "adsr.prev_ptr");
+
+  LLVMValueRef prev_trig =
+      LLVMBuildLoad2(builder, f64_ty, prev_ptr, "adsr.prev_trig");
+
+  LLVMTypeRef fn_ty = LLVMFunctionType(
+      f64_ty,
+      (LLVMTypeRef[]){f64_ty,     f64_ty,     f64_ty, f64_ty, f64_ty,
+                      f64_ty,     f64_ty,     f64_ptr_ty, f64_ptr_ty,
+                      f64_ptr_ty},
+      10, 0);
+  LLVMValueRef fn = LLVMGetNamedFunction(module, "adsr_samp");
+  if (!fn) {
+    fn = LLVMAddFunction(module, "adsr_samp", fn_ty);
+    LLVMSetLinkage(fn, LLVMExternalLinkage);
+  }
+
+  return LLVMBuildCall2(
+      builder, fn_ty, fn,
+      (LLVMValueRef[]){trig, prev_trig, attack, decay, sustain, release,
+                       dsp_ctx->spf, value_ptr, phase_ptr, prev_ptr},
+      10, "adsr.sample");
+}
+
+LLVMValueRef build_rect(LLVMValueRef duration, LLVMValueRef trig,
+                        DspBuildCtx *dsp_ctx, LLVMModuleRef module,
+                        LLVMBuilderRef builder) {
+  int off = (dsp_ctx->state_offset + 7) & ~7;
+  dsp_ctx->state_offset = off + 16;
+
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+
+  LLVMValueRef rem_off = LLVMConstInt(i32_ty, (uint64_t)off, 0);
+  LLVMValueRef prev_off = LLVMConstInt(i32_ty, (uint64_t)(off + 8), 0);
+
+  LLVMValueRef rem_ptr_i8 = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
+                                          &rem_off, 1, "rect.rem_ptr_i8");
+  LLVMValueRef prev_ptr_i8 = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
+                                           &prev_off, 1, "rect.prev_ptr_i8");
+  LLVMValueRef rem_ptr =
+      LLVMBuildBitCast(builder, rem_ptr_i8, f64_ptr_ty, "rect.rem_ptr");
+  LLVMValueRef prev_ptr =
+      LLVMBuildBitCast(builder, prev_ptr_i8, f64_ptr_ty, "rect.prev_ptr");
+
+  LLVMValueRef prev_trig =
+      LLVMBuildLoad2(builder, f64_ty, prev_ptr, "rect.prev_trig");
+
+  LLVMTypeRef fn_ty =
+      LLVMFunctionType(f64_ty,
+                       (LLVMTypeRef[]){f64_ty, f64_ty, f64_ty, f64_ty,
+                                       f64_ptr_ty, f64_ptr_ty},
+                       6, 0);
+  LLVMValueRef fn = LLVMGetNamedFunction(module, "rect_samp");
+  if (!fn) {
+    fn = LLVMAddFunction(module, "rect_samp", fn_ty);
+    LLVMSetLinkage(fn, LLVMExternalLinkage);
+  }
+
+  return LLVMBuildCall2(builder, fn_ty, fn,
+                        (LLVMValueRef[]){duration, trig, prev_trig,
+                                         dsp_ctx->spf, rem_ptr, prev_ptr},
+                        6, "rect.sample");
+}
 LLVMValueRef call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
                                                DspBuildCtx *dsp_ctx,
                                                JITLangCtx *ctx,
@@ -620,14 +737,12 @@ LLVMValueRef build_lfnoise_lin(LLVMValueRef freq, LLVMValueRef lo,
   LLVMValueRef slp_off = LLVMConstInt(i32_ty, (uint64_t)(off + 8), 0);
 
   LLVMValueRef val_ptr = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
-                                       &val_off, 1, "lfnlin.val_ptr");
+                                       &val_off, 1, "lfnoise1.val_ptr");
   LLVMValueRef slp_ptr = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
-                                       &slp_off, 1, "lfnlin.slp_ptr");
+                                       &slp_off, 1, "lfnoise1.slp_ptr");
 
   LLVMValueRef cur_val =
-      LLVMBuildLoad2(builder, f64_ty, val_ptr, "lfnlin.cur_val");
-  LLVMValueRef cur_slope =
-      LLVMBuildLoad2(builder, f64_ty, slp_ptr, "lfnlin.cur_slope");
+      LLVMBuildLoad2(builder, f64_ty, val_ptr, "lfnoise1.cur_val");
 
   // LLVMValueRef lo = LLVMConstReal(f64_ty, 0.0);
   // LLVMValueRef hi = LLVMConstReal(f64_ty, 1.0);
@@ -640,30 +755,28 @@ LLVMValueRef build_lfnoise_lin(LLVMValueRef freq, LLVMValueRef lo,
     rdr_fn = LLVMAddFunction(module, "rand_double_range", rdr_ty);
     LLVMSetLinkage(rdr_fn, LLVMExternalLinkage);
   }
-  LLVMValueRef new_target =
-      LLVMBuildCall2(builder, rdr_ty, rdr_fn, (LLVMValueRef[]){lo, hi}, 2,
-                     "lfnlin.new_target");
+  BUILD_ON_TRIG(
+      builder, trig, f64_ty, "lfnoise1",
+      LLVMValueRef new_target =
+          LLVMBuildCall2(builder, rdr_ty, rdr_fn, (LLVMValueRef[]){lo, hi}, 2,
+                         "lfnoise1.new_target");
+      // new_slope = (new_target - cur_val) * freq * spf
+      // = distance to travel, normalized to per-sample steps over one period
+      LLVMValueRef dist =
+          LLVMBuildFSub(builder, new_target, cur_val, "lfnoise1.dist");
+      LLVMValueRef freq_spf =
+          LLVMBuildFMul(builder, freq, dsp_ctx->spf, "lfnoise1.freq_spf");
+      LLVMValueRef new_slope =
+          LLVMBuildFMul(builder, dist, freq_spf, "lfnoise1.new_slope");
+      LLVMBuildStore(builder, new_slope, slp_ptr););
 
-  // new_slope = (new_target - cur_val) * freq * spf
-  // = distance to travel, normalized to per-sample steps over one period
-  LLVMValueRef dist =
-      LLVMBuildFSub(builder, new_target, cur_val, "lfnlin.dist");
-  LLVMValueRef freq_spf =
-      LLVMBuildFMul(builder, freq, dsp_ctx->spf, "lfnlin.freq_spf");
-  LLVMValueRef new_slope =
-      LLVMBuildFMul(builder, dist, freq_spf, "lfnlin.new_slope");
-
-  // On trig: adopt new slope; otherwise keep current slope
-  LLVMValueRef trig_hi = LLVMBuildFCmp(
-      builder, LLVMRealOGE, trig, LLVMConstReal(f64_ty, 0.5), "lfnlin.trig_hi");
   LLVMValueRef slope =
-      LLVMBuildSelect(builder, trig_hi, new_slope, cur_slope, "lfnlin.slope");
+      LLVMBuildLoad2(builder, f64_ty, slp_ptr, "lfnoise1.slope");
 
   // Advance cur_val by slope, store for next sample
   LLVMValueRef next_val =
-      LLVMBuildFAdd(builder, cur_val, slope, "lfnlin.next_val");
+      LLVMBuildFAdd(builder, cur_val, slope, "lfnoise1.next_val");
   LLVMBuildStore(builder, next_val, val_ptr);
-  LLVMBuildStore(builder, slope, slp_ptr);
 
   return cur_val;
 }
@@ -684,9 +797,7 @@ LLVMValueRef build_lfnoise_step(LLVMValueRef freq, LLVMValueRef lo,
 
   LLVMValueRef off_val = LLVMConstInt(i32_ty, (uint64_t)off, 0);
   LLVMValueRef val_ptr = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
-                                       &off_val, 1, "lfn0.val_ptr");
-  LLVMValueRef cur_val =
-      LLVMBuildLoad2(builder, f64_ty, val_ptr, "lfn0.cur_val");
+                                       &off_val, 1, "lfnoise0.val_ptr");
 
   LLVMTypeRef rdr_ty =
       LLVMFunctionType(f64_ty, (LLVMTypeRef[]){f64_ty, f64_ty}, 2, 0);
@@ -695,15 +806,72 @@ LLVMValueRef build_lfnoise_step(LLVMValueRef freq, LLVMValueRef lo,
     rdr_fn = LLVMAddFunction(module, "rand_double_range", rdr_ty);
     LLVMSetLinkage(rdr_fn, LLVMExternalLinkage);
   }
-  LLVMValueRef new_rand = LLVMBuildCall2(
-      builder, rdr_ty, rdr_fn, (LLVMValueRef[]){lo, hi}, 2, "lfn0.new_rand");
+  BUILD_ON_TRIG(builder, trig, f64_ty, "lfnoise0",
+                LLVMValueRef new_rand = LLVMBuildCall2(builder, rdr_ty, rdr_fn,
+                                                       (LLVMValueRef[]){lo, hi},
+                                                       2, "lfnoise0.new_rand");
+                LLVMBuildStore(builder, new_rand, val_ptr););
 
-  LLVMValueRef trig_hi = LLVMBuildFCmp(
-      builder, LLVMRealOGE, trig, LLVMConstReal(f64_ty, 0.5), "lfn0.trig_hi");
-  LLVMValueRef next_val =
-      LLVMBuildSelect(builder, trig_hi, new_rand, cur_val, "lfn0.next_val");
-  LLVMBuildStore(builder, next_val, val_ptr);
-  return next_val;
+  return LLVMBuildLoad2(builder, f64_ty, val_ptr, "lfnoise0.next_val");
+}
+
+LLVMValueRef build_kill_on_end(LLVMValueRef signal, DspBuildCtx *dsp_ctx,
+                               LLVMModuleRef module, LLVMBuilderRef builder) {
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef void_ty = LLVMVoidType();
+
+  // State: prev_val(8)
+  int off = dsp_ctx->state_offset;
+  dsp_ctx->state_offset += 8;
+
+  LLVMValueRef off_val = LLVMConstInt(i32_ty, (uint64_t)off, 0);
+  LLVMValueRef prev_ptr = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
+                                        &off_val, 1, "kill_on_end.prev_ptr");
+  LLVMValueRef prev_val =
+      LLVMBuildLoad2(builder, f64_ty, prev_ptr, "kill_on_end.prev_val");
+
+  LLVMValueRef eps = LLVMConstReal(f64_ty, _EPSILON);
+  LLVMValueRef prev_above_eps =
+      LLVMBuildFCmp(builder, LLVMRealOGT, prev_val, eps, "kill_on_end.prev_gt");
+  LLVMValueRef cur_below_eps =
+      LLVMBuildFCmp(builder, LLVMRealOLE, signal, eps, "kill_on_end.cur_le");
+  LLVMValueRef node_nonnull =
+      LLVMBuildICmp(builder, LLVMIntNE, dsp_ctx->node_ptr,
+                    LLVMConstNull(GENERIC_PTR), "kill_on_end.node_nonnull");
+  LLVMValueRef crossed =
+      LLVMBuildAnd(builder, prev_above_eps, cur_below_eps, "kill_on_end.crossed");
+  LLVMValueRef should_kill =
+      LLVMBuildAnd(builder, crossed, node_nonnull, "kill_on_end.cond");
+
+  LLVMTypeRef kill_fn_ty =
+      LLVMFunctionType(void_ty, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+  LLVMValueRef kill_fn = LLVMGetNamedFunction(module, "ylc_kill_node");
+  if (!kill_fn) {
+    kill_fn = LLVMAddFunction(module, "ylc_kill_node", kill_fn_ty);
+    LLVMSetLinkage(kill_fn, LLVMExternalLinkage);
+  }
+
+  LLVMBasicBlockRef cur_bb = LLVMGetInsertBlock(builder);
+  LLVMValueRef fn = LLVMGetBasicBlockParent(cur_bb);
+  LLVMBasicBlockRef then_bb = LLVMAppendBasicBlock(fn, "kill_on_end.then");
+  LLVMBasicBlockRef else_bb = LLVMAppendBasicBlock(fn, "kill_on_end.else");
+  LLVMBasicBlockRef merge_bb = LLVMAppendBasicBlock(fn, "kill_on_end.merge");
+
+  LLVMBuildCondBr(builder, should_kill, then_bb, else_bb);
+
+  LLVMPositionBuilderAtEnd(builder, then_bb);
+  LLVMBuildCall2(builder, kill_fn_ty, kill_fn,
+                 (LLVMValueRef[]){dsp_ctx->node_ptr}, 1, "kill_on_end.call");
+  LLVMBuildBr(builder, merge_bb);
+
+  LLVMPositionBuilderAtEnd(builder, else_bb);
+  LLVMBuildBr(builder, merge_bb);
+
+  LLVMPositionBuilderAtEnd(builder, merge_bb);
+  LLVMBuildStore(builder, signal, prev_ptr);
+  return signal;
 }
 LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -851,6 +1019,59 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                           (LLVMValueRef[]){LLVMConstReal(LLVMDoubleType(), -1.),
                                            LLVMConstReal(LLVMDoubleType(), 1.)},
                           2, "white_noise.sample");
+  }
+
+  if (strcmp(f->data.AST_IDENTIFIER.value, "kill_on_end") == 0) {
+    LLVMValueRef signal =
+        ensure_float(ast->data.AST_APPLICATION.args->type,
+                     dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                    ctx, module, builder),
+                     builder);
+    return build_kill_on_end(signal, dsp_ctx, module, builder);
+  }
+
+  if (strcmp(f->data.AST_IDENTIFIER.value, "adsr") == 0) {
+    LLVMValueRef attack =
+        ensure_float(ast->data.AST_APPLICATION.args->type,
+                     dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                    ctx, module, builder),
+                     builder);
+    LLVMValueRef decay =
+        ensure_float(ast->data.AST_APPLICATION.args[1].type,
+                     dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
+                                    ctx, module, builder),
+                     builder);
+    LLVMValueRef sustain =
+        ensure_float(ast->data.AST_APPLICATION.args[2].type,
+                     dsp_build_expr(ast->data.AST_APPLICATION.args + 2, dsp_ctx,
+                                    ctx, module, builder),
+                     builder);
+    LLVMValueRef release =
+        ensure_float(ast->data.AST_APPLICATION.args[3].type,
+                     dsp_build_expr(ast->data.AST_APPLICATION.args + 3, dsp_ctx,
+                                    ctx, module, builder),
+                     builder);
+    LLVMValueRef trig =
+        ensure_float(ast->data.AST_APPLICATION.args[4].type,
+                     dsp_build_expr(ast->data.AST_APPLICATION.args + 4, dsp_ctx,
+                                    ctx, module, builder),
+                     builder);
+    return build_adsr(attack, decay, sustain, release, trig, dsp_ctx, module,
+                      builder);
+  }
+
+  if (strcmp(f->data.AST_IDENTIFIER.value, "rect") == 0) {
+    LLVMValueRef duration =
+        ensure_float(ast->data.AST_APPLICATION.args->type,
+                     dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                    ctx, module, builder),
+                     builder);
+    LLVMValueRef trig =
+        ensure_float(ast->data.AST_APPLICATION.args[1].type,
+                     dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
+                                    ctx, module, builder),
+                     builder);
+    return build_rect(duration, trig, dsp_ctx, module, builder);
   }
 
   if (strcmp(f->data.AST_IDENTIFIER.value, "tabread1") == 0) {

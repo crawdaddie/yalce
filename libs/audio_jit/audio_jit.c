@@ -96,6 +96,80 @@ double ylc_read_inlet_node(void *node_raw, int64_t frame) {
   return ((Node *)node_raw)->output.buf[frame];
 }
 
+void ylc_kill_node(void *node_raw) { ((Node *)node_raw)->trig_end = true; }
+
+double adsr_samp(double trig, double prev_trig, double attack, double decay,
+                 double sustain, double release, double spf, double *value_ptr,
+                 double *phase_ptr, double *prev_trig_ptr) {
+  double value = *value_ptr;
+  double phase = *phase_ptr;
+  const double threshold = 0.5;
+
+  int rising = (prev_trig < threshold && trig >= threshold);
+  int falling = (prev_trig >= threshold && trig < threshold);
+
+  if (rising) {
+    phase = 1.0;
+  } else if (falling && phase == 3.0) {
+    phase = 4.0;
+  }
+
+  if (phase == 1.0) {
+    double rate = (attack > 0.0) ? (1.0 / attack) : 1e6;
+    value += rate * spf;
+    if (value >= 1.0) {
+      value = 1.0;
+      phase = 2.0;
+    }
+  } else if (phase == 2.0) {
+    double rate = (decay > 0.0) ? ((1.0 - sustain) / decay) : 1e6;
+    value -= rate * spf;
+    if (value <= sustain) {
+      value = sustain;
+      phase = (trig >= threshold) ? 3.0 : 4.0;
+    }
+  } else if (phase == 3.0) {
+    value = sustain;
+  } else if (phase == 4.0) {
+    double rate = (release > 0.0) ? (1.0 / release) : 1e6;
+    value -= rate * spf;
+    if (value <= 0.0) {
+      value = 0.0;
+      phase = 0.0;
+    }
+  } else {
+    value = 0.0;
+  }
+
+  *value_ptr = value;
+  *phase_ptr = phase;
+  *prev_trig_ptr = trig;
+  return value;
+}
+
+double rect_samp(double duration, double trig, double prev_trig, double spf,
+                 double *remaining_ptr, double *prev_trig_ptr) {
+  double remaining = *remaining_ptr;
+  const double threshold = 0.5;
+
+  int rising = (prev_trig < threshold && trig >= threshold);
+  if (rising) {
+    remaining = duration > 0.0 ? duration : 0.0;
+  }
+
+  double out = remaining > 0.0 ? 1.0 : 0.0;
+  if (remaining > 0.0) {
+    remaining -= spf;
+    if (remaining < 0.0) {
+      remaining = 0.0;
+    }
+  }
+
+  *remaining_ptr = remaining;
+  *prev_trig_ptr = trig;
+  return out;
+}
+
 LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder) {
   switch (ast->tag) {
@@ -629,28 +703,6 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
   }
 }
-// LLVMValueRef dsp_build_perform_fn(LLVMValueRef samp_fn, DspBuildCtx *dsp_ctx,
-//                                   JITLangCtx *ctx, LLVMModuleRef module_ref,
-//                                   LLVMBuilderRef builder) {}
-// LLVMValueRef dsp_build_cons_fn(const char *name, Ast *lambda,
-//                                LLVMValueRef perform_fn, DspBuildCtx *dsp_ctx,
-//                                JITLangCtx *ctx, LLVMModuleRef module_ref,
-//                                LLVMBuilderRef builder) {}
-
-LLVMValueRef PlayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                         LLVMBuilderRef builder) {
-  LLVMValueRef node =
-      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-  LLVMTypeRef play_param_tys[] = {GENERIC_PTR};
-  LLVMTypeRef play_fn_ty = LLVMFunctionType(GENERIC_PTR, play_param_tys, 1, 0);
-  LLVMValueRef play_fn = LLVMGetNamedFunction(module, "play_node");
-  if (!play_fn) {
-    play_fn = LLVMAddFunction(module, "play_node", play_fn_ty);
-    LLVMSetLinkage(play_fn, LLVMExternalLinkage);
-  }
-
-  return LLVMBuildCall2(builder, play_fn_ty, play_fn, &node, 1, "play_node");
-}
 
 static void register_builtin(ht *stack, const char *name,
                              BuiltinHandler handler) {
@@ -676,6 +728,4 @@ __attribute__((constructor)) static void ylc_audio_jit_init(void) {
   ht *stack = ylc_jit_ctx->frame->table;
   register_builtin(stack, "compile_audio_fn", CompileAudioFnHandler);
   fprintf(stderr, "libaudio_jit: registered compile_audio_fn\n");
-
-  register_builtin(stack, "play", PlayHandler);
 }

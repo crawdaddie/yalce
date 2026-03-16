@@ -14,13 +14,23 @@ static Node *jit_inlet_node(Node *node, int input) {
   return (Node *)src;
 }
 
+static inline int node_pending_free(Node *node) {
+  return !node || node->trig_end;
+}
+
 static void process_msg_pre(int frame_offset, audio_instruction msg) {
 
   switch (msg.type) {
   case NODE_ADD: {
     struct NODE_ADD payload = msg.payload.NODE_ADD;
+    if (node_pending_free(payload.target)) {
+      break;
+    }
     payload.target->frame_offset = frame_offset;
     if (payload.group) {
+      if (node_pending_free(payload.group)) {
+        break;
+      }
       group_add(payload.target, payload.group);
     } else {
       audio_ctx_add(payload.target);
@@ -31,6 +41,9 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
 
   case NODE_ADD_BEFORE: {
     struct NODE_ADD_BEFORE payload = msg.payload.NODE_ADD_BEFORE;
+    if (node_pending_free(payload.node) || node_pending_free(payload.target)) {
+      break;
+    }
     payload.node->frame_offset = frame_offset;
     audio_ctx_add_before(payload.target, payload.node);
     break;
@@ -39,6 +52,9 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
   case NODE_SET_SCALAR: {
     struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
     Node *node = payload.target;
+    if (node_pending_free(node)) {
+      break;
+    }
 
     if ((char *)node->perform == (char *)perform_audio_graph) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
@@ -66,6 +82,9 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
     struct NODE_SET_INPUT payload = msg.payload.NODE_SET_INPUT;
     Node *node = payload.target;
     Node *buf = payload.value;
+    if (node_pending_free(node) || node_pending_free(buf)) {
+      break;
+    }
 
     if ((char *)node->perform == (char *)perform_audio_graph) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
@@ -85,6 +104,9 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
   case NODE_SET_TRIG: {
     struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
     Node *node = payload.target;
+    if (node_pending_free(node)) {
+      break;
+    }
 
     if ((char *)node->perform == (char *)perform_audio_graph) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
@@ -122,6 +144,9 @@ static void process_msg_post(int frame_offset, audio_instruction msg) {
 
     struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
     Node *node = payload.target;
+    if (node_pending_free(node)) {
+      break;
+    }
 
     if ((char *)node->perform == (char *)perform_audio_graph) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
@@ -148,6 +173,9 @@ static void process_msg_post(int frame_offset, audio_instruction msg) {
   case NODE_SET_TRIG: {
     struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
     Node *node = payload.target;
+    if (node_pending_free(node)) {
+      break;
+    }
 
     if ((char *)node->perform == (char *)perform_audio_graph) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);

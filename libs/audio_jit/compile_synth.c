@@ -49,8 +49,6 @@ static LLVMValueRef call_dsp_symbol(Ast *ast, JITLangCtx *ctx,
     return LLVMConstNull(GENERIC_PTR);
   }
 
-  printf("call dsp symbol synth_id: %d [%s]\n", synth_id, synth_rec.name);
-
   LLVMValueRef ctor_fn = synth_rec.ctor;
   LLVMTypeRef ctor_fn_ty = LLVMGlobalGetValueType(ctor_fn);
   int arg_count = ast->data.AST_APPLICATION.len;
@@ -77,6 +75,10 @@ static LLVMValueRef call_dsp_symbol(Ast *ast, JITLangCtx *ctx,
       ctor_args[i] = LLVMConstNull(formal_tys[i]);
     }
   }
+
+  // hack to stop Synth converting the output to a const_sig because it sees it
+  // as a Double
+  ast->type = &t_ptr;
 
   LLVMValueRef node = LLVMBuildCall2(builder, ctor_fn_ty, ctor_fn, ctor_args,
                                      formal_count, "audio_jit.node");
@@ -182,13 +184,14 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
                                        LLVMInt32Type(), LLVMDoubleType()},
                        5, 0);
   LLVMTypeRef *frame_param_tys =
-      malloc(sizeof(LLVMTypeRef) * (size_t)(num_inputs + 1));
+      malloc(sizeof(LLVMTypeRef) * (size_t)(num_inputs + 2));
   frame_param_tys[0] = GENERIC_PTR; // state ptr (already offset by caller)
   for (int i = 0; i < num_inputs; i++) {
     frame_param_tys[i + 1] = LLVMDoubleType();
   }
+  frame_param_tys[num_inputs + 1] = GENERIC_PTR; // enclosing node ptr
   LLVMTypeRef frame_ty =
-      LLVMFunctionType(LLVMDoubleType(), frame_param_tys, num_inputs + 1, 0);
+      LLVMFunctionType(LLVMDoubleType(), frame_param_tys, num_inputs + 2, 0);
 
   char perf_name[32];
   sprintf(perf_name, "%s.perform", name);
@@ -287,6 +290,7 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
 
   LLVMPositionBuilderAtEnd(frame_ctx.perform_builder, frame_bb);
   frame_ctx.state_ptr = LLVMGetParam(frame_fn, 0);
+  frame_ctx.node_ptr = LLVMGetParam(frame_fn, num_inputs + 1);
   {
     LLVMTypeRef f64_ty_local = LLVMDoubleType();
     LLVMTypeRef spf_fn_ty =
@@ -334,7 +338,8 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
           LLVMGetInsertBlock(frame_ctx.perform_builder))) {
     LLVMBuildRet(frame_ctx.perform_builder, LLVMConstReal(f64_ty, 0.0));
   }
-  if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(frame_ctx.init_builder))) {
+  if (!LLVMGetBasicBlockTerminator(
+          LLVMGetInsertBlock(frame_ctx.init_builder))) {
     LLVMBuildRetVoid(frame_ctx.init_builder);
   }
 
@@ -352,7 +357,7 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef frame_i64 = LLVMBuildSExt(
       dsp_ctx.perform_builder, dsp_ctx.frame_idx, i64_ty, "frame_idx.i64");
   LLVMValueRef *frame_call_args =
-      malloc(sizeof(LLVMValueRef) * (size_t)(num_inputs + 1));
+      malloc(sizeof(LLVMValueRef) * (size_t)(num_inputs + 2));
   frame_call_args[0] = dsp_ctx.state_ptr;
   for (int i = 0; i < num_inputs; i++) {
     LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
@@ -366,9 +371,10 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
         LLVMBuildCall2(dsp_ctx.perform_builder, read_fn_ty, read_fn, read_args,
                        2, "inlet.sample");
   }
+  frame_call_args[num_inputs + 1] = dsp_ctx.node_ptr;
   LLVMValueRef frame_sample =
       LLVMBuildCall2(dsp_ctx.perform_builder, frame_ty, frame_fn,
-                     frame_call_args, num_inputs + 1, "frame.call");
+                     frame_call_args, num_inputs + 2, "frame.call");
   free(frame_call_args);
 
   LLVMTypeRef void_ty = LLVMVoidType();
