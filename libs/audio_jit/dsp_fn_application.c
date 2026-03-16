@@ -483,6 +483,172 @@ LLVMValueRef build_tabread(LLVMValueRef tab, LLVMValueRef phase,
                        "tabread.sample");
 }
 
+static LLVMValueRef build_bufplay(LLVMValueRef buf, LLVMValueRef rate,
+                                  LLVMValueRef start_pos, LLVMValueRef trig,
+                                  DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
+                                  LLVMModuleRef module,
+                                  LLVMBuilderRef builder) {
+  int off = dsp_ctx->state_offset;
+  dsp_ctx->state_offset += 8;
+
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+  LLVMTypeRef arr_ty =
+      LLVMStructType((LLVMTypeRef[]){i32_ty, f64_ptr_ty}, 2, 0);
+
+  LLVMValueRef buf_struct = buf;
+  if (LLVMGetTypeKind(LLVMTypeOf(buf)) == LLVMPointerTypeKind) {
+    buf_struct = LLVMBuildLoad2(builder, arr_ty, buf, "bufplay.arr");
+  }
+  LLVMValueRef len_i32 =
+      LLVMBuildExtractValue(builder, buf_struct, 0, "bufplay.len.i32");
+  LLVMValueRef len_f =
+      LLVMBuildSIToFP(builder, len_i32, f64_ty, "bufplay.len.f64");
+
+  LLVMValueRef phase_off_val = LLVMConstInt(i32_ty, (uint64_t)off, 0);
+
+  LLVMValueRef phase_ptr =
+      LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr, &phase_off_val, 1,
+                    "bufplay.phase_ptr");
+  BUILD_ON_TRIG(builder, trig, f64_ty, "bufplay",
+                LLVMBuildStore(builder, start_pos, phase_ptr););
+
+  LLVMValueRef cur_phase =
+      LLVMBuildLoad2(builder, f64_ty, phase_ptr, "bufplay.phase");
+  LLVMValueRef step = LLVMBuildFDiv(builder, rate, len_f, "bufplay.step");
+  LLVMValueRef advanced =
+      LLVMBuildFAdd(builder, cur_phase, step, "bufplay.advanced");
+
+  LLVMValueRef zero = LLVMConstReal(f64_ty, 0.0);
+  LLVMValueRef one = LLVMConstReal(f64_ty, 1.0);
+  LLVMValueRef ovf =
+      LLVMBuildFCmp(builder, LLVMRealOGE, advanced, one, "bufplay.ovf");
+  LLVMValueRef udf =
+      LLVMBuildFCmp(builder, LLVMRealOLT, advanced, zero, "bufplay.udf");
+  LLVMValueRef next =
+      LLVMBuildSelect(builder, ovf, zero, advanced, "bufplay.wrap_ovf");
+  next = LLVMBuildSelect(builder, udf, one, next, "bufplay.wrap_udf");
+
+  LLVMBuildStore(builder, next, phase_ptr);
+
+  return build_tabread(buf, cur_phase, dsp_ctx, ctx, module, builder);
+}
+
+static LLVMValueRef build_grains(int32_t max_grains, LLVMValueRef buf,
+                                 LLVMValueRef rate, LLVMValueRef pos,
+                                 LLVMValueRef width, LLVMValueRef trig,
+                                 DspBuildCtx *dsp_ctx, LLVMModuleRef module,
+                                 LLVMBuilderRef builder) {
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef i64_ty = LLVMInt64Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+  LLVMTypeRef i32_ptr_ty = LLVMPointerType(i32_ty, 0);
+  LLVMTypeRef arr_ty =
+      LLVMStructType((LLVMTypeRef[]){i32_ty, f64_ptr_ty}, 2, 0);
+
+  LLVMValueRef buf_struct = buf;
+  if (LLVMGetTypeKind(LLVMTypeOf(buf)) == LLVMPointerTypeKind) {
+    buf_struct = LLVMBuildLoad2(builder, arr_ty, buf, "grains.arr");
+  }
+  LLVMValueRef len_i32 =
+      LLVMBuildExtractValue(builder, buf_struct, 0, "grains.len.i32");
+  LLVMValueRef buf_ptr =
+      LLVMBuildExtractValue(builder, buf_struct, 1, "grains.data");
+  LLVMValueRef buf_size_i64 =
+      LLVMBuildSExt(builder, len_i32, i64_ty, "grains.len.i64");
+
+  int spawn_trig_off = dsp_ctx->state_offset;
+  dsp_ctx->state_offset += 8;
+
+  int active_grains_off = dsp_ctx->state_offset;
+  dsp_ctx->state_offset += 8;
+
+  int arrays_off = dsp_ctx->state_offset;
+  int array_bytes = max_grains * 8 + max_grains * 8 + max_grains * 8 +
+                    max_grains * 8 + max_grains * 8 + max_grains * 4;
+  dsp_ctx->state_offset += array_bytes;
+
+  LLVMValueRef arrays_off_val = LLVMConstInt(i32_ty, (uint64_t)arrays_off, 0);
+  LLVMValueRef base_ptr = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
+                                        &arrays_off_val, 1, "grains.base_ptr");
+
+  LLVMValueRef f64_size =
+      LLVMConstInt(i32_ty, (uint64_t)(sizeof(double) * max_grains), 0);
+
+  LLVMValueRef rates_ptr = base_ptr;
+  LLVMValueRef phases_ptr = LLVMBuildGEP2(builder, i8_ty, rates_ptr, &f64_size,
+                                          1, "grains.phases_ptr");
+  LLVMValueRef widths_ptr = LLVMBuildGEP2(builder, i8_ty, phases_ptr, &f64_size,
+                                          1, "grains.widths_ptr");
+  LLVMValueRef remaining_ptr =
+      LLVMBuildGEP2(builder, i8_ty, widths_ptr, &f64_size, 1, "grains.rem_ptr");
+  LLVMValueRef starts_ptr = LLVMBuildGEP2(builder, i8_ty, remaining_ptr,
+                                          &f64_size, 1, "grains.starts_ptr");
+  LLVMValueRef active_ptr = LLVMBuildGEP2(builder, i8_ty, starts_ptr, &f64_size,
+                                          1, "grains.active_ptr");
+
+  LLVMValueRef spawn_off_val =
+      LLVMConstInt(i32_ty, (uint64_t)spawn_trig_off, 0);
+  LLVMValueRef spawn_ptr = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
+                                         &spawn_off_val, 1, "grains.spawn_ptr");
+  LLVMBuildStore(builder, LLVMConstReal(f64_ty, 0.0), spawn_ptr);
+  BUILD_ON_TRIG(
+      builder, trig, f64_ty, "grains",
+      LLVMBuildStore(builder, LLVMConstReal(f64_ty, 1.0), spawn_ptr););
+  LLVMValueRef spawn_trig =
+      LLVMBuildLoad2(builder, f64_ty, spawn_ptr, "grains.spawn_trig");
+
+  LLVMValueRef active_off_val =
+      LLVMConstInt(i32_ty, (uint64_t)active_grains_off, 0);
+  LLVMValueRef active_grains_ptr =
+      LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr, &active_off_val, 1,
+                    "grains.active_grains_ptr");
+
+  LLVMTypeRef grain_fn_ty = LLVMFunctionType(
+      f64_ty,
+      (LLVMTypeRef[]){f64_ptr_ty, i64_ty, f64_ty, f64_ty, f64_ty, f64_ty,
+                      f64_ty, i32_ty, f64_ptr_ty, f64_ptr_ty, f64_ptr_ty,
+                      f64_ptr_ty, f64_ptr_ty, i32_ptr_ty, i32_ptr_ty},
+      15, 0);
+  LLVMValueRef grain_fn = LLVMGetNamedFunction(module, "grain_samp");
+  if (!grain_fn) {
+    grain_fn = LLVMAddFunction(module, "grain_samp", grain_fn_ty);
+    LLVMSetLinkage(grain_fn, LLVMExternalLinkage);
+  }
+
+  LLVMValueRef max_grains_val = LLVMConstInt(i32_ty, (uint64_t)max_grains, 0);
+  LLVMValueRef grain_args[] = {
+      buf_ptr,
+      buf_size_i64,
+      spawn_trig,
+      pos,
+      rate,
+      width,
+      dsp_ctx->spf,
+      max_grains_val,
+      LLVMBuildBitCast(builder, rates_ptr, f64_ptr_ty, "grains.rates.f64_ptr"),
+      LLVMBuildBitCast(builder, phases_ptr, f64_ptr_ty,
+                       "grains.phases.f64_ptr"),
+      LLVMBuildBitCast(builder, widths_ptr, f64_ptr_ty,
+                       "grains.widths.f64_ptr"),
+      LLVMBuildBitCast(builder, remaining_ptr, f64_ptr_ty,
+                       "grains.rem.f64_ptr"),
+      LLVMBuildBitCast(builder, starts_ptr, f64_ptr_ty,
+                       "grains.starts.f64_ptr"),
+      LLVMBuildBitCast(builder, active_ptr, i32_ptr_ty,
+                       "grains.active.i32_ptr"),
+      LLVMBuildBitCast(builder, active_grains_ptr, i32_ptr_ty,
+                       "grains.active_grains.i32_ptr"),
+  };
+
+  return LLVMBuildCall2(builder, grain_fn_ty, grain_fn, grain_args, 15,
+                        "grains.sample");
+}
+
 LLVMValueRef build_exp_decay(LLVMValueRef T, LLVMValueRef trig,
                              DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                              LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -596,9 +762,8 @@ LLVMValueRef build_adsr(LLVMValueRef attack, LLVMValueRef decay,
 
   LLVMTypeRef fn_ty = LLVMFunctionType(
       f64_ty,
-      (LLVMTypeRef[]){f64_ty,     f64_ty,     f64_ty, f64_ty, f64_ty,
-                      f64_ty,     f64_ty,     f64_ptr_ty, f64_ptr_ty,
-                      f64_ptr_ty},
+      (LLVMTypeRef[]){f64_ty, f64_ty, f64_ty, f64_ty, f64_ty, f64_ty, f64_ty,
+                      f64_ptr_ty, f64_ptr_ty, f64_ptr_ty},
       10, 0);
   LLVMValueRef fn = LLVMGetNamedFunction(module, "adsr_samp");
   if (!fn) {
@@ -606,11 +771,11 @@ LLVMValueRef build_adsr(LLVMValueRef attack, LLVMValueRef decay,
     LLVMSetLinkage(fn, LLVMExternalLinkage);
   }
 
-  return LLVMBuildCall2(
-      builder, fn_ty, fn,
-      (LLVMValueRef[]){trig, prev_trig, attack, decay, sustain, release,
-                       dsp_ctx->spf, value_ptr, phase_ptr, prev_ptr},
-      10, "adsr.sample");
+  return LLVMBuildCall2(builder, fn_ty, fn,
+                        (LLVMValueRef[]){trig, prev_trig, attack, decay,
+                                         sustain, release, dsp_ctx->spf,
+                                         value_ptr, phase_ptr, prev_ptr},
+                        10, "adsr.sample");
 }
 
 LLVMValueRef build_rect(LLVMValueRef duration, LLVMValueRef trig,
@@ -639,11 +804,10 @@ LLVMValueRef build_rect(LLVMValueRef duration, LLVMValueRef trig,
   LLVMValueRef prev_trig =
       LLVMBuildLoad2(builder, f64_ty, prev_ptr, "rect.prev_trig");
 
-  LLVMTypeRef fn_ty =
-      LLVMFunctionType(f64_ty,
-                       (LLVMTypeRef[]){f64_ty, f64_ty, f64_ty, f64_ty,
-                                       f64_ptr_ty, f64_ptr_ty},
-                       6, 0);
+  LLVMTypeRef fn_ty = LLVMFunctionType(
+      f64_ty,
+      (LLVMTypeRef[]){f64_ty, f64_ty, f64_ty, f64_ty, f64_ptr_ty, f64_ptr_ty},
+      6, 0);
   LLVMValueRef fn = LLVMGetNamedFunction(module, "rect_samp");
   if (!fn) {
     fn = LLVMAddFunction(module, "rect_samp", fn_ty);
@@ -840,8 +1004,8 @@ LLVMValueRef build_kill_on_end(LLVMValueRef signal, DspBuildCtx *dsp_ctx,
   LLVMValueRef node_nonnull =
       LLVMBuildICmp(builder, LLVMIntNE, dsp_ctx->node_ptr,
                     LLVMConstNull(GENERIC_PTR), "kill_on_end.node_nonnull");
-  LLVMValueRef crossed =
-      LLVMBuildAnd(builder, prev_above_eps, cur_below_eps, "kill_on_end.crossed");
+  LLVMValueRef crossed = LLVMBuildAnd(builder, prev_above_eps, cur_below_eps,
+                                      "kill_on_end.crossed");
   LLVMValueRef should_kill =
       LLVMBuildAnd(builder, crossed, node_nonnull, "kill_on_end.cond");
 
@@ -1223,6 +1387,61 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
     return call_registered_synth_in_audio_fn(ast, rec, dsp_ctx, ctx, module,
                                              builder);
+  }
+
+  if (is_ident(f, "bufplay")) {
+    LLVMValueRef buf = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                      ctx, module, builder);
+    LLVMValueRef rate =
+        ensure_float(ast->data.AST_APPLICATION.args[1].type,
+                     dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
+                                    ctx, module, builder),
+                     builder);
+    LLVMValueRef start_pos =
+        ensure_float(ast->data.AST_APPLICATION.args[2].type,
+                     dsp_build_expr(ast->data.AST_APPLICATION.args + 2, dsp_ctx,
+                                    ctx, module, builder),
+                     builder);
+    LLVMValueRef trig =
+        ensure_float(ast->data.AST_APPLICATION.args[3].type,
+                     dsp_build_expr(ast->data.AST_APPLICATION.args + 3, dsp_ctx,
+                                    ctx, module, builder),
+                     builder);
+
+    return build_bufplay(buf, rate, start_pos, trig, dsp_ctx, ctx, module,
+                         builder);
+  }
+
+  if (is_ident(f, "grains")) {
+    Ast *args = ast->data.AST_APPLICATION.args;
+    double max_grains_num = 0.0;
+    if (!ast_is_const(&args[0], ctx) ||
+        !ast_try_eval_const_num(&args[0], &max_grains_num)) {
+      fprintf(stderr, "Error - max_grains needs to be a constant\n");
+      return NULL;
+    }
+
+    int32_t max_grains = (int32_t)max_grains_num;
+    if (max_grains <= 0) {
+      return LLVMConstReal(LLVMDoubleType(), 0.0);
+    }
+
+    LLVMValueRef buf = dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+    LLVMValueRef rate = ensure_float(
+        args[2].type, dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder),
+        builder);
+    LLVMValueRef pos = ensure_float(
+        args[3].type, dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder),
+        builder);
+    LLVMValueRef width = ensure_float(
+        args[4].type, dsp_build_expr(args + 4, dsp_ctx, ctx, module, builder),
+        builder);
+    LLVMValueRef trig = ensure_float(
+        args[5].type, dsp_build_expr(args + 5, dsp_ctx, ctx, module, builder),
+        builder);
+
+    return build_grains(max_grains, buf, rate, pos, width, trig, dsp_ctx,
+                        module, builder);
   }
 
   if (callable_sym && callable_sym->type == STYPE_AUDIO_JIT_INLINE_LAMBDA) {

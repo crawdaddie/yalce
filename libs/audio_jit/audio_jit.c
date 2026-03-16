@@ -34,12 +34,25 @@ int STYPE_AUDIO_JIT_BUILTIN_HANDLER;
 int STYPE_AUDIO_JIT_INLINE_LAMBDA;
 int STYPE_AUDIO_JIT_SYNTH_INLET;
 
+#ifndef GRAIN_WINDOW_TABSIZE
+#define GRAIN_WINDOW_TABSIZE (1 << 9)
+#endif
+static const double ylc_grain_win[GRAIN_WINDOW_TABSIZE] = {
+#include "../../engine/assets/grain_win.csv"
+};
+
 // let array_of_buf = extern fn Ptr -> Array of Double;
 // let bufsize = extern fn Ptr -> Int;
 _DoubleArray array_of_buf(NodeRef buf) {
   return (_DoubleArray){.data = buf->output.buf, .size = buf->output.size};
 }
 int bufsize(NodeRef buf) { return buf->output.size; }
+void *ylc_get_output_buf(void *node_raw) {
+  return ((Node *)node_raw)->output.buf;
+}
+int64_t ylc_bufsize(void *node_raw) {
+  return (int64_t)((Node *)node_raw)->output.size;
+}
 
 Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
                             int state_bytes) {
@@ -168,6 +181,77 @@ double rect_samp(double duration, double trig, double prev_trig, double spf,
   *remaining_ptr = remaining;
   *prev_trig_ptr = trig;
   return out;
+}
+
+double grain_samp(double *buf, int64_t buf_size, double trig, double pos,
+                  double rate, double width, double spf, int32_t max_grains,
+                  double *rates, double *phases, double *widths,
+                  double *remaining_secs, double *starts, int32_t *active,
+                  int32_t *active_grains) {
+  if (!buf || buf_size <= 1 || max_grains <= 0 || !rates || !phases ||
+      !widths || !remaining_secs || !starts || !active || !active_grains) {
+    return 0.0;
+  }
+
+  double sample = 0.0;
+
+  if (trig >= 0.5 && *active_grains < max_grains) {
+    for (int32_t i = 0; i < max_grains; i++) {
+      if (active[i] == 0) {
+        rates[i] = rate;
+        phases[i] = 0.0;
+        starts[i] = pos * (double)buf_size;
+        widths[i] = width;
+        remaining_secs[i] = width;
+        active[i] = 1;
+        (*active_grains)++;
+        break;
+      }
+    }
+  }
+
+  for (int32_t i = 0; i < max_grains; i++) {
+    if (!active[i]) {
+      continue;
+    }
+
+    double r = rates[i];
+    double p = phases[i];
+    double s = starts[i];
+    double w = widths[i];
+    double rem = remaining_secs[i];
+
+    double d_index = s + (p * (double)buf_size);
+    int64_t index = (int64_t)d_index;
+    double frac = d_index - (double)index;
+
+    int64_t i0 = index % buf_size;
+    if (i0 < 0) {
+      i0 += buf_size;
+    }
+    int64_t i1 = (i0 + 1) % buf_size;
+    double a = buf[i0];
+    double b_val = buf[i1];
+
+    double grain_elapsed = 1.0 - (rem / w);
+    int mask = GRAIN_WINDOW_TABSIZE - 1;
+    double env_pos = grain_elapsed * (double)mask;
+    int env_idx = (int)env_pos;
+    double env_frac = env_pos - (double)env_idx;
+    double env_val = ylc_grain_win[env_idx & mask] * (1.0 - env_frac) +
+                     ylc_grain_win[(env_idx + 1) & mask] * env_frac;
+
+    sample += env_val * ((1.0 - frac) * a + (frac * b_val));
+    phases[i] += (r / (double)buf_size);
+
+    remaining_secs[i] -= spf;
+    if (remaining_secs[i] <= 0.0) {
+      active[i] = 0;
+      (*active_grains)--;
+    }
+  }
+
+  return sample;
 }
 
 LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,

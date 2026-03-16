@@ -21,6 +21,13 @@ let lfnoise0 = extern fn Double -> Double -> Double -> Double;
 let kill_on_end = extern fn Double -> Double;
 let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
 let rect = extern fn Double -> Double -> Double;
+
+#                       buf                rate      start_pos trig
+let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;
+
+#                      max_grains   buf                rate      pos       width     trig
+let grains = extern fn Int ->       Array of Double -> Double -> Double -> Double -> Double;
+
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
 
 import std/Math;
@@ -110,32 +117,61 @@ let hpf1p = fn freq x ->
 #
 #
 
+# compile_audio_fn (
+#   let osc = fn f -> 
+#     let dt = fn f -> 
+#       sq_osc f + sq_osc (f * 1.01)
+#     ;;
+#     trig 0
+#     |> decay 0.08
+#     |> scale f 1000
+#     |> dt
+#     |> (*) (adsr 0 0 1 0.3 (trig 0 |> rect 0.2) |> kill_on_end) 
+#   ;
+# );
+#
+# # osc 60 |> play_node;
+#
+# defer_quant 1. (fn t ->
+#   let c = fn () ->
+#     (Math.array_choose [|60, 120, 240, 300|]) |> osc |> play_node_offset (get_tl_tick ());
+#     yield (Math.array_choose [|0.25, 0.125, 0.5,0.125|]);
+#     # yield 1.;
+#     yield c ()
+#   ;;
+#
+#   c () |> play_routine t schedule_event 
+# );
+#
+#
+#
+
+
+# let amen = load_soundfile "fat_amen_mono_48000.wav";
+# compile_audio_fn (
+#   let x = fn () ->
+#     bufplay (array_of_buf amen) 1 0.25 (trig 16) 
+#   ;
+# );
+#
+# x () |> play_node
+
+let whisper = load_soundfile "whisper.wav";
+# let whisper = load_soundfile "fat_amen_mono_48000.wav";
+
 compile_audio_fn (
-  let osc = fn f -> 
-    let dt = fn f -> 
-      sq_osc f + sq_osc (f * 1.01)
-    ;;
-    trig 0
-    |> decay 0.08
-    |> scale f 1000
-    |> dt
-    |> (*) (adsr 0 0 1 0.3 (trig 0 |> rect 0.2) |> kill_on_end) 
+  let x = fn () ->
+    trig 50
+    |> grains
+    100
+    (array_of_buf whisper)
+    1.
+    (sin_osc 0.003
+      |> scale_bp 0 1
+      |> (+) (lfnoise 50 0 0.003)
+    )
+    0.07
   ;
 );
-
-# osc 60 |> play_node;
-
-defer_quant 1. (fn t ->
-  let c = fn () ->
-    (Math.array_choose [|60, 120, 240, 300|]) |> osc |> play_node_offset (get_tl_tick ());
-    yield (Math.array_choose [|0.25, 0.125, 0.5,0.125|]);
-    # yield 1.;
-    yield c ()
-  ;;
-
-  c () |> play_routine t schedule_event 
-);
 #
-#
-#
-
+x () |> play_node
