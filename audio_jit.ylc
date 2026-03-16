@@ -116,10 +116,10 @@ compile_audio_fn (
       sq_osc f + sq_osc (f * 1.01)
     ;;
     trig 0
-    |> decay 0.2
+    |> decay 0.08
     |> scale f 1000
     |> dt
-    |> (*) (adsr 0 0 1 0.9 (trig 0 |> rect 0.2) |> kill_on_end) 
+    |> (*) (adsr 0 0 1 0.3 (trig 0 |> rect 0.2) |> kill_on_end) 
   ;
 );
 
@@ -127,8 +127,9 @@ compile_audio_fn (
 
 defer_quant 1. (fn t ->
   let c = fn () ->
-    osc 60 |> play_node_offset (get_tl_tick ());
-    yield 1.;
+    (Math.array_choose [|60, 120, 240, 300|]) |> osc |> play_node_offset (get_tl_tick ());
+    yield (Math.array_choose [|0.25, 0.125, 0.5,0.125|]);
+    # yield 1.;
     yield c ()
   ;;
 
