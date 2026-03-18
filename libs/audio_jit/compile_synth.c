@@ -173,7 +173,6 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
     }
   }
 
-  fprintf(stderr, "compile audio function for %s\n", name);
   // print_ast(lambda);
   // print_type(lambda->type);
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
@@ -327,7 +326,6 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef expr =
       dsp_build_expr(lambda->data.AST_LAMBDA.body, &frame_ctx, &fn_ctx, module,
                      frame_ctx.perform_builder);
-  fprintf(stderr, "compile_audio_fn: body built for %s\n", name);
 
   if (expr) {
     expr = ensure_float(lambda->data.AST_LAMBDA.body->type, expr,
@@ -470,7 +468,6 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = synth_id;
 
   ht_set_hash(ctx->frame->table, name, hash_string(name, strlen(name)), sym);
-  fprintf(stderr, "libaudio_jit: audio fn symbol %s\n", name);
 
   LLVMDisposeBuilder(dsp_ctx.ctor_builder);
   LLVMDisposeBuilder(dsp_ctx.init_builder);
@@ -478,14 +475,14 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   LLVMDisposeBuilder(frame_ctx.perform_builder);
   destroy_ctx(&fn_ctx);
 
-  printf("compiled for %s: \n", name);
-  LLVMDumpValue(perf_fn);
-  printf("\n");
-  LLVMDumpValue(frame_fn);
-  printf("\n");
-
-  LLVMDumpValue(cons_fn);
-  printf("\n");
+  // printf("compiled for %s: \n", name);
+  // LLVMDumpValue(perf_fn);
+  // printf("\n");
+  // LLVMDumpValue(frame_fn);
+  // printf("\n");
+  //
+  // LLVMDumpValue(cons_fn);
+  // printf("\n");
   return cons_fn;
 }
 

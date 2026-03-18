@@ -1292,21 +1292,27 @@ void *dyn_allpass_perform(Node *node, allpass_state *state, Node *inputs[],
 
       // Calculate delay in samples and interpolation
       double delay_samples = *delay_time * sample_rate;
+      if (delay_samples < 1.0) {
+        delay_samples = 1.0;
+      }
+      if (delay_samples >= (double)delay_per_channel) {
+        delay_samples = (double)(delay_per_channel - 1);
+      }
       int read_offset = (int)delay_samples;
       double frac = delay_samples - read_offset;
 
       // Calculate read positions with proper modulo
       int read_pos =
           (write_pos - read_offset + delay_per_channel) % delay_per_channel;
-      int read_pos_next = (read_pos + 1) % delay_per_channel;
+      int read_pos_prev = (read_pos - 1 + delay_per_channel) % delay_per_channel;
 
       // Add channel offset to get absolute positions
       int read_pos_abs = channel_offset + read_pos;
-      int read_pos_next_abs = channel_offset + read_pos_next;
+      int read_pos_prev_abs = channel_offset + read_pos_prev;
 
       // Linear interpolation for delayed signal
       double delayed_signal = delay_buf[read_pos_abs] * (1.0 - frac) +
-                              delay_buf[read_pos_next_abs] * frac;
+                              delay_buf[read_pos_prev_abs] * frac;
 
       // Allpass filter equation: y[n] = -g * x[n] + x[n-M] + g * y[n-M]
       *out = -state->g * (*in) + delayed_signal;
@@ -1366,6 +1372,11 @@ Node *dyn_allpass_node(double max_delay_time, double g, Node *input,
   plug_input_in_graph(2, node, delay_time);
 
   return graph_embed(node);
+}
+
+Node *allpass1_node(Node *delay_time, double max_delay_time, double g,
+                    Node *input) {
+  return dyn_allpass_node(max_delay_time, g, input, delay_time);
 }
 typedef struct grain_pitchshift_state {
   int length;

@@ -1,166 +1,10 @@
-open engine/bindings/Synth;
-open engine/bindings/Sched;
-
-let compile_audio_fn = extern fn T -> T;
-
-let sin_osc = extern fn Double -> Double;
-let sq_osc = extern fn Double -> Double;
-let saw_osc = extern fn Double -> Double;
-let white = extern fn () -> Double;
-let phasor = extern fn Double -> Double;
-let phasor_sinc = extern fn Double -> Double -> Double;
-let trig = extern fn Double -> Double;
-let tabread1 = extern fn Array of Double -> Double -> Double;
-let decay = extern fn Double -> Double -> Double;
-let scale = extern fn Double -> Double -> Double -> Double;
-let scale_bp = extern fn Double -> Double -> Double -> Double;
-let array_of_buf = extern fn Ptr -> Array of Double;
-let bufsize = extern fn Ptr -> Int;
-let lfnoise = extern fn Double -> Double -> Double -> Double;
-let lfnoise0 = extern fn Double -> Double -> Double -> Double;
-let kill_on_end = extern fn Double -> Double;
-let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
-let rect = extern fn Double -> Double -> Double;
-
-#                       buf                rate      start_pos trig
-let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;
-
-#                      max_grains   buf                rate      pos       width     trig
-let grains = extern fn Int ->       Array of Double -> Double -> Double -> Double -> Double;
-
-let _ = dlopen "libs/audio_jit/libaudio_jit.so";
-
-import std/Math;
-
-# compile_audio_fn (
-#   let x = fn f ->
-#     sq_osc f
-#     |> (+) (sq_osc (f * 1.01))
-#     |> (*) (Math.db_amp -15)
-#   ;
-# );
-# x 200 |> play;
-
-# let amen = load_soundfile "fat_amen_mono_48000.wav";
-# compile_audio_fn (
-#   let x = fn rate ->
-#
-#
-#     let z = [| 32., |];
-#     z[0] := z[0] * 0.99997;
-#
-#     trig (z[0])
-#     |> phasor_sinc rate
-#     |> tabread1 (array_of_buf amen)
-#     ;
-# );
-  #   phasor (0.6 + 0.2 * sin_osc 0.2)
-  #   |> tabread1 (array_of_buf amen)
-  #   # # |> (+) (sq_osc (f * 1.01))
-  #   |> (*) (Math.db_amp -15)
-  # ;
-
-# compile_audio_fn (
-#   let x = fn () ->
-#     let z = [| 1000., |];
-#     z[0] := z[0] * 0.999;
-#     sin_osc (z[0])
-#   ;
-# );
-
-# one‑pole with softclip
-compile_audio_fn (
-let pole = fn g x z ->
-  let y = z + g * (x - z) in
-  y
-;
-);
-
-# one-pole lowpass: frequency in Hz
-compile_audio_fn (
-let lpf1p = fn freq x ->
-  let Z = [| 0. |];
-  let g = 2.0 * Math.PI * freq * (spf ());
-  let y = Z[0] |> pole g x;
-  Z[0] := y;
-  y
-;
-);
-compile_audio_fn (
-let hpf1p = fn freq x ->
-  let Z = [| 0. |];
-  let g = 2.0 * Math.PI * freq * (spf ());
-  let lp = Z[0] |> pole g x;
-  Z[0] := lp;
-  x - lp
-;
-);
-# compile_audio_fn (
-#   let osc = fn f -> 
-#     saw_osc f |> Math.tanh
-#   ;
-# );
-#
-# compile_audio_fn (
-#   let x = fn () ->
-#     trig 0
-#     |> decay 5
-#     |> scale 1.5 64
-#     |> trig
-#     |> decay 0.3
-#     |> scale 60 800
-#     |> sin_osc
-#     |> (*) (Math.db_amp -10)
-#   ;
-# );
-# x () |> play;
-#
-#
-
-# compile_audio_fn (
-#   let osc = fn f -> 
-#     let dt = fn f -> 
-#       sq_osc f + sq_osc (f * 1.01)
-#     ;;
-#     trig 0
-#     |> decay 0.08
-#     |> scale f 1000
-#     |> dt
-#     |> (*) (adsr 0 0 1 0.3 (trig 0 |> rect 0.2) |> kill_on_end) 
-#   ;
-# );
-#
-# # osc 60 |> play_node;
-#
-# defer_quant 1. (fn t ->
-#   let c = fn () ->
-#     (Math.array_choose [|60, 120, 240, 300|]) |> osc |> play_node_offset (get_tl_tick ());
-#     yield (Math.array_choose [|0.25, 0.125, 0.5,0.125|]);
-#     # yield 1.;
-#     yield c ()
-#   ;;
-#
-#   c () |> play_routine t schedule_event 
-# );
-#
-#
-#
-
-
-# let amen = load_soundfile "fat_amen_mono_48000.wav";
-# compile_audio_fn (
-#   let x = fn () ->
-#     bufplay (array_of_buf amen) 1 0.25 (trig 16) 
-#   ;
-# );
-#
-# x () |> play_node
-
+open DSP;
 let whisper = load_soundfile "whisper.wav";
 # let whisper = load_soundfile "fat_amen_mono_48000.wav";
 
 compile_audio_fn (
   let x = fn () ->
+
     trig 50
     |> grains
     100
@@ -171,6 +15,7 @@ compile_audio_fn (
       |> (+) (lfnoise 50 0 0.003)
     )
     0.07
+    |> delay 0.2 0.2 0.4
   ;
 );
 #

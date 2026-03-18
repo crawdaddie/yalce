@@ -283,8 +283,6 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       work_ctx = &inner_ctx;
       pushed_ctx = true;
     }
-    fprintf(stderr, "dsp_let enter: %.*s scope=%d in_expr=%d\n", len, chars,
-            ctx->stack_ptr, in_expr ? 1 : 0);
 
     if (expr->tag == AST_LAMBDA) {
 
@@ -308,7 +306,6 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       return NULL;
     }
 
-    fprintf(stderr, "dsp_let eval expr: %.*s\n", len, chars);
     LLVMValueRef val = dsp_build_expr(expr, dsp_ctx, work_ctx, module, builder);
 
     if (!val) {
@@ -322,7 +319,6 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     ht_set_hash(work_ctx->frame->table, chars, hash_string(chars, len), sym);
 
     if (in_expr) {
-      fprintf(stderr, "dsp_let eval in_expr: %.*s\n", len, chars);
       LLVMValueRef e_val =
           dsp_build_expr(in_expr, dsp_ctx, work_ctx, module, builder);
 
@@ -332,7 +328,6 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       return e_val;
     }
 
-    fprintf(stderr, "dsp_let exit(no-in): %.*s\n", len, chars);
     return val;
   }
   case AST_IDENTIFIER: {

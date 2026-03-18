@@ -239,15 +239,22 @@ Type *infer_inline_module(Ast *ast, TICtx *ctx) {
   int i = 0;
   for (AstList *current = stmt_list; current != NULL; current = current->next) {
     stmt = current->ast;
-    if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
-          (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
-      return type_error(stmt,
-                        "Please only have let statements and type declarations "
-                        "in a module\n");
-      return NULL;
-    }
 
     Type *t = infer(stmt, &module_ctx);
+    // if (stmt->tag == AST_APPLICATION &&
+    //     stmt->data.AST_APPLICATION.args->tag == AST_LET) {
+    //   stmt = stmt->data.AST_APPLICATION.args;
+    // }
+
+    if (stmt->tag == AST_APPLICATION &&
+        stmt->data.AST_APPLICATION.args->tag == AST_LET) {
+      stmt = stmt->data.AST_APPLICATION.args;
+    }
+    if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
+          (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
+      return type_error(stmt, "Please only have let statements and type"
+                              " declarations in a module\n");
+    }
     member_types[i] = t;
 
     if (stmt->tag == AST_TYPE_DECL) {

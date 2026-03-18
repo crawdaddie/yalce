@@ -28,6 +28,8 @@ NodeRef biquad_lp_node(NodeRef freq, NodeRef res, NodeRef input);
 
 NodeRef allpass_node(double delay_time, double max_delay_time, double g,
                      NodeRef input);
+NodeRef allpass1_node(NodeRef delay_time, double max_delay_time, double g,
+                      NodeRef input);
 
 NodeRef reverb_node(double room_size, double wet, double dry, double width,
                     NodeRef input);
