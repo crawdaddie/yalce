@@ -26,4 +26,5 @@ LLVMValueRef gte_val(LLVMValueRef val, LLVMValueRef from, Type *type,
 LLVMValueRef lte_val(LLVMValueRef val, LLVMValueRef from, Type *type,
                      JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
+extern void *runtime_load();
 #endif

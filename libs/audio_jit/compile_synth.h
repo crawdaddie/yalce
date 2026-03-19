@@ -20,6 +20,8 @@ typedef struct {
   LLVMValueRef perf_fn;
   LLVMValueRef create_call;
   LLVMBasicBlockRef frame_cond_bb;
+  int sample_rate;
+  double spf_scalar;
   int state_offset;
   LLVMBuilderRef ctor_builder;
   LLVMBuilderRef init_builder;

@@ -18,17 +18,14 @@ let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->
   )
 ;;
 
-let _foldi = fn f: (Int -> R -> T -> R) idx: (Int) res: (R) a: (Array of T) ->
+let foldi__ = fn idx: (Int) f: (Int -> R -> T -> R) res: (R) a: (Array of T) ->
   match array_size a with
   | 0 -> res
   | _ -> (
-    _foldi f (idx + 1) (f idx res (a[0])) (array_succ a)
+    foldi__ (idx + 1) f (f idx res (a[0])) (array_succ a)
   )
 ;;
-
-let foldi = fn f: (Int -> R -> T -> R) res: (R) a: (Array of T) ->
-  _foldi f 0 res a
-;;
+let foldi = fn f res a -> foldi__ 0 f res a;;
 
 
 # let map = fn f: (T -> R) a: (Array of T) ->
@@ -61,6 +58,8 @@ let of_list = fn len l ->
 let test = module () ->
   let test_sum_doubles = fold (+) 0. [|1., 2., 3.|] == 6.;
   let test_sum_ints = fold (+) 0 [|1, 2, 3|] == 6;
+
+
   let test_last = last [|1, 2, 3 |] == 3;
   let test_map = 
     let s = map ((+) 3) [| 1,2,3 |] in
@@ -73,4 +72,6 @@ let test = module () ->
   ;
 
   let test_of_list = (of_list 3 [1,2,3]) == [|1,2,3|];
+
+  # let test_sum_foldi = (foldi (fn i r x -> r + i) [|1, 2, 3|]) == 6;
 ;

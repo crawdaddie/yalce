@@ -1159,7 +1159,12 @@ LLVMValueRef DlOpenHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   ylc_jit_module = module;
   ylc_jit_builder = builder;
 
+  ylc_runtime_load_fn = NULL;
   void *handle = dlopen(full_path, RTLD_GLOBAL | RTLD_LAZY);
+  if (ylc_runtime_load_fn) {
+    ylc_runtime_load_fn();
+    ylc_runtime_load_fn = NULL;
+  }
 
   ylc_jit_ctx = NULL;
   ylc_jit_module = NULL;

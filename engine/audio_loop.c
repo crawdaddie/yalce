@@ -1,4 +1,5 @@
 #include "audio_loop.h"
+#include "../lang/backend_llvm/lib_registry.h"
 #include "../lang/ylc_datatypes.h"
 #include "audio_loop_utils.h"
 #include "audio_routing.h"
@@ -603,16 +604,17 @@ int init_audio() {
     return 0;
   }
 
-  maketable_sq();
-  maketable_sin();
-  maketable_saw();
-  maketable_saw();
-  maketable_grain_window();
+  // maketable_sq();
+  // maketable_sin();
+  // maketable_saw();
+  // maketable_saw();
+  // maketable_grain_window();
 
   if (config_size) {
     parse_input_config(config, config_size);
   }
   start_audio();
+  printf("inited audio\n");
 
   scheduler_event_loop();
   gc_loop(get_audio_ctx());
@@ -620,4 +622,8 @@ int init_audio() {
   // midi_setup();
 
   return 0;
+}
+
+__attribute__((constructor)) static void ylc_engine_init(void) {
+  ylc_runtime_load_fn = (YlcRuntimeLoadFn)init_audio;
 }

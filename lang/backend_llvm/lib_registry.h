@@ -35,5 +35,8 @@
 extern JITLangCtx *ylc_jit_ctx;
 extern LLVMModuleRef ylc_jit_module;
 extern LLVMBuilderRef ylc_jit_builder;
+typedef void (*YlcRuntimeLoadFn)(void);
+
+extern YlcRuntimeLoadFn ylc_runtime_load_fn;
 
 #endif

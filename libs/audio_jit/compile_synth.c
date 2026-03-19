@@ -236,17 +236,31 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   LLVMBuilderRef init_b = LLVMCreateBuilderInContext(llvm_ctx);
   LLVMPositionBuilderAtEnd(init_b, init_bb);
 
+  int compile_sample_rate = ctx_sample_rate();
+  if (compile_sample_rate <= 0) {
+    compile_sample_rate = 48000;
+  }
+
+  double compile_spf = ctx_spf();
+  if (compile_spf <= 0.0) {
+    compile_spf = 1.0 / (double)compile_sample_rate;
+  }
+
   DspBuildCtx dsp_ctx = {
       .ctor_builder = ctor_b,
       .init_builder = init_b,
       .perform_builder = LLVMCreateBuilderInContext(llvm_ctx),
       .perf_fn = perf_fn,
+      .sample_rate = compile_sample_rate,
+      .spf_scalar = compile_spf,
   };
   DspBuildCtx frame_ctx = {
       .ctor_builder = ctor_b,
       .init_builder = init_b,
       .perform_builder = LLVMCreateBuilderInContext(llvm_ctx),
       .perf_fn = frame_fn,
+      .sample_rate = compile_sample_rate,
+      .spf_scalar = compile_spf,
   };
 
   LLVMTypeRef create_param_tys[] = {GENERIC_PTR, i32_ty, i32_ty};

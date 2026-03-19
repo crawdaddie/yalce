@@ -570,8 +570,10 @@ LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
         f->data.T_FN.from, ctx, module, builder);
   }
 
+  int const_args_len = ast->data.AST_APPLICATION.len;
   for (i = 0; i < fn_len; i++) {
-    inner_args[inner_args_len - 1 + i] = LLVMGetParam(func, i);
+    // Runtime parameters should follow the already-materialized const args.
+    inner_args[const_args_len + i] = LLVMGetParam(func, i);
   }
 
   LLVMValueRef inner_fn =

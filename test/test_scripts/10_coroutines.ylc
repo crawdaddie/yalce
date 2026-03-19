@@ -37,7 +37,6 @@ let test_embed_seq = fn () ->
   && co () == Some 400
   && co () == Some 3
 ;;
-#
 let test_rec = fn () ->
   let co_void_rec = fn () ->
     yield 1;
@@ -68,6 +67,9 @@ let test_fib_cor = fn () ->
   && co () == Some 3
   && co () == Some 5
   && co () == Some 8
+  && co () == Some 13
+  && co () == Some 21
+  && co () == Some 34
 ;;
 
 let test_geo = fn () ->
@@ -83,7 +85,6 @@ let test_geo = fn () ->
   && co () == Some 8.
   && co () == Some 16.
 ;;
-
 let test_iter_all_arg = fn () ->
 
   let co_void_arg = fn a ->
@@ -116,28 +117,6 @@ let test_iter_boundary_xers = fn () ->
   && (co () == Some 3)
   && (co () == None)
 ;;
-
-
-let test_fib_ser = fn () ->
-  let fib = fn a b ->
-    yield a;
-    yield fib b (a + b)
-  ;;
-
-  let c = fib 0 1 in
-     c () == Some 0
-  && c () == Some 1
-  && c () == Some 1
-  && c () == Some 2
-  && c () == Some 3 
-  && c () == Some 5
-  && c () == Some 8
-  && c () == Some 13
-  && c () == Some 21
-  && c () == Some 34
-
-;;
-#
 
 let test_nested_coroutines = fn () ->
   let cor1 = fn () ->
@@ -229,42 +208,11 @@ let test_cor_loop_and_map = fn () ->
   && (let xx = x () in let yy = y () in xx == yy && xx == Some 6)
 
 ;;
-#
 let test_cor_stop = fn () ->
   let c = fn () -> yield 1; yield 2; yield 3;;
   let x = c () in
   (x () == Some 1) && (cor_stop x; x () == None)
 ;;
-
-# let test_embed_list_of_cors = fn () ->
-#   let get_head = fn l -> 
-#     match l with
-#     | [] -> None
-#     | x::rest -> Some (x, rest)
-#   ;;
-#
-#   let embed = fn l ->
-#     let h, r = cor_try_opt (get_head l);
-#     yield h;
-#     yield embed r
-#   ;;
-#   let ex = fn () ->
-#     yield 2000;
-#     yield 2001
-#   ;;
-#   let x = embed [
-#     iter_of_list [1, 2],
-#     ex (),
-#     iter_of_list [3, 4],
-#   ] in
-#      x () == Some 1
-#   && x () == Some 2
-#   && x () == Some 2000
-#   && x () == Some 2001
-#   && x () == Some 3
-#   && x () == Some 4
-#   && x () == None
-# ;;
 
 let test_loop_iter_list = fn () ->
  let x = [ 1,2,3 ] |> iter_of_list |> cor_loop;
@@ -311,19 +259,3 @@ let test_zip = fn () ->
     | _ -> false
 
 ;;
-#
-# #
-# let test_chaining = fn () ->
-#   let (+>) = fn a b -> yield a; yield b;;
-#   let z = ([ 1,2,3 ] |> iter_of_list)
-#     +> ([| 6,5,4 |] |> iter_of_array |> cor_loop);
-#      z () == Some 1
-#   && z () == Some 2
-#   && z () == Some 3
-#   && z () == Some 6
-#   && z () == Some 5 
-#   && z () == Some 4 
-#   && z () == Some 6
-#   && z () == Some 5
-# ;;
-#

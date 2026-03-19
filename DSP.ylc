@@ -10,7 +10,8 @@ let white = extern fn () -> Double;
 let phasor = extern fn Double -> Double;
 let phasor_sinc = extern fn Double -> Double -> Double;
 let trig = extern fn Double -> Double;
-let tabread1 = extern fn Array of Double -> Double -> Double;
+let tabread = extern fn Array of Double -> Double -> Double;
+let tabread_samp = extern fn Array of Double -> Double -> Double;
 let decay = extern fn Double -> Double -> Double;
 let scale = extern fn Double -> Double -> Double -> Double;
 let scale_bp = extern fn Double -> Double -> Double -> Double;
@@ -26,6 +27,8 @@ let delay = extern fn Double -> Double -> Double -> Double -> Double;
 let comb = extern fn Double -> Double -> Double -> Double -> Double;
 let allpass = extern fn Double -> Double -> Double -> Double -> Double;
 let clampup = extern fn Double -> Double -> Double;
+let lag = extern fn Double -> Double -> Double;
+let arr_choose = extern fn Array of Double -> Double -> Double;
 
 
 #                       buf                rate      start_pos trig
@@ -277,5 +280,4 @@ compile_audio_fn (
     y4
   ;
 );
-
 ;

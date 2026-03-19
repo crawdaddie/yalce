@@ -4,14 +4,15 @@
 #include "audio_routing.h"
 #include "ext_lib.h"
 #include "group.h"
+#include <stdio.h>
 #include <stdlib.h>
 
 Ctx ctx = {};
 
 void init_ctx() {
   ctx.output_buf_capacity = BUF_SIZE;
-  ctx.output_buf = calloc((size_t)ctx.output_buf_capacity * LAYOUT,
-                          sizeof(double));
+  ctx.output_buf =
+      calloc((size_t)ctx.output_buf_capacity * LAYOUT, sizeof(double));
 
   ctx.num_input_signals = num_signals;
   ctx.input_signals = malloc(sizeof(Signal) * num_signals);
@@ -93,6 +94,7 @@ Node *add_to_dac(Node *node) {
 Ctx *get_audio_ctx() { return &ctx; }
 
 int ctx_sample_rate() { return ctx.sample_rate; }
+
 double ctx_spf() { return ctx.spf; }
 
 double *ctx_main_out() { return ctx.output_buf; }
