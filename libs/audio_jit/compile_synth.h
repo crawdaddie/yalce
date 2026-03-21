@@ -55,4 +55,12 @@ int synth_registry_len();
 
 LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder);
+
+SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
+                                           JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+
+                                           LLVMBuilderRef builder);
+
+void print_synth_record(SynthRecord rec);
 #endif

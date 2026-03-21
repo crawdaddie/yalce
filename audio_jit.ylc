@@ -7,19 +7,22 @@ open DSP;
 import std/Math;
 import std/Arrays;
 
-let z = [|1.0, 1.122462048309373, 1.189207115002721, 1.4983070768766815, 1.5874010519681994|];
+# let z = [|0.,2.,3.,7.,8.,12.,14.,15.,19.,20.|] |> Arrays.map (fn x -> Math.pow 2. (x / 12.));
+let z = [|0,2,3,7,8,12,14,15,19,20|] |> Arrays.map (fn x -> Math.pow 2. (x / 12.));
+# Arrays.print_arr z;
+
+let semi_to_ratio = fn x -> Math.pow 2. (x / 12.);;
 
 compile_audio_fn (
   let x = fn () ->
-    # 0,2,3,7,8
-    # z |> Arrays.foldi (fn i x r -> r + (o x (1 + i / 10.))) 0. 
     let o = fn f tf ->
       trig tf
       |> decay 2. 
       |> (*) (sin_osc f)
     ;;
+    # 0,2,3,7,8
+    [|0,2,3,7,8,12,14,15,19,20|] |> Arrays.foldi (fn i x r -> r + o (300 * semi_to_ratio x) (1 + i / 10.)) 0. 
 
-    o 300. 4.
 
   ;
 );

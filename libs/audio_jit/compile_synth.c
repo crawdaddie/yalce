@@ -153,13 +153,11 @@ static LLVMBasicBlockRef dsp_build_perform_loop(LLVMValueRef perform_fn,
   dsp_ctx->frame_idx = frame_idx;
   return exit_bb;
 }
-LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
-                                   LLVMModuleRef module,
-                                   LLVMBuilderRef builder) {
-  Ast *source = ast->data.AST_APPLICATION.args;
-  Ast *lambda = source->data.AST_LET.expr;
-  Ast *binding = source->data.AST_LET.binding;
-  const char *name = binding->data.AST_IDENTIFIER.value;
+
+SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
+                                           JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
   int num_inputs = 0;
   bool is_void_fn = is_void_func(lambda->type);
 
@@ -173,8 +171,6 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
     }
   }
 
-  // print_ast(lambda);
-  // print_type(lambda->type);
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
   // Build Synth Perform func scaffold
   LLVMTypeRef perf_ty =
@@ -468,36 +464,51 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   }
   free(frame_param_tys);
 
-  JITSymbol *sym =
-      new_symbol((symbol_type)STYPE_AUDIO_JIT_SYM, NULL, NULL, NULL);
-
-  sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler = call_dsp_symbol;
-  int synth_id =
-      extend_synth_registry((SynthRecord){.name = name,
-                                          .ctor = cons_fn,
-                                          .init_fn = init_fn,
-                                          .frame_fn = frame_fn,
-                                          .perform_fn = perf_fn,
-                                          .state_bytes = state_bytes});
-  sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = synth_id;
-
-  ht_set_hash(ctx->frame->table, name, hash_string(name, strlen(name)), sym);
-
   LLVMDisposeBuilder(dsp_ctx.ctor_builder);
   LLVMDisposeBuilder(dsp_ctx.init_builder);
   LLVMDisposeBuilder(dsp_ctx.perform_builder);
   LLVMDisposeBuilder(frame_ctx.perform_builder);
   destroy_ctx(&fn_ctx);
 
-  // printf("compiled for %s: \n", name);
-  // LLVMDumpValue(perf_fn);
-  // printf("\n");
-  // LLVMDumpValue(frame_fn);
-  // printf("\n");
-  //
-  // LLVMDumpValue(cons_fn);
-  // printf("\n");
-  return cons_fn;
+  return (SynthRecord){.name = name,
+                       .ctor = cons_fn,
+                       .init_fn = init_fn,
+                       .frame_fn = frame_fn,
+                       .perform_fn = perf_fn,
+                       .state_bytes = state_bytes};
+}
+void print_synth_record(SynthRecord rec) {
+
+  printf("synth record %s bytes: %d\n", rec.name, rec.state_bytes);
+  printf("init fn: \n");
+  LLVMDumpValue(rec.init_fn);
+  printf("\n");
+
+  printf("frame_fn: \n");
+  LLVMDumpValue(rec.frame_fn);
+  printf("\n");
+}
+
+LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+  Ast *source = ast->data.AST_APPLICATION.args;
+  Ast *lambda = source->data.AST_LET.expr;
+  Ast *binding = source->data.AST_LET.binding;
+  const char *name = binding->data.AST_IDENTIFIER.value;
+
+  SynthRecord rec =
+      compile_lambda_to_synth_record(lambda, name, ctx, module, builder);
+
+  int synth_id = extend_synth_registry(rec);
+
+  JITSymbol *sym =
+      new_symbol((symbol_type)STYPE_AUDIO_JIT_SYM, NULL, NULL, NULL);
+  sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler = call_dsp_symbol;
+  sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = synth_id;
+  ht_set_hash(ctx->frame->table, name, hash_string(name, strlen(name)), sym);
+
+  return rec.ctor;
 }
 
 SynthRecord synth_registry_get(int synth_id) {

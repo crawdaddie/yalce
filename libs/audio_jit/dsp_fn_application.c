@@ -1700,14 +1700,42 @@ Ast *get_collection_proc_func(Ast *fn_ast) {
   return NULL;
 }
 
+LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
+                            JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder) {
+
+  Ast *anon_func = ast->data.AST_APPLICATION.args;
+
+  Ast compile_synth_application = (Ast){
+      AST_APPLICATION,
+      .data = {.AST_APPLICATION = {
+                   .len = 1, .args = ast, .is_curried_with_constants = false}}};
+
+  int _synth_id = synth_registry_len();
+
+  SynthRecord s =
+      compile_lambda_to_synth_record(anon_func, "anon", ctx, module, builder);
+  Ast *array_ast = ast->data.AST_APPLICATION.args + 2;
+  if (is_constant_expr(array_ast, &(TICtx){.env = ctx->env})) {
+    int loop_length = array_ast->data.AST_LIST.len;
+    // printf("loop length %d\n", loop_length);
+  }
+}
+
 LLVMValueRef call_dsp_list_proc(Ast *fn_ast, Ast *ast, DspBuildCtx *dsp_ctx,
                                 JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
-  print_ast(fn_ast);
 
-  printf("list proc\n");
-  print_ast(ast->data.AST_APPLICATION.args);
+  if (is_array_type(ast->data.AST_APPLICATION.args[2].type)) {
+    if (is_ident(fn_ast, "foldi")) {
+      return dsp_array_fold(true, ast, dsp_ctx, ctx, module, builder);
+    }
 
+    if (is_ident(fn_ast, "fold")) {
+      return dsp_array_fold(false, ast, dsp_ctx, ctx, module, builder);
+    }
+  } else if (is_list_type(ast->data.AST_APPLICATION.args[2].type)) {
+  }
   return NULL;
 }
 
@@ -2474,13 +2502,15 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                                 module, builder);
     }
 
-    if (callable_sym->type == STYPE_GENERIC_FUNCTION &&
-        !is_closure(callable_sym->symbol_type)) {
-      callable_type = resolve_sym_type(expected_fn_type,
-                                       callable_sym->symbol_type, ctx->env);
-      callable = get_specific_callable(callable_sym, callable_type, ctx, module,
-                                       builder);
-    }
+    // if (callable_sym->type == STYPE_GENERIC_FUNCTION &&
+    //     !is_closure(callable_sym->symbol_type)) {
+    //   callable_type = resolve_sym_type(expected_fn_type,
+    //                                    callable_sym->symbol_type,
+    //                                    ctx->env);
+    //   callable = get_specific_callable(callable_sym, callable_type, ctx,
+    //   module,
+    //                                    builder);
+    // }
 
     if (!callable) {
       fprintf(stderr, "dsp fn application failed, callable not found\n");
