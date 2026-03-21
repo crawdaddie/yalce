@@ -1,33 +1,25 @@
 open DSP;
+
 # let whisper = load_soundfile "whisper.wav";
 # let whisper = load_soundfile "fat_amen_mono_48000.wav";
 
 
-
+import std/Math;
+import std/Arrays;
 
 let z = [|1.0, 1.122462048309373, 1.189207115002721, 1.4983070768766815, 1.5874010519681994|];
 
 compile_audio_fn (
   let x = fn () ->
     # 0,2,3,7,8
+    # z |> Arrays.foldi (fn i x r -> r + (o x (1 + i / 10.))) 0. 
     let o = fn f tf ->
-      trig (0.5 * tf)
+      trig tf
       |> decay 2. 
-      |> (*) (sin_osc (f * 330))
+      |> (*) (sin_osc f)
     ;;
 
-    o (z[0]) 1. 
-    |> (+) (o (z[1]) 1.1)
-    |> (+) (o (z[2]) 1.2)
-    |> (+) (o (z[3]) 1.3)
-    |> (+) (o (z[4]) 1.4)
-    |> (+) (o (2 * z[0]) 1.5)
-    |> (+) (o (2. * z[1]) 1.6)
-    |> (+) (o (2. * z[2]) 1.7)
-    |> (+) (o (2. * z[3]) 1.8)
-    |> (+) (o (2. * z[4]) 1.9)
-    # |> (+) (o 4. 2.)
-    |> (*) 0.2
+    o 300. 4.
 
   ;
 );

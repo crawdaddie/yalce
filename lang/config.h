@@ -10,6 +10,7 @@ typedef struct RTConfig {
   bool debug_ir;
   bool debug_ir_pre;
   bool debug_symbols;
+  bool verify_ir;
   const char *base_libs_dir;
   const char *import_current_dir;
   const char *opt_level;

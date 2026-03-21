@@ -18,6 +18,7 @@
 #include "types/builtins.h"
 #include "types/inference.h"
 #include "types/type_ser.h"
+#include <llvm-c/Analysis.h>
 #include <llvm-c/Core.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/IRReader.h>
@@ -175,6 +176,16 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
     LLVMDumpModule(module);
   }
 
+  if (config.verify_ir) {
+    char *verify_err = NULL;
+    if (LLVMVerifyModule(module, LLVMPrintMessageAction, &verify_err)) {
+      fprintf(stderr, "IR verification failed: %s\n", verify_err);
+      LLVMDisposeMessage(verify_err);
+      return NULL;
+    }
+    LLVMDisposeMessage(verify_err);
+  }
+
   module_passes(module, target_machine);
 
   LLVMExecutionEngineRef engine;
@@ -267,7 +278,7 @@ int jit(int argc, char **argv) {
   LLVMInitializeNativeAsmParser();
   LLVMLinkInMCJIT();
 
-  LLVMContextRef context = LLVMContextCreate();
+  LLVMContextRef context = LLVMGetGlobalContext();
   LLVMModuleRef module =
       LLVMModuleCreateWithNameInContext("ylc.top-level", context);
 
@@ -358,6 +369,9 @@ int jit(int argc, char **argv) {
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "-O3") == 0) {
       config.opt_level = "default<O3>";
+      arg_counter++;
+    } else if (strcmp(argv[arg_counter], "--verify-ir") == 0) {
+      config.verify_ir = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "-g") == 0) {
       config.debug_symbols = true;
@@ -492,6 +506,15 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
       continue;
     } else {
       // Run optimization passes before execution
+      if (config.verify_ir) {
+        char *verify_err = NULL;
+        if (LLVMVerifyModule(module, LLVMPrintMessageAction, &verify_err)) {
+          fprintf(stderr, "IR verification failed: %s\n", verify_err);
+          LLVMDisposeMessage(verify_err);
+          continue;
+        }
+        LLVMDisposeMessage(verify_err);
+      }
       module_passes(module, target_machine);
 
       LLVMExecutionEngineRef engine;

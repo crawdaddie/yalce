@@ -11,6 +11,8 @@
 #include "../../lang/ylc_datatypes.h"
 #include "./audio_jit.h"
 #include "./compile_synth.h"
+#include "application.h"
+#include "function.h"
 #include <llvm-c/Types.h>
 
 #include <math.h>
@@ -93,6 +95,13 @@ const double ylc_sq_table[SQ_TABSIZE] = {
 
 const double ylc_saw_table[SAW_TABSIZE] = {
 #include "../../engine/assets/saw_table.csv"
+};
+
+#ifndef GRAIN_WINDOW_TABSIZE
+#define GRAIN_WINDOW_TABSIZE (1 << 9)
+#endif
+static const double ylc_grain_win[GRAIN_WINDOW_TABSIZE] = {
+#include "../../engine/assets/grain_win.csv"
 };
 
 static LLVMValueRef get_table_global_ptr(const char *sym_name,
@@ -791,6 +800,158 @@ LLVMValueRef build_exp_decay(LLVMValueRef T, LLVMValueRef trig,
   return cur_val;
 }
 
+void dsp_write_output(void *node_raw, int64_t frame, double val) {
+  ((Node *)node_raw)->output.buf[frame] = val;
+}
+
+double ylc_read_inlet_node(void *node_raw, int64_t frame) {
+  return ((Node *)node_raw)->output.buf[frame];
+}
+
+void ylc_kill_node(void *node_raw) { ((Node *)node_raw)->trig_end = true; }
+
+double adsr_samp(double trig, double prev_trig, double attack, double decay,
+                 double sustain, double release, double spf, double *value_ptr,
+                 double *phase_ptr, double *prev_trig_ptr) {
+  double value = *value_ptr;
+  double phase = *phase_ptr;
+  const double threshold = 0.5;
+
+  int rising = (prev_trig < threshold && trig >= threshold);
+  int falling = (prev_trig >= threshold && trig < threshold);
+
+  if (rising) {
+    phase = 1.0;
+  } else if (falling && phase == 3.0) {
+    phase = 4.0;
+  }
+
+  if (phase == 1.0) {
+    double rate = (attack > 0.0) ? (1.0 / attack) : 1e6;
+    value += rate * spf;
+    if (value >= 1.0) {
+      value = 1.0;
+      phase = 2.0;
+    }
+  } else if (phase == 2.0) {
+    double rate = (decay > 0.0) ? ((1.0 - sustain) / decay) : 1e6;
+    value -= rate * spf;
+    if (value <= sustain) {
+      value = sustain;
+      phase = (trig >= threshold) ? 3.0 : 4.0;
+    }
+  } else if (phase == 3.0) {
+    value = sustain;
+  } else if (phase == 4.0) {
+    double rate = (release > 0.0) ? (1.0 / release) : 1e6;
+    value -= rate * spf;
+    if (value <= 0.0) {
+      value = 0.0;
+      phase = 0.0;
+    }
+  } else {
+    value = 0.0;
+  }
+
+  *value_ptr = value;
+  *phase_ptr = phase;
+  *prev_trig_ptr = trig;
+  return value;
+}
+
+double rect_samp(double duration, double trig, double prev_trig, double spf,
+                 double *remaining_ptr, double *prev_trig_ptr) {
+  double remaining = *remaining_ptr;
+  const double threshold = 0.5;
+
+  int rising = (prev_trig < threshold && trig >= threshold);
+  if (rising) {
+    remaining = duration > 0.0 ? duration : 0.0;
+  }
+
+  double out = remaining > 0.0 ? 1.0 : 0.0;
+  if (remaining > 0.0) {
+    remaining -= spf;
+    if (remaining < 0.0) {
+      remaining = 0.0;
+    }
+  }
+
+  *remaining_ptr = remaining;
+  *prev_trig_ptr = trig;
+  return out;
+}
+
+double grain_samp(double *buf, int64_t buf_size, double trig, double pos,
+                  double rate, double width, double spf, int32_t max_grains,
+                  double *rates, double *phases, double *widths,
+                  double *remaining_secs, double *starts, int32_t *active,
+                  int32_t *active_grains) {
+  if (!buf || buf_size <= 1 || max_grains <= 0 || !rates || !phases ||
+      !widths || !remaining_secs || !starts || !active || !active_grains) {
+    return 0.0;
+  }
+
+  double sample = 0.0;
+
+  if (trig >= 0.5 && *active_grains < max_grains) {
+    for (int32_t i = 0; i < max_grains; i++) {
+      if (active[i] == 0) {
+        rates[i] = rate;
+        phases[i] = 0.0;
+        starts[i] = pos * (double)buf_size;
+        widths[i] = width;
+        remaining_secs[i] = width;
+        active[i] = 1;
+        (*active_grains)++;
+        break;
+      }
+    }
+  }
+
+  for (int32_t i = 0; i < max_grains; i++) {
+    if (!active[i]) {
+      continue;
+    }
+
+    double r = rates[i];
+    double p = phases[i];
+    double s = starts[i];
+    double w = widths[i];
+    double rem = remaining_secs[i];
+
+    double d_index = s + (p * (double)buf_size);
+    int64_t index = (int64_t)d_index;
+    double frac = d_index - (double)index;
+
+    int64_t i0 = index % buf_size;
+    if (i0 < 0) {
+      i0 += buf_size;
+    }
+    int64_t i1 = (i0 + 1) % buf_size;
+    double a = buf[i0];
+    double b_val = buf[i1];
+
+    double grain_elapsed = 1.0 - (rem / w);
+    int mask = GRAIN_WINDOW_TABSIZE - 1;
+    double env_pos = grain_elapsed * (double)mask;
+    int env_idx = (int)env_pos;
+    double env_frac = env_pos - (double)env_idx;
+    double env_val = ylc_grain_win[env_idx & mask] * (1.0 - env_frac) +
+                     ylc_grain_win[(env_idx + 1) & mask] * env_frac;
+
+    sample += env_val * ((1.0 - frac) * a + (frac * b_val));
+    phases[i] += (r / (double)buf_size);
+
+    remaining_secs[i] -= spf;
+    if (remaining_secs[i] <= 0.0) {
+      active[i] = 0;
+      (*active_grains)--;
+    }
+  }
+
+  return sample;
+}
 LLVMValueRef build_adsr(LLVMValueRef attack, LLVMValueRef decay,
                         LLVMValueRef sustain, LLVMValueRef release,
                         LLVMValueRef trig, DspBuildCtx *dsp_ctx,
@@ -883,6 +1044,7 @@ LLVMValueRef build_rect(LLVMValueRef duration, LLVMValueRef trig,
                                          dsp_ctx->spf, rem_ptr, prev_ptr},
                         6, "rect.sample");
 }
+
 LLVMValueRef call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
                                                DspBuildCtx *dsp_ctx,
                                                JITLangCtx *ctx,
@@ -1520,6 +1682,33 @@ LLVMValueRef build_array_choose(LLVMValueRef arr, LLVMValueRef trig,
                 LLVMBuildStore(builder, pick, val_ptr););
 
   return LLVMBuildLoad2(builder, f64_ty, val_ptr, "array_choose.out");
+}
+
+Ast *get_collection_proc_func(Ast *fn_ast) {
+  if (fn_ast->tag == AST_RECORD_ACCESS) {
+    return get_collection_proc_func(fn_ast->data.AST_RECORD_ACCESS.member);
+  }
+
+  if (fn_ast->tag == AST_IDENTIFIER) {
+    if (is_ident(fn_ast, "fold") || is_ident(fn_ast, "foldi") ||
+        is_ident(fn_ast, "map") || is_ident(fn_ast, "mapi")) {
+      return fn_ast;
+    }
+    return NULL;
+  }
+
+  return NULL;
+}
+
+LLVMValueRef call_dsp_list_proc(Ast *fn_ast, Ast *ast, DspBuildCtx *dsp_ctx,
+                                JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
+  print_ast(fn_ast);
+
+  printf("list proc\n");
+  print_ast(ast->data.AST_APPLICATION.args);
+
+  return NULL;
 }
 
 LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
@@ -2204,7 +2393,9 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
 
   if (callable_sym && callable_sym->type == STYPE_AUDIO_JIT_INLINE_LAMBDA) {
+
     Ast *lambda_ast = callable_sym->symbol_data._USER_DEFINED_SYMBOL;
+
     STACK_ALLOC_CTX_PUSH(lctx, ctx);
     Type *ltype = callable_sym->symbol_type;
 
@@ -2220,6 +2411,11 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         LLVMValueRef arg_val =
             dsp_build_expr(ast->data.AST_APPLICATION.args + idx, dsp_ctx, &lctx,
                            module, builder);
+        if (types_equal(param_type, &t_num)) {
+          arg_val = ensure_float(ast->data.AST_APPLICATION.args[idx].type,
+                                 arg_val, builder);
+        }
+
         JITSymbol *sym =
             new_symbol(STYPE_LOCAL_VAR, param_type, arg_val,
                        type_to_llvm_type(param_type, &lctx, module));
@@ -2241,17 +2437,57 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return res;
   }
 
+  // if (is_ident(f, "dsp_list_foldi")) {
+  //   return NULL;
+  // }
+  // if (is_ident(f, "dsp_list_fold")) {
+  //   return NULL;
+  // }
+  // if (is_ident(f, "dsp_list_map")) {
+  //   return NULL;
+  // }
+  // if (is_ident(f, "dsp_array_fold")) {
+  //   return NULL;
+  // }
+  // if (is_ident(f, "dsp_array_foldi")) {
+  //   return NULL;
+  // }
+  // if (is_ident(f, "dsp_array_foldi")) {
+  //   return NULL;
+  // }
+
   if (callable_sym) {
     LLVMValueRef callable = callable_sym->val;
 
     if (callable_sym->type == STYPE_LAZY_EXTERN_FUNCTION) {
-
       callable = instantiate_extern_fn_sym(callable_sym, ctx, module, builder);
     }
-    // printf("application??a\n");
-    // print_ast(ast);
-    // print_type(ast->data.AST_APPLICATION.function->type);
-    // LLVMDumpValue(callable);
+
+    Type *expected_fn_type = ast->data.AST_APPLICATION.function->type;
+    Type *callable_type = expected_fn_type;
+
+    Ast *fn_ast = ast->data.AST_APPLICATION.function;
+    Ast *collection_proc_fn_ast;
+
+    if (collection_proc_fn_ast = get_collection_proc_func(fn_ast)) {
+      return call_dsp_list_proc(collection_proc_fn_ast, ast, dsp_ctx, ctx,
+                                module, builder);
+    }
+
+    if (callable_sym->type == STYPE_GENERIC_FUNCTION &&
+        !is_closure(callable_sym->symbol_type)) {
+      callable_type = resolve_sym_type(expected_fn_type,
+                                       callable_sym->symbol_type, ctx->env);
+      callable = get_specific_callable(callable_sym, callable_type, ctx, module,
+                                       builder);
+    }
+
+    if (!callable) {
+      fprintf(stderr, "dsp fn application failed, callable not found\n");
+      print_ast_err(ast);
+      return NULL;
+    }
+
     int args_len = ast->data.AST_APPLICATION.len;
     LLVMValueRef args[args_len];
 
@@ -2260,6 +2496,13 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     for (int i = 0; i < args_len; i++) {
       args[i] = dsp_build_expr(ast->data.AST_APPLICATION.args + i, dsp_ctx, ctx,
                                module, builder);
+      if (args[i] == NULL) {
+        fprintf(stderr, "Application Error: null operand to function %d\n",
+                fn_ast->tag);
+        print_ast_err(ast->data.AST_APPLICATION.args + i);
+        print_ast(fn_ast);
+        return NULL;
+      }
       Type *t = f->data.T_FN.from;
 
       if (types_equal(t, &t_num)) {
@@ -2268,6 +2511,7 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       }
       f = f->data.T_FN.to;
     }
+
     return LLVMBuildCall2(builder, LLVMGlobalGetValueType(callable), callable,
                           args, args_len, "call.ylc-function");
   }
