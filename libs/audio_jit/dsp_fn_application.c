@@ -1088,10 +1088,11 @@ LLVMValueRef call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
   LLVMGetParamTypes(frame_fn_ty, formal_tys);
 
   frame_args[0] = state_ptr;
+  frame_args[1] = dsp_ctx->node_ptr;
 
   int arg_count = ast->data.AST_APPLICATION.len;
-  for (unsigned i = 1; i < formal_count; i++) {
-    int arg_idx = (int)i - 1;
+  for (unsigned i = 2; i < formal_count; i++) {
+    int arg_idx = (int)i - 2;
     if (arg_idx < arg_count) {
       Ast *arg_ast = ast->data.AST_APPLICATION.args + arg_idx;
       LLVMValueRef arg_val =
@@ -1705,21 +1706,186 @@ LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
                             LLVMBuilderRef builder) {
 
   Ast *anon_func = ast->data.AST_APPLICATION.args;
+  Ast *init_ast = ast->data.AST_APPLICATION.args + 1;
+  Ast *array_ast = ast->data.AST_APPLICATION.args + 2;
 
-  Ast compile_synth_application = (Ast){
-      AST_APPLICATION,
-      .data = {.AST_APPLICATION = {
-                   .len = 1, .args = ast, .is_curried_with_constants = false}}};
+  // Ast compile_synth_application = (Ast){
+  //     AST_APPLICATION,
+  //     .data = {.AST_APPLICATION = {
+  //                  .len = 1, .args = ast, .is_curried_with_constants =
+  //                  false}}};
 
-  int _synth_id = synth_registry_len();
+  // int _synth_id = synth_registry_len();
 
   SynthRecord s =
       compile_lambda_to_synth_record(anon_func, "anon", ctx, module, builder);
-  Ast *array_ast = ast->data.AST_APPLICATION.args + 2;
+
+  Type *arr_type = array_ast->type;
+  Type *_el_type = arr_type->data.T_CONS.args[0];
+  LLVMTypeRef el_type = type_to_llvm_type(_el_type, ctx, module);
+  LLVMTypeRef idx_type = LLVMInt32Type();
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef i64_ty = LLVMInt64Type();
+  LLVMTypeRef fold_type = type_to_llvm_type(init_ast->type, ctx, module);
+
   if (is_constant_expr(array_ast, &(TICtx){.env = ctx->env})) {
     int loop_length = array_ast->data.AST_LIST.len;
-    // printf("loop length %d\n", loop_length);
+    int iter_state_stride = (s.state_bytes + 7) & ~7;
+    int iter_state_off = (dsp_ctx->state_offset + 7) & ~7;
+    dsp_ctx->state_offset = iter_state_off + (loop_length * iter_state_stride);
+    LLVMValueRef array_value =
+        dsp_build_expr(array_ast, dsp_ctx, ctx, module, builder);
+
+    LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
+    LLVMValueRef fn__ = LLVMGetBasicBlockParent(entry_block);
+
+    LLVMBasicBlockRef cond_block = LLVMAppendBasicBlock(fn__, "loop.cond");
+    LLVMBasicBlockRef body_block = LLVMAppendBasicBlock(fn__, "loop.body");
+    LLVMBasicBlockRef inc_block = LLVMAppendBasicBlock(fn__, "loop.inc");
+    LLVMBasicBlockRef after_block = LLVMAppendBasicBlock(fn__, "loop.after");
+
+    LLVMBuilderRef alloca_builder = LLVMCreateBuilder();
+    LLVMValueRef first_inst = LLVMGetFirstInstruction(entry_block);
+    if (first_inst) {
+      LLVMPositionBuilderBefore(alloca_builder, first_inst);
+    } else {
+      LLVMPositionBuilderAtEnd(alloca_builder, entry_block);
+    }
+    LLVMValueRef idx_alloca =
+        LLVMBuildAlloca(alloca_builder, idx_type, "fold.idx");
+    LLVMValueRef acc_alloca =
+        LLVMBuildAlloca(alloca_builder, fold_type, "fold.acc");
+    LLVMValueRef iter_state_ptr_alloca =
+        LLVMBuildAlloca(alloca_builder, GENERIC_PTR, "fold.iter_state_ptr");
+    LLVMDisposeBuilder(alloca_builder);
+
+    if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr && s.init_fn) {
+      LLVMTypeRef init_fn_ty = LLVMGlobalGetValueType(s.init_fn);
+      for (int i = 0; i < loop_length; i++) {
+        LLVMValueRef off_i64 = LLVMConstInt(
+            i64_ty, (uint64_t)(iter_state_off + (i * iter_state_stride)), 0);
+        LLVMValueRef iter_init_state_ptr =
+            LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, dsp_ctx->init_state_ptr,
+                          &off_i64, 1, "fold.iter_init_state");
+        LLVMBuildCall2(dsp_ctx->init_builder, init_fn_ty, s.init_fn,
+                       (LLVMValueRef[]){iter_init_state_ptr}, 1,
+                       "fold.iter_init_call");
+      }
+    }
+
+    LLVMBuildStore(builder, LLVMConstInt(idx_type, 0, 0), idx_alloca);
+
+    LLVMValueRef init_val =
+        dsp_build_expr(init_ast, dsp_ctx, ctx, module, builder);
+
+    if (LLVMGetTypeKind(fold_type) == LLVMDoubleTypeKind) {
+      init_val = ensure_float(init_ast->type, init_val, builder);
+    }
+    LLVMBuildStore(builder, init_val, acc_alloca);
+
+    LLVMBuildBr(builder, cond_block);
+
+    LLVMPositionBuilderAtEnd(builder, cond_block);
+    LLVMValueRef idx_val =
+        LLVMBuildLoad2(builder, idx_type, idx_alloca, "fold.idx.val");
+    LLVMValueRef cond = LLVMBuildICmp(
+        builder, LLVMIntSLT, idx_val,
+        LLVMConstInt(idx_type, (uint64_t)loop_length, 0), "fold.cond");
+    LLVMBuildCondBr(builder, cond, body_block, after_block);
+
+    LLVMPositionBuilderAtEnd(builder, body_block);
+
+    LLVMValueRef idx_val_body =
+        LLVMBuildLoad2(builder, idx_type, idx_alloca, "fold.idx.body");
+    LLVMValueRef idx_i64 =
+        LLVMBuildSExt(builder, idx_val_body, i64_ty, "fold.idx.i64");
+    LLVMValueRef stride_i64 =
+        LLVMConstInt(i64_ty, (uint64_t)iter_state_stride, 0);
+    LLVMValueRef base_i64 = LLVMConstInt(i64_ty, (uint64_t)iter_state_off, 0);
+    LLVMValueRef iter_byte_off = LLVMBuildAdd(
+        builder, base_i64,
+        LLVMBuildMul(builder, idx_i64, stride_i64, "fold.iter_state.byte_off"),
+        "fold.iter_state.total_off");
+    LLVMValueRef iter_state_ptr =
+        LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr, &iter_byte_off, 1,
+                      "fold.iter_state_ptr");
+    LLVMBuildStore(builder, iter_state_ptr, iter_state_ptr_alloca);
+
+    // Load current array element into elem_alloca here.
+    // Example for constant AST list:
+    // LLVMValueRef elem_val = dsp_build_expr(array_ast->data.AST_LIST.items +
+    // 0,
+    //                                        dsp_ctx, ctx, module, builder);
+    LLVMValueRef elem_val =
+        get_array_element(builder, array_value, idx_val, el_type);
+
+    elem_val = ensure_float(_el_type, elem_val, builder);
+
+    LLVMValueRef acc_val =
+        LLVMBuildLoad2(builder, fold_type, acc_alloca, "fold.acc.val");
+
+    LLVMValueRef state_arg = LLVMBuildLoad2(
+        builder, GENERIC_PTR, iter_state_ptr_alloca, "fold.iter_state_arg");
+
+    LLVMValueRef frame_fn = s.frame_fn;
+    LLVMTypeRef frame_fn_ty = LLVMGlobalGetValueType(frame_fn);
+    unsigned formal_count = LLVMCountParamTypes(frame_fn_ty);
+    LLVMTypeRef formal_tys[5];
+    LLVMGetParamTypes(frame_fn_ty, formal_tys);
+    LLVMValueRef frame_args[5];
+    unsigned nargs = 0;
+    frame_args[nargs++] = state_arg;
+    frame_args[nargs++] = LLVMConstNull(GENERIC_PTR);
+
+    if (with_index) {
+      LLVMTypeRef idx_formal_ty = formal_tys[nargs];
+      if (LLVMGetTypeKind(idx_formal_ty) == LLVMDoubleTypeKind) {
+        frame_args[nargs++] = LLVMBuildSIToFP(builder, idx_val_body,
+                                              idx_formal_ty, "fold.idx.f64");
+      } else {
+        frame_args[nargs++] = idx_val_body;
+      }
+    }
+    LLVMTypeRef elem_formal_ty = formal_tys[nargs];
+    if (LLVMGetTypeKind(elem_formal_ty) == LLVMDoubleTypeKind &&
+        LLVMGetTypeKind(LLVMTypeOf(elem_val)) == LLVMIntegerTypeKind) {
+      elem_val =
+          LLVMBuildSIToFP(builder, elem_val, elem_formal_ty, "fold.elem.f64");
+    }
+    frame_args[nargs++] = elem_val;
+
+    LLVMTypeRef acc_formal_ty = formal_tys[nargs];
+    if (LLVMGetTypeKind(acc_formal_ty) == LLVMDoubleTypeKind &&
+        LLVMGetTypeKind(LLVMTypeOf(acc_val)) == LLVMIntegerTypeKind) {
+      acc_val =
+          LLVMBuildSIToFP(builder, acc_val, acc_formal_ty, "fold.acc.f64");
+    }
+    frame_args[nargs++] = acc_val;
+
+    if (formal_count != nargs) {
+      fprintf(stderr, "audio_jit: fold lambda arity mismatch\n");
+      return NULL;
+    }
+
+    LLVMValueRef next_acc = LLVMBuildCall2(builder, frame_fn_ty, frame_fn,
+                                           frame_args, nargs, "fold.next_acc");
+
+    LLVMBuildStore(builder, next_acc, acc_alloca);
+
+    LLVMBuildBr(builder, inc_block);
+
+    LLVMPositionBuilderAtEnd(builder, inc_block);
+    LLVMValueRef idx_next = LLVMBuildAdd(
+        builder, LLVMBuildLoad2(builder, idx_type, idx_alloca, "fold.idx.cur"),
+        LLVMConstInt(idx_type, 1, 0), "fold.idx.next");
+    LLVMBuildStore(builder, idx_next, idx_alloca);
+    LLVMBuildBr(builder, cond_block);
+
+    LLVMPositionBuilderAtEnd(builder, after_block);
+    return LLVMBuildLoad2(builder, fold_type, acc_alloca, "fold.result");
   }
+
+  return NULL;
 }
 
 LLVMValueRef call_dsp_list_proc(Ast *fn_ast, Ast *ast, DspBuildCtx *dsp_ctx,

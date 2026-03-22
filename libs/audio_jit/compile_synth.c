@@ -180,11 +180,11 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
                        5, 0);
   LLVMTypeRef *frame_param_tys =
       malloc(sizeof(LLVMTypeRef) * (size_t)(num_inputs + 2));
-  frame_param_tys[0] = GENERIC_PTR; // state ptr (already offset by caller)
+  frame_param_tys[0] = GENERIC_PTR; // state ptr
+  frame_param_tys[1] = GENERIC_PTR; // enclosing node ptr
   for (int i = 0; i < num_inputs; i++) {
-    frame_param_tys[i + 1] = LLVMDoubleType();
+    frame_param_tys[i + 2] = LLVMDoubleType();
   }
-  frame_param_tys[num_inputs + 1] = GENERIC_PTR; // enclosing node ptr
   LLVMTypeRef frame_ty =
       LLVMFunctionType(LLVMDoubleType(), frame_param_tys, num_inputs + 2, 0);
 
@@ -299,7 +299,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
 
   LLVMPositionBuilderAtEnd(frame_ctx.perform_builder, frame_bb);
   frame_ctx.state_ptr = LLVMGetParam(frame_fn, 0);
-  frame_ctx.node_ptr = LLVMGetParam(frame_fn, num_inputs + 1);
+  frame_ctx.node_ptr = LLVMGetParam(frame_fn, 1);
   {
     LLVMTypeRef f64_ty_local = LLVMDoubleType();
     LLVMTypeRef spf_fn_ty =
@@ -322,7 +322,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
     for (AstList *p = lambda->data.AST_LAMBDA.params; p; p = p->next, idx++) {
       Ast *param_ast = p->ast;
       Type *param_type = fn_type->data.T_FN.from;
-      LLVMValueRef arg_val = LLVMGetParam(frame_fn, idx + 1);
+      LLVMValueRef arg_val = LLVMGetParam(frame_fn, idx + 2);
       JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, param_type, arg_val, f64_ty);
 
       const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
@@ -367,6 +367,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   LLVMValueRef *frame_call_args =
       malloc(sizeof(LLVMValueRef) * (size_t)(num_inputs + 2));
   frame_call_args[0] = dsp_ctx.state_ptr;
+  frame_call_args[1] = dsp_ctx.node_ptr;
   for (int i = 0; i < num_inputs; i++) {
     LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
     LLVMValueRef inlet_slot =
@@ -375,11 +376,10 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
     LLVMValueRef inlet_node = LLVMBuildLoad2(
         dsp_ctx.perform_builder, GENERIC_PTR, inlet_slot, "inlet.node");
     LLVMValueRef read_args[] = {inlet_node, frame_i64};
-    frame_call_args[i + 1] =
+    frame_call_args[i + 2] =
         LLVMBuildCall2(dsp_ctx.perform_builder, read_fn_ty, read_fn, read_args,
                        2, "inlet.sample");
   }
-  frame_call_args[num_inputs + 1] = dsp_ctx.node_ptr;
   LLVMValueRef frame_sample =
       LLVMBuildCall2(dsp_ctx.perform_builder, frame_ty, frame_fn,
                      frame_call_args, num_inputs + 2, "frame.call");
