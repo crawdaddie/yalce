@@ -16,12 +16,14 @@ let semi_to_ratio = fn x -> Math.pow 2. (x / 12.);;
 compile_audio_fn (
   let x = fn () ->
     let o = fn f tf ->
-      trig tf
+      trig (0.5 * tf)
       |> decay 2. 
       |> (*) (sin_osc f)
     ;;
     # 0,2,3,7,8
-    [|0,2,3,7,8,12,14,15,19,20|] |> Arrays.foldi (fn i x r -> r + o (300 * semi_to_ratio x) (1 + i / 10.)) 0. 
+    [|0.,2.,3.,7.,8.,12.,14.,15.,19.,20.|] |> Arrays.foldi (fn i x r -> r + o (300 * semi_to_ratio x) (1. + i / 10.)) 0. 
+    |> (*) (Math.db_amp -10)
+    # o 300 1.5
 
 
   ;
