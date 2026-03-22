@@ -6,27 +6,47 @@ open DSP;
 
 import std/Math;
 import std/Arrays;
+import std/Lists;
 
 # let z = [|0.,2.,3.,7.,8.,12.,14.,15.,19.,20.|] |> Arrays.map (fn x -> Math.pow 2. (x / 12.));
-let z = [|0,2,3,7,8,12,14,15,19,20|] |> Arrays.map (fn x -> Math.pow 2. (x / 12.));
+# let z = [|0,2,3,7,8,12,14,15,19,20|] |> Arrays.map (fn x -> Math.pow 2. (x / 12.));
 # Arrays.print_arr z;
 
-let semi_to_ratio = fn x -> Math.pow 2. (x / 12.);;
+
+# let semi_to_ratio = fn x -> Math.pow 2. (x / 12.);;
+    # let o = fn f tf ->
+    #   trig (0.5 * tf)
+    #   |> decay 2. 
+    #   |> (*) (sin_osc f)
+    # ;;
+    # [|0.,2.,3.,7.,8.,12.,14.,15.,19.,20.|] |> Arrays.foldi (fn i r x -> r + o (300 * semi_to_ratio x) (1. + i / 10.)) 0. 
+    # [0,2,3,7,8,12,14,15,19,20] |> Lists.foldi (fn i r x -> r + o (300 * semi_to_ratio x) (1. + i / 10.)) 0. 
+    # |> (*) (Math.db_amp -20)
+    # o 600 1.5
+
+# compile_audio_fn (
+# );
 
 compile_audio_fn (
-  let x = fn () ->
-    let o = fn f tf ->
-      trig (0.5 * tf)
-      |> decay 2. 
-      |> (*) (sin_osc f)
-    ;;
-    # 0,2,3,7,8
-    [|0.,2.,3.,7.,8.,12.,14.,15.,19.,20.|] |> Arrays.foldi (fn i x r -> r + o (300 * semi_to_ratio x) (1. + i / 10.)) 0. 
-    |> (*) (Math.db_amp -10)
-    # o 300 1.5
+  let y = fn () ->
 
+    # let x = fn f ->
+    #   [1., 0., 1., 0.1, 1., 0., 1., 0., 1.]
+    #   |> dsp_list.foldi (fn i r x -> r + x * sin_osc (f * (i + 1))) 0.
+    #   |> (*) (Math.db_amp -10)
+    # ;;
+    # x f
+    # [0.2, 0.3, 0.5, 0.7, 0.11, 0.13, 0.17] |> Lists.fold (fn r x -> r + (.05 * r) |> delay x 1. 0.3) s
+    # |> (*) (Math.db_amp -20)
 
+    # sin_osc (f + lfnoise 10 0 400) |> delay 0.1 0.1 0.5 |> delay 0.03 0.2 0.8
+    let t = trig 1;
+    let pitches = [| 600., 800., 2400., 4800., 60., 60.|];
+    t
+    |> decay 0.5
+    |> (*) (arr_choose pitches t |> sin_osc)
+    |> Reverb.reverb 4. 0.9
   ;
 );
-#
-x () |> play_node
+
+y () |> play_node

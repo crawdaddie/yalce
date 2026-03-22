@@ -57,6 +57,7 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder);
 
 SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
+                                           LLVMTypeRef frame_ty,
                                            JITLangCtx *ctx,
                                            LLVMModuleRef module,
 

@@ -154,10 +154,9 @@ static LLVMBasicBlockRef dsp_build_perform_loop(LLVMValueRef perform_fn,
   return exit_bb;
 }
 
-SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
-                                           JITLangCtx *ctx,
-                                           LLVMModuleRef module,
-                                           LLVMBuilderRef builder) {
+LLVMTypeRef synth_frame_fn_type(Ast *lambda, JITLangCtx *ctx,
+                                LLVMModuleRef module, LLVMBuilderRef builder) {
+
   int num_inputs = 0;
   bool is_void_fn = is_void_func(lambda->type);
 
@@ -170,6 +169,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       }
     }
   }
+  Type *ftype = lambda->type;
 
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
   // Build Synth Perform func scaffold
@@ -178,15 +178,55 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
                        (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR,
                                        LLVMInt32Type(), LLVMDoubleType()},
                        5, 0);
+
   LLVMTypeRef *frame_param_tys =
       malloc(sizeof(LLVMTypeRef) * (size_t)(num_inputs + 2));
   frame_param_tys[0] = GENERIC_PTR; // state ptr
   frame_param_tys[1] = GENERIC_PTR; // enclosing node ptr
   for (int i = 0; i < num_inputs; i++) {
+
     frame_param_tys[i + 2] = LLVMDoubleType();
   }
   LLVMTypeRef frame_ty =
       LLVMFunctionType(LLVMDoubleType(), frame_param_tys, num_inputs + 2, 0);
+  return frame_ty;
+}
+
+SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
+                                           LLVMTypeRef frame_ty,
+                                           JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
+  int num_inputs = 0;
+  bool is_void_fn = is_void_func(lambda->type);
+  //
+  if (!is_void_fn) {
+    for (AstList *p = lambda->data.AST_LAMBDA.params; p; p = p->next) {
+      if (p->ast->tag == AST_IDENTIFIER) {
+        num_inputs++;
+      } else if (p->ast->tag == AST_TUPLE) {
+        num_inputs += p->ast->data.AST_LIST.len;
+      }
+    }
+  }
+  // Type *ftype = lambda->type;
+  //
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  // Build Synth Perform func scaffold
+  LLVMTypeRef perf_ty =
+      LLVMFunctionType(GENERIC_PTR,
+                       (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR,
+                                       LLVMInt32Type(), LLVMDoubleType()},
+                       5, 0);
+  //
+  // LLVMTypeRef *frame_param_tys =
+  //     malloc(sizeof(LLVMTypeRef) * (size_t)(num_inputs + 2));
+  // frame_param_tys[0] = GENERIC_PTR; // state ptr
+  // frame_param_tys[1] = GENERIC_PTR; // enclosing node ptr
+  // for (int i = 0; i < num_inputs; i++) {
+  //
+  //   frame_param_tys[i + 2] = LLVMDoubleType();
+  // }
 
   char perf_name[32];
   sprintf(perf_name, "%s.perform", name);
@@ -323,16 +363,54 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       Ast *param_ast = p->ast;
       Type *param_type = fn_type->data.T_FN.from;
       LLVMValueRef arg_val = LLVMGetParam(frame_fn, idx + 2);
-      JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, param_type, arg_val, f64_ty);
 
-      const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
-      int id_len = param_ast->data.AST_IDENTIFIER.length;
-      ht_set_hash(fn_ctx.frame->table, id_chars, hash_string(id_chars, id_len),
-                  sym);
+      if (param_ast->tag == AST_TUPLE) {
+        // Destructure tuple param: extract each field and bind its identifier
+        int nfields = param_ast->data.AST_LIST.len;
+        for (int j = 0; j < nfields; j++) {
+          Ast *field_ast = param_ast->data.AST_LIST.items + j;
+          Type *field_type = param_type->data.T_CONS.args[j];
+          LLVMValueRef field_val = LLVMBuildExtractValue(
+              frame_ctx.perform_builder, arg_val, (unsigned)j, "tuple.field");
+          LLVMTypeRef field_llvm_ty = LLVMTypeOf(field_val);
+          JITSymbol *field_sym =
+              new_symbol(STYPE_LOCAL_VAR, field_type, field_val, field_llvm_ty);
+          const char *field_chars = field_ast->data.AST_IDENTIFIER.value;
+          int field_len = field_ast->data.AST_IDENTIFIER.length;
+          ht_set_hash(fn_ctx.frame->table, field_chars,
+                      hash_string(field_chars, field_len), field_sym);
+        }
+      } else {
+        JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, param_type, arg_val, f64_ty);
+        const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
+        int id_len = param_ast->data.AST_IDENTIFIER.length;
+        ht_set_hash(fn_ctx.frame->table, id_chars,
+                    hash_string(id_chars, id_len), sym);
+      }
 
       fn_type = fn_type->data.T_FN.to;
     }
   }
+
+  // Bind closed-over values from extra frame params (appended after lambda params).
+  // The closed_vals list and closure_meta->args are in the same order.
+  if (lambda->tag == AST_LAMBDA) {
+    int cap_idx = idx;
+    for (AstList *cv = lambda->data.AST_LAMBDA.closed_vals; cv;
+         cv = cv->next, cap_idx++) {
+      Ast *cl = cv->ast;
+      if (cl->tag == AST_IDENTIFIER) {
+        LLVMValueRef cap_val = LLVMGetParam(frame_fn, cap_idx + 2);
+        LLVMTypeRef cap_llvm_ty = LLVMTypeOf(cap_val);
+        JITSymbol *sym =
+            new_symbol(STYPE_LOCAL_VAR, cl->type, cap_val, cap_llvm_ty);
+        const char *name = cl->data.AST_IDENTIFIER.value;
+        int len = cl->data.AST_IDENTIFIER.length;
+        ht_set_hash(fn_ctx.frame->table, name, hash_string(name, len), sym);
+      }
+    }
+  }
+
   LLVMValueRef expr =
       dsp_build_expr(lambda->data.AST_LAMBDA.body, &frame_ctx, &fn_ctx, module,
                      frame_ctx.perform_builder);
@@ -364,11 +442,22 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   }
   LLVMValueRef frame_i64 = LLVMBuildSExt(
       dsp_ctx.perform_builder, dsp_ctx.frame_idx, i64_ty, "frame_idx.i64");
+  // Use the actual frame_ty param count as ground truth, not num_inputs.
+  // num_inputs may over-count when tuple params are expanded from AST, but
+  // frame_ty already encodes the real function signature (e.g. tuple element
+  // as a single struct param).
+  unsigned frame_total_params = LLVMCountParamTypes(frame_ty);
+  unsigned frame_user_params = frame_total_params > 2 ? frame_total_params - 2 : 0;
+
+  LLVMTypeRef *frame_formal_tys =
+      malloc(sizeof(LLVMTypeRef) * (size_t)frame_total_params);
+  LLVMGetParamTypes(frame_ty, frame_formal_tys);
+
   LLVMValueRef *frame_call_args =
-      malloc(sizeof(LLVMValueRef) * (size_t)(num_inputs + 2));
+      malloc(sizeof(LLVMValueRef) * (size_t)frame_total_params);
   frame_call_args[0] = dsp_ctx.state_ptr;
   frame_call_args[1] = dsp_ctx.node_ptr;
-  for (int i = 0; i < num_inputs; i++) {
+  for (unsigned i = 0; i < frame_user_params; i++) {
     LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
     LLVMValueRef inlet_slot =
         LLVMBuildGEP2(dsp_ctx.perform_builder, GENERIC_PTR, inputs_ptr_cast,
@@ -376,13 +465,19 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
     LLVMValueRef inlet_node = LLVMBuildLoad2(
         dsp_ctx.perform_builder, GENERIC_PTR, inlet_slot, "inlet.node");
     LLVMValueRef read_args[] = {inlet_node, frame_i64};
-    frame_call_args[i + 2] =
-        LLVMBuildCall2(dsp_ctx.perform_builder, read_fn_ty, read_fn, read_args,
-                       2, "inlet.sample");
+    LLVMValueRef sample = LLVMBuildCall2(dsp_ctx.perform_builder, read_fn_ty,
+                                         read_fn, read_args, 2, "inlet.sample");
+    LLVMTypeRef formal_ty = frame_formal_tys[i + 2];
+    if (LLVMGetTypeKind(formal_ty) == LLVMIntegerTypeKind) {
+      sample = LLVMBuildFPToSI(dsp_ctx.perform_builder, sample, formal_ty,
+                               "inlet.sample.i");
+    }
+    frame_call_args[i + 2] = sample;
   }
+  free(frame_formal_tys);
   LLVMValueRef frame_sample =
       LLVMBuildCall2(dsp_ctx.perform_builder, frame_ty, frame_fn,
-                     frame_call_args, num_inputs + 2, "frame.call");
+                     frame_call_args, frame_total_params, "frame.call");
   free(frame_call_args);
 
   LLVMTypeRef void_ty = LLVMVoidType();
@@ -462,7 +557,6 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   if (cons_param_tys) {
     free(cons_param_tys);
   }
-  free(frame_param_tys);
 
   LLVMDisposeBuilder(dsp_ctx.ctor_builder);
   LLVMDisposeBuilder(dsp_ctx.init_builder);
@@ -497,8 +591,9 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   Ast *binding = source->data.AST_LET.binding;
   const char *name = binding->data.AST_IDENTIFIER.value;
 
-  SynthRecord rec =
-      compile_lambda_to_synth_record(lambda, name, ctx, module, builder);
+  LLVMTypeRef frame_ty = synth_frame_fn_type(lambda, ctx, module, builder);
+  SynthRecord rec = compile_lambda_to_synth_record(lambda, name, frame_ty, ctx,
+                                                   module, builder);
 
   int synth_id = extend_synth_registry(rec);
 

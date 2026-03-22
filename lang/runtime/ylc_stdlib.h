@@ -18,6 +18,8 @@ double rand_double();
 // uniformly distributed double between min and max
 double rand_double_range(double min, double max);
 
+void *ylc_alloc_zeroed_state(int32_t n_bytes);
+
 double amp_db(double amplitude);
 double db_amp(double db);
 

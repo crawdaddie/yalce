@@ -1,4 +1,5 @@
 #include "./closures.h"
+#include "serde.h"
 #include <string.h>
 
 Type *_get_full_closure_type(int num, Type *f, AstList *cl) {

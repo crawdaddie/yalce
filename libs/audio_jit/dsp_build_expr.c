@@ -140,6 +140,7 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return dsp_fn_application(ast, dsp_ctx, ctx, module, builder);
   }
 
+  case AST_LIST:
   case AST_ARRAY: {
     if (ast_is_const(ast, ctx)) {
       int len = ast->data.AST_LIST.len;
@@ -200,13 +201,6 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return NULL;
   }
 
-  case AST_LIST: {
-    if (ast_is_const(ast, ctx)) {
-      // allocate list in constructor and initialize it to the specified val
-    }
-
-    return NULL;
-  }
   default: {
     return NULL;
   }

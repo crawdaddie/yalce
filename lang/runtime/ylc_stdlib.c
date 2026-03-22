@@ -64,6 +64,10 @@ double rand_double_range(double min, double max) {
   return rand_double;
 }
 
+void *ylc_alloc_zeroed_state(int32_t n_bytes) {
+  return calloc(1, (size_t)n_bytes);
+}
+
 double amp_db(double amplitude) { return 20.0f * log10(amplitude); }
 double db_amp(double db) { return pow(10.0f, db / 20.0f); }
 

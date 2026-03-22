@@ -279,9 +279,13 @@ LLVMValueRef builtin_phasor(LLVMValueRef freq, DspBuildCtx *dsp_ctx,
       LLVMBuildFCmp(builder, LLVMRealOGE, advanced, one, "phasor.ovf");
   LLVMValueRef udf =
       LLVMBuildFCmp(builder, LLVMRealOLT, advanced, zero, "phasor.udf");
+  LLVMValueRef wrapped_ovf =
+      LLVMBuildFSub(builder, advanced, one, "phasor.wrap_ovf_val");
   LLVMValueRef next =
-      LLVMBuildSelect(builder, ovf, zero, advanced, "phasor.wrap_ovf");
-  next = LLVMBuildSelect(builder, udf, one, next, "phasor.wrap_udf");
+      LLVMBuildSelect(builder, ovf, wrapped_ovf, advanced, "phasor.wrap_ovf");
+  LLVMValueRef wrapped_udf =
+      LLVMBuildFAdd(builder, next, one, "phasor.wrap_udf_val");
+  next = LLVMBuildSelect(builder, udf, wrapped_udf, next, "phasor.wrap_udf");
 
   LLVMBuildStore(builder, next, phase_ptr);
   return phase;
@@ -342,9 +346,13 @@ LLVMValueRef builtin_phasor_sinc(LLVMValueRef freq, LLVMValueRef trig,
       LLVMBuildFCmp(builder, LLVMRealOGE, advanced, one, "phasor.ovf");
   LLVMValueRef udf =
       LLVMBuildFCmp(builder, LLVMRealOLT, advanced, zero, "phasor.udf");
+  LLVMValueRef wrapped_ovf =
+      LLVMBuildFSub(builder, advanced, one, "phasor.wrap_ovf_val");
   LLVMValueRef next =
-      LLVMBuildSelect(builder, ovf, zero, advanced, "phasor.wrap_ovf");
-  next = LLVMBuildSelect(builder, udf, one, next, "phasor.wrap_udf");
+      LLVMBuildSelect(builder, ovf, wrapped_ovf, advanced, "phasor.wrap_ovf");
+  LLVMValueRef wrapped_udf =
+      LLVMBuildFAdd(builder, next, one, "phasor.wrap_udf_val");
+  next = LLVMBuildSelect(builder, udf, wrapped_udf, next, "phasor.wrap_udf");
 
   LLVMBuildStore(builder, next, phase_ptr);
   LLVMBuildStore(builder, trig, prev_trig_ptr);
@@ -444,7 +452,15 @@ static LLVMValueRef pow2_tabread(LLVMValueRef phasor, LLVMValueRef table_ptr,
 }
 LLVMValueRef ensure_float(Type *in_type, LLVMValueRef val,
                           LLVMBuilderRef builder) {
-
+  if (!val) {
+    return val;
+  }
+  // Guard on the actual LLVM type, not just the YLC type: the explicit
+  // frame_ty for fold callbacks forces the index param to i32 regardless of
+  // what type inference said, so we must check both.
+  if (LLVMGetTypeKind(LLVMTypeOf(val)) == LLVMIntegerTypeKind) {
+    return LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "i2f");
+  }
   if (types_equal(in_type, &t_int)) {
     return LLVMBuildSIToFP(builder, val, LLVMDoubleType(), "freq.f64");
   }
@@ -1056,23 +1072,53 @@ LLVMValueRef call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
     return LLVMConstReal(LLVMDoubleType(), 0.0);
   }
 
+  // Reserve an 8-byte pointer slot in the caller's state. The sub-synth's
+  // state is allocated separately (via ylc_alloc_zeroed_state) so that x.frame
+  // receives its own state pointer rather than a slice of y's state block.
   int off = (dsp_ctx->state_offset + 7) & ~7;
-  dsp_ctx->state_offset = off + rec.state_bytes;
+  dsp_ctx->state_offset = off + 8;
 
   LLVMTypeRef i8_ty = LLVMInt8Type();
   LLVMTypeRef i32_ty = LLVMInt32Type();
 
   LLVMValueRef off_i32 = LLVMConstInt(i32_ty, (uint64_t)off, 0);
-  LLVMValueRef state_ptr = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
-                                         &off_i32, 1, "reg_synth.state_ptr");
-  if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr && rec.init_fn) {
-    LLVMValueRef init_state_ptr =
+
+  // slot_ptr: the 8-byte slot in the caller's run-time state that holds
+  // the sub-synth's separately-allocated state pointer.
+  LLVMValueRef slot_ptr = LLVMBuildGEP2(builder, i8_ty, dsp_ctx->state_ptr,
+                                        &off_i32, 1, "sub_synth.slot_ptr");
+
+  if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
+    // At construction time: allocate + initialise x's own state block.
+    LLVMTypeRef alloc_fn_ty =
+        LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){i32_ty}, 1, 0);
+    LLVMValueRef alloc_fn =
+        LLVMGetNamedFunction(module, "ylc_alloc_zeroed_state");
+    if (!alloc_fn) {
+      alloc_fn = LLVMAddFunction(module, "ylc_alloc_zeroed_state", alloc_fn_ty);
+      LLVMSetLinkage(alloc_fn, LLVMExternalLinkage);
+    }
+    LLVMValueRef n_bytes = LLVMConstInt(i32_ty, (uint64_t)rec.state_bytes, 0);
+    LLVMValueRef sub_state_ptr =
+        LLVMBuildCall2(dsp_ctx->init_builder, alloc_fn_ty, alloc_fn, &n_bytes,
+                       1, "sub_synth.alloc");
+
+    if (rec.init_fn) {
+      LLVMTypeRef init_fn_ty = LLVMGlobalGetValueType(rec.init_fn);
+      LLVMBuildCall2(dsp_ctx->init_builder, init_fn_ty, rec.init_fn,
+                     (LLVMValueRef[]){sub_state_ptr}, 1, "sub_synth.init");
+    }
+
+    // Store the sub-synth state pointer in the caller's init state slot.
+    LLVMValueRef init_slot_ptr =
         LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, dsp_ctx->init_state_ptr,
-                      &off_i32, 1, "reg_synth.init_state_ptr");
-    LLVMTypeRef init_fn_ty = LLVMGlobalGetValueType(rec.init_fn);
-    LLVMBuildCall2(dsp_ctx->init_builder, init_fn_ty, rec.init_fn,
-                   (LLVMValueRef[]){init_state_ptr}, 1, "reg_synth.init_call");
+                      &off_i32, 1, "sub_synth.init_slot_ptr");
+    LLVMBuildStore(dsp_ctx->init_builder, sub_state_ptr, init_slot_ptr);
   }
+
+  // At frame time: load the sub-synth state pointer from the slot.
+  LLVMValueRef state_ptr =
+      LLVMBuildLoad2(builder, GENERIC_PTR, slot_ptr, "sub_synth.state_ptr");
 
   LLVMValueRef frame_fn = rec.frame_fn;
   LLVMTypeRef frame_fn_ty = LLVMGlobalGetValueType(frame_fn);
@@ -1717,9 +1763,6 @@ LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
 
   // int _synth_id = synth_registry_len();
 
-  SynthRecord s =
-      compile_lambda_to_synth_record(anon_func, "anon", ctx, module, builder);
-
   Type *arr_type = array_ast->type;
   Type *_el_type = arr_type->data.T_CONS.args[0];
   LLVMTypeRef el_type = type_to_llvm_type(_el_type, ctx, module);
@@ -1727,6 +1770,43 @@ LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   LLVMTypeRef i8_ty = LLVMInt8Type();
   LLVMTypeRef i64_ty = LLVMInt64Type();
   LLVMTypeRef fold_type = type_to_llvm_type(init_ast->type, ctx, module);
+
+  // Count closed-over variables from the lambda's closure_meta (if any).
+  int num_captured = 0;
+  Type *closure_meta = NULL;
+  if (anon_func->tag == AST_LAMBDA && anon_func->type &&
+      anon_func->type->closure_meta) {
+    closure_meta = anon_func->type->closure_meta;
+    num_captured = closure_meta->data.T_CONS.num_args;
+  }
+
+  // Build frame_ty explicitly to match foldi's calling convention:
+  // f(idx: i32, acc: fold_type, element: el_type, ...captured) -> fold_type
+  // frame_fn receives (state ptr, node ptr, [idx i32,] acc, element,
+  // ...captured). We must NOT derive this from the lambda's inferred type
+  // because type inference may resolve the index param as double (e.g. from `i
+  // / 10.`) rather than Int, producing the wrong LLVM type at that position.
+  int max_params = 5 + num_captured;
+  LLVMTypeRef *frame_param_tys =
+      malloc(sizeof(LLVMTypeRef) * (size_t)max_params);
+  int frame_nparams = 0;
+  frame_param_tys[frame_nparams++] = GENERIC_PTR; // state ptr
+  frame_param_tys[frame_nparams++] = GENERIC_PTR; // node ptr
+  if (with_index) {
+    frame_param_tys[frame_nparams++] = idx_type; // i32 index
+  }
+  frame_param_tys[frame_nparams++] = fold_type; // accumulator
+  frame_param_tys[frame_nparams++] = el_type;   // element
+  for (int i = 0; i < num_captured; i++) {
+    frame_param_tys[frame_nparams++] =
+        type_to_llvm_type(closure_meta->data.T_CONS.args[i], ctx, module);
+  }
+  LLVMTypeRef frame_ty =
+      LLVMFunctionType(fold_type, frame_param_tys, frame_nparams, 0);
+  free(frame_param_tys);
+
+  SynthRecord s = compile_lambda_to_synth_record(anon_func, "anon", frame_ty,
+                                                 ctx, module, builder);
 
   if (is_constant_expr(array_ast, &(TICtx){.env = ctx->env})) {
     int loop_length = array_ast->data.AST_LIST.len;
@@ -1829,46 +1909,29 @@ LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
 
     LLVMValueRef frame_fn = s.frame_fn;
     LLVMTypeRef frame_fn_ty = LLVMGlobalGetValueType(frame_fn);
-    unsigned formal_count = LLVMCountParamTypes(frame_fn_ty);
-    LLVMTypeRef formal_tys[5];
-    LLVMGetParamTypes(frame_fn_ty, formal_tys);
-    LLVMValueRef frame_args[5];
+    unsigned frame_total_args = LLVMCountParamTypes(frame_fn_ty);
+    LLVMValueRef *frame_args =
+        malloc(sizeof(LLVMValueRef) * (size_t)frame_total_args);
     unsigned nargs = 0;
     frame_args[nargs++] = state_arg;
     frame_args[nargs++] = LLVMConstNull(GENERIC_PTR);
-
     if (with_index) {
-      LLVMTypeRef idx_formal_ty = formal_tys[nargs];
-      if (LLVMGetTypeKind(idx_formal_ty) == LLVMDoubleTypeKind) {
-        frame_args[nargs++] = LLVMBuildSIToFP(builder, idx_val_body,
-                                              idx_formal_ty, "fold.idx.f64");
-      } else {
-        frame_args[nargs++] = idx_val_body;
-      }
-    }
-    LLVMTypeRef elem_formal_ty = formal_tys[nargs];
-    if (LLVMGetTypeKind(elem_formal_ty) == LLVMDoubleTypeKind &&
-        LLVMGetTypeKind(LLVMTypeOf(elem_val)) == LLVMIntegerTypeKind) {
-      elem_val =
-          LLVMBuildSIToFP(builder, elem_val, elem_formal_ty, "fold.elem.f64");
-    }
-    frame_args[nargs++] = elem_val;
-
-    LLVMTypeRef acc_formal_ty = formal_tys[nargs];
-    if (LLVMGetTypeKind(acc_formal_ty) == LLVMDoubleTypeKind &&
-        LLVMGetTypeKind(LLVMTypeOf(acc_val)) == LLVMIntegerTypeKind) {
-      acc_val =
-          LLVMBuildSIToFP(builder, acc_val, acc_formal_ty, "fold.acc.f64");
+      frame_args[nargs++] = idx_val; // foldi: f(idx, acc, element)
     }
     frame_args[nargs++] = acc_val;
-
-    if (formal_count != nargs) {
-      fprintf(stderr, "audio_jit: fold lambda arity mismatch\n");
-      return NULL;
+    frame_args[nargs++] = elem_val;
+    // Append closed-over values evaluated in the outer (enclosing) context.
+    if (anon_func->tag == AST_LAMBDA) {
+      for (AstList *cv = anon_func->data.AST_LAMBDA.closed_vals; cv;
+           cv = cv->next) {
+        frame_args[nargs++] =
+            dsp_build_expr(cv->ast, dsp_ctx, ctx, module, builder);
+      }
     }
 
     LLVMValueRef next_acc = LLVMBuildCall2(builder, frame_fn_ty, frame_fn,
                                            frame_args, nargs, "fold.next_acc");
+    free(frame_args);
 
     LLVMBuildStore(builder, next_acc, acc_alloca);
 
@@ -1901,6 +1964,13 @@ LLVMValueRef call_dsp_list_proc(Ast *fn_ast, Ast *ast, DspBuildCtx *dsp_ctx,
       return dsp_array_fold(false, ast, dsp_ctx, ctx, module, builder);
     }
   } else if (is_list_type(ast->data.AST_APPLICATION.args[2].type)) {
+    if (is_ident(fn_ast, "foldi")) {
+      return dsp_array_fold(true, ast, dsp_ctx, ctx, module, builder);
+    }
+
+    if (is_ident(fn_ast, "fold")) {
+      return dsp_array_fold(false, ast, dsp_ctx, ctx, module, builder);
+    }
   }
   return NULL;
 }
@@ -2215,7 +2285,7 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     if (!eval_delay_buf_size(args + 1, dsp_ctx, ctx, "comb", &buf_size)) {
       return LLVMConstReal(LLVMDoubleType(), 0.0);
     }
-    DelayBufIR db = build_delay_buf_ir(dsp_ctx, builder, buf_size, false);
+    DelayBufIR db = build_delay_buf_ir(dsp_ctx, builder, buf_size, true);
 
     LLVMTypeRef i32_ty = LLVMInt32Type();
     LLVMTypeRef f64_ty = LLVMDoubleType();
