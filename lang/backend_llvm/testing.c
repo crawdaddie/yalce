@@ -220,7 +220,7 @@ int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return 0;
   }
 
-  if (config.debug_ir_pre) {
+  if (ylc_config.debug_ir_pre) {
     LLVMDumpModule(module);
   }
 
@@ -238,7 +238,7 @@ int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMGetNamedFunction(module, "_report_test_totals"),
                        (void *)_report_test_totals);
 
-  if (config.debug_ir) {
+  if (ylc_config.debug_ir) {
     LLVMDumpModule(module);
   }
 

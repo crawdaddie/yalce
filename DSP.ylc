@@ -42,7 +42,7 @@ let _ = dlopen "libs/audio_jit/libaudio_jit.so";
 import std/Math;
 
 let Filter = module () ->
-  compile_audio_fn (
+compile_audio_fn (
   let biquad = fn b0 b1 b2 a1 a2 x ->
     let X = [| 0., 0. |];
     let Y = [| 0., 0. |];
@@ -52,7 +52,6 @@ let Filter = module () ->
     Y[1] := Y[0];
     Y[0] := y;
     y
-  ;
 );
 
 compile_audio_fn (
@@ -76,7 +75,6 @@ compile_audio_fn (
     let a2n = a2 / a0 in
 
     biquad b0n b1n b2n a1n a2n x
-  ;
 );
 
 compile_audio_fn (
@@ -100,7 +98,6 @@ compile_audio_fn (
     let a2n = a2 / a0 in
 
     biquad b0n b1n b2n a1n a2n x
-  ;
 );
 
 compile_audio_fn (
@@ -124,7 +121,6 @@ compile_audio_fn (
     let a2n = a2 / a0 in
 
     biquad b0n b1n b2n a1n a2n x
-  ;
 );
 
 compile_audio_fn (
@@ -148,7 +144,6 @@ compile_audio_fn (
     let a2n = a2 / a0 in
 
     biquad b0n b1n b2n a1n a2n x
-  ;
 );
 
 compile_audio_fn (
@@ -174,7 +169,6 @@ compile_audio_fn (
     let a2n = a2 / a0 in
 
     biquad b0n b1n b2n a1n a2n x
-  ;
 );
 
 compile_audio_fn (
@@ -200,7 +194,6 @@ compile_audio_fn (
     let a2n = a2 / a0 in
 
     biquad b0n b1n b2n a1n a2n x
-  ;
 );
 
 compile_audio_fn (
@@ -225,14 +218,12 @@ compile_audio_fn (
     let a2n = a2 / a0 in
 
     biquad b0n b1n b2n a1n a2n x
-  ;
 );
 compile_audio_fn (
   # one‑pole with softclip
   let pole = fn g x z ->
     let y = z + g * (x - z) in
     y
-  ;
 );
 
 compile_audio_fn (
@@ -243,7 +234,6 @@ compile_audio_fn (
     let y = Z[0] |> pole g x;
     Z[0] := y;
     y
-  ;
 );
 
 compile_audio_fn (
@@ -254,7 +244,6 @@ compile_audio_fn (
     let lp = Z[0] |> pole g x;
     Z[0] := lp;
     x - lp
-  ;
 );
 
 compile_audio_fn (
@@ -278,7 +267,6 @@ compile_audio_fn (
     Z[3] := y4 in
 
     y4
-  ;
 );
 ;
 
@@ -305,7 +293,6 @@ compile_audio_fn (
     # 2 allpass in series for echo density / diffusion
     body |> allpass 0.005  0.05 0.5
          |> allpass 0.0017 0.05 0.5
-  ;
 );
 
 # 2. Early reflections + diffuse tail
@@ -315,7 +302,6 @@ compile_audio_fn (
     [0.0073, 0.0119, 0.0169, 0.0223, 0.0281, 0.0341]
     |> dsp_list.fold (fn acc t -> acc + delay t 0.1 0. x) 0.
     |> (*) 0.167
-  ;
 );
 
 compile_audio_fn (
@@ -323,7 +309,6 @@ compile_audio_fn (
     let early = early_refl (x * 0.4) in
     let late  = schroeder room damp (x * 0.6) in
     early + late
-  ;
 );
 
 # 3. Allpass chain ("plate"-style diffuse sound)
@@ -338,7 +323,6 @@ compile_audio_fn (
     # Tank: two allpass loops in series approximate a reverb tail
     [0.0672, 0.0100, 0.0442, 0.0908, 0.0100, 0.0400]
     |> dsp_list.fold (fn acc t -> acc |> allpass t 0.15 decay) pre
-  ;
 );
 
 # 4. Adding tone shaping — absorptive reverb by LP-filtering the comb feedback:
@@ -350,8 +334,5 @@ compile_audio_fn (
     let y = input + fed;
     Z[0] := comb t 0.1 0.8 y;
     y
-  ;
 );
-
-
 ;

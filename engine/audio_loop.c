@@ -1,5 +1,6 @@
 #include "audio_loop.h"
 #include "../lang/backend_llvm/lib_registry.h"
+#include "../lang/config.h"
 #include "../lang/ylc_datatypes.h"
 #include "audio_loop_utils.h"
 #include "audio_routing.h"
@@ -575,7 +576,7 @@ int start_audio() {
   return 0;
 }
 
-static int config[16];
+static int __config[16];
 static int32_t config_size = 0;
 typedef struct IntLL {
   int32_t data;
@@ -587,7 +588,7 @@ void set_input_conf(char *conf) {
 
   config_size = 0;
   while (l) {
-    config[config_size] = l->data;
+    __config[config_size] = l->data;
     config_size++;
     IntLL *prev = l;
     l = l->next;
@@ -611,7 +612,7 @@ int init_audio() {
   // maketable_grain_window();
 
   if (config_size) {
-    parse_input_config(config, config_size);
+    parse_input_config(__config, config_size);
   }
   start_audio();
   printf("inited audio\n");
@@ -626,4 +627,5 @@ int init_audio() {
 
 __attribute__((constructor)) static void ylc_engine_init(void) {
   ylc_runtime_load_fn = (YlcRuntimeLoadFn)init_audio;
+  ylc_config.interactive_mode = true;
 }

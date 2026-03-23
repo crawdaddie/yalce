@@ -16,6 +16,6 @@ typedef struct RTConfig {
   const char *opt_level;
 
 } RTConfig;
-extern RTConfig config;
-
+extern RTConfig ylc_config;
+void ylc_config_set_interactive(bool);
 #endif

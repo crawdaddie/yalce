@@ -119,7 +119,7 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
 
   // __import_current_dir = get_dirname(filename);
 
-  if (config.test_mode) {
+  if (ylc_config.test_mode) {
     printf("\n# Test %s\n"
            "-----------------------------------------\n",
            filename);
@@ -146,11 +146,11 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
   ctx->env = ti_ctx.env;
   ctx->module_name = filename;
 
-  if (config.debug_symbols) {
+  if (ylc_config.debug_symbols) {
     init_debugging(filename, ctx, module);
   }
 
-  if (config.test_mode) {
+  if (ylc_config.test_mode) {
     ctx->module_name = filename;
     int res = test_module(*prog, ctx, module, builder, target_machine);
     if (!res) {
@@ -172,11 +172,11 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
   LLVMValueRef top_level_func =
       codegen_top_level(*prog, &top_level_ret_type, ctx, module, builder);
 
-  if (config.debug_ir_pre) {
+  if (ylc_config.debug_ir_pre) {
     LLVMDumpModule(module);
   }
 
-  if (config.verify_ir) {
+  if (ylc_config.verify_ir) {
     char *verify_err = NULL;
     if (LLVMVerifyModule(module, LLVMPrintMessageAction, &verify_err)) {
       fprintf(stderr, "IR verification failed: %s\n", verify_err);
@@ -196,11 +196,11 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   LLVMGenericValueRef exec_args[] = {};
-  if (config.debug_ir) {
+  if (ylc_config.debug_ir) {
     LLVMDumpModule(module);
   }
 
-  if (config.debug_codegen) {
+  if (ylc_config.debug_codegen) {
     dump_assembly(module);
   }
 
@@ -246,10 +246,10 @@ void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine) {
   LLVMPassBuilderOptionsRef options = LLVMCreatePassBuilderOptions();
 
   const char *opt_passes;
-  if (config.debug_symbols) {
+  if (ylc_config.debug_symbols) {
     opt_passes = "default<O0>";
   } else {
-    opt_passes = config.opt_level ? config.opt_level : "default<O3>";
+    opt_passes = ylc_config.opt_level ? ylc_config.opt_level : "default<O3>";
   }
   // const char opts[512];
   // // sprintf(opts, "%s,%s", "coro-early,coro-elide,coro-split,coro-cleanup",
@@ -334,47 +334,47 @@ int jit(int argc, char **argv) {
   // initialize_synth_types(&ctx, module, builder);
 
   int arg_counter = 1;
-  config.base_libs_dir = getenv("YLC_BASE_DIR");
+  ylc_config.base_libs_dir = getenv("YLC_BASE_DIR");
   int scripts = 0;
   while (arg_counter < argc) {
     if (strcmp(argv[arg_counter], "-i") == 0) {
-      config.interactive_mode = true;
+      ylc_config.interactive_mode = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--debug-codegen") == 0) {
-      config.debug_ir = true;
-      config.debug_codegen = true;
+      ylc_config.debug_ir = true;
+      ylc_config.debug_codegen = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--debug-ir") == 0) {
-      config.debug_ir = true;
+      ylc_config.debug_ir = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--debug-ir-pre") == 0) {
-      config.debug_ir_pre = true;
+      ylc_config.debug_ir_pre = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--test") == 0) {
       // run top-level tests for input module
-      config.test_mode = true;
+      ylc_config.test_mode = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--base") == 0) {
       arg_counter++;
-      config.base_libs_dir = argv[arg_counter];
+      ylc_config.base_libs_dir = argv[arg_counter];
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "-O0") == 0) {
-      config.opt_level = "default<O0>";
+      ylc_config.opt_level = "default<O0>";
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "-O1") == 0) {
-      config.opt_level = "default<O1>";
+      ylc_config.opt_level = "default<O1>";
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "-O2") == 0) {
-      config.opt_level = "default<O2>";
+      ylc_config.opt_level = "default<O2>";
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "-O3") == 0) {
-      config.opt_level = "default<O3>";
+      ylc_config.opt_level = "default<O3>";
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--verify-ir") == 0) {
-      config.verify_ir = true;
+      ylc_config.verify_ir = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "-g") == 0) {
-      config.debug_symbols = true;
+      ylc_config.debug_symbols = true;
       arg_counter++;
     } else {
 
@@ -388,10 +388,10 @@ int jit(int argc, char **argv) {
   }
 
   if (argc == 1 || !scripts) {
-    config.interactive_mode = true;
+    ylc_config.interactive_mode = true;
   }
 
-  if (config.interactive_mode) {
+  if (ylc_config.interactive_mode) {
 
     char dirname[100];
     getcwd(dirname, 100);
@@ -407,8 +407,8 @@ int jit(int argc, char **argv) {
                          "module base directory: %s\n"
                          "Opt level: %s\n" STYLE_RESET_ALL,
 
-           config.base_libs_dir == NULL ? "./" : config.base_libs_dir,
-           config.opt_level ? config.opt_level : "default<O3>");
+           ylc_config.base_libs_dir == NULL ? "./" : ylc_config.base_libs_dir,
+           ylc_config.opt_level ? ylc_config.opt_level : "default<O3>");
 
     init_readline();
 
@@ -506,7 +506,7 @@ void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,
       continue;
     } else {
       // Run optimization passes before execution
-      if (config.verify_ir) {
+      if (ylc_config.verify_ir) {
         char *verify_err = NULL;
         if (LLVMVerifyModule(module, LLVMPrintMessageAction, &verify_err)) {
           fprintf(stderr, "IR verification failed: %s\n", verify_err);

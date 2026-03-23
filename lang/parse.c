@@ -236,7 +236,7 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
   }
 
   if (expr->tag == AST_LAMBDA) {
-    if (!config.test_mode &&
+    if (!ylc_config.test_mode &&
         strncmp(name->data.AST_IDENTIFIER.value, "test_", 5) == 0) {
       return NULL;
     }
@@ -258,7 +258,7 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
 }
 
 Ast *ast_test_module(Ast *expr) {
-  if (!config.test_mode) {
+  if (!ylc_config.test_mode) {
     // don't parse this unless in test context
     return NULL;
   }
@@ -1128,12 +1128,13 @@ static void restore_parsing_context(ParsingContext ctx) { ctx = ctx; }
 
 char *check_path(char *fully_qualified_name, char *rel_path) {
   if (access(fully_qualified_name, F_OK) != 0 &&
-      (config.base_libs_dir != NULL)) {
+      (ylc_config.base_libs_dir != NULL)) {
 
-    char *new_filename = malloc(
-        sizeof(char) * (strlen(rel_path) + strlen(config.base_libs_dir) + 2));
+    char *new_filename =
+        malloc(sizeof(char) *
+               (strlen(rel_path) + strlen(ylc_config.base_libs_dir) + 2));
 
-    sprintf(new_filename, "%s/%s", config.base_libs_dir, rel_path);
+    sprintf(new_filename, "%s/%s", ylc_config.base_libs_dir, rel_path);
     fully_qualified_name = new_filename;
 
     if (access(fully_qualified_name, F_OK) != 0) {

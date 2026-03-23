@@ -191,6 +191,9 @@ let get_saw_tabsize = extern fn () -> Int;
 
 
 let set_main_vol = extern fn Double -> ();
+let play_into = extern fn Ptr -> Ptr -> Ptr;
+let play_into_idx = extern fn Ptr -> Int -> Ptr -> Ptr;
+
 
 # let init_audio = extern fn () -> () in
 #   init_audio ()

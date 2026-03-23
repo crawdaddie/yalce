@@ -1,6 +1,7 @@
 open DSP;
+open engine/bindings/Synth; 
+open engine/bindings/Sched; 
 
-# let whisper = load_soundfile "whisper.wav";
 # let whisper = load_soundfile "fat_amen_mono_48000.wav";
 
 
@@ -28,7 +29,7 @@ import std/Lists;
 # );
 
 compile_audio_fn (
-  let y = fn () ->
+  let y_ = fn () ->
 
     # let x = fn f ->
     #   [1., 0., 1., 0.1, 1., 0., 1., 0., 1.]
@@ -43,12 +44,87 @@ compile_audio_fn (
     let t = trig 1.5;
     # let pitches = [| 60., 60., 60., 60.|];
     t
-    |> decay 1. 
-    |> (*) (sin_osc 60.)
-    |> Reverb.reverb 4. 0.9
-    |> (*) 4.
-    |> Math.tanh
+    |> decay 1 
+    |> (*) (sin_osc 1200)
+    |> Reverb.reverb 4 0.9
+    # |> (*) 4
+    # |> Math.tanh
   ;
 );
 
-y () |> play_node
+# let whisper = load_soundfile "whisper.wav";
+#
+# compile_audio_fn (
+#   let g = fn () -> 
+#     trig 30
+#     |> grains 20
+#     (array_of_buf whisper)
+#     1
+#     (phasor 0.005 |> (+) ((sin_osc 0.1) * (lfnoise0 30 0.05 0.06)))
+#     0.2
+#     |> Reverb.reverb 3 0.8
+# ) ;
+# g () |> play_node;
+
+#
+# compile_audio_fn (
+#   let f = fn freq ->
+#     sin_osc freq 
+#     |> (*) (trig 0 |> adsr 0. 0.1 1. 0.1 |> kill_on_end)
+#     |> (*) 0.5
+# );
+#
+# let pitches = [| 100., 300., 600., 1200., 1200., 1300., 800. |];
+# let times = [| 0.5, 0.25, 0.25, 0.5, 1. |];
+#
+# let q = 60. / 60.;
+# let rfx = Reverb.reverb 4. 0.9 0. |> play_node;
+# defer_quant 0.1 (fn t -> 
+#   (dur: (fn () -> Math.array_choose times), freq: (fn () -> Math.array_choose pitches))
+#   |> cor_zip_struct
+#   |> cor_map (fn (d, freq) -> 
+#     f freq |> play_into rfx;
+#     d * q
+#   ) 
+#   |> play_routine t schedule_event
+# );
+
+
+
+compile_audio_fn (
+  let acid = fn f t ->
+
+    let ffreq = t |> decay 2. |> scale f 8000;
+
+    let osc = fn f -> saw_osc f + saw_osc (f * 1.01) + saw_osc (f * 1.02) |> (*) 0.3;;
+    # let osc = fn f -> saw_osc f + saw_osc (f * 1.01) 
+    # ;;
+
+    f
+    |> lag 0.3
+    |> osc
+    |> Filter.lpf ffreq 10.
+    |> (*) 10 |> Math.tanh
+    |> (*) (adsr 0 0.1 0.8 0.5 t)
+);
+
+
+
+let x = acid 50 0. |> play_node;
+
+let trig = fn () -> 
+  let fo = get_tl_tick ();
+  set_input_scalar_offset x 0 fo (Math.array_choose [|60., 60., 60., 60., 60., 240., 60., 480.|]) ;
+  set_input_trig_offset x 1 fo
+;;
+
+let q = 60. / 150.;
+
+defer_quant q (fn t ->
+  iter_of_array [|3., 3., 3., 4., 3., 3., 3., 3., 6., 1.|]  
+  |> cor_loop
+  |> cor_map ((*) (q * 0.25))
+  |> cor_map (fn d -> trig (); d)
+  |> play_routine t schedule_event
+)
+

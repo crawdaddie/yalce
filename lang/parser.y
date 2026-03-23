@@ -193,6 +193,10 @@ simple_expr:
   | '(' expr_sequence ')' { $$ = $2; }
   | '(' FN lambda_args ARROW expr_sequence ')' { $$ = ast_lambda($3, $5); }
   | '(' FN TOK_VOID ARROW expr_sequence ')'    { $$ = ast_void_lambda($5); }
+  | '(' LET IDENTIFIER '=' FN lambda_args ARROW expr_sequence ')'
+                                    { $$ = ast_let(ast_identifier($3), ast_lambda($6, $8), NULL); }
+  | '(' LET IDENTIFIER '=' FN TOK_VOID ARROW expr_sequence ')'
+                                    { $$ = ast_let(ast_identifier($3), ast_void_lambda($8), NULL); }
   | '(' '+' ')'           { $$ = ast_identifier((ObjString){"+", 1}); }
   | '(' '-' ')'           { $$ = ast_identifier((ObjString){"-", 1}); }
   | '(' '*' ')'           { $$ = ast_identifier((ObjString){"*", 1}); }

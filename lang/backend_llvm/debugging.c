@@ -29,12 +29,12 @@ void init_debugging(const char *src_file, JITLangCtx *ctx,
   // Create compile unit
   LLVMMetadataRef di_compile_unit = LLVMDIBuilderCreateCompileUnit(
       di_builder,
-      LLVMDWARFSourceLanguageC, // or define your own language
-      di_file, "ylc", 3,        // producer
-      config.opt_level != NULL, // isOptimized (set based on your opt level)
-      "", 0,                    // flags
-      0,                        // runtime version
-      "", 0,                    // split name
+      LLVMDWARFSourceLanguageC,     // or define your own language
+      di_file, "ylc", 3,            // producer
+      ylc_config.opt_level != NULL, // isOptimized (set based on your opt level)
+      "", 0,                        // flags
+      0,                            // runtime version
+      "", 0,                        // split name
       LLVMDWARFEmissionFull, 0, 0, 0, 0, 0, "", 0);
   ctx->debug_ctx.di_compile_unit = di_compile_unit;
 }

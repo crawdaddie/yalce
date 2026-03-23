@@ -586,7 +586,9 @@ static NodeRef ensure_play_into_mixer_inlet(NodeRef target, int inlet_idx) {
 
 NodeRef play_into(NodeRef target, NodeRef node) {
   if (target && node && target->num_inputs > 0) {
-    NodeRef mixer = ensure_play_into_mixer_inlet(target, 0);
+    NodeRef mixer =
+        // input inlet is typically the last one
+        ensure_play_into_mixer_inlet(target, target->num_inputs - 1);
     if (mixer) {
       node->bus = mixer;
       node->write_to_output = false;
@@ -596,6 +598,17 @@ NodeRef play_into(NodeRef target, NodeRef node) {
   return play_node_before(target, node);
 }
 
+NodeRef play_into_idx(NodeRef target, int idx, NodeRef node) {
+  if (target && node && target->num_inputs > 0) {
+    NodeRef mixer = ensure_play_into_mixer_inlet(target, idx);
+    if (mixer) {
+      node->bus = mixer;
+      node->write_to_output = false;
+    }
+  }
+
+  return play_node_before(target, node);
+}
 int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
   SNDFILE *infile;
   SF_INFO sfinfo;
