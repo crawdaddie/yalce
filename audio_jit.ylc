@@ -104,27 +104,57 @@ compile_audio_fn (
     |> lag 0.3
     |> osc
     |> Filter.lpf ffreq 10.
-    |> (*) 10 |> Math.tanh
+    |> (*) 5 |> Math.tanh
     |> (*) (adsr 0 0.1 0.8 0.5 t)
 );
 
+compile_audio_fn (
+  let kick = fn () ->
+    let t = trig 0;
+    let freq = t |> decay 0.1 |> scale 30 4000;
+    freq
+    |> sin_osc 
+    |> (+) (t |> decay 0.4 |> (*) (white ()))
+    |> (*) 2. |> Math.tanh
+    |> (*) (adsr 0 0.1 1. 0.2 (t |> rect 0.25) |> kill_on_end)
 
+);
 
-let x = acid 50 0. |> play_node;
-
-let trig = fn () -> 
-  let fo = get_tl_tick ();
-  set_input_scalar_offset x 0 fo (Math.array_choose [|60., 60., 60., 60., 60., 240., 60., 480.|]) ;
-  set_input_trig_offset x 1 fo
-;;
 
 let q = 60. / 150.;
 
+compile_audio_fn (
+  let fx = fn dt inp ->
+    delay dt 2. 0.3 inp 
+
+);
+#hh let rfx = allpass q 2. 0.5 0. |> play_node;
+
+let rfx = fx (0.5 * q) 0. |> play_node;
+let x = acid 50 0. |> play_into rfx;
+# let x = acid 50 0. |> play_into rfx;
+import std/Arrays;
+let semi_ratio = fn x -> Math.pow 2. (x / 12.);;
+let trig = fn () -> 
+  let fo = get_tl_tick ();
+  set_input_scalar_offset x 0 fo ([|0., 0., 0., 24. + 8., 24. + 7., 12., 12. + 3.|] |> Arrays.map (fn x -> 60. * (semi_ratio x)) |> Math.array_choose);
+  set_input_trig_offset x 1 fo
+;;
+
+
 defer_quant q (fn t ->
-  iter_of_array [|3., 3., 3., 4., 3., 3., 3., 3., 6., 1.|]  
+  iter_of_array [|3., 3., 3., 4., 3.,  3., 3., 3., 4., 1., 1., 1.,|]  
   |> cor_loop
   |> cor_map ((*) (q * 0.25))
   |> cor_map (fn d -> trig (); d)
+  |> play_routine t schedule_event
+  ;
+
+
+  iter_of_array [|3., 3., 3., 4., 3., 3., 3., 3., 5., 1., 1., 3., 3., 3., 3., 4|]  
+  |> cor_loop
+  |> cor_map ((*) (q * 0.25))
+  |> cor_map (fn d ->  kick () |> play_node_offset (get_tl_tick ()); d)
   |> play_routine t schedule_event
 )
 
