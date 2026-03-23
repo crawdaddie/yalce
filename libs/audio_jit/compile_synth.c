@@ -124,6 +124,7 @@ static LLVMBasicBlockRef dsp_build_perform_loop(LLVMValueRef perform_fn,
 
   dsp_ctx->node_ptr = LLVMGetParam(perform_fn, 0);
   dsp_ctx->state_ptr = LLVMGetParam(perform_fn, 1);
+  dsp_ctx->state_base_ptr = dsp_ctx->state_ptr;
   dsp_ctx->inputs_ptr = LLVMGetParam(perform_fn, 2);
   dsp_ctx->spf = LLVMGetParam(perform_fn, 4);
 
@@ -331,7 +332,16 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   frame_ctx.create_call = node_val;
 
   dsp_ctx.init_state_ptr = init_state_ptr;
+  dsp_ctx.init_state_base_ptr = init_state_ptr;
   frame_ctx.init_state_ptr = init_state_ptr;
+  frame_ctx.init_state_base_ptr = init_state_ptr;
+
+  {
+    LLVMTypeRef i8_ptr_ty = LLVMPointerType(i8_ty, 0);
+    frame_ctx.init_state_cursor_ptr =
+        LLVMBuildAlloca(init_b, i8_ptr_ty, "init.state_cursor");
+    LLVMBuildStore(init_b, init_state_ptr, frame_ctx.init_state_cursor_ptr);
+  }
 
   LLVMPositionBuilderAtEnd(dsp_ctx.perform_builder, perf_bb);
   LLVMBasicBlockRef perf_exit_bb =
@@ -339,7 +349,15 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
 
   LLVMPositionBuilderAtEnd(frame_ctx.perform_builder, frame_bb);
   frame_ctx.state_ptr = LLVMGetParam(frame_fn, 0);
+  frame_ctx.state_base_ptr = frame_ctx.state_ptr;
   frame_ctx.node_ptr = LLVMGetParam(frame_fn, 1);
+  {
+    LLVMTypeRef i8_ptr_ty = LLVMPointerType(i8_ty, 0);
+    frame_ctx.state_cursor_ptr = LLVMBuildAlloca(
+        frame_ctx.perform_builder, i8_ptr_ty, "frame.state_cursor");
+    LLVMBuildStore(frame_ctx.perform_builder, frame_ctx.state_ptr,
+                   frame_ctx.state_cursor_ptr);
+  }
   {
     LLVMTypeRef f64_ty_local = LLVMDoubleType();
     LLVMTypeRef spf_fn_ty =

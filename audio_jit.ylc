@@ -40,12 +40,14 @@ compile_audio_fn (
     # |> (*) (Math.db_amp -20)
 
     # sin_osc (f + lfnoise 10 0 400) |> delay 0.1 0.1 0.5 |> delay 0.03 0.2 0.8
-    let t = trig 1;
-    let pitches = [| 600., 800., 2400., 4800., 60., 60.|];
+    let t = trig 1.5;
+    # let pitches = [| 60., 60., 60., 60.|];
     t
-    |> decay 0.5
-    |> (*) (arr_choose pitches t |> sin_osc)
+    |> decay 1. 
+    |> (*) (sin_osc 60.)
     |> Reverb.reverb 4. 0.9
+    |> (*) 4.
+    |> Math.tanh
   ;
 );
 

@@ -13,6 +13,10 @@ typedef struct {
   LLVMValueRef node_ptr;  // !llvm.ptr  — the Node* itself
   LLVMValueRef state_ptr; // !llvm.ptr  — opaque state block
   LLVMValueRef init_state_ptr;
+  LLVMValueRef state_base_ptr;
+  LLVMValueRef init_state_base_ptr;
+  LLVMValueRef state_cursor_ptr;      // alloca(i8*)
+  LLVMValueRef init_state_cursor_ptr; // alloca(i8*)
   LLVMValueRef inputs_ptr; // !llvm.ptr  — Node** inputs array
   LLVMValueRef spf;        // frame seconds value
   LLVMValueRef frame_idx;  // index      — loop induction variable (eg 0 .. 256)

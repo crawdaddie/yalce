@@ -10,6 +10,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+LLVMValueRef dsp_consume_frame_state(DspBuildCtx *dsp_ctx,
+                                     LLVMBuilderRef builder, int size,
+                                     int align, const char *name);
+LLVMValueRef dsp_consume_init_state(DspBuildCtx *dsp_ctx,
+                                    LLVMBuilderRef builder, int size,
+                                    int align, const char *name);
+
 LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder) {
   switch (ast->tag) {
@@ -156,43 +163,50 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       LLVMTypeRef arr_ty =
           LLVMStructType((LLVMTypeRef[]){i32_ty, f64_ptr_ty}, 2, 0);
       LLVMTypeRef arr_ptr_ty = LLVMPointerType(arr_ty, 0);
+      int total_bytes = 16 + (len * 8);
 
-      LLVMValueRef off_i32 = LLVMConstInt(i32_ty, (uint64_t)off, 0);
-      LLVMValueRef data_off_i32 = LLVMConstInt(i32_ty, (uint64_t)data_off, 0);
-      LLVMValueRef arr_ptr_i8 =
-          LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, dsp_ctx->init_state_ptr,
-                        &off_i32, 1, "array.ctor.ptr_i8");
-      LLVMValueRef arr_ptr = LLVMBuildBitCast(dsp_ctx->init_builder, arr_ptr_i8,
-                                              arr_ptr_ty, "array.ctor.ptr");
+      if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
+        LLVMValueRef init_base = dsp_consume_init_state(
+            dsp_ctx, dsp_ctx->init_builder, total_bytes, 8, "array.ctor.base");
+        LLVMValueRef arr_ptr_i8 = init_base;
+        LLVMValueRef arr_ptr = LLVMBuildBitCast(dsp_ctx->init_builder,
+                                                arr_ptr_i8, arr_ptr_ty,
+                                                "array.ctor.ptr");
 
-      LLVMValueRef ctor_base_i8 =
-          LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, dsp_ctx->init_state_ptr,
-                        &data_off_i32, 1, "array.ctor.base");
+        LLVMValueRef ctor_base_i8 = LLVMBuildGEP2(
+            dsp_ctx->init_builder, i8_ty, init_base,
+            (LLVMValueRef[]){LLVMConstInt(i64_ty, 16, 0)}, 1,
+            "array.ctor.base");
 
-      LLVMValueRef ctor_base = LLVMBuildBitCast(
-          dsp_ctx->init_builder, ctor_base_i8, f64_ptr_ty, "array.ctor.data");
-      LLVMValueRef arr_init = LLVMGetUndef(arr_ty);
-      arr_init = LLVMBuildInsertValue(dsp_ctx->init_builder, arr_init,
-                                      LLVMConstInt(i32_ty, (uint64_t)len, 0), 0,
-                                      "array.ctor.size");
-      arr_init = LLVMBuildInsertValue(dsp_ctx->init_builder, arr_init,
-                                      ctor_base, 1, "array.ctor.data_ptr");
-      LLVMBuildStore(dsp_ctx->init_builder, arr_init, arr_ptr);
+        LLVMValueRef ctor_base = LLVMBuildBitCast(
+            dsp_ctx->init_builder, ctor_base_i8, f64_ptr_ty, "array.ctor.data");
+        LLVMValueRef arr_init = LLVMGetUndef(arr_ty);
+        arr_init = LLVMBuildInsertValue(dsp_ctx->init_builder, arr_init,
+                                        LLVMConstInt(i32_ty, (uint64_t)len, 0),
+                                        0, "array.ctor.size");
+        arr_init = LLVMBuildInsertValue(dsp_ctx->init_builder, arr_init,
+                                        ctor_base, 1,
+                                        "array.ctor.data_ptr");
+        LLVMBuildStore(dsp_ctx->init_builder, arr_init, arr_ptr);
 
-      for (int i = 0; i < len; i++) {
-        Ast *item = ast->data.AST_LIST.items + i;
-        LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
-        LLVMValueRef elem_ptr =
-            LLVMBuildGEP2(dsp_ctx->init_builder, f64_ty, ctor_base, &idx_i64, 1,
-                          "array.init.ptr");
+        for (int i = 0; i < len; i++) {
+          Ast *item = ast->data.AST_LIST.items + i;
+          LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
+          LLVMValueRef elem_ptr = LLVMBuildGEP2(dsp_ctx->init_builder, f64_ty,
+                                                ctor_base, &idx_i64, 1,
+                                                "array.init.ptr");
 
-        LLVMValueRef elem = codegen(item, ctx, module, dsp_ctx->init_builder);
-        elem = ensure_float(item->type, elem, dsp_ctx->init_builder);
-        LLVMBuildStore(dsp_ctx->init_builder, elem, elem_ptr);
+          LLVMValueRef elem =
+              codegen(item, ctx, module, dsp_ctx->init_builder);
+          elem = ensure_float(item->type, elem, dsp_ctx->init_builder);
+          LLVMBuildStore(dsp_ctx->init_builder, elem, elem_ptr);
+        }
       }
 
-      LLVMValueRef run_arr_ptr_i8 = LLVMBuildGEP2(
-          builder, i8_ty, dsp_ctx->state_ptr, &off_i32, 1, "array.ptr_i8");
+      (void)off;
+      (void)data_off;
+      LLVMValueRef run_arr_ptr_i8 = dsp_consume_frame_state(
+          dsp_ctx, builder, total_bytes, 8, "array.ptr");
       LLVMValueRef run_arr_ptr =
           LLVMBuildBitCast(builder, run_arr_ptr_i8, arr_ptr_ty, "array.ptr");
       return LLVMBuildLoad2(builder, arr_ty, run_arr_ptr, "array.load");
