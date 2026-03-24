@@ -300,9 +300,9 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       .spf_scalar = compile_spf,
   };
 
-  LLVMTypeRef create_param_tys[] = {GENERIC_PTR, i32_ty, i32_ty};
+  LLVMTypeRef create_param_tys[] = {GENERIC_PTR, i32_ty, i32_ty, GENERIC_PTR};
   LLVMTypeRef create_fn_ty =
-      LLVMFunctionType(GENERIC_PTR, create_param_tys, 3, 0);
+      LLVMFunctionType(GENERIC_PTR, create_param_tys, 4, 0);
   LLVMValueRef create_fn =
       LLVMGetNamedFunction(module, "ylc_create_audio_node");
   if (!create_fn) {
@@ -310,13 +310,16 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
     LLVMSetLinkage(create_fn, LLVMExternalLinkage);
   }
 
+  LLVMValueRef meta_str =
+      LLVMBuildGlobalStringPtr(ctor_b, name ? name : "?", "synth.meta");
   LLVMValueRef create_args[] = {
       perf_fn,
       LLVMConstInt(i32_ty, (uint64_t)num_inputs, 0),
       LLVMConstInt(i32_ty, 0, 0),
+      meta_str,
   };
   LLVMValueRef node_val =
-      LLVMBuildCall2(ctor_b, create_fn_ty, create_fn, create_args, 3, "node");
+      LLVMBuildCall2(ctor_b, create_fn_ty, create_fn, create_args, 4, "node");
   LLVMBuildBr(ctor_b, ctor_init_bb);
 
   LLVMPositionBuilderAtEnd(ctor_b, ctor_init_bb);
@@ -399,7 +402,8 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
                       hash_string(field_chars, field_len), field_sym);
         }
       } else {
-        JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, param_type, arg_val, f64_ty);
+        JITSymbol *sym =
+            new_symbol(STYPE_LOCAL_VAR, param_type, arg_val, f64_ty);
         const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
         int id_len = param_ast->data.AST_IDENTIFIER.length;
         ht_set_hash(fn_ctx.frame->table, id_chars,
@@ -410,8 +414,8 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
     }
   }
 
-  // Bind closed-over values from extra frame params (appended after lambda params).
-  // The closed_vals list and closure_meta->args are in the same order.
+  // Bind closed-over values from extra frame params (appended after lambda
+  // params). The closed_vals list and closure_meta->args are in the same order.
   if (lambda->tag == AST_LAMBDA) {
     int cap_idx = idx;
     for (AstList *cv = lambda->data.AST_LAMBDA.closed_vals; cv;
@@ -465,7 +469,8 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   // frame_ty already encodes the real function signature (e.g. tuple element
   // as a single struct param).
   unsigned frame_total_params = LLVMCountParamTypes(frame_ty);
-  unsigned frame_user_params = frame_total_params > 2 ? frame_total_params - 2 : 0;
+  unsigned frame_user_params =
+      frame_total_params > 2 ? frame_total_params - 2 : 0;
 
   LLVMTypeRef *frame_formal_tys =
       malloc(sizeof(LLVMTypeRef) * (size_t)frame_total_params);

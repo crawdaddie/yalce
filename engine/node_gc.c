@@ -40,27 +40,56 @@ void remove_and_free_node(node_group_state *ctx, NodeRef prev,
     free(to_free);
   }
 }
-void iter_gc(node_group_state *ctx) {
-  Node *current = ctx->head;
+static int iter_gc_prev_lines = 0;
+static int iter_gc_cur_lines = 0;
+static int iter_gc_depth = 0;
 
+// #define __DUMP_TABLE
+
+void iter_gc(node_group_state *ctx) {
+#ifdef __DUMP_TABLE
+  if (iter_gc_depth == 0) {
+    for (int i = 0; i < iter_gc_prev_lines; i++)
+      fprintf(stderr, "\033[A\033[2K");
+    iter_gc_cur_lines = 0;
+    fprintf(stderr, "%-6s  %-18s  %s\n", "status", "ptr", "meta");
+    fprintf(stderr, "------  ------------------  ----\n");
+    iter_gc_cur_lines += 2;
+  }
+#endif
+
+  iter_gc_depth++;
+
+  Node *current = ctx->head;
   Node *prev = NULL;
 
   while (current != NULL) {
-    if (current->perform == (perform_func_t)perform_ensemble) {
+    if (current->perform == (perform_func_t)perform_ensemble)
       iter_gc(current->state_ptr);
-    }
 
-    Node *next = current->next; // Save next pointer before potentially freeing
+    Node *next = current->next;
+
+#ifdef __DUMP_TABLE
+    fprintf(stderr, "%-6s  %p  %s\n", current->trig_end ? "KILL" : "live",
+            (void *)current, current->meta ? current->meta : "?");
+    iter_gc_cur_lines++;
+#endif
 
     if (current->trig_end) {
       remove_and_free_node(ctx, prev, current);
       current = next;
-      // Don't update prev since we removed a node
     } else {
       prev = current;
       current = next;
     }
   }
+
+#ifdef __DUMP_TABLE
+  iter_gc_depth--;
+  if (iter_gc_depth == 0) {
+    iter_gc_prev_lines = iter_gc_cur_lines;
+  }
+#endif
 }
 
 // The garbage collection thread function
