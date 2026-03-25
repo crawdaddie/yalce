@@ -136,4 +136,5 @@ __attribute__((constructor)) static void ylc_audio_jit_init(void) {
   printf("sample rates: %d %f\n", ctx_sample_rate(), ctx_spf());
 
   register_builtin(stack, "pat", pattern_handler);
+  register_builtin(stack, "pat_key", pattern_key_handler);
 }

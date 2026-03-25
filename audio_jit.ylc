@@ -174,14 +174,14 @@ compile_audio_fn (
 
 
 defer_quant q (fn t ->
-  pat "3 3 3 4 1 1 1" 
-  |> cor_loop
-  |> cor_map (fn d -> trig (); d)
-  |> cor_map ((*) (q * 0.25))
-  |> play_routine t schedule_event
-  ;
-
-
+  # pat "3 3 3 4 1 1 1" 
+  # |> cor_loop
+  # |> cor_map (fn d -> trig (); d)
+  # |> cor_map ((*) (q * 0.25))
+  # |> play_routine t schedule_event
+  # ;
+  #
+  #
   pat "3 3 3 4 3" 
   |> cor_loop
   |> cor_map (fn d -> kick () |> play_node_offset (get_tl_tick ()); d)
@@ -189,30 +189,29 @@ defer_quant q (fn t ->
   |> play_routine t schedule_event
   ;
 
-  let hh = fn () -> closed_hh () |> play_node_offset (get_tl_tick ());;
-  let ohh = fn () -> open_hh () |> play_node_offset (get_tl_tick ());;
+  # let hh = fn () -> closed_hh () |> play_node_offset (get_tl_tick ());;
+  # let ohh = fn () -> open_hh () |> play_node_offset (get_tl_tick ());;
 
-  let tts_pat = fn () ->
-    hh ();
-    yield 0.25;
-    hh ();
-    yield 0.25;
-    ohh ();
-    yield 0.5;
-    yield tts_pat ()
-  ;;
-
-  tts_pat ()
-    |> cor_map ((*) q)
-    |> play_routine t schedule_event
-  ;
-
-  pat "1 1 1 1 4 1 1 1 4 1" 
-  |> cor_loop
-  |> cor_map (fn d -> chirp (Math.rand_double_range 100. 1000.) 0.02 |> play_node_offset (get_tl_tick ()); d)
-  |> cor_map ((*) (q * 0.25))
+  (dur:     pat "1 1 2",
+    hh: pat_key "c c o"
+  )
+  |> cor_zip_struct 
+  |> cor_map (fn (d, hh) ->
+    match hh with
+    | "c" -> (closed_hh () |> play_node_offset (get_tl_tick ()))
+    | "o" -> (open_hh () |> play_node_offset (get_tl_tick ()))
+    ;
+    d * 0.125
+  )
   |> play_routine t schedule_event
   ;
+
+  # pat "1 1 1 1 4 1 1 1 4 1" 
+  # |> cor_loop
+  # |> cor_map (fn d -> chirp (Math.rand_double_range 100. 1000.) 0.02 |> play_node_offset (get_tl_tick ()); d)
+  # |> cor_map ((*) (q * 0.25))
+  # |> play_routine t schedule_event
+  # ;
 
 )
 
