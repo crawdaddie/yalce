@@ -11,7 +11,7 @@ compile_audio_fn (
     |> (+) (0.4 * sin_osc (f * 3))
     |> (*) od
     |> Math.tanh
-    |> (*) (adsr 0.05 0.1 0.5 1. t |> kill_on_end)
+    |> (*) (adsr 0. 0.1 0.5 1. t |> kill_on_end)
 );
 
 compile_audio_fn (
@@ -43,7 +43,7 @@ defer_quant q (fn t ->
   ))
   |> cor_zip_struct 
   |> cor_map (fn (d, freq) ->
-    8. * freq |> mel (Math.rand_double_range 1. 8.) |> play_into rfx ;
+    8 * freq |> mel (Math.rand_double_range 0.5 20.) |> play_into rfx ;
     d * q * 0.25
   )
   |> play_routine t schedule_event
@@ -54,7 +54,7 @@ defer_quant q (fn t ->
   )
   |> cor_zip_struct 
   |> cor_map (fn (d, f) ->
-    2. * f |> bass |> play_node_offset (get_tl_tick ());
+    2 * f |> bass |> play_node_offset (get_tl_tick ());
     d * q * 0.5
   )
   |> play_routine t schedule_event
