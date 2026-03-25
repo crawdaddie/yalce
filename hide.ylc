@@ -1,0 +1,61 @@
+open DSP;
+
+open engine/bindings/Synth; 
+import std/Math;
+
+compile_audio_fn (
+  let mel = fn od f ->
+    let t = trig 0;
+    f
+    |> sin_osc
+    |> (+) (0.4 * sin_osc (f * 3))
+    |> (*) od
+    |> Math.tanh
+    |> (*) (adsr 0.05 0.1 0.5 1. t |> kill_on_end)
+);
+
+compile_audio_fn (
+  let bass = fn f ->
+    let t = trig 0;
+    f
+    |> saw_osc
+    |> (+) (saw_osc (f * 1.01))
+    |> (*) (adsr 0.08 0.1 1. 2. t |> kill_on_end)
+);
+
+let rfx = Reverb.reverb 4. 0.9 0. |> play_node;
+let q = 60. / 95.;
+let midi_key_freq = fn k ->
+  match (parse_note k) with
+  | Some md -> md |> midi_freq 
+  | _ -> 0.
+  ;;
+
+defer_quant q (fn t ->
+  (dur:     pat "1",
+     k: (pat_key `
+     f0  c1  e_1 g1  a_1 b_1 e_1 a_0
+     e_1 g1  c2  e_2 f2  g2  e_2 c2
+     c1  g1  b_1 d2  e_2 f2  b_2 e_1
+     b_1 d2  c3  b_2 a_2 g2  e_2 c2
+     `
+     |> cor_map midi_key_freq
+  ))
+  |> cor_zip_struct 
+  |> cor_map (fn (d, freq) ->
+    8. * freq |> mel (Math.rand_double_range 1. 8.) |> play_into rfx ;
+    d * q * 0.25
+  )
+  |> play_routine t schedule_event
+  ;
+
+  (dur:     pat "3  5   3   5",
+     k: (pat_key "f0 a_0 b_0 c#1" |> cor_map midi_key_freq)
+  )
+  |> cor_zip_struct 
+  |> cor_map (fn (d, f) ->
+    2. * f |> bass |> play_node_offset (get_tl_tick ());
+    d * q * 0.5
+  )
+  |> play_routine t schedule_event
+)

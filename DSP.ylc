@@ -338,3 +338,31 @@ compile_audio_fn (
     y
 );
 ;
+
+let int32_parse = extern fn String -> Int;
+let parse_note = fn s ->
+  let n = match (s[0]) with
+  | 'c' -> 0
+  | 'd' -> 2
+  | 'e' -> 4
+  | 'f' -> 5
+  | 'g' -> 7
+  | 'a' -> 9
+  | 'b' -> 11
+  | _ -> -1
+  ;
+
+  let (acc, oct) = match s[1] with
+  | '#' -> (1, int32_parse (s[2 ..]))
+  | '_' -> (-1, int32_parse (s[2 ..]))
+  | _ -> (0, int32_parse (s[1 ..]))
+  ;
+
+  match n with
+  | -1 -> None
+  | _ -> Some @@ ((oct + 1) * 12) + n + acc
+;;
+
+let midi_freq = fn n ->
+  440. * (Math.pow 2. ((n - 69.)/12.))
+;;

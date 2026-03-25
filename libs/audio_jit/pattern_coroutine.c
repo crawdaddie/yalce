@@ -9,10 +9,10 @@
 // ============================================================================
 // Pattern parser
 //
-// Grammar (one level of nesting inside group brackets):
+// Grammar:
 //   pattern  ::= step+
 //   step     ::= number | '<' slot+ '>' | '{' slot+ '}'
-//   slot     ::= number | '[' number+ ']'
+//   slot     ::= number | '[' number+ ']' | '{' number+ '}'
 //
 // '<a b>'  — cycle through slots in order (counter % n)
 // '{a b}'  — pick a slot uniformly at random each time
@@ -29,20 +29,26 @@
 #define MAX_SLOTS 64
 #define MAX_SEQ_VALS 64
 
+typedef enum {
+  STEP_SEQ,  // single fixed value
+  STEP_ALT,  // cycling alternation  <>
+  STEP_RAND, // random selection     {}
+} PatternStepKind;
+
 typedef struct {
-  double *vals; // malloced; count=1 for scalar, N for [a b c]
+  PatternStepKind kind; // STEP_SEQ = sequence/scalar, STEP_RAND = random pick
+  double *vals;         // malloced; count=1 for scalar, N for [a b c] or {a b}
   int count;
 } Slot;
 
 typedef struct {
-  bool is_alt;
-  bool is_rand; // true for {}, false for <>  (only when is_alt)
-  // STEP_FIXED:
+  PatternStepKind kind;
+  // STEP_SEQ:
   double fixed_val;
-  // STEP_ALT:
+  // STEP_ALT / STEP_RAND:
   Slot *slots; // malloced array of slots
   int num_slots;
-  int counter_idx; // which alt_counter alloca to use (-1 for rand steps)
+  int counter_idx; // alt_counter alloca index (-1 for STEP_RAND)
 } PatternStep;
 
 typedef struct {
@@ -54,7 +60,7 @@ typedef struct {
 static void free_parsed(ParsedPattern *p) {
   for (int i = 0; i < p->num_steps; i++) {
     PatternStep *s = &p->steps[i];
-    if (s->is_alt) {
+    if (s->kind != STEP_SEQ) {
       for (int j = 0; j < s->num_slots; j++)
         free(s->slots[j].vals);
       free(s->slots);
@@ -64,36 +70,42 @@ static void free_parsed(ParsedPattern *p) {
 }
 
 static void skip_ws(const char **pp) {
-  while (**pp == ' ' || **pp == '\t')
+  while (**pp == ' ' || **pp == '\t' || **pp == '\n' || **pp == '\r')
     (*pp)++;
+}
+
+static bool parse_num_list(const char **pp, char close, double *tmp, int *n) {
+  while (**pp && **pp != close) {
+    skip_ws(pp);
+    if (**pp == close)
+      break;
+    char *end;
+    double v = strtod(*pp, &end);
+    if (end == *pp)
+      return false;
+    if (*n >= MAX_SEQ_VALS)
+      return false;
+    tmp[(*n)++] = v;
+    *pp = end;
+  }
+  if (**pp == close)
+    (*pp)++;
+  return *n > 0;
 }
 
 static bool parse_slot(const char **pp, Slot *out) {
   skip_ws(pp);
-  if (**pp == '[') {
+  if (**pp == '[' || **pp == '{') {
+    char close = **pp == '[' ? ']' : '}';
+    out->kind = **pp == '[' ? STEP_SEQ : STEP_RAND;
     (*pp)++;
     double tmp[MAX_SEQ_VALS];
     int n = 0;
-    while (**pp && **pp != ']') {
-      skip_ws(pp);
-      if (**pp == ']')
-        break;
-      char *end;
-      double v = strtod(*pp, &end);
-      if (end == *pp)
-        return false;
-      if (n >= MAX_SEQ_VALS)
-        return false;
-      tmp[n++] = v;
-      *pp = end;
-    }
-    if (**pp == ']')
-      (*pp)++;
-    if (n == 0)
+    if (!parse_num_list(pp, close, tmp, &n))
       return false;
     out->count = n;
-    out->vals = malloc(sizeof(double) * n);
-    memcpy(out->vals, tmp, sizeof(double) * n);
+    out->vals = malloc(sizeof(double) * (size_t)n);
+    memcpy(out->vals, tmp, sizeof(double) * (size_t)n);
     return true;
   } else {
     char *end;
@@ -101,6 +113,7 @@ static bool parse_slot(const char **pp, Slot *out) {
     if (end == *pp)
       return false;
     *pp = end;
+    out->kind = STEP_SEQ;
     out->count = 1;
     out->vals = malloc(sizeof(double));
     out->vals[0] = v;
@@ -140,8 +153,7 @@ static bool parse_pattern(const char *src, ParsedPattern *out) {
         return false;
 
       PatternStep *step = &out->steps[out->num_steps++];
-      step->is_alt = true;
-      step->is_rand = false;
+      step->kind = STEP_ALT;
       step->fixed_val = 0.0;
       step->num_slots = num_slots;
       step->slots = malloc(sizeof(Slot) * num_slots);
@@ -166,13 +178,12 @@ static bool parse_pattern(const char *src, ParsedPattern *out) {
         return false;
 
       PatternStep *step = &out->steps[out->num_steps++];
-      step->is_alt = true;
-      step->is_rand = true;
+      step->kind = STEP_RAND;
       step->fixed_val = 0.0;
       step->num_slots = num_slots;
       step->slots = malloc(sizeof(Slot) * num_slots);
       memcpy(step->slots, tmp_slots, sizeof(Slot) * num_slots);
-      step->counter_idx = -1; // no cycling counter for rand
+      step->counter_idx = -1;
     } else {
       char *end;
       double v = strtod(p, &end);
@@ -180,7 +191,7 @@ static bool parse_pattern(const char *src, ParsedPattern *out) {
         return false;
       p = end;
       PatternStep *step = &out->steps[out->num_steps++];
-      step->is_alt = false;
+      step->kind = STEP_SEQ;
       step->fixed_val = v;
       step->slots = NULL;
       step->num_slots = 0;
@@ -196,26 +207,26 @@ static bool parse_pattern(const char *src, ParsedPattern *out) {
 // Grammar (same grouping rules as numeric parser):
 //   pattern  ::= step+
 //   step     ::= token | '<' slot+ '>' | '{' slot+ '}'
-//   slot     ::= token | '[' token+ ']'
+//   slot     ::= token | '[' token+ ']' | '{' token+ '}'
 //
 // Tokens are whitespace-delimited and cannot include grouping delimiters
 // (< > { } [ ]).
 // ============================================================================
 
 typedef struct {
-  char **vals; // malloced token strings; count=1 for scalar, N for [a b c]
+  PatternStepKind kind; // STEP_SEQ = sequence/scalar, STEP_RAND = random pick
+  char **vals;          // malloced token strings
   int count;
 } KeySlot;
 
 typedef struct {
-  bool is_alt;
-  bool is_rand; // true for {}, false for <>  (only when is_alt)
-  // STEP_FIXED:
+  PatternStepKind kind;
+  // STEP_SEQ:
   char *fixed_key; // malloced token string
-  // STEP_ALT:
+  // STEP_ALT / STEP_RAND:
   KeySlot *slots; // malloced array of slots
   int num_slots;
-  int counter_idx; // which alt_counter alloca to use (-1 for rand steps)
+  int counter_idx; // alt_counter alloca index (-1 for STEP_RAND)
 } KeyPatternStep;
 
 typedef struct {
@@ -227,7 +238,7 @@ typedef struct {
 static void free_parsed_key(ParsedKeyPattern *p) {
   for (int i = 0; i < p->num_steps; i++) {
     KeyPatternStep *s = &p->steps[i];
-    if (s->is_alt) {
+    if (s->kind != STEP_SEQ) {
       for (int j = 0; j < s->num_slots; j++) {
         for (int k = 0; k < s->slots[j].count; k++) {
           free(s->slots[j].vals[k]);
@@ -266,28 +277,35 @@ static bool parse_key_token(const char **pp, char **out) {
   return true;
 }
 
+static bool parse_key_token_list(const char **pp, char close, char **tmp,
+                                 int *n) {
+  while (**pp && **pp != close) {
+    skip_ws(pp);
+    if (**pp == close)
+      break;
+    if (*n >= MAX_SEQ_VALS)
+      return false;
+    if (!parse_key_token(pp, &tmp[*n])) {
+      for (int i = 0; i < *n; i++)
+        free(tmp[i]);
+      return false;
+    }
+    (*n)++;
+  }
+  if (**pp == close)
+    (*pp)++;
+  return *n > 0;
+}
+
 static bool parse_key_slot(const char **pp, KeySlot *out) {
   skip_ws(pp);
-  if (**pp == '[') {
+  if (**pp == '[' || **pp == '{') {
+    char close = **pp == '[' ? ']' : '}';
+    out->kind = **pp == '[' ? STEP_SEQ : STEP_RAND;
     (*pp)++;
     char *tmp[MAX_SEQ_VALS];
     int n = 0;
-    while (**pp && **pp != ']') {
-      skip_ws(pp);
-      if (**pp == ']')
-        break;
-      if (n >= MAX_SEQ_VALS)
-        return false;
-      if (!parse_key_token(pp, &tmp[n])) {
-        for (int i = 0; i < n; i++)
-          free(tmp[i]);
-        return false;
-      }
-      n++;
-    }
-    if (**pp == ']')
-      (*pp)++;
-    if (n == 0)
+    if (!parse_key_token_list(pp, close, tmp, &n))
       return false;
     out->count = n;
     out->vals = malloc(sizeof(char *) * (size_t)n);
@@ -297,6 +315,7 @@ static bool parse_key_slot(const char **pp, KeySlot *out) {
     char *tok;
     if (!parse_key_token(pp, &tok))
       return false;
+    out->kind = STEP_SEQ;
     out->count = 1;
     out->vals = malloc(sizeof(char *));
     out->vals[0] = tok;
@@ -336,8 +355,7 @@ static bool parse_key_pattern(const char *src, ParsedKeyPattern *out) {
         return false;
 
       KeyPatternStep *step = &out->steps[out->num_steps++];
-      step->is_alt = true;
-      step->is_rand = false;
+      step->kind = STEP_ALT;
       step->fixed_key = NULL;
       step->num_slots = num_slots;
       step->slots = malloc(sizeof(KeySlot) * (size_t)num_slots);
@@ -362,20 +380,19 @@ static bool parse_key_pattern(const char *src, ParsedKeyPattern *out) {
         return false;
 
       KeyPatternStep *step = &out->steps[out->num_steps++];
-      step->is_alt = true;
-      step->is_rand = true;
+      step->kind = STEP_RAND;
       step->fixed_key = NULL;
       step->num_slots = num_slots;
       step->slots = malloc(sizeof(KeySlot) * (size_t)num_slots);
       memcpy(step->slots, tmp_slots, sizeof(KeySlot) * (size_t)num_slots);
-      step->counter_idx = -1; // no cycling counter for rand
+      step->counter_idx = -1;
     } else {
       char *tok;
       if (!parse_key_token(&p, &tok))
         return false;
 
       KeyPatternStep *step = &out->steps[out->num_steps++];
-      step->is_alt = false;
+      step->kind = STEP_SEQ;
       step->fixed_key = tok;
       step->slots = NULL;
       step->num_slots = 0;
@@ -556,7 +573,7 @@ LLVMValueRef emit_pattern_coroutine(const char *pattern_str, JITLangCtx *ctx,
     PatternStep *step = &pat.steps[i];
     char lbl[64];
 
-    if (!step->is_alt) {
+    if (step->kind == STEP_SEQ) {
       snprintf(lbl, sizeof(lbl), "s%d", i);
       emit_yield(wrapper_fn, module, builder, handle, promise_alloca,
                  LLVMConstReal(yield_ty, step->fixed_val), cleanup_bb,
@@ -564,7 +581,7 @@ LLVMValueRef emit_pattern_coroutine(const char *pattern_str, JITLangCtx *ctx,
     } else {
       // Compute which slot to use: cycling counter or random pick.
       LLVMValueRef slot_idx;
-      if (step->is_rand) {
+      if (step->kind == STEP_RAND) {
         // Call ylc_rand_int(num_slots) at runtime.
         LLVMTypeRef rand_fn_ty = LLVMFunctionType(
             LLVMInt32Type(), (LLVMTypeRef[]){LLVMInt32Type()}, 1, 0);
@@ -613,11 +630,48 @@ LLVMValueRef emit_pattern_coroutine(const char *pattern_str, JITLangCtx *ctx,
       for (int j = 0; j < step->num_slots; j++) {
         LLVMPositionBuilderAtEnd(builder, slot_bbs[j]);
         Slot *slot = &step->slots[j];
-        for (int k = 0; k < slot->count; k++) {
-          snprintf(lbl, sizeof(lbl), "s%d.sl%d.v%d", i, j, k);
-          emit_yield(wrapper_fn, module, builder, handle, promise_alloca,
-                     LLVMConstReal(yield_ty, slot->vals[k]), cleanup_bb,
-                     suspend_bb, lbl);
+        if (slot->kind == STEP_RAND) {
+          // Random pick within this slot: ylc_rand_int(count) → switch → yield
+          // one value.
+          LLVMTypeRef rand_fn_ty = LLVMFunctionType(
+              LLVMInt32Type(), (LLVMTypeRef[]){LLVMInt32Type()}, 1, 0);
+          LLVMValueRef rand_fn = LLVMGetNamedFunction(module, "ylc_rand_int");
+          if (!rand_fn) {
+            rand_fn = LLVMAddFunction(module, "ylc_rand_int", rand_fn_ty);
+            LLVMSetLinkage(rand_fn, LLVMExternalLinkage);
+          }
+          LLVMValueRef n_val = LLVMConstInt(LLVMInt32Type(), slot->count, 0);
+          LLVMValueRef rnd = LLVMBuildCall2(builder, rand_fn_ty, rand_fn,
+                                            &n_val, 1, "slot.rnd");
+          LLVMBasicBlockRef after_rnd_bb =
+              LLVMAppendBasicBlock(wrapper_fn, "slot.after_rnd");
+          LLVMBasicBlockRef *val_bbs =
+              malloc(sizeof(LLVMBasicBlockRef) * (size_t)slot->count);
+          for (int k = 0; k < slot->count; k++) {
+            snprintf(lbl, sizeof(lbl), "s%d.sl%d.rnd%d", i, j, k);
+            val_bbs[k] = LLVMAppendBasicBlock(wrapper_fn, lbl);
+          }
+          LLVMValueRef rsw = LLVMBuildSwitch(
+              builder, rnd, val_bbs[slot->count - 1], slot->count - 1);
+          for (int k = 0; k < slot->count - 1; k++)
+            LLVMAddCase(rsw, LLVMConstInt(LLVMInt32Type(), k, 0), val_bbs[k]);
+          for (int k = 0; k < slot->count; k++) {
+            LLVMPositionBuilderAtEnd(builder, val_bbs[k]);
+            snprintf(lbl, sizeof(lbl), "s%d.sl%d.rv%d", i, j, k);
+            emit_yield(wrapper_fn, module, builder, handle, promise_alloca,
+                       LLVMConstReal(yield_ty, slot->vals[k]), cleanup_bb,
+                       suspend_bb, lbl);
+            LLVMBuildBr(builder, after_rnd_bb);
+          }
+          free(val_bbs);
+          LLVMPositionBuilderAtEnd(builder, after_rnd_bb);
+        } else {
+          for (int k = 0; k < slot->count; k++) {
+            snprintf(lbl, sizeof(lbl), "s%d.sl%d.v%d", i, j, k);
+            emit_yield(wrapper_fn, module, builder, handle, promise_alloca,
+                       LLVMConstReal(yield_ty, slot->vals[k]), cleanup_bb,
+                       suspend_bb, lbl);
+          }
         }
         LLVMBuildBr(builder, after_alt_bb);
       }
@@ -781,14 +835,14 @@ LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str,
     KeyPatternStep *step = &pat.steps[i];
     char lbl[64];
 
-    if (!step->is_alt) {
+    if (step->kind == STEP_SEQ) {
       snprintf(lbl, sizeof(lbl), "k%d", i);
       emit_yield(wrapper_fn, module, builder, handle, promise_alloca,
                  codegen_const_token_string(step->fixed_key, yield_ty, builder),
                  cleanup_bb, suspend_bb, lbl);
     } else {
       LLVMValueRef slot_idx;
-      if (step->is_rand) {
+      if (step->kind == STEP_RAND) {
         LLVMTypeRef rand_fn_ty = LLVMFunctionType(
             LLVMInt32Type(), (LLVMTypeRef[]){LLVMInt32Type()}, 1, 0);
         LLVMValueRef rand_fn = LLVMGetNamedFunction(module, "ylc_rand_int");
@@ -832,12 +886,48 @@ LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str,
       for (int j = 0; j < step->num_slots; j++) {
         LLVMPositionBuilderAtEnd(builder, slot_bbs[j]);
         KeySlot *slot = &step->slots[j];
-        for (int k = 0; k < slot->count; k++) {
-          snprintf(lbl, sizeof(lbl), "k%d.sl%d.v%d", i, j, k);
-          emit_yield(
-              wrapper_fn, module, builder, handle, promise_alloca,
-              codegen_const_token_string(slot->vals[k], yield_ty, builder),
-              cleanup_bb, suspend_bb, lbl);
+        if (slot->kind == STEP_RAND) {
+          LLVMTypeRef rand_fn_ty = LLVMFunctionType(
+              LLVMInt32Type(), (LLVMTypeRef[]){LLVMInt32Type()}, 1, 0);
+          LLVMValueRef rand_fn = LLVMGetNamedFunction(module, "ylc_rand_int");
+          if (!rand_fn) {
+            rand_fn = LLVMAddFunction(module, "ylc_rand_int", rand_fn_ty);
+            LLVMSetLinkage(rand_fn, LLVMExternalLinkage);
+          }
+          LLVMValueRef n_val = LLVMConstInt(LLVMInt32Type(), slot->count, 0);
+          LLVMValueRef rnd = LLVMBuildCall2(builder, rand_fn_ty, rand_fn,
+                                            &n_val, 1, "kslot.rnd");
+          LLVMBasicBlockRef after_rnd_bb =
+              LLVMAppendBasicBlock(wrapper_fn, "kslot.after_rnd");
+          LLVMBasicBlockRef *val_bbs =
+              malloc(sizeof(LLVMBasicBlockRef) * (size_t)slot->count);
+          for (int k = 0; k < slot->count; k++) {
+            snprintf(lbl, sizeof(lbl), "k%d.sl%d.rnd%d", i, j, k);
+            val_bbs[k] = LLVMAppendBasicBlock(wrapper_fn, lbl);
+          }
+          LLVMValueRef rsw = LLVMBuildSwitch(
+              builder, rnd, val_bbs[slot->count - 1], slot->count - 1);
+          for (int k = 0; k < slot->count - 1; k++)
+            LLVMAddCase(rsw, LLVMConstInt(LLVMInt32Type(), k, 0), val_bbs[k]);
+          for (int k = 0; k < slot->count; k++) {
+            LLVMPositionBuilderAtEnd(builder, val_bbs[k]);
+            snprintf(lbl, sizeof(lbl), "k%d.sl%d.rv%d", i, j, k);
+            emit_yield(
+                wrapper_fn, module, builder, handle, promise_alloca,
+                codegen_const_token_string(slot->vals[k], yield_ty, builder),
+                cleanup_bb, suspend_bb, lbl);
+            LLVMBuildBr(builder, after_rnd_bb);
+          }
+          free(val_bbs);
+          LLVMPositionBuilderAtEnd(builder, after_rnd_bb);
+        } else {
+          for (int k = 0; k < slot->count; k++) {
+            snprintf(lbl, sizeof(lbl), "k%d.sl%d.v%d", i, j, k);
+            emit_yield(
+                wrapper_fn, module, builder, handle, promise_alloca,
+                codegen_const_token_string(slot->vals[k], yield_ty, builder),
+                cleanup_bb, suspend_bb, lbl);
+          }
         }
         LLVMBuildBr(builder, after_alt_bb);
       }
@@ -888,24 +978,35 @@ LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str,
 // Builtin handler — called from ylc via compile_audio_fn or similar
 // ============================================================================
 
+static const char *ast_to_pattern_string(Ast *arg) {
+  if (!arg)
+    return NULL;
+  if (arg->tag == AST_STRING)
+    return arg->data.AST_STRING.value;
+  if (arg->tag == AST_FMT_STRING && arg->data.AST_LIST.len > 0 &&
+      arg->data.AST_LIST.items[0].tag == AST_STRING)
+    return arg->data.AST_LIST.items[0].data.AST_STRING.value;
+  return NULL;
+}
+
 LLVMValueRef pattern_handler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMBuilderRef builder) {
-  Ast *arg = ast->data.AST_APPLICATION.args;
-  if (!arg || arg->tag != AST_STRING) {
-    fprintf(stderr, "pattern: expected a string literal argument\n");
+  const char *pattern_str =
+      ast_to_pattern_string(ast->data.AST_APPLICATION.args);
+  if (!pattern_str) {
+    fprintf(stderr, "pat: expected a string or format-string literal\n");
     return NULL;
   }
-  const char *pattern_str = arg->data.AST_STRING.value;
   return emit_pattern_coroutine(pattern_str, ctx, module, builder);
 }
 
 LLVMValueRef pattern_key_handler(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
-  Ast *arg = ast->data.AST_APPLICATION.args;
-  if (!arg || arg->tag != AST_STRING) {
-    fprintf(stderr, "pat_key: expected a string literal argument\n");
+  const char *pattern_str =
+      ast_to_pattern_string(ast->data.AST_APPLICATION.args);
+  if (!pattern_str) {
+    fprintf(stderr, "pat_key: expected a string or format-string literal\n");
     return NULL;
   }
-  const char *pattern_str = arg->data.AST_STRING.value;
   return emit_key_pattern_coroutine(pattern_str, ctx, module, builder);
 }

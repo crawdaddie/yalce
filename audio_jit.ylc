@@ -201,7 +201,7 @@ defer_quant q (fn t ->
     | "c" -> (closed_hh () |> play_node_offset (get_tl_tick ()))
     | "o" -> (open_hh () |> play_node_offset (get_tl_tick ()))
     ;
-    d * 0.125
+    d * q * 0.25
   )
   |> play_routine t schedule_event
   ;
