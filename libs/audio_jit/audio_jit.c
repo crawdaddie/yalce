@@ -20,6 +20,7 @@
 #include "../../lang/ylc_datatypes.h"
 #include "./compile_synth.h"
 #include "./dsp_fn_application.h"
+#include "pattern_coroutine.h"
 
 #include <llvm-c/Core.h>
 #include <math.h>
@@ -68,6 +69,20 @@ Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
   node->next = NULL;
 
   return node;
+}
+
+void ylc_register_synth_ctor(int synth_id, void *ctor) {
+  synth_registry_set_ctor_ptr(synth_id, ctor);
+}
+
+void *ylc_get_synth_ctor(int synth_id) {
+  return synth_registry_get_ctor_ptr(synth_id);
+}
+
+int ylc_rand_int(int n) {
+  if (n <= 1)
+    return 0;
+  return rand() % n;
 }
 
 Node *ylc_const_inlet(double val) {
@@ -119,4 +134,6 @@ __attribute__((constructor)) static void ylc_audio_jit_init(void) {
   register_builtin(stack, "compile_audio_fn", CompileAudioFnHandler);
   fprintf(stderr, "libaudio_jit: registered compile_audio_fn\n");
   printf("sample rates: %d %f\n", ctx_sample_rate(), ctx_spf());
+
+  register_builtin(stack, "pat", pattern_handler);
 }

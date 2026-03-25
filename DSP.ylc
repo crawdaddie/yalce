@@ -2,6 +2,7 @@ open engine/bindings/Synth;
 open engine/bindings/Sched;
 
 let compile_audio_fn = extern fn T -> T;
+let pat = extern fn String -> Coroutine of Double;
 
 let sin_osc = extern fn Double -> Double;
 let sq_osc = extern fn Double -> Double;

@@ -174,7 +174,7 @@ compile_audio_fn (
 
 
 defer_quant q (fn t ->
-  iter_of_array [|3., 3., 3., 4., 1., 1., 1.,|]  
+  pat "3 3 3 4 1 1 1" 
   |> cor_loop
   |> cor_map (fn d -> trig (); d)
   |> cor_map ((*) (q * 0.25))
@@ -182,7 +182,7 @@ defer_quant q (fn t ->
   ;
 
 
-  iter_of_array [|3., 3., 3., 4., 3.|]  
+  pat "3 3 3 4 3" 
   |> cor_loop
   |> cor_map (fn d -> kick () |> play_node_offset (get_tl_tick ()); d)
   |> cor_map ((*) (q * 0.25))
@@ -207,7 +207,7 @@ defer_quant q (fn t ->
     |> play_routine t schedule_event
   ;
 
-  iter_of_array [|1.,1., 1., 1., 4., 1.,1., 1.,  4., 1. |]  
+  pat "1 1 1 1 4 1 1 1 4 1" 
   |> cor_loop
   |> cor_map (fn d -> chirp (Math.rand_double_range 100. 1000.) 0.02 |> play_node_offset (get_tl_tick ()); d)
   |> cor_map ((*) (q * 0.25))

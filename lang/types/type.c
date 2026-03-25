@@ -288,7 +288,7 @@ int fn_type_args_len(Type *fn_type) {
 }
 
 Type *create_tuple_type(int len, Type **contained_types) {
-  Type *tuple = t_alloc(sizeof(Type));
+  Type *tuple = empty_type();
   tuple->kind = T_CONS;
   tuple->data.T_CONS.name = TYPE_NAME_TUPLE;
   tuple->data.T_CONS.args = contained_types;

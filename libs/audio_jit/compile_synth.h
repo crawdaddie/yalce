@@ -6,6 +6,7 @@
 #include "../../lang/common.h"
 #include "../../lang/parse.h"
 #include <llvm-c/Core.h>
+#include <stdatomic.h>
 #include <stdint.h>
 
 typedef struct {
@@ -45,6 +46,7 @@ typedef struct SynthRecord {
   LLVMValueRef init_fn;
   LLVMValueRef frame_fn;
   LLVMValueRef perform_fn;
+  _Atomic(void *) ctor_ptr; // compiled machine address, populated at runtime
   int state_bytes;
 } SynthRecord;
 
@@ -55,6 +57,8 @@ typedef struct SynthRegistry {
 } SynthRegistry;
 
 SynthRecord synth_registry_get(int synth_id);
+void *synth_registry_get_ctor_ptr(int synth_id);
+void synth_registry_set_ctor_ptr(int synth_id, void *ctor_ptr);
 int synth_registry_len();
 
 LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,

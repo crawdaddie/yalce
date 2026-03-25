@@ -17,5 +17,4 @@ typedef struct RTConfig {
 
 } RTConfig;
 extern RTConfig ylc_config;
-void ylc_config_set_interactive(bool);
 #endif

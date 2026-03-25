@@ -80,8 +80,25 @@ static LLVMValueRef call_dsp_symbol(Ast *ast, JITLangCtx *ctx,
   // as a Double
   ast->type = &t_ptr;
 
-  LLVMValueRef node = LLVMBuildCall2(builder, ctor_fn_ty, ctor_fn, ctor_args,
-                                     formal_count, "audio_jit.node");
+  // Emit an indirect call through ylc_get_synth_ctor so that redefining the
+  // synth (updating synth_registry.records[synth_id].ctor) is picked up by
+  // already-compiled call sites (e.g. coroutines) at runtime.
+  LLVMTypeRef get_ctor_fn_ty =
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){LLVMInt32Type()}, 1, 0);
+  LLVMValueRef get_ctor_fn =
+      LLVMGetNamedFunction(module_ref, "ylc_get_synth_ctor");
+  if (!get_ctor_fn) {
+    get_ctor_fn =
+        LLVMAddFunction(module_ref, "ylc_get_synth_ctor", get_ctor_fn_ty);
+    LLVMSetLinkage(get_ctor_fn, LLVMExternalLinkage);
+  }
+  LLVMValueRef synth_id_val =
+      LLVMConstInt(LLVMInt32Type(), (unsigned long long)synth_id, 0);
+  LLVMValueRef current_ctor = LLVMBuildCall2(
+      builder, get_ctor_fn_ty, get_ctor_fn, &synth_id_val, 1, "ctor.ptr");
+
+  LLVMValueRef node = LLVMBuildCall2(builder, ctor_fn_ty, current_ctor,
+                                     ctor_args, formal_count, "audio_jit.node");
   // if (formal_tys) {
   //   free(formal_tys);
   // }
@@ -615,10 +632,46 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   const char *name = binding->data.AST_IDENTIFIER.value;
 
   LLVMTypeRef frame_ty = synth_frame_fn_type(lambda, ctx, module, builder);
+
+  // Determine synth_id before compiling so we can emit the registration call.
+  JITSymbol *existing = lookup_id_ast(binding, ctx);
+  int synth_id;
+  if (existing && existing->type == (symbol_type)STYPE_AUDIO_JIT_SYM) {
+    synth_id = audio_sym_synth_id(existing);
+  } else {
+    synth_id = synth_registry_len();
+  }
+
   SynthRecord rec = compile_lambda_to_synth_record(lambda, name, frame_ty, ctx,
                                                    module, builder);
 
-  int synth_id = extend_synth_registry(rec);
+  // Emit a runtime call to ylc_register_synth_ctor(synth_id, cons_fn) so that
+  // synth_ctor_table is populated with the real compiled address when the
+  // top-level function executes.
+  LLVMTypeRef reg_fn_ty = LLVMFunctionType(
+      LLVMVoidType(), (LLVMTypeRef[]){LLVMInt32Type(), GENERIC_PTR}, 2, 0);
+  LLVMValueRef reg_fn = LLVMGetNamedFunction(module, "ylc_register_synth_ctor");
+  if (!reg_fn) {
+    reg_fn = LLVMAddFunction(module, "ylc_register_synth_ctor", reg_fn_ty);
+    LLVMSetLinkage(reg_fn, LLVMExternalLinkage);
+  }
+  LLVMValueRef synth_id_val =
+      LLVMConstInt(LLVMInt32Type(), (unsigned long long)synth_id, 0);
+  LLVMBuildCall2(builder, reg_fn_ty, reg_fn,
+                 (LLVMValueRef[]){synth_id_val, rec.ctor}, 2, "");
+
+  if (existing && existing->type == (symbol_type)STYPE_AUDIO_JIT_SYM) {
+    // Preserve the old ctor_ptr so the scheduler can keep calling the previous
+    // constructor until ylc_register_synth_ctor fires with the new address.
+    void *old_ctor_ptr = atomic_load_explicit(
+        &synth_registry.records[synth_id].ctor_ptr, memory_order_relaxed);
+    synth_registry.records[synth_id] = rec;
+    atomic_store_explicit(&synth_registry.records[synth_id].ctor_ptr,
+                          old_ctor_ptr, memory_order_relaxed);
+    return rec.ctor;
+  }
+
+  extend_synth_registry(rec);
 
   JITSymbol *sym =
       new_symbol((symbol_type)STYPE_AUDIO_JIT_SYM, NULL, NULL, NULL);
@@ -631,5 +684,13 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
 
 SynthRecord synth_registry_get(int synth_id) {
   return synth_registry.records[synth_id];
+}
+void *synth_registry_get_ctor_ptr(int synth_id) {
+  return atomic_load_explicit(&synth_registry.records[synth_id].ctor_ptr,
+                              memory_order_acquire);
+}
+void synth_registry_set_ctor_ptr(int synth_id, void *ctor_ptr) {
+  atomic_store_explicit(&synth_registry.records[synth_id].ctor_ptr, ctor_ptr,
+                        memory_order_release);
 }
 int synth_registry_len() { return synth_registry.length; }

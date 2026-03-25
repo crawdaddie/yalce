@@ -88,7 +88,11 @@ Type *instantiate(Type *sch, TICtx *ctx) {
   return s;
 }
 
-Type *empty_type() { return t_alloc(sizeof(Type)); }
+Type *empty_type() {
+  Type *t = t_alloc(sizeof(Type));
+  memset(t, 0, sizeof(Type));
+  return t;
+}
 
 static int type_var_counter = 0;
 void reset_type_var_counter() { type_var_counter = 0; }
