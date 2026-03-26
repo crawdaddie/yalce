@@ -29,7 +29,10 @@
 #include <llvm-c/Target.h>
 #include <llvm-c/TargetMachine.h>
 #include <llvm-c/Transforms/PassBuilder.h>
+#include <poll.h>
 #include <pthread.h>
+#include <readline/history.h>
+#include <readline/readline.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,6 +42,18 @@
 
 static LLVMTargetMachineRef target_machine;
 void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine);
+
+// Non-blocking REPL state (used when GUI shares the main thread)
+static LLVMModuleRef  s_repl_module;
+static const char    *s_repl_filename;
+static const char    *s_repl_dirname;
+static JITLangCtx    *s_repl_ctx;
+static LLVMBuilderRef s_repl_builder;
+static char          *s_repl_prompt;
+
+void repl_begin_nonblocking(LLVMModuleRef module, const char *filename,
+                            const char *dirname, JITLangCtx *ctx,
+                            LLVMBuilderRef builder);
 
 typedef struct {
   LLVMModuleRef module;
@@ -61,16 +76,9 @@ void *repl_loop_thread_fn(void *arg) {
 void break_repl_for_gui_loop(LLVMModuleRef module, const char *filename,
                              const char *dirname, JITLangCtx *ctx,
                              LLVMBuilderRef builder) {
-  repl_args thread_args = {module, filename, dirname, ctx, builder};
-
-  pthread_t repl_thread;
   __BREAK_REPL_FOR_GUI_LOOP = false;
-  if (pthread_create(&repl_thread, NULL, repl_loop_thread_fn, &thread_args) !=
-      0) {
-    perror("Failed to create REPL thread");
-  }
+  repl_begin_nonblocking(module, filename, dirname, ctx, builder);
   break_repl_for_gui_loop_cb();
-  return;
 }
 void dump_assembly(LLVMModuleRef module);
 #define STACK_MAX 256
@@ -437,6 +445,161 @@ void _print_type(Type *t) {
   fflush(stdout);
   print_type_to_stream(t, stdout);
   fflush(stdout);
+}
+
+static void repl_process_line(LLVMModuleRef module, const char *filename,
+                              const char *dirname, JITLangCtx *ctx,
+                              LLVMBuilderRef builder, char *input) {
+  LLVMTypeRef top_level_ret_type;
+
+  if (strncmp("%dump_module", input, 12) == 0) {
+    printf(STYLE_RESET_ALL "\n");
+    LLVMDumpModule(module);
+    return;
+  } else if (strncmp("%dump_type_env", input, 14) == 0) {
+    print_type_env(ctx->env);
+    return;
+  } else if (strncmp("%dump_ast", input, 9) == 0) {
+    print_ast(pctx.ast_root);
+    return;
+  } else if (strncmp("%builtins", input, 8) == 0) {
+    print_builtin_types();
+    return;
+  } else if (strncmp("%plot", input, 5) == 0) {
+    return;
+  } else if (strcmp("\n", input) == 0) {
+    return;
+  } else if (strcmp("%quit", input) == 0) {
+    exit(0);
+  }
+
+  LLVMSetSourceFileName(module, filename, strlen(filename));
+  Ast *prog = parse_input(input, dirname);
+
+  TICtx ti_ctx = {.env = ctx->env, .scope = 0};
+  Type *typecheck_result = infer(prog, &ti_ctx);
+  escape_analysis(prog);
+  ctx->env = ti_ctx.env;
+
+  if (typecheck_result == NULL)
+    return;
+
+  if (typecheck_result->kind == T_VAR) {
+    Ast *top = body_tail(prog);
+    fprintf(stderr, "type not found: ");
+    print_ast_err(top);
+    print_location(top);
+    return;
+  }
+
+  LLVMValueRef top_level_func =
+      codegen_repl_top_level(prog, &top_level_ret_type, ctx, module, builder);
+
+  printf(COLOR_GREEN "> ");
+
+  Type *top_type = prog->type;
+
+  if (top_level_func == NULL) {
+    print_type(top_type);
+  } else {
+    if (ylc_config.verify_ir) {
+      char *verify_err = NULL;
+      if (LLVMVerifyModule(module, LLVMPrintMessageAction, &verify_err)) {
+        fprintf(stderr, "IR verification failed: %s\n", verify_err);
+        LLVMDisposeMessage(verify_err);
+        printf(COLOR_RESET);
+        return;
+      }
+      LLVMDisposeMessage(verify_err);
+    }
+    module_passes(module, target_machine);
+
+    LLVMExecutionEngineRef engine;
+    prepare_ex_engine(ctx, &engine, module);
+    const char *func_name = LLVMGetValueName(top_level_func);
+    uint64_t func_addr = LLVMGetFunctionAddress(engine, func_name);
+    typedef int (*top_level_func_t)(void);
+    top_level_func_t func = (top_level_func_t)func_addr;
+    _print_type(top_type);
+
+    if (VALUE_IS_PRINTABLE(top_type))
+      printf(": ");
+    int result = func();
+    printf("\n");
+  }
+  printf(COLOR_RESET);
+}
+
+// Accumulation buffer for multiline \ continuation in non-blocking mode
+static char  *s_repl_accum      = NULL;
+static size_t s_repl_accum_len  = 0;
+
+static void repl_line_ready(char *line) {
+  if (!line) {
+    // EOF
+    free(s_repl_accum);
+    s_repl_accum     = NULL;
+    s_repl_accum_len = 0;
+    rl_callback_handler_remove();
+    exit(0);
+  }
+  if (*line)
+    add_history(line);
+
+  size_t len = strlen(line);
+
+  // Check for \ continuation (line ends with backslash)
+  if (len > 0 && line[len - 1] == '\\') {
+    // Replace trailing \ with \n and accumulate
+    size_t new_len = s_repl_accum_len + len; // len-1 chars + '\n'
+    char  *tmp     = realloc(s_repl_accum, new_len + 1);
+    if (!tmp) { free(line); return; }
+    s_repl_accum = tmp;
+    memcpy(s_repl_accum + s_repl_accum_len, line, len - 1);
+    s_repl_accum[s_repl_accum_len + len - 1] = '\n';
+    s_repl_accum[s_repl_accum_len + len]     = '\0';
+    s_repl_accum_len = new_len;
+    free(line);
+    return; // wait for more lines
+  }
+
+  // Final (or only) line — append it with a trailing newline
+  size_t final_len = s_repl_accum_len + len + 2; // +newline +NUL
+  char  *input     = malloc(final_len);
+  if (s_repl_accum_len)
+    memcpy(input, s_repl_accum, s_repl_accum_len);
+  memcpy(input + s_repl_accum_len, line, len);
+  input[s_repl_accum_len + len]     = '\n';
+  input[s_repl_accum_len + len + 1] = '\0';
+  free(line);
+
+  // Reset accumulator
+  free(s_repl_accum);
+  s_repl_accum     = NULL;
+  s_repl_accum_len = 0;
+
+  repl_process_line(s_repl_module, s_repl_filename, s_repl_dirname,
+                    s_repl_ctx, s_repl_builder, input);
+  free(input);
+}
+
+void repl_begin_nonblocking(LLVMModuleRef module, const char *filename,
+                            const char *dirname, JITLangCtx *ctx,
+                            LLVMBuilderRef builder) {
+  s_repl_module   = module;
+  s_repl_filename = filename;
+  s_repl_dirname  = dirname;
+  s_repl_ctx      = ctx;
+  s_repl_builder  = builder;
+  s_repl_prompt   = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
+
+  rl_callback_handler_install(s_repl_prompt, repl_line_ready);
+}
+
+void repl_poll_stdin(void) {
+  struct pollfd pfd = {.fd = STDIN_FILENO, .events = POLLIN};
+  if (poll(&pfd, 1, 0) > 0 && (pfd.revents & POLLIN))
+    rl_callback_read_char();
 }
 
 void repl_loop(LLVMModuleRef module, const char *filename, const char *dirname,

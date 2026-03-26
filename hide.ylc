@@ -9,9 +9,7 @@ compile_audio_fn (
     f
     |> sin_osc
     |> (+) (0.4 * sin_osc (f * 3))
-    |> (*) od
-    |> Math.tanh
-    |> (*) (adsr 0. 0.1 0.5 1. t |> kill_on_end)
+    |> (*) od |> Math.tanh |> (*) (adsr 0. 0.1 0.5 1. t |> kill_on_end)
 );
 
 compile_audio_fn (
@@ -47,9 +45,10 @@ defer_quant q (fn t ->
     d * q * 0.25
   )
   |> play_routine t schedule_event
-  ;
+);
 
-  (dur:     pat "3  5   3   5",
+defer_quant (q + (q * 32)) (fn t ->
+  (dur:      pat "3  5   3   5",
      k: (pat_key "f0 a_0 b_0 c#1" |> cor_map midi_key_freq)
   )
   |> cor_zip_struct 
@@ -58,4 +57,20 @@ defer_quant q (fn t ->
     d * q * 0.5
   )
   |> play_routine t schedule_event
-)
+);
+
+let scope_tap = extern fn Ptr -> Ptr;
+
+
+# let tapped = scope_tap rfx;
+# let _ = play_node tapped;
+
+  # The tap is a pass-through, so if your synth chain uses the node's output further (e.g. into a reverb), insert the tap in the chain:
+  #
+  # let _ = play (reverb (scope_tap my_osc))
+
+let ylc_scope_open = extern fn Synth -> (); 
+let _ = dlopen "libs/gui/libgui.so";
+ylc_scope_open rfx;
+
+

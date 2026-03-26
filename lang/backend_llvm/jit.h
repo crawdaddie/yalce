@@ -14,4 +14,10 @@ int start_jit(JITLangCtx *kernel_ctx, ht *kernel_table,
               LLVMContextRef *context_ref, LLVMModuleRef *module_ref,
               LLVMBuilderRef *builder_ref);
 
+// Non-blocking REPL for shared main-thread with GUI
+void repl_begin_nonblocking(LLVMModuleRef module, const char *filename,
+                            const char *dirname, JITLangCtx *ctx,
+                            LLVMBuilderRef builder);
+void repl_poll_stdin(void);
+
 #endif

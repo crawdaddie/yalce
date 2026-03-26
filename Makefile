@@ -69,7 +69,7 @@ LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 LANG_CPP_OBJS := $(LANG_CPP_SRCS:$(LANG_SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
 LANG_OBJS += $(LANG_CPP_OBJS)
 
-.PHONY: all clean engine audio_jit test wasm serve_docs engine_bindings gui cor
+.PHONY: all clean engine audio_jit gui test wasm serve_docs engine_bindings cor
 
 all: $(BUILD_DIR)/ylc
 
@@ -83,9 +83,10 @@ audio_jit: engine
 	@echo "######### MAKE AUDIO_JIT------------"
 	$(MAKE) -C libs/audio_jit
 
-gui:
+gui: 
 	@echo "######### MAKE GUI------------"
-	$(MAKE) -C gui
+	$(MAKE) -C libs/gui
+
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -128,7 +129,7 @@ clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(MAKE) -C engine clean
-	$(MAKE) -C gui clean
+	$(MAKE) -C libs/gui clean
 	$(MAKE) -C libs/audio_jit clean
 
 test:
