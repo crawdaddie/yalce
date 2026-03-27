@@ -50,31 +50,29 @@ typedef struct {
 static GUIWindow windows[MAX_WINDOWS];
 static int num_windows = 0;
 
-// ============================================================================
-// Pending queue (main-thread only — no mutex needed)
-// ============================================================================
-
-typedef struct {
-  int type_id;
-  char title[64];
-  int w, h;
-  void *state;
-} PendingWindow;
-
-static PendingWindow pending[MAX_WINDOWS];
-static int num_pending = 0;
-
 void ylc_window_open(int type_id, const char *title, int w, int h,
                      void *state) {
-  if (num_pending >= MAX_WINDOWS)
+  if (num_windows >= MAX_WINDOWS)
     return;
-  PendingWindow *p = &pending[num_pending++];
-  p->type_id = type_id;
-  p->w = w;
-  p->h = h;
-  p->state = state;
-  strncpy(p->title, title ? title : "", sizeof(p->title) - 1);
-  p->title[sizeof(p->title) - 1] = '\0';
+  YLCWindowType *t = find_type(type_id);
+  if (!t) {
+    fprintf(stderr, "libgui: unknown window type %d\n", type_id);
+    return;
+  }
+  SDL_Window *win =
+      SDL_CreateWindow(title ? title : "", w, h, SDL_WINDOW_RESIZABLE);
+  if (!win) {
+    fprintf(stderr, "libgui: SDL_CreateWindow: %s\n", SDL_GetError());
+    return;
+  }
+  SDL_Renderer *ren = SDL_CreateRenderer(win, NULL);
+  if (!ren) {
+    fprintf(stderr, "libgui: SDL_CreateRenderer: %s\n", SDL_GetError());
+    SDL_DestroyWindow(win);
+    return;
+  }
+  windows[num_windows++] = (GUIWindow){
+      .type_id = type_id, .window = win, .renderer = ren, .state = state};
 }
 
 // ============================================================================
@@ -286,36 +284,6 @@ static void sdl_main_loop(void) {
   }
 
   while (true) {
-    // Drain pending window requests
-    int snap = num_pending;
-    num_pending = 0;
-
-    for (int i = 0; i < snap && num_windows < MAX_WINDOWS; i++) {
-      PendingWindow *p = &pending[i];
-      if (!find_type(p->type_id)) {
-        fprintf(stderr, "libgui: unknown window type %d\n", p->type_id);
-        continue;
-      }
-      SDL_Window *win =
-          SDL_CreateWindow(p->title, p->w, p->h, SDL_WINDOW_RESIZABLE);
-      if (!win) {
-        fprintf(stderr, "libgui: SDL_CreateWindow: %s\n", SDL_GetError());
-        continue;
-      }
-      SDL_Renderer *ren = SDL_CreateRenderer(win, NULL);
-      if (!ren) {
-        fprintf(stderr, "libgui: SDL_CreateRenderer: %s\n", SDL_GetError());
-        SDL_DestroyWindow(win);
-        continue;
-      }
-      windows[num_windows++] = (GUIWindow){
-          .type_id = p->type_id,
-          .window = win,
-          .renderer = ren,
-          .state = p->state,
-      };
-    }
-
     // Process events
     SDL_Event e;
     while (SDL_PollEvent(&e)) {

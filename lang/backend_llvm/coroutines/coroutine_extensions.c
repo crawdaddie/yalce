@@ -2,6 +2,7 @@
 #include "../../types/type_ser.h"
 #include "../adt.h"
 #include "../closures.h"
+#include "../function.h"
 #include "../tuple.h"
 #include "../types.h"
 #include "./coroutines.h"
@@ -351,6 +352,7 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Type analysis: (T -> U) -> Coroutine<T> -> Coroutine<U>
   Type *map_fn_type = map_fn_ast->type;
+
   Type *input_type = map_fn_type->data.T_FN.from;  // T
   Type *output_type = fn_return_type(map_fn_type); // U
 
@@ -362,8 +364,15 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Promise type for inner coroutine (to read reset_fn/args_ptr)
   LLVMTypeRef inner_prom_type = CORO_PROMISE_TYPE(llvm_input_type);
+  //
+  // LLVMValueRef map_fn = codegen(map_fn_ast, ctx, module, builder);
+  LLVMValueRef map_fn;
+  if (map_fn_ast->type->kind == T_FN) {
+    map_fn = codegen_fn(map_fn_ast, ctx, module, builder);
+  } else {
+    map_fn = codegen(map_fn_ast, ctx, module, builder);
+  }
 
-  LLVMValueRef map_fn = codegen(map_fn_ast, ctx, module, builder);
   LLVMValueRef inner_handle = codegen(coro_ast, ctx, module, builder);
 
   // Create wrapper coroutine function that TAKES frame_size_out, map function,
@@ -3001,7 +3010,8 @@ static LLVMValueRef call_zero_arg_function_value(Type *fn_type,
         LLVMBuildExtractValue(builder, fn_value, 1, "zips.closure.args_ptr");
 
     LLVMTypeRef env_type = closure_record_type(fn_type, ctx, module);
-    LLVMTypeRef clos_impl_type = closure_fn_type(fn_type, env_type, ctx, module);
+    LLVMTypeRef clos_impl_type =
+        closure_fn_type(fn_type, env_type, ctx, module);
     LLVMTypeRef clos_impl_ptr_type = LLVMPointerType(clos_impl_type, 0);
     LLVMTypeRef env_ptr_type = LLVMPointerType(env_type, 0);
 
@@ -3011,9 +3021,8 @@ static LLVMValueRef call_zero_arg_function_value(Type *fn_type,
     }
 
     if (LLVMTypeOf(closure_args_ptr) != env_ptr_type) {
-      closure_args_ptr =
-          LLVMBuildBitCast(builder, closure_args_ptr, env_ptr_type,
-                           "zips.closure.args.cast");
+      closure_args_ptr = LLVMBuildBitCast(
+          builder, closure_args_ptr, env_ptr_type, "zips.closure.args.cast");
     }
 
     return LLVMBuildCall2(builder, clos_impl_type, closure_fn,
@@ -3026,9 +3035,11 @@ static LLVMValueRef call_zero_arg_function_value(Type *fn_type,
   LLVMTypeRef llvm_fn_ptr_type = LLVMPointerType(llvm_fn_type, 0);
   LLVMValueRef callee = fn_value;
   if (LLVMTypeOf(callee) != llvm_fn_ptr_type) {
-    callee = LLVMBuildBitCast(builder, callee, llvm_fn_ptr_type, "zips.fn.cast");
+    callee =
+        LLVMBuildBitCast(builder, callee, llvm_fn_ptr_type, "zips.fn.cast");
   }
-  return LLVMBuildCall2(builder, llvm_fn_type, callee, NULL, 0, "zips.fn.call0");
+  return LLVMBuildCall2(builder, llvm_fn_type, callee, NULL, 0,
+                        "zips.fn.call0");
 }
 
 LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
@@ -3055,11 +3066,12 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
 
   // Evaluate input struct and extract each field value once in caller context.
   LLVMValueRef input_struct_val = codegen(struct_ast, ctx, module, builder);
-  LLVMTypeRef llvm_input_struct_type = type_to_llvm_type(struct_type, ctx, module);
+  LLVMTypeRef llvm_input_struct_type =
+      type_to_llvm_type(struct_type, ctx, module);
   LLVMValueRef input_fields[num_fields];
   for (int i = 0; i < num_fields; i++) {
-    input_fields[i] =
-        codegen_tuple_access(i, input_struct_val, llvm_input_struct_type, builder);
+    input_fields[i] = codegen_tuple_access(i, input_struct_val,
+                                           llvm_input_struct_type, builder);
   }
 
   // Build wrapper signature from actual runtime field value types.
@@ -3086,7 +3098,8 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
   snprintf(wrapper_name, sizeof(wrapper_name), "coro_zip_struct_%lu",
            zip_struct_counter++);
 
-  LLVMValueRef wrapper_fn = LLVMAddFunction(module, wrapper_name, wrapper_fn_type);
+  LLVMValueRef wrapper_fn =
+      LLVMAddFunction(module, wrapper_name, wrapper_fn_type);
   LLVMSetLinkage(wrapper_fn, LLVMExternalLinkage);
 
   COROUTINE_ATTR_MARKING(wrapper_fn)
@@ -3105,8 +3118,10 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
       builder, promise_type, promise_alloca, 1, "is_done_ptr");
   LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_done_gep);
 
-  PROMISE_SET_RESET_FN(promise_alloca, promise_type, LLVMConstNull(GENERIC_PTR));
-  PROMISE_SET_ARGS_PTR(promise_alloca, promise_type, LLVMConstNull(GENERIC_PTR));
+  PROMISE_SET_RESET_FN(promise_alloca, promise_type,
+                       LLVMConstNull(GENERIC_PTR));
+  PROMISE_SET_ARGS_PTR(promise_alloca, promise_type,
+                       LLVMConstNull(GENERIC_PTR));
 
   LLVMValueRef id = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
@@ -3180,8 +3195,9 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
     LLVMPositionBuilderAtEnd(builder, check_before_bbs[i]);
     int field_idx = coro_field_indices[i];
 
-    LLVMValueRef h_val = LLVMBuildLoad2(builder, wrapper_param_types[field_idx + 1],
-                                        field_slots[field_idx], "zips.coro.h.pre");
+    LLVMValueRef h_val =
+        LLVMBuildLoad2(builder, wrapper_param_types[field_idx + 1],
+                       field_slots[field_idx], "zips.coro.h.pre");
     LLVMValueRef h = h_val;
     if (LLVMTypeOf(h) != GENERIC_PTR) {
       h = LLVMBuildBitCast(builder, h, GENERIC_PTR, "zips.coro.h.pre.cast");
@@ -3192,22 +3208,24 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
         get_coro_done_intrinsic(module), (LLVMValueRef[]){h}, 1, "done.before");
 
     LLVMBuildCondBr(builder, done_before, exit_bb,
-                    (i + 1 < num_coroutines) ? check_before_bbs[i + 1] : resume_bb);
+                    (i + 1 < num_coroutines) ? check_before_bbs[i + 1]
+                                             : resume_bb);
   }
 
   // Resume all coroutine fields.
   LLVMPositionBuilderAtEnd(builder, resume_bb);
   for (int i = 0; i < num_coroutines; i++) {
     int field_idx = coro_field_indices[i];
-    LLVMValueRef h_val = LLVMBuildLoad2(builder, wrapper_param_types[field_idx + 1],
-                                        field_slots[field_idx], "zips.coro.h");
+    LLVMValueRef h_val =
+        LLVMBuildLoad2(builder, wrapper_param_types[field_idx + 1],
+                       field_slots[field_idx], "zips.coro.h");
     LLVMValueRef h = h_val;
     if (LLVMTypeOf(h) != GENERIC_PTR) {
       h = LLVMBuildBitCast(builder, h, GENERIC_PTR, "zips.coro.h.cast");
     }
-    LLVMBuildCall2(builder,
-                   LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
-                   get_coro_resume_intrinsic(module), (LLVMValueRef[]){h}, 1, "");
+    LLVMBuildCall2(
+        builder, LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
+        get_coro_resume_intrinsic(module), (LLVMValueRef[]){h}, 1, "");
   }
   LLVMBuildBr(builder, num_coroutines > 0 ? check_after_bbs[0] : values_bb);
 
@@ -3216,8 +3234,9 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
     LLVMPositionBuilderAtEnd(builder, check_after_bbs[i]);
     int field_idx = coro_field_indices[i];
 
-    LLVMValueRef h_val = LLVMBuildLoad2(builder, wrapper_param_types[field_idx + 1],
-                                        field_slots[field_idx], "zips.coro.h.post");
+    LLVMValueRef h_val =
+        LLVMBuildLoad2(builder, wrapper_param_types[field_idx + 1],
+                       field_slots[field_idx], "zips.coro.h.post");
     LLVMValueRef h = h_val;
     if (LLVMTypeOf(h) != GENERIC_PTR) {
       h = LLVMBuildBitCast(builder, h, GENERIC_PTR, "zips.coro.h.post.cast");
@@ -3228,10 +3247,12 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
         get_coro_done_intrinsic(module), (LLVMValueRef[]){h}, 1, "done.after");
 
     LLVMBuildCondBr(builder, done_after, exit_bb,
-                    (i + 1 < num_coroutines) ? check_after_bbs[i + 1] : values_bb);
+                    (i + 1 < num_coroutines) ? check_after_bbs[i + 1]
+                                             : values_bb);
   }
 
-  // values: build transformed yield payload from scalar/function/coroutine fields.
+  // values: build transformed yield payload from scalar/function/coroutine
+  // fields.
   LLVMPositionBuilderAtEnd(builder, values_bb);
   LLVMValueRef result_val = LLVMGetUndef(llvm_result_type);
 
@@ -3256,31 +3277,34 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
           (LLVMValueRef[]){h, LLVMConstInt(LLVMInt32Type(), 0, 0),
                            LLVMConstInt(LLVMInt1Type(), 0, 0)},
           3, "field.prom.raw");
-      LLVMValueRef prom_ptr = LLVMBuildBitCast(
-          builder, prom_raw, LLVMPointerType(llvm_yield_t, 0), "field.prom.ptr");
-      field_val = LLVMBuildLoad2(builder, llvm_yield_t, prom_ptr, "field.prom.val");
+      LLVMValueRef prom_ptr =
+          LLVMBuildBitCast(builder, prom_raw, LLVMPointerType(llvm_yield_t, 0),
+                           "field.prom.ptr");
+      field_val =
+          LLVMBuildLoad2(builder, llvm_yield_t, prom_ptr, "field.prom.val");
 
     } else if (is_void_arg_function_type(field_type)) {
-      LLVMValueRef fn_val =
-          LLVMBuildLoad2(builder, wrapper_param_types[i + 1], field_slots[i],
-                         "zips.fn.val");
-      field_val =
-          call_zero_arg_function_value(field_type, fn_val, ctx, module, builder);
+      LLVMValueRef fn_val = LLVMBuildLoad2(builder, wrapper_param_types[i + 1],
+                                           field_slots[i], "zips.fn.val");
+      field_val = call_zero_arg_function_value(field_type, fn_val, ctx, module,
+                                               builder);
 
     } else {
       LLVMTypeRef llvm_scalar = type_to_llvm_type(field_type, ctx, module);
-      field_val =
-          LLVMBuildLoad2(builder, llvm_scalar, field_slots[i], "zips.scalar.val");
+      field_val = LLVMBuildLoad2(builder, llvm_scalar, field_slots[i],
+                                 "zips.scalar.val");
     }
 
-    result_val = LLVMBuildInsertValue(builder, result_val, field_val, i, "zips.ins");
+    result_val =
+        LLVMBuildInsertValue(builder, result_val, field_val, i, "zips.ins");
   }
 
   LLVMBuildStore(builder, result_val, promise_alloca);
 
   LLVMValueRef save_token = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
-      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1, "coro.save");
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "coro.save");
   LLVMValueRef suspend_result = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
       get_coro_suspend_intrinsic(module),
@@ -3304,7 +3328,8 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
   LLVMPositionBuilderAtEnd(builder, exit_bb);
   LLVMValueRef final_save = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
-      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1, "final.save");
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "final.save");
   LLVMValueRef final_suspend = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
       get_coro_suspend_intrinsic(module),
@@ -3314,7 +3339,8 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
       LLVMAppendBasicBlock(wrapper_fn, "zips.final_return");
   LLVMValueRef final_switch =
       LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
-  LLVMAddCase(final_switch, LLVMConstInt(LLVMInt8Type(), 0, 0), final_return_bb);
+  LLVMAddCase(final_switch, LLVMConstInt(LLVMInt8Type(), 0, 0),
+              final_return_bb);
   LLVMAddCase(final_switch, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
 
   LLVMPositionBuilderAtEnd(builder, final_return_bb);
@@ -3323,7 +3349,8 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
   LLVMPositionBuilderAtEnd(builder, cleanup_bb);
   LLVMValueRef mem = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_free_intrinsic(module)),
-      get_coro_free_intrinsic(module), (LLVMValueRef[]){id, handle}, 2, "coro.free");
+      get_coro_free_intrinsic(module), (LLVMValueRef[]){id, handle}, 2,
+      "coro.free");
   LLVMBuildFree(builder, mem);
   LLVMBuildBr(builder, suspend_bb);
 
