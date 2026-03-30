@@ -344,6 +344,13 @@ LLVMValueRef coro_map_reset_fn(LLVMTypeRef promise_type,
   return reset_closure_fn;
 }
 
+bool is_compose_fn(Ast *ast) {
+  return ast->tag == AST_APPLICATION &&
+         ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+         strcmp(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+                "fn_composition") == 0;
+}
+
 LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   // Get the two arguments: map function and coroutine
@@ -367,7 +374,7 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   //
   // LLVMValueRef map_fn = codegen(map_fn_ast, ctx, module, builder);
   LLVMValueRef map_fn;
-  if (map_fn_ast->type->kind == T_FN) {
+  if (map_fn_ast->type->kind == T_FN && !is_compose_fn(map_fn_ast)) {
     map_fn = codegen_fn(map_fn_ast, ctx, module, builder);
   } else {
     map_fn = codegen(map_fn_ast, ctx, module, builder);

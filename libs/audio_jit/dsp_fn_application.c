@@ -183,6 +183,21 @@ static bool ast_try_eval_const_num(Ast *ast, DspBuildCtx *dsp_ctx,
         return true;
       }
     }
+    // // Look up let-bound constants in the JIT scope
+    // if (jit_ctx) {
+    //   JITSymbol *sym = lookup_id_ast(ast, jit_ctx);
+    //   if (sym && sym->val) {
+    //     if (LLVMIsAConstantInt(sym->val)) {
+    //       *out = (double)LLVMConstIntGetSExtValue(sym->val);
+    //       return true;
+    //     }
+    //     if (LLVMIsAConstantFP(sym->val)) {
+    //       LLVMBool loses_info;
+    //       *out = LLVMConstRealGetDouble(sym->val, &loses_info);
+    //       return true;
+    //     }
+    //   }
+    // }
     return false;
   }
   case AST_APPLICATION: {
@@ -1805,6 +1820,85 @@ LLVMValueRef build_array_choose(LLVMValueRef arr, LLVMValueRef trig,
   return LLVMBuildLoad2(builder, f64_ty, val_ptr, "array_choose.out");
 }
 
+LLVMValueRef build_array_seq(LLVMValueRef arr, LLVMValueRef trig,
+                             DspBuildCtx *dsp_ctx, LLVMModuleRef module,
+                             LLVMBuilderRef builder) {
+  // State layout: val (f64, 8 bytes) + counter (i32, 4 bytes) = 12 bytes
+  int off = (dsp_ctx->state_offset + 7) & ~7;
+  dsp_ctx->state_offset = off + 12;
+
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef i64_ty = LLVMInt64Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+  LLVMTypeRef i32_ptr_ty = LLVMPointerType(i32_ty, 0);
+
+  LLVMValueRef base =
+      dsp_consume_frame_state(dsp_ctx, builder, 12, 8, "array_seq.base");
+  LLVMValueRef val_ptr =
+      LLVMBuildBitCast(builder, base, f64_ptr_ty, "array_seq.val_ptr");
+  LLVMValueRef counter_ptr_i8 = LLVMBuildGEP2(
+      builder, i8_ty, base, (LLVMValueRef[]){LLVMConstInt(i64_ty, 8, 0)}, 1,
+      "array_seq.counter_ptr_i8");
+  LLVMValueRef counter_ptr = LLVMBuildBitCast(
+      builder, counter_ptr_i8, i32_ptr_ty, "array_seq.counter_ptr");
+
+  if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
+    LLVMValueRef init_base = dsp_consume_init_state(
+        dsp_ctx, dsp_ctx->init_builder, 12, 8, "array_seq.init.base");
+    LLVMValueRef init_val_ptr = LLVMBuildBitCast(
+        dsp_ctx->init_builder, init_base, f64_ptr_ty, "array_seq.init.val_ptr");
+    LLVMValueRef init_counter_ptr_i8 =
+        LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, init_base,
+                      (LLVMValueRef[]){LLVMConstInt(i64_ty, 8, 0)}, 1,
+                      "array_seq.init.counter_ptr_i8");
+    LLVMValueRef init_counter_ptr =
+        LLVMBuildBitCast(dsp_ctx->init_builder, init_counter_ptr_i8, i32_ptr_ty,
+                         "array_seq.init.counter_ptr");
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, NAN),
+                   init_val_ptr);
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstInt(i32_ty, 0, 0),
+                   init_counter_ptr);
+  }
+
+  LLVMValueRef cur_val =
+      LLVMBuildLoad2(builder, f64_ty, val_ptr, "array_seq.cur_val");
+  LLVMValueRef is_uninit = LLVMBuildFCmp(builder, LLVMRealUNO, cur_val, cur_val,
+                                         "array_seq.is_uninit");
+
+  LLVMBasicBlockRef cur_bb = LLVMGetInsertBlock(builder);
+  LLVMValueRef fn_parent = LLVMGetBasicBlockParent(cur_bb);
+  LLVMBasicBlockRef init_bb = LLVMAppendBasicBlock(fn_parent, "array_seq.init");
+  LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlock(fn_parent, "array_seq.cont");
+  LLVMBuildCondBr(builder, is_uninit, init_bb, cont_bb);
+
+  // First call: counter = -1 so the first trig increments to 0, val = arr[0]
+  LLVMPositionBuilderAtEnd(builder, init_bb);
+  LLVMValueRef zero = LLVMConstInt(i32_ty, 0, 0);
+  LLVMBuildStore(builder, LLVMConstInt(i32_ty, (uint64_t)-1, 1), counter_ptr);
+  LLVMBuildStore(builder, get_array_element(builder, arr, zero, f64_ty),
+                 val_ptr);
+  LLVMBuildBr(builder, cont_bb);
+
+  // On trig: counter = (counter + 1) % len, val = arr[counter]
+  LLVMPositionBuilderAtEnd(builder, cont_bb);
+  LLVMValueRef len_i32 = codegen_get_array_size(builder, arr, f64_ty);
+  BUILD_ON_TRIG(
+      builder, trig, "array_seq",
+      LLVMValueRef cur_counter =
+          LLVMBuildLoad2(builder, i32_ty, counter_ptr, "array_seq.counter");
+      LLVMValueRef next_counter =
+          LLVMBuildAdd(builder, cur_counter, LLVMConstInt(i32_ty, 1, 0),
+                       "array_seq.next_counter");
+      LLVMValueRef wrapped =
+          LLVMBuildSRem(builder, next_counter, len_i32, "array_seq.wrapped");
+      LLVMBuildStore(builder, wrapped, counter_ptr); LLVMBuildStore(
+          builder, get_array_element(builder, arr, wrapped, f64_ty), val_ptr););
+
+  return LLVMBuildLoad2(builder, f64_ty, val_ptr, "array_seq.out");
+}
+
 Ast *get_collection_proc_func(Ast *fn_ast) {
   if (fn_ast->tag == AST_RECORD_ACCESS) {
     return get_collection_proc_func(fn_ast->data.AST_RECORD_ACCESS.member);
@@ -2252,6 +2346,16 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return build_array_choose(array, trig, dsp_ctx, module, builder);
   }
 
+  if (is_ident(f, "arr_seq")) {
+
+    LLVMValueRef array = dsp_build_expr(ast->data.AST_APPLICATION.args + 0,
+                                        dsp_ctx, ctx, module, builder);
+    LLVMValueRef trig = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
+                                       dsp_ctx, ctx, module, builder);
+    trig = ensure_float(ast->data.AST_APPLICATION.args[1].type, trig, builder);
+
+    return build_array_seq(array, trig, dsp_ctx, module, builder);
+  }
   if (is_ident(f, "white")) {
 
     LLVMTypeRef wn_ty = LLVMFunctionType(

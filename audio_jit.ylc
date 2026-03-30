@@ -7,7 +7,6 @@ open engine/bindings/Sched;
 
 import std/Math;
 import std/Arrays;
-import std/Lists;
 
 # let z = [|0.,2.,3.,7.,8.,12.,14.,15.,19.,20.|] |> Arrays.map (fn x -> Math.pow 2. (x / 12.));
 # let z = [|0,2,3,7,8,12,14,15,19,20|] |> Arrays.map (fn x -> Math.pow 2. (x / 12.));
@@ -174,12 +173,12 @@ compile_audio_fn (
 
 
 defer_quant q (fn t ->
-  # pat "3 3 3 4 1 1 1" 
-  # |> cor_loop
-  # |> cor_map (fn d -> trig (); d)
-  # |> cor_map ((*) (q * 0.25))
-  # |> play_routine t schedule_event
-  # ;
+  pat "3 3 3 4 1 1 1" 
+  |> cor_loop
+  |> cor_map (fn d -> trig (); d)
+  |> cor_map ((*) (q * 0.25))
+  |> play_routine t schedule_event
+  ;
   #
   #
   pat "3 3 3 4 3" 
@@ -206,12 +205,12 @@ defer_quant q (fn t ->
   |> play_routine t schedule_event
   ;
 
-  # pat "1 1 1 1 4 1 1 1 4 1" 
-  # |> cor_loop
-  # |> cor_map (fn d -> chirp (Math.rand_double_range 100. 1000.) 0.02 |> play_node_offset (get_tl_tick ()); d)
-  # |> cor_map ((*) (q * 0.25))
-  # |> play_routine t schedule_event
-  # ;
+  pat "1 1 1 1 4 1 1 1 4 1" 
+  |> cor_loop
+  |> cor_map (fn d -> chirp (Math.rand_double_range 100. 1000.) 0.02 |> play_node_offset (get_tl_tick ()); d)
+  |> cor_map ((*) (q * 0.25))
+  |> play_routine t schedule_event
+  ;
 
 )
 

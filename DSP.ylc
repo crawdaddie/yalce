@@ -31,6 +31,7 @@ let allpass = extern fn Double -> Double -> Double -> Double -> Double;
 let clampup = extern fn Double -> Double -> Double;
 let lag = extern fn Double -> Double -> Double;
 let arr_choose = extern fn Array of Double -> Double -> Double;
+let arr_seq = extern fn Array of Double -> Double -> Double;
 
 
 #                       buf                rate      start_pos trig
@@ -337,6 +338,72 @@ compile_audio_fn (
     Z[0] := comb t 0.1 0.8 y;
     y
 );
+
+
+# compile_audio_fn (
+# let fdn4 = fn m d1 d2 d3 d4 fb inp ->
+#   let dts = [|d1, d2, d3, d4|];
+#   let n = Math.ceil (2 * sample_rate ());
+#   let dbuf1 = array_fill_const n 0.;
+#   # let dbuf2 = array_fill_const n 0.;
+#   # let dbuf3 = array_fill_const n 0.;
+#   # let dbuf4 = array_fill_const n 0.;
+#
+#   let ds1 = d1 * sample_rate ();
+#   # let ds2 = d2 * sample_rate ();
+#   # let ds3 = d3 * sample_rate ();
+#   # let ds4 = d4 * sample_rate ();
+#
+#   let counter = [|0|];
+#
+#   let w = counter[0];
+#   let y0 = tabread_samp dbuf1 (w - ds1);
+#   # let y1 = tabread_samp dbuf2 (w - ds2);
+#   # let y2 = tabread_samp dbuf3 (w - ds3);
+#   # let y3 = tabread_samp dbuf4 (w - ds4);
+#
+#   # row-major 4x4 matmul M.y 
+#   # let v0 = m[0]         * y0 + m[1]         * y1 + m[2]         *y2 + m[3]         * y3;
+#   # let v1 = m[1 * 4 + 0] * y0 + m[1 * 4 + 1] * y1 + m[1 * 4 + 2] *y2 + m[1 * 4 + 3] * y3;
+#   # let v2 = m[2 * 4 + 0] * y0 + m[2 * 4 + 1] * y1 + m[2 * 4 + 2] *y2 + m[2 * 4 + 3] * y3;
+#   # let v3 = m[3 * 4 + 0] * y0 + m[3 * 4 + 1] * y1 + m[3 * 4 + 2] *y2 + m[3 * 4 + 3] * y3;
+#
+#   let v0 = m[0]         * y0 + m[1];
+#
+#
+#   dbuf1[w] := inp + fb * v0;
+#   # dbuf2[w] := inp + fb * v1;
+#   # dbuf3[w] := inp + fb * v2;
+#   # dbuf4[w] := inp + fb * v3;
+#
+#   counter[0] := (counter[0] + 1) % n;
+#
+#   0.25 * y0
+# );
+# ;
+# let BUF_SIZE = 96000;
+# compile_audio_fn (
+# let fdn4 = fn m d1 d2 d3 d4 fb inp ->
+#   # let dts = [|d1, d2, d3, d4|];
+#   # let n = BUF_SIZE;
+#   let dbuf1 = array_fill_const 96000 0.;
+#
+#   let ds1 = d1 * sample_rate;
+#
+#   let counter = [|0|];
+#
+#   let w = counter[0];
+#   let y0 = tabread_samp dbuf1 (w - ds1);
+#
+#   let v0 = m[0]         * y0 + m[1];
+#
+#
+#   dbuf1[w] := inp + fb * v0;
+#
+#   counter[0] := (counter[0] + 1) % 96000;
+#
+#   0.25 * y0
+# );
 ;
 
 let int32_parse = extern fn String -> Int;
