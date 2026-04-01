@@ -185,6 +185,7 @@ void push_event(void (*callback)(void *, uint64_t), void *userdata,
 }
 static _Thread_local uint64_t sched_now = 0;
 static uint64_t cur_tick = 0;
+
 uint64_t get_tl_tick() {
   return cur_tick == 0 ? get_current_sample() : cur_tick;
 }

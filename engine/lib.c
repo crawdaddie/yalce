@@ -511,7 +511,7 @@ NodeRef chain(NodeRef _t) {
   return group;
 }
 
-NodeRef play_node(NodeRef s) {
+NodeRef play_node_(NodeRef s) {
   if (s == NULL) {
     fprintf(stderr, "play_node: null synth node\n");
     return NULL;
@@ -523,11 +523,33 @@ NodeRef play_node(NodeRef s) {
   return play_node_offset(get_frame_offset(), s);
 }
 
+NodeRef play_node(NodeRef s) {
+  if (s == NULL) {
+    fprintf(stderr, "play_node: null synth node\n");
+    return NULL;
+  }
+  if ((strcmp(s->meta, "ensemble") != 0) && (_chain_head != NULL)) {
+    return play_node_offset(get_tl_tick(), chain(s));
+  }
+
+  return play_node_offset(get_tl_tick(), s);
+}
+
 NodeRef play_node_before(NodeRef target, NodeRef node) {
   push_msg(&ctx.msg_queue,
            (audio_instruction){
                NODE_ADD_BEFORE,
-               get_frame_offset(),
+               get_tl_tick(),
+               {.NODE_ADD_BEFORE = {.target = target, .node = node}}});
+  return node;
+}
+
+static NodeRef play_node_before_at(uint64_t tick, NodeRef target,
+                                   NodeRef node) {
+  push_msg(&ctx.msg_queue,
+           (audio_instruction){
+               NODE_ADD_BEFORE,
+               tick,
                {.NODE_ADD_BEFORE = {.target = target, .node = node}}});
   return node;
 }
@@ -578,7 +600,7 @@ static NodeRef ensure_play_into_mixer_inlet(NodeRef target, int inlet_idx) {
   if (target->next) {
     play_node_before(target->next, inlet);
   } else {
-    play_node_offset(get_frame_offset(), inlet);
+    play_node_offset(get_tl_tick(), inlet);
   }
   plug_input_in_graph(inlet_idx, target, inlet);
   return inlet;
@@ -596,6 +618,19 @@ NodeRef play_into(NodeRef target, NodeRef node) {
   }
 
   return play_node_before(target, node);
+}
+
+NodeRef play_into_offset(uint64_t tick, NodeRef target, NodeRef node) {
+  if (target && node && target->num_inputs > 0) {
+    NodeRef mixer =
+        ensure_play_into_mixer_inlet(target, target->num_inputs - 1);
+    if (mixer) {
+      node->bus = mixer;
+      node->write_to_output = false;
+    }
+  }
+
+  return play_node_before_at(tick, target, node);
 }
 
 NodeRef play_into_idx(NodeRef target, int idx, NodeRef node) {

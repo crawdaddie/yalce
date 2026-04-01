@@ -9,6 +9,24 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
+// Pre-pass analysis: tracks which symbols have array allocations and which
+// have array_set called on them. Used to decide whether an array needs mutable
+// (frame) state or can live in init-only state.
+typedef struct {
+  const char **alloc_syms;   // names of symbols bound to array literals or array_fill_const
+  const char **mutated_syms; // names of symbols passed as first arg to array_set
+  int alloc_count;
+  int mutated_count;
+  int alloc_cap;
+  int mutated_cap;
+} DspArrayAnalysis;
+
+void dsp_array_analysis_init(DspArrayAnalysis *a);
+void dsp_array_analysis_free(DspArrayAnalysis *a);
+void dsp_analyze_arrays(Ast *body, DspArrayAnalysis *out);
+bool dsp_array_is_mutated(const DspArrayAnalysis *a, const char *name);
+bool dsp_array_is_allocated(const DspArrayAnalysis *a, const char *name);
+
 typedef struct {
   // state_ptr
   LLVMValueRef node_ptr;  // !llvm.ptr  — the Node* itself
@@ -31,6 +49,7 @@ typedef struct {
   LLVMBuilderRef ctor_builder;
   LLVMBuilderRef init_builder;
   LLVMBuilderRef perform_builder;
+  DspArrayAnalysis array_analysis;
 } DspBuildCtx;
 LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,

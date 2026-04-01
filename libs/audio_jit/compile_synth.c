@@ -291,6 +291,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   LLVMPositionBuilderAtEnd(init_b, init_bb);
 
   int compile_sample_rate = ctx_sample_rate();
+
   if (compile_sample_rate <= 0) {
     compile_sample_rate = 48000;
   }
@@ -308,6 +309,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       .sample_rate = compile_sample_rate,
       .spf_scalar = compile_spf,
   };
+
   DspBuildCtx frame_ctx = {
       .ctor_builder = ctor_b,
       .init_builder = init_b,

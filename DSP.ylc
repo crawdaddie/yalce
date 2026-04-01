@@ -33,6 +33,8 @@ let lag = extern fn Double -> Double -> Double;
 let arr_choose = extern fn Array of Double -> Double -> Double;
 let arr_seq = extern fn Array of Double -> Double -> Double;
 
+let delay_line = extern fn Double -> Array of Double;
+
 
 #                       buf                rate      start_pos trig
 let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;
