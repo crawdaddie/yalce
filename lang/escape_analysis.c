@@ -20,8 +20,17 @@ Allocation *create_alloc(const char *varname, Ast *alloc_site, int scope) {
       .escapes = false,
       .is_returned = false,
       .is_captured = false,
+      .is_mutable = false,
   };
   return alloc;
+}
+
+static void ctx_mark_allocation_mutable(EACtx *ctx, uint32_t id) {
+  for (Allocation *a = ctx->allocations; a; a = a->next) {
+    if (a->id == id) {
+      a->is_mutable = true;
+    }
+  }
 }
 
 void print_allocs(Allocation *allocs) {
@@ -173,9 +182,17 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
         // values that cross yield boundary need to be allocated on the heap -
         // this is because they would get recreated each time the coroutine
         // resumes if they are on the stack
-        *ea_meta = (EscapeMeta){.status = EA_HEAP_ALLOC, .id = a->id};
+        *ea_meta = (EscapeMeta){
+            .status = EA_HEAP_ALLOC,
+            .id = a->id,
+            .attributes = a->is_mutable ? EA_ATTR_MUTABLE : 0,
+        };
       } else {
-        *ea_meta = (EscapeMeta){.status = EA_STACK_ALLOC, .id = a->id};
+        *ea_meta = (EscapeMeta){
+            .status = EA_STACK_ALLOC,
+            .id = a->id,
+            .attributes = a->is_mutable ? EA_ATTR_MUTABLE : 0,
+        };
       }
       a->alloc_site->ea_md = ea_meta;
     }
@@ -183,7 +200,11 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
     if (ret_alloc) {
       for (Allocation *r = ret_alloc; r; r = r->next) {
         EscapeMeta *ea_meta = malloc(sizeof(EscapeMeta));
-        *ea_meta = (EscapeMeta){.status = EA_HEAP_ALLOC, .id = r->id};
+        *ea_meta = (EscapeMeta){
+            .status = EA_HEAP_ALLOC,
+            .id = r->id,
+            .attributes = r->is_mutable ? EA_ATTR_MUTABLE : 0,
+        };
         r->alloc_site->ea_md = ea_meta;
       }
     }
@@ -215,6 +236,18 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
     if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
 
       Ast *fn_ast = ast->data.AST_APPLICATION.function;
+
+      if (CHARS_EQ(fn_ast->data.AST_IDENTIFIER.value, "array_set") &&
+          ast->data.AST_APPLICATION.len >= 1 &&
+          ast->data.AST_APPLICATION.args[0].tag == AST_IDENTIFIER) {
+
+        Allocation *arr_alloc = ctx_find_allocation(
+            ctx, ast->data.AST_APPLICATION.args[0].data.AST_IDENTIFIER.value);
+
+        if (arr_alloc) {
+          ctx_mark_allocation_mutable(ctx, arr_alloc->id);
+        }
+      }
 
       if (has_attr(fn_ast->type->data.T_FN.attributes, ATTR_ALLOCATES)) {
         Allocation *arr_alloc = create_alloc(NULL, ast, ctx->scope);

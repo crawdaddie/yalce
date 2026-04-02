@@ -93,7 +93,7 @@ compile_audio_fn (
 compile_audio_fn (
   let acid = fn f t ->
 
-    let ffreq = t |> decay 2. |> scale f 8000;
+    let ffreq = t |> decay 0.2 |> scale f 8000;
 
     let osc = fn f -> saw_osc f + saw_osc (f * 1.01) + saw_osc (f * 1.02) |> (*) 0.3;;
     # let osc = fn f -> saw_osc f + saw_osc (f * 1.01) 
@@ -103,7 +103,7 @@ compile_audio_fn (
     |> lag 0.3
     |> osc
     |> Filter.lpf ffreq 10.
-    |> (*) 5 |> Math.tanh
+    # |> (*) 2 |> Math.tanh
     |> (*) (adsr 0 0.1 0.8 0.5 t)
     |> (*) (Math.db_amp -15)
 );
@@ -205,12 +205,12 @@ defer_quant q (fn t ->
   |> play_routine t schedule_event
   ;
 
-  pat "1 1 1 1 4 1 1 1 4 1" 
-  |> cor_loop
-  |> cor_map (fn d -> chirp (Math.rand_double_range 100. 1000.) 0.02 |> play_node_offset (get_tl_tick ()); d)
-  |> cor_map ((*) (q * 0.25))
-  |> play_routine t schedule_event
-  ;
+  # pat "1 1 1 1 4 1 1 1 4 1" 
+  # |> cor_loop
+  # |> cor_map (fn d -> chirp (Math.rand_double_range 100. 1000.) 0.02 |> play_node_offset (get_tl_tick ()); d)
+  # |> cor_map ((*) (q * 0.25))
+  # |> play_routine t schedule_event
+  # ;
 
 )
 

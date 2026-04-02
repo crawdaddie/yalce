@@ -1,24 +1,18 @@
 open DSP;
 compile_audio_fn ( 
   let fdn = fn d1 d2 d3 d4 inp -> 
-    let dd = [|d1, d2, d3, d4|];
-    let dl1 = delay_line 2;
-    let dl2 = delay_line 2;
-    let dl3 = delay_line 2;
-    let dl4 = delay_line 2;
-    let dll = [| dl1, dl2, dl3, dl4 |];
+    let dts = [|d1, d2, d3, d4|];
+    let dls = [|
+      delay_line 2,
+      delay_line 2,
+      delay_line 2,
+      delay_line 2,
+    |];
 
     let counter = [| 0 |];
     let w = counter[0];
-    let d = w - (sample_rate * dd[0]) |> tabread_samp (dll[0]);
-
-    let y = dsp_array.mapi (fn dt i -> 
-      w - (sample_rate * dt) |> tabread_samp (dll[i]);
-    ) dd;
-
-    (dll[0])[w] := inp + 0.2 * d;
     counter[0] := (w + 1) % (array_size (dll[0]));
-    inp + d
+    inp 
 );
 
 

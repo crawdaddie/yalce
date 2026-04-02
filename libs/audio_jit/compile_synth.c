@@ -15,6 +15,7 @@
 #include "../../lang/backend_llvm/symbols.h"
 #include "../../lang/backend_llvm/types.h"
 #include "../../lang/common.h"
+#include "../../lang/escape_analysis.h"
 #include "../../lang/ht.h"
 #include "../../lang/serde.h"
 #include "../../lang/types/builtins.h"
@@ -215,6 +216,8 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
                                            JITLangCtx *ctx,
                                            LLVMModuleRef module,
                                            LLVMBuilderRef builder) {
+  escape_analysis(lambda);
+
   int num_inputs = 0;
   bool is_void_fn = is_void_func(lambda->type);
   //

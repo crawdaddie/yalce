@@ -1,8 +1,11 @@
 #include "./dsp_build_expr.h"
+#include "../../lang/backend_llvm/application.h"
+#include "../../lang/backend_llvm/array.h"
 #include "../../lang/backend_llvm/codegen.h"
 #include "../../lang/backend_llvm/function.h"
 #include "../../lang/backend_llvm/symbols.h"
 #include "../../lang/backend_llvm/types.h"
+#include "../../lang/escape_analysis.h"
 #include "../../lang/serde.h"
 #include "../../lang/ylc_datatypes.h"
 #include "./dsp_fn_application.h"
@@ -92,6 +95,14 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       return NULL;
     }
 
+    // if ((expr->tag == AST_ARRAY || is_array_type(expr->type)) && expr->ea_md)
+    // {
+    //   print_ast(ast);
+    //   printf("array attributes -> %d\n\n", expr->ea_md->attributes);
+    //   if (expr->ea_md && expr->ea_md->attributes & EA_ATTR_MUTABLE) {
+    //   }
+    // }
+
     LLVMValueRef val = dsp_build_expr(expr, dsp_ctx, work_ctx, module, builder);
 
     if (!val) {
@@ -162,66 +173,55 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
   case AST_LIST:
   case AST_ARRAY: {
+    bool hoist_to_synth_lifetime =
+        ast->ea_md && (ast->ea_md->attributes & EA_ATTR_MUTABLE);
     int len = ast->data.AST_LIST.len;
 
     LLVMTypeRef i8_ty = LLVMInt8Type();
     LLVMTypeRef i32_ty = LLVMInt32Type();
     LLVMTypeRef i64_ty = LLVMInt64Type();
 
-    LLVMTypeRef el_llvm_ty = LLVMDoubleType();
-
-    if (ast->type && ast->type->data.T_CONS.args) {
-      Type *el_type = ast->type->data.T_CONS.args[0];
-      if (el_type->kind == T_VAR) {
-        el_llvm_ty = LLVMDoubleType();
-      } else {
-        el_llvm_ty =
-            type_to_llvm_type(ast->type->data.T_CONS.args[0], ctx, module);
-      }
-    }
-
-    int el_size = 0;
-    if (ast->type && ast->type->data.T_CONS.args) {
-      Type *el_type = ast->type->data.T_CONS.args[0];
-      if (el_type && el_type->kind == T_CONS && el_type->data.T_CONS.name &&
-          strcmp(el_type->data.T_CONS.name, TYPE_NAME_ARRAY) == 0) {
-        // Array-of-array in DSP state uses the runtime array record layout.
-        el_size = (int)sizeof(_DoubleArray);
-      }
-    }
-    if (el_size == 0) {
-      unsigned long long el_size_ull =
-          LLVMABISizeOfType(LLVMGetModuleDataLayout(module), el_llvm_ty);
-      if (el_size_ull == 0 || el_size_ull > (unsigned long long)INT_MAX) {
-        fprintf(stderr, "Error: invalid array element ABI size (%llu)\n",
-                el_size_ull);
-        print_ast_err(ast);
-        return NULL;
-      }
-      el_size = (int)el_size_ull;
-    }
-
-    LLVMTypeRef el_ptr_ty = LLVMPointerType(el_llvm_ty, 0);
-    LLVMTypeRef arr_ty =
-        LLVMStructType((LLVMTypeRef[]){i32_ty, el_ptr_ty}, 2, 0);
+    Type *el_type = ast->type->data.T_CONS.args[0];
+    LLVMTypeRef el_llvm_ty = type_to_llvm_type(el_type, ctx, module);
+    LLVMTypeRef arr_ty = codegen_array_type(el_llvm_ty);
     LLVMTypeRef arr_ptr_ty = LLVMPointerType(arr_ty, 0);
+    LLVMTypeRef el_ptr_ty = LLVMPointerType(el_llvm_ty, 0);
 
-    if (ast_is_const(ast, ctx)) {
+    unsigned long long el_size_ull =
+        LLVMABISizeOfType(LLVMGetModuleDataLayout(module), el_llvm_ty);
+    if (el_size_ull > (unsigned long long)INT_MAX) {
+      fprintf(stderr, "Error: invalid array element ABI size (%llu)\n",
+              el_size_ull);
+      print_ast_err(ast);
+      return NULL;
+    }
+    int el_size = (int)el_size_ull;
+
+    unsigned long long arr_size_ull =
+        LLVMABISizeOfType(LLVMGetModuleDataLayout(module), arr_ty);
+    if (arr_size_ull > (unsigned long long)INT_MAX) {
+      fprintf(stderr, "Error: invalid array ABI size (%llu)\n", arr_size_ull);
+      print_ast_err(ast);
+      return NULL;
+    }
+    int arr_size = (int)arr_size_ull;
+
+    if (hoist_to_synth_lifetime) {
       int off = (dsp_ctx->state_offset + 7) & ~7;
-      int data_off = off + 16;
+      int data_off = off + arr_size;
+      int total_bytes = arr_size + (len * el_size);
       dsp_ctx->state_offset = data_off + (len * el_size);
-      int total_bytes = 16 + (len * el_size);
 
       if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
-        LLVMValueRef init_base = dsp_consume_init_state(
-            dsp_ctx, dsp_ctx->init_builder, total_bytes, 8, "array.ctor.base");
+        LLVMValueRef init_base =
+            dsp_consume_init_state(dsp_ctx, dsp_ctx->init_builder, total_bytes,
+                                   8, "array.ctor.base");
         LLVMValueRef arr_ptr = LLVMBuildBitCast(
             dsp_ctx->init_builder, init_base, arr_ptr_ty, "array.ctor.ptr");
-
-        LLVMValueRef ctor_base_i8 =
-            LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, init_base,
-                          (LLVMValueRef[]){LLVMConstInt(i64_ty, 16, 0)}, 1,
-                          "array.ctor.base");
+        LLVMValueRef ctor_base_i8 = LLVMBuildGEP2(
+            dsp_ctx->init_builder, i8_ty, init_base,
+            (LLVMValueRef[]){LLVMConstInt(i64_ty, (uint64_t)arr_size, 0)}, 1,
+            "array.ctor.base");
         LLVMValueRef ctor_base = LLVMBuildBitCast(
             dsp_ctx->init_builder, ctor_base_i8, el_ptr_ty, "array.ctor.data");
 
@@ -236,25 +236,24 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         for (int i = 0; i < len; i++) {
           Ast *item = ast->data.AST_LIST.items + i;
           LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
-          LLVMValueRef elem_ptr =
-              LLVMBuildGEP2(dsp_ctx->init_builder, el_llvm_ty, ctor_base,
-                            &idx_i64, 1, "array.init.ptr");
-          LLVMValueRef elem = codegen(item, ctx, module, dsp_ctx->init_builder);
-          if (LLVMGetTypeKind(el_llvm_ty) == LLVMDoubleTypeKind) {
-            elem = ensure_float(item->type, elem, dsp_ctx->init_builder);
-          }
+          LLVMValueRef elem_ptr = LLVMBuildGEP2(dsp_ctx->init_builder,
+                                                el_llvm_ty, ctor_base, &idx_i64,
+                                                1, "array.init.ptr");
+          LLVMValueRef elem = dsp_build_expr(item, dsp_ctx, ctx, module,
+                                             dsp_ctx->init_builder);
+          elem = handle_type_conversions(elem, item->type, el_type, ctx, module,
+                                         dsp_ctx->init_builder);
           LLVMBuildStore(dsp_ctx->init_builder, elem, elem_ptr);
         }
       }
 
-      LLVMValueRef run_arr_ptr_i8 = dsp_consume_frame_state(
-          dsp_ctx, builder, total_bytes, 8, "array.ptr");
+      LLVMValueRef run_arr_ptr_i8 =
+          dsp_consume_frame_state(dsp_ctx, builder, total_bytes, 8, "array.ptr");
       LLVMValueRef run_arr_ptr =
           LLVMBuildBitCast(builder, run_arr_ptr_i8, arr_ptr_ty, "array.ptr");
       return LLVMBuildLoad2(builder, arr_ty, run_arr_ptr, "array.load");
     }
 
-    // Non-constant array literals are rebuilt per frame as stack-local arrays.
     LLVMValueRef len_i32 = LLVMConstInt(i32_ty, (uint64_t)len, 0);
     LLVMValueRef frame_data_ptr =
         LLVMBuildArrayAlloca(builder, el_llvm_ty, len_i32, "array.frame.data");
@@ -265,16 +264,16 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       LLVMValueRef elem_ptr = LLVMBuildGEP2(builder, el_llvm_ty, frame_data_ptr,
                                             &idx_i64, 1, "array.frame.ptr");
       LLVMValueRef elem = dsp_build_expr(item, dsp_ctx, ctx, module, builder);
-      if (LLVMGetTypeKind(el_llvm_ty) == LLVMDoubleTypeKind) {
-        elem = ensure_float(item->type, elem, builder);
-      }
+      elem = handle_type_conversions(elem, item->type, el_type, ctx, module,
+                                     builder);
       LLVMBuildStore(builder, elem, elem_ptr);
     }
 
     LLVMValueRef arr_val = LLVMGetUndef(arr_ty);
-    arr_val = LLVMBuildInsertValue(builder, arr_val, len_i32, 0, "array.size");
     arr_val =
-        LLVMBuildInsertValue(builder, arr_val, frame_data_ptr, 1, "array.data");
+        LLVMBuildInsertValue(builder, arr_val, len_i32, 0, "array.size");
+    arr_val = LLVMBuildInsertValue(builder, arr_val, frame_data_ptr, 1,
+                                   "array.data");
     return arr_val;
   }
 
