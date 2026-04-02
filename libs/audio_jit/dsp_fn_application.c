@@ -1928,6 +1928,14 @@ Ast *get_collection_proc_func(Ast *fn_ast) {
   return NULL;
 }
 
+LLVMValueRef dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
+                           JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  printf("map arr\n");
+  print_ast(ast);
+  return NULL;
+}
+
 LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
                             JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
@@ -2154,6 +2162,15 @@ LLVMValueRef call_dsp_list_proc(Ast *fn_ast, Ast *ast, DspBuildCtx *dsp_ctx,
                                 JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
 
+  if (is_array_type(ast->data.AST_APPLICATION.args[1].type)) {
+    if (is_ident(fn_ast, "mapi")) {
+      return dsp_array_map(true, ast, dsp_ctx, ctx, module, builder);
+    }
+    if (is_ident(fn_ast, "map")) {
+      return dsp_array_map(false, ast, dsp_ctx, ctx, module, builder);
+    }
+  }
+
   if (is_array_type(ast->data.AST_APPLICATION.args[2].type)) {
     if (is_ident(fn_ast, "foldi")) {
       return dsp_array_fold(true, ast, dsp_ctx, ctx, module, builder);
@@ -2162,6 +2179,7 @@ LLVMValueRef call_dsp_list_proc(Ast *fn_ast, Ast *ast, DspBuildCtx *dsp_ctx,
     if (is_ident(fn_ast, "fold")) {
       return dsp_array_fold(false, ast, dsp_ctx, ctx, module, builder);
     }
+
   } else if (is_list_type(ast->data.AST_APPLICATION.args[2].type)) {
     if (is_ident(fn_ast, "foldi")) {
       return dsp_array_fold(true, ast, dsp_ctx, ctx, module, builder);
@@ -2233,10 +2251,10 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                         builder);
   }
   if (is_ident(f, "+")) {
-    LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args,
-                                    dsp_ctx, ctx, module, builder);
-    LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                    dsp_ctx, ctx, module, builder);
+    LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                    ctx, module, builder);
+    LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
+                                    ctx, module, builder);
     if (LLVMGetTypeKind(LLVMTypeOf(l)) == LLVMIntegerTypeKind &&
         LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind)
       return LLVMBuildAdd(builder, l, r, "signal.add");
@@ -2246,10 +2264,10 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
 
   if (is_ident(f, "-")) {
-    LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args,
-                                    dsp_ctx, ctx, module, builder);
-    LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                    dsp_ctx, ctx, module, builder);
+    LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                    ctx, module, builder);
+    LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
+                                    ctx, module, builder);
     if (LLVMGetTypeKind(LLVMTypeOf(l)) == LLVMIntegerTypeKind &&
         LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind)
       return LLVMBuildSub(builder, l, r, "signal.sub");
@@ -2259,10 +2277,10 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
 
   if (is_ident(f, "*")) {
-    LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args,
-                                    dsp_ctx, ctx, module, builder);
-    LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                    dsp_ctx, ctx, module, builder);
+    LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                    ctx, module, builder);
+    LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
+                                    ctx, module, builder);
     if (!l || !r) {
       fprintf(stderr, "audio_jit: null operand in '*' expression\n");
       print_ast(ast);
@@ -2277,10 +2295,10 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
 
   if (is_ident(f, "/")) {
-    LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args,
-                                    dsp_ctx, ctx, module, builder);
-    LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                    dsp_ctx, ctx, module, builder);
+    LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                    ctx, module, builder);
+    LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
+                                    ctx, module, builder);
     if (LLVMGetTypeKind(LLVMTypeOf(l)) == LLVMIntegerTypeKind &&
         LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind)
       return LLVMBuildSDiv(builder, l, r, "signal.div");
@@ -2290,10 +2308,10 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
 
   if (is_ident(f, "%")) {
-    LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args,
-                                    dsp_ctx, ctx, module, builder);
-    LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                    dsp_ctx, ctx, module, builder);
+    LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                    ctx, module, builder);
+    LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
+                                    ctx, module, builder);
     if (LLVMGetTypeKind(LLVMTypeOf(l)) == LLVMIntegerTypeKind &&
         LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind)
       return LLVMBuildSRem(builder, l, r, "signal.rem");

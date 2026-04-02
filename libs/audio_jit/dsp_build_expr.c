@@ -4,9 +4,13 @@
 #include "../../lang/backend_llvm/symbols.h"
 #include "../../lang/backend_llvm/types.h"
 #include "../../lang/serde.h"
+#include "../../lang/ylc_datatypes.h"
 #include "./dsp_fn_application.h"
+#include "types/type_ser.h"
+#include <llvm-c/Target.h>
 #include <llvm-c/Types.h>
 
+#include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -158,26 +162,51 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
   case AST_LIST:
   case AST_ARRAY: {
-    if (ast_is_const(ast, ctx)) {
-      int len = ast->data.AST_LIST.len;
+    int len = ast->data.AST_LIST.len;
 
-      LLVMTypeRef i8_ty = LLVMInt8Type();
-      LLVMTypeRef i32_ty = LLVMInt32Type();
-      LLVMTypeRef i64_ty = LLVMInt64Type();
+    LLVMTypeRef i8_ty = LLVMInt8Type();
+    LLVMTypeRef i32_ty = LLVMInt32Type();
+    LLVMTypeRef i64_ty = LLVMInt64Type();
 
-      LLVMTypeRef el_llvm_ty = LLVMDoubleType();
-      if (ast->type && ast->type->data.T_CONS.args) {
-        el_llvm_ty = type_to_llvm_type(ast->type->data.T_CONS.args[0], ctx, module);
+    LLVMTypeRef el_llvm_ty = LLVMDoubleType();
+
+    if (ast->type && ast->type->data.T_CONS.args) {
+      Type *el_type = ast->type->data.T_CONS.args[0];
+      if (el_type->kind == T_VAR) {
+        el_llvm_ty = LLVMDoubleType();
+      } else {
+        el_llvm_ty =
+            type_to_llvm_type(ast->type->data.T_CONS.args[0], ctx, module);
       }
-      int el_size = (LLVMGetTypeKind(el_llvm_ty) == LLVMIntegerTypeKind)
-                        ? (int)(LLVMGetIntTypeWidth(el_llvm_ty) / 8)
-                        : 8;
+    }
 
-      LLVMTypeRef el_ptr_ty = LLVMPointerType(el_llvm_ty, 0);
-      LLVMTypeRef arr_ty =
-          LLVMStructType((LLVMTypeRef[]){i32_ty, el_ptr_ty}, 2, 0);
-      LLVMTypeRef arr_ptr_ty = LLVMPointerType(arr_ty, 0);
+    int el_size = 0;
+    if (ast->type && ast->type->data.T_CONS.args) {
+      Type *el_type = ast->type->data.T_CONS.args[0];
+      if (el_type && el_type->kind == T_CONS && el_type->data.T_CONS.name &&
+          strcmp(el_type->data.T_CONS.name, TYPE_NAME_ARRAY) == 0) {
+        // Array-of-array in DSP state uses the runtime array record layout.
+        el_size = (int)sizeof(_DoubleArray);
+      }
+    }
+    if (el_size == 0) {
+      unsigned long long el_size_ull =
+          LLVMABISizeOfType(LLVMGetModuleDataLayout(module), el_llvm_ty);
+      if (el_size_ull == 0 || el_size_ull > (unsigned long long)INT_MAX) {
+        fprintf(stderr, "Error: invalid array element ABI size (%llu)\n",
+                el_size_ull);
+        print_ast_err(ast);
+        return NULL;
+      }
+      el_size = (int)el_size_ull;
+    }
 
+    LLVMTypeRef el_ptr_ty = LLVMPointerType(el_llvm_ty, 0);
+    LLVMTypeRef arr_ty =
+        LLVMStructType((LLVMTypeRef[]){i32_ty, el_ptr_ty}, 2, 0);
+    LLVMTypeRef arr_ptr_ty = LLVMPointerType(arr_ty, 0);
+
+    if (ast_is_const(ast, ctx)) {
       int off = (dsp_ctx->state_offset + 7) & ~7;
       int data_off = off + 16;
       dsp_ctx->state_offset = data_off + (len * el_size);
@@ -223,13 +252,30 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       LLVMValueRef run_arr_ptr =
           LLVMBuildBitCast(builder, run_arr_ptr_i8, arr_ptr_ty, "array.ptr");
       return LLVMBuildLoad2(builder, arr_ty, run_arr_ptr, "array.load");
-    } else {
-      fprintf(stderr, "Non-constant array literal\n");
-      print_ast_err(ast);
-      return NULL;
     }
 
-    return NULL;
+    // Non-constant array literals are rebuilt per frame as stack-local arrays.
+    LLVMValueRef len_i32 = LLVMConstInt(i32_ty, (uint64_t)len, 0);
+    LLVMValueRef frame_data_ptr =
+        LLVMBuildArrayAlloca(builder, el_llvm_ty, len_i32, "array.frame.data");
+
+    for (int i = 0; i < len; i++) {
+      Ast *item = ast->data.AST_LIST.items + i;
+      LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
+      LLVMValueRef elem_ptr = LLVMBuildGEP2(builder, el_llvm_ty, frame_data_ptr,
+                                            &idx_i64, 1, "array.frame.ptr");
+      LLVMValueRef elem = dsp_build_expr(item, dsp_ctx, ctx, module, builder);
+      if (LLVMGetTypeKind(el_llvm_ty) == LLVMDoubleTypeKind) {
+        elem = ensure_float(item->type, elem, builder);
+      }
+      LLVMBuildStore(builder, elem, elem_ptr);
+    }
+
+    LLVMValueRef arr_val = LLVMGetUndef(arr_ty);
+    arr_val = LLVMBuildInsertValue(builder, arr_val, len_i32, 0, "array.size");
+    arr_val =
+        LLVMBuildInsertValue(builder, arr_val, frame_data_ptr, 1, "array.data");
+    return arr_val;
   }
 
   default: {
