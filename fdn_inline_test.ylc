@@ -1,16 +1,100 @@
 open DSP;
-
 import std/Math;
+
+compile_audio_fn ( 
+  let grain_delay = fn dt fb inp ->
+    let dl = delay_line 1;
+    let max_size = array_size dl;
+
+    let counter = [| 0 |];
+    let w = counter[0];
+
+    let pos = (w - sample_rate * dt) / sample_rate;
+    let t = trig 20;
+    let y = t
+    |> grains 30 dl
+      (arr_choose [| 1., 2., 0.5|] t)
+      (pos - lfnoise0 20 0 0.2)
+      0.15;
+
+    dl[w] := inp + y * fb;
+    counter[0] := (w + 1) % max_size;
+    inp + y
+);
+compile_audio_fn ( 
+  let grain_reverb = fn d1 d2 d3 d4 rt60 inp -> 
+    let M = [|
+      -0.5,  0.5,  0.5,  0.5,
+       0.5, -0.5,  0.5,  0.5,
+       0.5,  0.5, -0.5,  0.5,
+       0.5,  0.5,  0.5, -0.5
+    |];
+    let b = array_fill_const 4 1.;
+    let c = array_fill_const 4 0.25;
+
+
+    let dls = [|
+      (delay_line 1, d1),
+      (delay_line 1, d2),
+      (delay_line 1, d3),
+      (delay_line 1, d4),
+    |];
+
+    let dl0, _ = dls[0];
+    let max_size = array_size dl0;
+
+    let counter = [| 0 |];
+    let w = counter[0];
+
+    let t = trig 10;
+    let y = dsp_array.map (fn (dl, dt) -> 
+
+      let pos = (w - sample_rate * dt) / sample_rate;
+      # tabread_samp dl (w - sample_rate * dt)
+      t |> grains 30 dl
+        (arr_choose [| 1., 2.|] t)
+        (pos - lfnoise0 20 0 0.2)
+        # pos
+        0.15;
+    ) dls;
+
+
+    array_fill_const 4 0.
+    |> dsp_mmul_op M y
+    |> dsp_array.mapi (fn i d -> 
+      let (dl, dt) = dls[i];
+      dl[w] := inp * b[i] + (
+        d
+        |> (*) (Math.pow 10.0 ((-3.0 * dt) / rt60)) # per-delay-line gamma output gain
+        |> Filter.lpf1p 8000
+        |> Filter.hpf1p 200
+      )
+    )
+    ;
+
+    counter[0] := (w + 1) % max_size;
+    inp + (vec_dot c y)
+);
 
 
 compile_audio_fn ( 
   let imp = fn () -> 
-    trig 1.
+    let t = trig 1;
+    t 
     |> adsr 0.001 0.01 0.5 0.2
     # |> decay 0.5
-    |> (*) (sin_osc 600)
-    |> Reverb.fdn8 0.0199  0.0260  0.0341  0.0440  0.0581  0.0759  0.0990  0.1291 10
+    |> (*) (sin_osc (
+      trig 0.5 |> arr_choose [|600., 300., 450., 900., 950., 675. |])
+    )
+    # |> Reverb.fdn4 0.05 0.0741 0.11 0.1634 10
+    # |> Reverb.fdn8rs 2 10
     # |> Reverb.fdn4 0.0581  0.0759  0.0990  0.1291 10
+    |> grain_delay (8 * 0.0581) 0.2
+    |> grain_delay (8 * 0.0759) 0.2
+    |> grain_delay (8 * 0.0990) 0.5
+    |> Reverb.cathedral
+
+    # |> grain_reverb 0.1249 0.1873 0.2797 0.4177 10.0
 
 );
 
