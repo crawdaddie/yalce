@@ -516,6 +516,11 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
     if (LLVMGetTypeKind(formal_ty) == LLVMIntegerTypeKind) {
       sample = LLVMBuildFPToSI(dsp_ctx.perform_builder, sample, formal_ty,
                                "inlet.sample.i");
+    } else if (LLVMGetTypeKind(formal_ty) == LLVMStructTypeKind) {
+      // Struct params can't be read from a scalar double inlet.
+      // Use undef — the perform function for map/fold lambdas is never called
+      // at runtime (only frame_fn is), so this is safe.
+      sample = LLVMGetUndef(formal_ty);
     }
     frame_call_args[i + 2] = sample;
   }

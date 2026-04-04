@@ -34,6 +34,8 @@ let arr_choose = extern fn Array of Double -> Double -> Double;
 let arr_seq = extern fn Array of Double -> Double -> Double;
 
 let delay_line = extern fn Double -> Array of Double;
+let dsp_mmul_op = extern fn Array of Double -> Array of Double -> Array of Double -> Array of Double;
+let vec_dot = extern fn Array of Double -> Array of Double -> Double;
 
 
 #                       buf                rate      start_pos trig
@@ -285,6 +287,8 @@ let dsp_array = module () ->
   let foldi = extern fn (Int -> R -> T -> T) -> R -> Array of T -> R;
   let map = extern fn (T -> R) -> Array of T -> Array of R;
   let mapi = extern fn (Int -> T -> R) -> Array of T -> Array of R;
+  let iter = extern fn (T -> ()) -> Array of T -> ();
+  let sum = extern fn Array of T -> T;
 ;
 
 let Reverb = module () ->
@@ -343,6 +347,160 @@ compile_audio_fn (
     y
 );
 
+# compile_audio_fn ( 
+#   let fdn4 = fn d1 d2 d3 d4 rt60 inp -> 
+#
+#     let dls = [|
+#       (delay_line 1, d1),
+#       (delay_line 1, d2),
+#       (delay_line 1, d3),
+#       (delay_line 1, d4),
+#     |];
+#
+#     let dl0, _ = dls[0];
+#     let max_size = array_size dl0;
+#
+#     let counter = [| 0 |];
+#     let w = counter[0];
+#
+#     let y = dsp_array.map (fn (dl, dt) -> 
+#       tabread_samp dl (w - sample_rate * dt)
+#     ) dls;
+#
+#     let M = [|
+#       -0.5,  0.5,  0.5,  0.5,
+#        0.5, -0.5,  0.5,  0.5,
+#        0.5,  0.5, -0.5,  0.5,
+#        0.5,  0.5,  0.5, -0.5
+#     |];
+#
+#     [|0., 0., 0., 0.|]
+#     |> dsp_mmul_op M y
+#     |> dsp_array.mapi (fn i d -> 
+#       let (dl, dt) = dls[i];
+#       dl[w] := inp + (
+#         d
+#         |> (*) (Math.pow 10.0 ((-3.0 * dt) / rt60)) # per-delay-line gamma output gain
+#         |> Filter.lpf1p 8000
+#         |> Filter.hpf1p 200
+#       )
+#     )
+#     ;
+#
+#     counter[0]    := (w + 1) % max_size;
+#     # inp + 0.25 * (y[0] + y[1] + y[2] + y[3])
+#     inp + 0.25 * (y |> dsp_array.sum)
+# );
+compile_audio_fn ( 
+  let fdn4 = fn d1 d2 d3 d4 rt60 inp -> 
+    let M = [|
+      -0.5,  0.5,  0.5,  0.5,
+       0.5, -0.5,  0.5,  0.5,
+       0.5,  0.5, -0.5,  0.5,
+       0.5,  0.5,  0.5, -0.5
+    |];
+    let b = array_fill_const 4 1.;
+    let c = array_fill_const 4 0.25;
+
+
+    let dls = [|
+      (delay_line 1, d1),
+      (delay_line 1, d2),
+      (delay_line 1, d3),
+      (delay_line 1, d4),
+    |];
+
+    let dl0, _ = dls[0];
+    let max_size = array_size dl0;
+
+    let counter = [| 0 |];
+    let w = counter[0];
+
+    let y = dsp_array.map (fn (dl, dt) -> 
+      tabread_samp dl (w - sample_rate * dt)
+    ) dls;
+
+
+    array_fill_const 4 0.
+    |> dsp_mmul_op M y
+    |> dsp_array.mapi (fn i d -> 
+      let (dl, dt) = dls[i];
+      dl[w] := inp * b[i] + (
+        d
+        |> (*) (Math.pow 10.0 ((-3.0 * dt) / rt60)) # per-delay-line gamma output gain
+        |> Filter.lpf1p 8000
+        |> Filter.hpf1p 200
+      )
+    )
+    ;
+
+    counter[0] := (w + 1) % max_size;
+    inp + (vec_dot c y)
+);
+
+
+compile_audio_fn (
+  let fdn8 = fn d1 d2 d3 d4 d5 d6 d7 d8 rt60 inp ->
+
+    # 8x8 generalised conference matrix: M = (2/8)*J - I
+    # diagonal = -3/4, off-diagonal = 1/4 — orthogonal, lossless
+    let M = [|
+      -0.75,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25,
+       0.25, -0.75,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25,
+       0.25,  0.25, -0.75,  0.25,  0.25,  0.25,  0.25,  0.25,
+       0.25,  0.25,  0.25, -0.75,  0.25,  0.25,  0.25,  0.25,
+       0.25,  0.25,  0.25,  0.25, -0.75,  0.25,  0.25,  0.25,
+       0.25,  0.25,  0.25,  0.25,  0.25, -0.75,  0.25,  0.25,
+       0.25,  0.25,  0.25,  0.25,  0.25,  0.25, -0.75,  0.25,
+       0.25,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25, -0.75,
+    |];
+    let b = array_fill_const 8 1.;
+    let c = array_fill_const 8 0.125;
+
+    let dls = [|
+      (delay_line 1, d1),
+      (delay_line 1, d2),
+      (delay_line 1, d3),
+      (delay_line 1, d4),
+      (delay_line 1, d5),
+      (delay_line 1, d6),
+      (delay_line 1, d7),
+      (delay_line 1, d8),
+    |];
+
+    let dl0, _ = dls[0];
+    let max_size = array_size dl0;
+
+    let counter = [| 0 |];
+    let w = counter[0];
+
+    let y = dsp_array.map (fn (dl, dt) ->
+      tabread_samp dl (w - sample_rate * dt)
+    ) dls;
+
+    array_fill_const 8 0.
+    |> dsp_mmul_op M y
+    |> dsp_array.mapi (fn i d ->
+      let (dl, dt) = dls[i];
+      dl[w] := inp * b[i] + (
+        d
+        |> (*) (Math.pow 10.0 ((-3.0 * dt) / rt60))
+        |> Filter.lpf1p 8000
+        |> Filter.hpf1p 200
+      )
+    )
+    ;
+
+    counter[0] := (w + 1) % max_size;
+    inp + (vec_dot c y)
+);
+
+# compile_audio_fn ( 
+#   let fdn4 = fn d1 d2 d3 d4 rt60 inp -> 
+#     0.
+# );
+
+#
 
 # compile_audio_fn (
 # let fdn4 = fn m d1 d2 d3 d4 fb inp ->

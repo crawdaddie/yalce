@@ -34,6 +34,7 @@ int STYPE_AUDIO_JIT_INLINE_SYM;
 int STYPE_AUDIO_JIT_BUILTIN_HANDLER;
 int STYPE_AUDIO_JIT_INLINE_LAMBDA;
 int STYPE_AUDIO_JIT_SYNTH_INLET;
+int STYPE_AUDIO_JIT_LOCAL_ARRAY;
 
 // let array_of_buf = extern fn Ptr -> Array of Double;
 // let bufsize = extern fn Ptr -> Int;
@@ -129,6 +130,7 @@ __attribute__((constructor)) static void ylc_audio_jit_init(void) {
   STYPE_AUDIO_JIT_INLINE_SYM = REGISTERED_JIT_SYMBOL_TYPE++;
   STYPE_AUDIO_JIT_INLINE_LAMBDA = REGISTERED_JIT_SYMBOL_TYPE++;
   STYPE_AUDIO_JIT_SYNTH_INLET = REGISTERED_JIT_SYMBOL_TYPE++;
+  STYPE_AUDIO_JIT_LOCAL_ARRAY = REGISTERED_JIT_SYMBOL_TYPE++;
 
   ht *stack = ylc_jit_ctx->frame->table;
   register_builtin(stack, "compile_audio_fn", CompileAudioFnHandler);

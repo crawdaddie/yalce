@@ -201,6 +201,7 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   Type *func_type = infer(func, ctx);
 
   if (!func_type) {
+    print_ast_err(ast);
     return type_error(ast, "Cannot infer type of applicable");
   }
 
