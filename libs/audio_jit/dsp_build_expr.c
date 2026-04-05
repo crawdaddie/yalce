@@ -19,13 +19,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-LLVMValueRef dsp_consume_frame_state(DspBuildCtx *dsp_ctx,
-                                     LLVMBuilderRef builder, int size,
-                                     int align, const char *name);
-LLVMValueRef dsp_consume_init_state(DspBuildCtx *dsp_ctx,
-                                    LLVMBuilderRef builder, int size, int align,
-                                    const char *name);
-
 LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder) {
   switch (ast->tag) {
@@ -155,14 +148,20 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
     return val;
   }
+  case AST_BOOL: {
+    return LLVMConstInt(LLVMInt1Type(), ast->data.AST_BOOL.value, 0);
+  }
   case AST_IDENTIFIER: {
     const char *id_name = ast->data.AST_IDENTIFIER.value;
     if (dsp_ctx && id_name) {
       LLVMTypeRef f64_ty = LLVMDoubleType();
-      if (strcmp(id_name, "sample_rate") == 0)
+      if (strcmp(id_name, "sample_rate") == 0) {
         return LLVMConstReal(f64_ty, (double)dsp_ctx->sample_rate);
-      if (strcmp(id_name, "spf") == 0)
+      }
+
+      if (strcmp(id_name, "spf") == 0) {
         return LLVMConstReal(f64_ty, 1.0 / (double)dsp_ctx->sample_rate);
+      }
     }
     JITSymbol *sym = lookup_id_ast(ast, ctx);
     if (sym && sym->type == (symbol_type)STYPE_AUDIO_JIT_SYNTH_INLET) {
@@ -339,6 +338,55 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     arr_val =
         LLVMBuildInsertValue(builder, arr_val, frame_data_ptr, 1, "array.data");
     return arr_val;
+  }
+  case AST_VOID: {
+
+    return LLVMGetUndef(LLVMVoidType());
+  }
+  case AST_MATCH: {
+    Ast *expr = ast->data.AST_MATCH.expr;
+    int len = ast->data.AST_MATCH.len;
+    Ast *branches = ast->data.AST_MATCH.branches;
+
+    LLVMValueRef expr_val = dsp_build_expr(expr, dsp_ctx, ctx, module, builder);
+
+    /* Compute all body vals eagerly (stateful DSP must run every frame).
+       Build comparisons and chain selects from the last branch (default)
+       backwards so the first matching case wins. */
+    LLVMValueRef body_vals[len];
+    LLVMValueRef cmps[len - 1];
+
+    for (int i = 0; i < len; i++) {
+      body_vals[i] =
+          dsp_build_expr(branches + 2 * i + 1, dsp_ctx, ctx, module, builder);
+
+      if (i < len - 1) {
+        Ast *case_ast = branches + 2 * i;
+        LLVMValueRef case_val =
+
+            dsp_build_expr(branches + 2 * i, dsp_ctx, ctx, module, builder);
+        print_ast(case_ast);
+
+        printf("case val %d???\n", case_ast->tag);
+        print_ast(branches + 2 * i);
+        LLVMDumpValue(case_val);
+
+        if (LLVMGetTypeKind(LLVMTypeOf(expr_val)) == LLVMIntegerTypeKind) {
+          cmps[i] = LLVMBuildICmp(builder, LLVMIntEQ, expr_val, case_val,
+                                  "match.cmp");
+        } else
+          cmps[i] = LLVMBuildFCmp(builder, LLVMRealOEQ, expr_val, case_val,
+                                  "match.cmp");
+      }
+    }
+
+    LLVMValueRef result = body_vals[len - 1];
+    for (int i = len - 2; i >= 0; i--) {
+      result =
+          LLVMBuildSelect(builder, cmps[i], body_vals[i], result, "match.sel");
+    }
+
+    return result;
   }
 
   default: {

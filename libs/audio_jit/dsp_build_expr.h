@@ -10,4 +10,15 @@
 
 LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                             LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef dsp_consume_state_cursor(LLVMValueRef cursor_ptr,
+                                      LLVMBuilderRef builder, int size,
+                                      int align, const char *name);
+LLVMValueRef dsp_consume_frame_state(DspBuildCtx *dsp_ctx,
+                                     LLVMBuilderRef builder, int size,
+                                     int align, const char *name);
+
+LLVMValueRef dsp_consume_init_state(DspBuildCtx *dsp_ctx,
+                                    LLVMBuilderRef builder, int size, int align,
+                                    const char *name);
 #endif

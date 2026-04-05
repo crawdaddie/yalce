@@ -2,26 +2,6 @@ open DSP;
 import std/Math;
 
 compile_audio_fn ( 
-  let grain_delay = fn dt fb inp ->
-    let dl = delay_line 1;
-    let max_size = array_size dl;
-
-    let counter = [| 0 |];
-    let w = counter[0];
-
-    let pos = (w - sample_rate * dt) / sample_rate;
-    let t = trig 20;
-    let y = t
-    |> grains 30 dl
-      (arr_choose [| 1., 2., 0.5|] t)
-      (pos - lfnoise0 20 0 0.2)
-      0.15;
-
-    dl[w] := inp + y * fb;
-    counter[0] := (w + 1) % max_size;
-    inp + y
-);
-compile_audio_fn ( 
   let grain_reverb = fn d1 d2 d3 d4 rt60 inp -> 
     let M = [|
       -0.5,  0.5,  0.5,  0.5,
@@ -76,30 +56,100 @@ compile_audio_fn (
     inp + (vec_dot c y)
 );
 
+# let delay_proc = fn f dl inp ->
+#     let max_size = array_size dl;
+#     let counter = [| 0 |];
+#     let w = counter[0];
+#     dl[w] := f w dl inp;
+#     counter[0] := (w + 1) % max_size;
+#     dl[w]
+# ;;
+
+# compile_audio_fn ( 
+#   let grain_delay = fn dt fb inp ->
+#     let dl = delay_line 1;
+#     let max_size = array_size dl;
+#
+#     let counter = [| 0 |];
+#     let w = counter[0];
+#
+#     let pos = (w - sample_rate * dt) / sample_rate;
+#     let t = trig 20;
+#     let y = t
+#     |> grains 30 dl
+#       (arr_choose [| 1., 2., 0.5|] t)
+#       (pos - lfnoise0 20 0 0.2)
+#       0.15;
+#
+#     dl[w] := inp + y * fb;
+#     counter[0] := (w + 1) % max_size;
+#     dl[w]
+# );
 
 compile_audio_fn ( 
-  let imp = fn () -> 
-    let t = trig 1;
-    t 
-    |> adsr 0.001 0.01 0.5 0.2
-    # |> decay 0.5
-    |> (*) (sin_osc (
-      trig 0.5 |> arr_choose [|600., 300., 450., 900., 950., 675. |])
-    )
-    # |> Reverb.fdn4 0.05 0.0741 0.11 0.1634 10
-    # |> Reverb.fdn8rs 2 10
-    # |> Reverb.fdn4 0.0581  0.0759  0.0990  0.1291 10
-    |> grain_delay (8 * 0.0581) 0.2
-    |> grain_delay (8 * 0.0759) 0.2
-    |> grain_delay (8 * 0.0990) 0.5
-    |> Reverb.cathedral
+  let grain_delay = fn dt fb inp ->
+    let dl = delay_line 1;
+    delay_proc (fn w dl inp -> 
+      let pos = (w - sample_rate * dt) / sample_rate;
+      let t = trig 20;
+      let y = t
+      |> grains 30 dl
+        (arr_choose [| 1., 2., 0.5|] t)
+        (pos - lfnoise0 20 0 0.2)
+        0.15
+      |> Filter.lpf1p 8000
+      |> Filter.hpf1p 100
+      ;
 
-    # |> grain_reverb 0.1249 0.1873 0.2797 0.4177 10.0
-
+      inp + y * fb;
+    ) dl inp
 );
 
 
+# compile_audio_fn ( 
+#   let imp = fn () -> 
+#     let t = trig 1;
+#     t 
+#     |> adsr 0.001 0.01 0.5 0.2
+#     # |> decay 0.5
+#     |> (*) (sin_osc (
+#       trig 0.5 |> arr_choose [|600., 300., 450., 900., 950., 675. |])
+#     )
+#     |> grain_delay 0.1 0.8
+#     |> Reverb.cathedral
+# );
+import std/Math;
+# compile_audio_fn ( 
+#   let imp = fn () -> 
+#     let dust = fn density ->  
+#       let thresh = density * spf ;   # density (events/sec) * (1/sample_rate) = prob per sample
+#       let z = Math.rand_double ()  ;            # uniform [0, 1)
+#       match (z < thresh) with
+#       | true -> 1.
+#       | _ -> 0.
+#       
+#     ;;
+#     let t = dust 8;
+#     t 
+#     |> decay 0.1
+#     |> (*) (sin_osc (
+#       trig 0.5 |> arr_choose [|600., 300., 450., 900., 950., 675. |])
+#     )
+#
+# );
+#
+#
+#
+# imp () |> play_node
 
-imp () |> play_node
-
+compile_audio_fn (
+  let dust = fn density ->  
+    let thresh = density * spf ;   # density (events/sec) * (1/sample_rate) = prob per sample
+    let z = Math.rand_double ()  ;            # uniform [0, 1)
+    match (z < thresh) with
+    | true -> 1.
+    | _ -> 0.
+    
+);
+dust () |> play_node
 
