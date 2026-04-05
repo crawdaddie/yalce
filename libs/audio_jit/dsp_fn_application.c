@@ -2921,6 +2921,11 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     LLVMValueRef args[args_len];
 
     Type *f = callable_sym->symbol_type;
+    if (is_void_func(f)) {
+
+      return LLVMBuildCall2(builder, LLVMGlobalGetValueType(callable), callable,
+                            NULL, 0, "call.ylc-function");
+    }
 
     for (int i = 0; i < args_len; i++) {
       args[i] = dsp_build_expr(ast->data.AST_APPLICATION.args + i, dsp_ctx, ctx,

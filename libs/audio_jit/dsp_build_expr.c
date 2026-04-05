@@ -339,10 +339,6 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         LLVMBuildInsertValue(builder, arr_val, frame_data_ptr, 1, "array.data");
     return arr_val;
   }
-  case AST_VOID: {
-
-    return LLVMGetUndef(LLVMVoidType());
-  }
   case AST_MATCH: {
     Ast *expr = ast->data.AST_MATCH.expr;
     int len = ast->data.AST_MATCH.len;
