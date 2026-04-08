@@ -1,0 +1,44 @@
+open engine/bindings/Synth;
+open engine/bindings/Sched;
+
+let sin_osc = extern fn Double -> Double;
+let sq_osc = extern fn Double -> Double;
+let sq_osc = extern fn Double -> Double;
+let phasor = extern fn Double -> Double;
+
+let compile_audio_fn = extern fn T -> T;
+let _ = dlopen "libs/audio_jit_mlir/libaudio_jit.so";
+
+import std/Math;
+compile_audio_fn (
+  let white = fn () -> Math.rand_double_range -1 1;;
+  let scale = fn a b x -> Math.unipolar_scale a b x;; 
+  let scale_bp = fn a b x -> Math.bipolar_scale a b x;;
+  let tanh = fn x -> Math.tanh x;
+);
+
+
+
+
+# compile_audio_fn (
+#   # let y = fn () -> sin_osc 1 |> scale_bp 1 10 |> sin_osc |> (*) (white ())
+#   let y = fn x -> phasor -0.5 |> scale 1 20 |> sin_osc |> (*) (sq_osc x + sq_osc (x * 1.01) + white ())
+# );
+
+let ~ = extern fn List of T -> T;
+
+compile_audio_fn (
+  # # let y = fn () -> sin_osc 1 |> scale_bp 1 10 |> sin_osc |> (*) (white ())
+  # let z = fn f -> 
+  #   let c = [ 4. ] in
+  #   c[0]
+  #   |> (*) (sq_osc [f, f * 1.01]) |> tanh
+  let y = fn f -> sq_osc [f, f * 1.01]
+
+);
+#
+# compile_audio_fn (
+#   let z = fn () -> sq_osc 100
+# );
+
+z 20 |> play_node
