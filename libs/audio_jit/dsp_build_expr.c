@@ -350,22 +350,28 @@ LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
        Build comparisons and chain selects from the last branch (default)
        backwards so the first matching case wins. */
     LLVMValueRef body_vals[len];
-    LLVMValueRef cmps[len - 1];
-
     for (int i = 0; i < len; i++) {
       body_vals[i] =
           dsp_build_expr(branches + 2 * i + 1, dsp_ctx, ctx, module, builder);
+    }
+
+    if (expr->type->kind == T_BOOL && len == 2 && branches[0].tag == AST_BOOL &&
+        branches[2].tag == AST_BOOL && branches[0].data.AST_BOOL.value) {
+
+      printf("simplify???\n");
+      print_ast(ast);
+
+      return LLVMBuildSelect(builder, expr_val, body_vals[0], body_vals[1],
+                             "match.sel");
+    }
+
+    LLVMValueRef cmps[len - 1];
+    for (int i = 0; i < len; i++) {
 
       if (i < len - 1) {
         Ast *case_ast = branches + 2 * i;
         LLVMValueRef case_val =
-
             dsp_build_expr(branches + 2 * i, dsp_ctx, ctx, module, builder);
-        print_ast(case_ast);
-
-        printf("case val %d???\n", case_ast->tag);
-        print_ast(branches + 2 * i);
-        LLVMDumpValue(case_val);
 
         if (LLVMGetTypeKind(LLVMTypeOf(expr_val)) == LLVMIntegerTypeKind) {
           cmps[i] = LLVMBuildICmp(builder, LLVMIntEQ, expr_val, case_val,

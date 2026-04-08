@@ -564,7 +564,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
     LLVMSetOperand(dsp_ctx.create_call, 2,
                    LLVMConstInt(i32_ty, (uint64_t)state_bytes, 0));
     LLVMBuildCall2(dsp_ctx.ctor_builder, init_ty, init_fn,
-                   (LLVMValueRef[]){ctor_state_ptr}, 1, "node.init");
+                   (LLVMValueRef[]){ctor_state_ptr}, 1, "");
 
     if (num_inputs > 0) {
       LLVMTypeRef const_inlet_fn_ty =

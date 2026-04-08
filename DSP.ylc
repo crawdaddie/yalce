@@ -45,7 +45,7 @@ let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;
 #                      max_grains   buf                rate      pos       width     trig
 let grains = extern fn Int ->       Array of Double -> Double -> Double -> Double -> Double;
 
-let _ = dlopen "libs/audio_jit/libaudio_jit.so";
+let _ = dlopen "libs/audio_jit_mlir/libaudio_jit.so";
 
 import std/Math;
 
