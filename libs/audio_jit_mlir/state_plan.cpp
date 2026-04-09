@@ -6,6 +6,7 @@
 #include <mlir/Dialect/Func/IR/FuncOps.h>
 #include <mlir/Dialect/LLVMIR/LLVMDialect.h>
 #include <mlir/IR/Builders.h>
+#include <mlir/IR/Matchers.h>
 #include <mlir/Pass/Pass.h>
 #include <mlir/Pass/PassManager.h>
 
@@ -18,7 +19,9 @@ namespace {
 
 enum class StateObjectKind {
   Phasor,
+  PhasorSync,
   SubSynth,
+  Array,
 };
 
 struct StateObject {
@@ -31,6 +34,7 @@ struct StateObject {
   bool live;
   std::string synthName;
   int32_t numInputs = 0;
+  int64_t byteOffset = -1;
 };
 
 struct StatePlan {
@@ -50,11 +54,48 @@ static bool hasLiveObjects(const StatePlan &plan) {
   return false;
 }
 
+static bool isMutableArray(dsp::ArrayOp op) {
+  return llvm::any_of(op->getUsers(), [](mlir::Operation *user) {
+    return mlir::isa<dsp::ArraySetOp>(user);
+  });
+}
+
+static mlir::Attribute getLiteralConstantAttr(mlir::Value value) {
+  mlir::Attribute attr;
+  if (mlir::matchPattern(value, mlir::m_Constant(&attr)))
+    return attr;
+  return {};
+}
+
+static mlir::Value materializeLiteralForInit(mlir::Attribute attr, mlir::Type ty,
+                                             mlir::OpBuilder &b,
+                                             mlir::Location loc) {
+  if (!attr)
+    return {};
+  if (auto intAttr = llvm::dyn_cast<mlir::IntegerAttr>(attr))
+    return b.create<mlir::arith::ConstantOp>(loc,
+                                             b.getIntegerAttr(ty, intAttr.getInt()));
+  if (auto floatAttr = llvm::dyn_cast<mlir::FloatAttr>(attr))
+    return b.create<mlir::arith::ConstantOp>(loc, b.getFloatAttr(ty, floatAttr.getValue()));
+  return {};
+}
+
 static std::optional<StatePlan> buildStatePlan(mlir::func::FuncOp frameFn) {
   StatePlan plan;
   frameFn.walk([&](dsp::PhasorOp op) {
     plan.objects.push_back(StateObject{
         .kind = StateObjectKind::Phasor,
+        .owner = op.getOperation(),
+        .size = 8,
+        .align = 8,
+        .initF64 = 0.0,
+        .needsInit = true,
+        .live = !op.getResult().use_empty(),
+    });
+  });
+  frameFn.walk([&](dsp::PhasorSyncOp op) {
+    plan.objects.push_back(StateObject{
+        .kind = StateObjectKind::PhasorSync,
         .owner = op.getOperation(),
         .size = 8,
         .align = 8,
@@ -76,15 +117,34 @@ static std::optional<StatePlan> buildStatePlan(mlir::func::FuncOp frameFn) {
         .numInputs = static_cast<int32_t>(op.getNumInputs()),
     });
   });
+  frameFn.walk([&](dsp::ArrayOp op) {
+    if (!isMutableArray(op))
+      return;
+    auto arrTy = llvm::cast<dsp::ArrayType>(op.getResult().getType());
+    mlir::Type elemTy = arrTy.getElementType();
+    plan.objects.push_back(StateObject{
+        .kind = StateObjectKind::Array,
+        .owner = op.getOperation(),
+        .size = static_cast<int32_t>(op.getValues().size() *
+                                     dsp::getArrayElemSize(elemTy)),
+        .align = dsp::getArrayElemAlign(elemTy),
+        .initF64 = 0.0,
+        .needsInit = op.getValues().size() > 0,
+        .live = !op.getResult().use_empty(),
+        .synthName = "",
+        .numInputs = 0,
+    });
+  });
 
   if (plan.objects.empty())
     return std::nullopt;
 
   int64_t offset = 0;
-  for (const StateObject &obj : plan.objects) {
+  for (StateObject &obj : plan.objects) {
     if (!obj.live)
       continue;
     offset = alignTo(offset, obj.align);
+    obj.byteOffset = offset;
     offset += obj.size;
   }
   plan.totalBytes = alignTo(offset, 8);
@@ -130,7 +190,8 @@ static mlir::LogicalResult rewriteInitFromPlan(mlir::func::FuncOp initFn,
       cursor = consume.getNextCursor();
 
       if (obj.needsInit) {
-        if (obj.kind == StateObjectKind::Phasor) {
+        if (obj.kind == StateObjectKind::Phasor ||
+            obj.kind == StateObjectKind::PhasorSync) {
           auto init = b.create<mlir::arith::ConstantOp>(
               loc, b.getF64FloatAttr(obj.initF64));
           b.create<mlir::LLVM::StoreOp>(loc, init.getResult(), consume.getPtr());
@@ -140,6 +201,30 @@ static mlir::LogicalResult rewriteInitFromPlan(mlir::func::FuncOp initFn,
               b.getFunctionType({ptrTy}, {}));
           b.create<mlir::func::CallOp>(loc, callee,
                                        mlir::ValueRange{consume.getPtr()});
+        } else if (obj.kind == StateObjectKind::Array) {
+          auto arrayOp = mlir::dyn_cast<dsp::ArrayOp>(obj.owner);
+          if (!arrayOp)
+            continue;
+          auto arrTy = llvm::cast<dsp::ArrayType>(arrayOp.getResult().getType());
+          mlir::Type elemTy = arrTy.getElementType();
+          auto elemPtrTy = mlir::LLVM::LLVMPointerType::get(initFn.getContext());
+          mlir::Value basePtr = b.create<mlir::LLVM::BitcastOp>(
+              loc, elemPtrTy, consume.getPtr());
+          for (auto [i, value] : llvm::enumerate(arrayOp.getValues())) {
+            mlir::Attribute attr = getLiteralConstantAttr(value);
+            mlir::Value initValue =
+                materializeLiteralForInit(attr, elemTy, b, loc);
+            if (!initValue) {
+              initFn.emitError("mutable dsp.array requires literal initial "
+                               "values for state initialization");
+              return mlir::failure();
+            }
+            auto idx = b.create<mlir::arith::ConstantOp>(
+                loc, b.getI32IntegerAttr(static_cast<int32_t>(i)));
+            auto elemPtr = b.create<mlir::LLVM::GEPOp>(
+                loc, elemPtrTy, elemTy, basePtr, mlir::ValueRange{idx});
+            b.create<mlir::LLVM::StoreOp>(loc, initValue, elemPtr.getResult());
+          }
         }
       }
     }
@@ -200,6 +285,24 @@ static mlir::LogicalResult rewriteFrameFromPlan(mlir::func::FuncOp frameFn,
       continue;
     }
 
+    if (obj.kind == StateObjectKind::PhasorSync) {
+      auto phasor = mlir::dyn_cast<dsp::PhasorSyncOp>(obj.owner);
+      if (!phasor)
+        continue;
+      if (!obj.live) {
+        phasor.erase();
+        continue;
+      }
+
+      b.setInsertionPoint(phasor);
+      auto stateful = b.create<dsp::PhasorSyncStatefulOp>(
+          phasor.getLoc(), statePtrs[index], phasor.getFreq(), phasor.getTrig(),
+          phasor.getSpf().convertToDouble());
+      phasor.replaceAllUsesWith(stateful.getResult());
+      phasor.erase();
+      continue;
+    }
+
     if (obj.kind == StateObjectKind::SubSynth) {
       auto subSynth = mlir::dyn_cast<dsp::SubSynthOp>(obj.owner);
       if (!subSynth)
@@ -229,6 +332,27 @@ static mlir::LogicalResult rewriteFrameFromPlan(mlir::func::FuncOp frameFn,
       auto call = b.create<mlir::func::CallOp>(loc, callee, args);
       subSynth.replaceAllUsesWith(call.getResult(0));
       subSynth.erase();
+      continue;
+    }
+
+    if (obj.kind == StateObjectKind::Array) {
+      auto arrayOp = mlir::dyn_cast<dsp::ArrayOp>(obj.owner);
+      if (!arrayOp)
+        continue;
+      if (!obj.live) {
+        arrayOp.erase();
+        continue;
+      }
+
+      b.setInsertionPoint(arrayOp);
+      auto stateful = b.create<dsp::ArrayStatefulOp>(
+          arrayOp.getLoc(),
+          llvm::cast<dsp::ArrayType>(arrayOp.getResult().getType()).getElementType(),
+          arrayOp.getValues());
+      stateful->setAttr("byte_offset",
+                        b.getI64IntegerAttr(static_cast<int64_t>(obj.byteOffset)));
+      arrayOp.replaceAllUsesWith(stateful.getResult());
+      arrayOp.erase();
     }
   }
 

@@ -44,9 +44,32 @@ static mlir::Value coerce_to_f64(mlir::Value v, mlir::OpBuilder &b,
   return v;
 }
 
+static mlir::Value coerce_to_i32(mlir::Value v, mlir::OpBuilder &b,
+                                 mlir::Location loc) {
+  auto ty = v.getType();
+
+  if (ty.isInteger(32))
+    return v;
+
+  if (ty.isInteger(1))
+    return b.create<mlir::arith::ExtSIOp>(loc, b.getI32Type(), v);
+
+  if (ty.isInteger(64))
+    return b.create<mlir::arith::TruncIOp>(loc, b.getI32Type(), v);
+
+  if (ty.isF64() || ty.isF32())
+    return b.create<mlir::arith::FPToSIOp>(loc, b.getI32Type(), v);
+
+  return v;
+}
+
 static mlir::Type mlir_type_from_ylc_type(Type *type, mlir::OpBuilder &b) {
-  if (!type)
+
+  if (!type) {
     return {};
+  }
+
+  print_type(type);
 
   switch (type->kind) {
   case T_NUM:
@@ -64,6 +87,12 @@ static mlir::Type mlir_type_from_ylc_type(Type *type, mlir::OpBuilder &b) {
     }
     return {};
   }
+  case T_VAR:
+  case T_TYPECLASS_RESOLVE: {
+    // TODO: this is a hack - needs more nuanced handling
+    return b.getF64Type();
+  }
+
   default:
 
     return {};
@@ -72,6 +101,7 @@ static mlir::Type mlir_type_from_ylc_type(Type *type, mlir::OpBuilder &b) {
 
 static mlir::Type mlir_array_elem_type_from_ylc(Type *type,
                                                 mlir::OpBuilder &b) {
+  print_type(type);
   if (is_array_type(type) || is_list_type(type)) {
     return mlir_type_from_ylc_type(type->data.T_CONS.args[0], b);
   }
@@ -101,6 +131,46 @@ static mlir::Value coerce_to_type(mlir::Value v, mlir::Type ty,
   }
 
   return v;
+}
+
+static bool is_float_like(mlir::Type ty) {
+  return ty && llvm::isa<mlir::FloatType>(ty);
+}
+
+static bool is_int_like(mlir::Type ty) {
+  return ty && llvm::isa<mlir::IntegerType>(ty);
+}
+
+static mlir::Type select_numeric_binary_type(mlir::Value lhs, mlir::Value rhs,
+                                             mlir::OpBuilder &b) {
+  mlir::Type lhs_ty = lhs.getType();
+  mlir::Type rhs_ty = rhs.getType();
+
+  if (lhs_ty.isF64() || rhs_ty.isF64())
+    return b.getF64Type();
+  if (lhs_ty.isF32() || rhs_ty.isF32())
+    return b.getF32Type();
+
+  if (lhs_ty.isInteger(32) || rhs_ty.isInteger(32))
+    return b.getI32Type();
+  if (lhs_ty.isInteger(64) || rhs_ty.isInteger(64))
+    return b.getI64Type();
+  if (lhs_ty.isInteger(1) || rhs_ty.isInteger(1))
+    return b.getI1Type();
+
+  return {};
+}
+
+static bool coerce_binary_numeric_operands(mlir::Value &lhs, mlir::Value &rhs,
+                                           mlir::OpBuilder &b,
+                                           mlir::Location loc) {
+  mlir::Type target_ty = select_numeric_binary_type(lhs, rhs, b);
+  if (!target_ty)
+    return false;
+
+  lhs = coerce_to_type(lhs, target_ty, b, loc);
+  rhs = coerce_to_type(rhs, target_ty, b, loc);
+  return lhs && rhs && lhs.getType() == target_ty && rhs.getType() == target_ty;
 }
 
 static mlir::func::FuncOp
@@ -142,6 +212,49 @@ get_or_create_extern_decl(mlir::ModuleOp module, mlir::OpBuilder &b,
                                          b.getFunctionType(inputs, results));
   fn.setPrivate();
   return fn;
+}
+
+static mlir::func::FuncOp
+get_or_create_runtime_decl(mlir::ModuleOp module, mlir::OpBuilder &b,
+                           mlir::Location loc, llvm::StringRef name,
+                           mlir::FunctionType fnType) {
+  if (auto fn = module.lookupSymbol<mlir::func::FuncOp>(name))
+    return fn;
+
+  mlir::OpBuilder::InsertionGuard guard(b);
+  b.setInsertionPointToStart(module.getBody());
+  auto fn = b.create<mlir::func::FuncOp>(loc, name, fnType);
+  fn.setPrivate();
+  return fn;
+}
+
+static mlir::Value build_top_level_var_load(Ast *ast, JITSymbol *sym,
+                                            DspBuildCtx &dsp_ctx) {
+  auto &b = dsp_ctx.builder;
+  auto loc = dsp_ctx.loc;
+  auto module = dsp_ctx.frame_fn->getParentOfType<mlir::ModuleOp>();
+  mlir::Type resultTy = mlir_type_from_ylc_type(ast->type, b);
+  if (!resultTy)
+    return {};
+
+  llvm::StringRef fnName;
+  if (resultTy.isF64()) {
+    fnName = "ylc_mlir_get_global_f64";
+  } else if (resultTy.isInteger(32)) {
+    fnName = "ylc_mlir_get_global_i32";
+  } else if (resultTy.isInteger(1)) {
+    fnName = "ylc_mlir_get_global_i1";
+  } else {
+    return {};
+  }
+
+  auto callee = get_or_create_runtime_decl(
+      module, b, loc, fnName, b.getFunctionType({b.getI32Type()}, {resultTy}));
+  auto slot = b.create<mlir::arith::ConstantOp>(
+      loc, b.getI32IntegerAttr(sym->symbol_data.STYPE_TOP_LEVEL_VAR));
+  auto call = b.create<mlir::func::CallOp>(loc, callee,
+                                           mlir::ValueRange{slot.getResult()});
+  return call.getResult(0);
 }
 
 // Store a heap-allocated mlir::Value* in a JITSymbol's val field (which is
@@ -210,8 +323,52 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
       return {};
     }
     if (!sym->val) {
+      if (sym->type == STYPE_TOP_LEVEL_VAR) {
+        mlir::Value global = build_top_level_var_load(ast, sym, dsp_ctx);
+        if (global)
+          return global;
+      }
       fprintf(stderr, "dsp_build_expr: identifier '%s' has null val\n",
               name ? name : "(null)");
+      return {};
+    }
+    if (sym->type == STYPE_TOP_LEVEL_VAR) {
+      mlir::Value global = build_top_level_var_load(ast, sym, dsp_ctx);
+      if (global)
+        return global;
+      fprintf(stderr, "dsp_build_expr: identifier '%s' top-level load failed\n",
+              name ? name : "(null)");
+      return {};
+    }
+    if (sym->type != STYPE_LOCAL_VAR) {
+      return {};
+    }
+    return *sym_val_to_mlir_val(sym->val);
+  }
+
+  case AST_RECORD_ACCESS: {
+    JITSymbol *sym = lookup_id_ast(ast, ctx);
+    if (!sym) {
+      fprintf(stderr, "dsp_build_expr: unresolved record access\n");
+      print_ast_err(ast);
+      return {};
+    }
+
+    if (!sym->val) {
+      if (sym->type == STYPE_TOP_LEVEL_VAR) {
+        mlir::Value global = build_top_level_var_load(ast, sym, dsp_ctx);
+        if (global)
+          return global;
+      }
+      return {};
+    }
+    if (sym->type == STYPE_TOP_LEVEL_VAR) {
+      mlir::Value global = build_top_level_var_load(ast, sym, dsp_ctx);
+      if (global)
+        return global;
+      return {};
+    }
+    if (sym->type != STYPE_LOCAL_VAR) {
       return {};
     }
     return *sym_val_to_mlir_val(sym->val);
@@ -280,6 +437,16 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
     if (f->tag == AST_IDENTIFIER) {
       const char *fn = f->data.AST_IDENTIFIER.value;
 
+      if (strcmp(fn, "phasor_sinc") == 0) {
+        mlir::Value freq = dsp_build_expr(args, dsp_ctx, ctx);
+        mlir::Value trig = dsp_build_expr(args + 1, dsp_ctx, ctx);
+        if (!freq || !trig)
+          return {};
+        freq = coerce_to_f64(freq, b, loc);
+        trig = coerce_to_f64(trig, b, loc);
+        return b.create<dsp::PhasorSyncOp>(loc, freq, trig, dsp_ctx.spf)
+            ->getResult(0);
+      }
       if (strcmp(fn, "phasor") == 0) {
         mlir::Value freq = dsp_build_expr(args, dsp_ctx, ctx);
         if (!freq)
@@ -287,6 +454,7 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
         freq = coerce_to_f64(freq, b, loc);
         return b.create<dsp::PhasorOp>(loc, freq, dsp_ctx.spf)->getResult(0);
       }
+
       if (strcmp(fn, "sin_osc") == 0) {
         mlir::Value freq = dsp_build_expr(args, dsp_ctx, ctx);
         freq = coerce_to_f64(freq, b, loc);
@@ -320,9 +488,11 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
         mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
         if (!lhs || !rhs)
           return {};
-        lhs = coerce_to_f64(lhs, b, loc);
-        rhs = coerce_to_f64(rhs, b, loc);
-        return b.create<mlir::arith::AddFOp>(loc, lhs, rhs);
+        if (!coerce_binary_numeric_operands(lhs, rhs, b, loc))
+          return {};
+        if (is_float_like(lhs.getType()))
+          return b.create<mlir::arith::AddFOp>(loc, lhs, rhs);
+        return b.create<mlir::arith::AddIOp>(loc, lhs, rhs);
       }
       if (strcmp(fn, "-") == 0) {
 
@@ -330,19 +500,24 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
         mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
         if (!lhs || !rhs)
           return {};
-        lhs = coerce_to_f64(lhs, b, loc);
-        rhs = coerce_to_f64(rhs, b, loc);
-        return b.create<mlir::arith::SubFOp>(loc, lhs, rhs);
+        if (!coerce_binary_numeric_operands(lhs, rhs, b, loc))
+          return {};
+        if (is_float_like(lhs.getType()))
+          return b.create<mlir::arith::SubFOp>(loc, lhs, rhs);
+        return b.create<mlir::arith::SubIOp>(loc, lhs, rhs);
       }
       if (strcmp(fn, "*") == 0) {
+        print_ast(ast);
 
         mlir::Value lhs = dsp_build_expr(args, dsp_ctx, ctx);
         mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
         if (!lhs || !rhs)
           return {};
-        lhs = coerce_to_f64(lhs, b, loc);
-        rhs = coerce_to_f64(rhs, b, loc);
-        return b.create<mlir::arith::MulFOp>(loc, lhs, rhs);
+        if (!coerce_binary_numeric_operands(lhs, rhs, b, loc))
+          return {};
+        if (is_float_like(lhs.getType()))
+          return b.create<mlir::arith::MulFOp>(loc, lhs, rhs);
+        return b.create<mlir::arith::MulIOp>(loc, lhs, rhs);
       }
       if (strcmp(fn, "/") == 0) {
 
@@ -350,9 +525,11 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
         mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
         if (!lhs || !rhs)
           return {};
-        lhs = coerce_to_f64(lhs, b, loc);
-        rhs = coerce_to_f64(rhs, b, loc);
-        return b.create<mlir::arith::DivFOp>(loc, lhs, rhs);
+        if (!coerce_binary_numeric_operands(lhs, rhs, b, loc))
+          return {};
+        if (is_float_like(lhs.getType()))
+          return b.create<mlir::arith::DivFOp>(loc, lhs, rhs);
+        return b.create<mlir::arith::DivSIOp>(loc, lhs, rhs);
       }
       if (strcmp(fn, "%") == 0) {
 
@@ -360,9 +537,11 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
         mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
         if (!lhs || !rhs)
           return {};
-        lhs = coerce_to_f64(lhs, b, loc);
-        rhs = coerce_to_f64(rhs, b, loc);
-        return b.create<mlir::arith::RemFOp>(loc, lhs, rhs);
+        if (!coerce_binary_numeric_operands(lhs, rhs, b, loc))
+          return {};
+        if (is_float_like(lhs.getType()))
+          return b.create<mlir::arith::RemFOp>(loc, lhs, rhs);
+        return b.create<mlir::arith::RemSIOp>(loc, lhs, rhs);
       }
       if (strcmp(fn, "<") == 0) {
 
@@ -370,10 +549,13 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
         mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
         if (!lhs || !rhs)
           return {};
-        lhs = coerce_to_f64(lhs, b, loc);
-        rhs = coerce_to_f64(rhs, b, loc);
-        return b.create<mlir::arith::CmpFOp>(
-            loc, mlir::arith::CmpFPredicate::OLT, lhs, rhs);
+        if (!coerce_binary_numeric_operands(lhs, rhs, b, loc))
+          return {};
+        if (is_float_like(lhs.getType()))
+          return b.create<mlir::arith::CmpFOp>(
+              loc, mlir::arith::CmpFPredicate::OLT, lhs, rhs);
+        return b.create<mlir::arith::CmpIOp>(
+            loc, mlir::arith::CmpIPredicate::slt, lhs, rhs);
       }
       if (strcmp(fn, "<=") == 0) {
 
@@ -381,10 +563,13 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
         mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
         if (!lhs || !rhs)
           return {};
-        lhs = coerce_to_f64(lhs, b, loc);
-        rhs = coerce_to_f64(rhs, b, loc);
-        return b.create<mlir::arith::CmpFOp>(
-            loc, mlir::arith::CmpFPredicate::OLE, lhs, rhs);
+        if (!coerce_binary_numeric_operands(lhs, rhs, b, loc))
+          return {};
+        if (is_float_like(lhs.getType()))
+          return b.create<mlir::arith::CmpFOp>(
+              loc, mlir::arith::CmpFPredicate::OLE, lhs, rhs);
+        return b.create<mlir::arith::CmpIOp>(
+            loc, mlir::arith::CmpIPredicate::sle, lhs, rhs);
       }
       if (strcmp(fn, ">") == 0) {
 
@@ -392,10 +577,13 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
         mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
         if (!lhs || !rhs)
           return {};
-        lhs = coerce_to_f64(lhs, b, loc);
-        rhs = coerce_to_f64(rhs, b, loc);
-        return b.create<mlir::arith::CmpFOp>(
-            loc, mlir::arith::CmpFPredicate::OGT, lhs, rhs);
+        if (!coerce_binary_numeric_operands(lhs, rhs, b, loc))
+          return {};
+        if (is_float_like(lhs.getType()))
+          return b.create<mlir::arith::CmpFOp>(
+              loc, mlir::arith::CmpFPredicate::OGT, lhs, rhs);
+        return b.create<mlir::arith::CmpIOp>(
+            loc, mlir::arith::CmpIPredicate::sgt, lhs, rhs);
       }
       if (strcmp(fn, ">=") == 0) {
 
@@ -403,21 +591,31 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
         mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
         if (!lhs || !rhs)
           return {};
-        lhs = coerce_to_f64(lhs, b, loc);
-        rhs = coerce_to_f64(rhs, b, loc);
-        return b.create<mlir::arith::CmpFOp>(
-            loc, mlir::arith::CmpFPredicate::OGE, lhs, rhs);
+        if (!coerce_binary_numeric_operands(lhs, rhs, b, loc))
+          return {};
+        if (is_float_like(lhs.getType()))
+          return b.create<mlir::arith::CmpFOp>(
+              loc, mlir::arith::CmpFPredicate::OGE, lhs, rhs);
+        return b.create<mlir::arith::CmpIOp>(
+            loc, mlir::arith::CmpIPredicate::sge, lhs, rhs);
       }
       if (strcmp(fn, "==") == 0) {
 
         mlir::Value lhs = dsp_build_expr(args, dsp_ctx, ctx);
         mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
+
         if (!lhs || !rhs)
           return {};
-        lhs = coerce_to_f64(lhs, b, loc);
-        rhs = coerce_to_f64(rhs, b, loc);
-        return b.create<mlir::arith::CmpFOp>(
-            loc, mlir::arith::CmpFPredicate::OEQ, lhs, rhs);
+
+        if (!coerce_binary_numeric_operands(lhs, rhs, b, loc))
+          return {};
+
+        if (is_float_like(lhs.getType()))
+          return b.create<mlir::arith::CmpFOp>(
+              loc, mlir::arith::CmpFPredicate::OEQ, lhs, rhs);
+
+        return b.create<mlir::arith::CmpIOp>(
+            loc, mlir::arith::CmpIPredicate::eq, lhs, rhs);
       }
       if (strcmp(fn, "!=") == 0) {
 
@@ -425,10 +623,91 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
         mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
         if (!lhs || !rhs)
           return {};
-        lhs = coerce_to_f64(lhs, b, loc);
-        rhs = coerce_to_f64(rhs, b, loc);
-        return b.create<mlir::arith::CmpFOp>(
-            loc, mlir::arith::CmpFPredicate::ONE, lhs, rhs);
+        if (!coerce_binary_numeric_operands(lhs, rhs, b, loc))
+          return {};
+        if (is_float_like(lhs.getType()))
+          return b.create<mlir::arith::CmpFOp>(
+              loc, mlir::arith::CmpFPredicate::ONE, lhs, rhs);
+        return b.create<mlir::arith::CmpIOp>(
+            loc, mlir::arith::CmpIPredicate::ne, lhs, rhs);
+      }
+
+      if (strcmp(fn, "||") == 0) {
+        mlir::Value lhs = dsp_build_expr(args, dsp_ctx, ctx);
+        mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
+        if (!lhs || !rhs)
+          return {};
+
+        if (!coerce_binary_numeric_operands(lhs, rhs, b, loc))
+          return {};
+
+        if (lhs.getType().isInteger(1))
+          return b.create<mlir::arith::OrIOp>(loc, lhs, rhs);
+
+        if (is_float_like(lhs.getType())) {
+          auto zero = b.create<mlir::arith::ConstantOp>(
+              loc, mlir::FloatAttr::get(lhs.getType(), 0.0));
+          auto one = b.create<mlir::arith::ConstantOp>(
+              loc, mlir::FloatAttr::get(lhs.getType(), 1.0));
+
+          auto lhs_nz = b.create<mlir::arith::CmpFOp>(
+              loc, mlir::arith::CmpFPredicate::ONE, lhs, zero);
+          auto rhs_nz = b.create<mlir::arith::CmpFOp>(
+              loc, mlir::arith::CmpFPredicate::ONE, rhs, zero);
+          auto any = b.create<mlir::arith::OrIOp>(loc, lhs_nz, rhs_nz);
+          return b.create<mlir::arith::SelectOp>(loc, any, one, zero);
+        }
+
+        auto zero = b.create<mlir::arith::ConstantOp>(
+            loc, b.getIntegerAttr(lhs.getType(), 0));
+        auto one = b.create<mlir::arith::ConstantOp>(
+            loc, b.getIntegerAttr(lhs.getType(), 1));
+
+        auto lhs_nz = b.create<mlir::arith::CmpIOp>(
+            loc, mlir::arith::CmpIPredicate::ne, lhs, zero);
+        auto rhs_nz = b.create<mlir::arith::CmpIOp>(
+            loc, mlir::arith::CmpIPredicate::ne, rhs, zero);
+        auto any = b.create<mlir::arith::OrIOp>(loc, lhs_nz, rhs_nz);
+        return b.create<mlir::arith::SelectOp>(loc, any, one, zero);
+      }
+
+      if (strcmp(fn, "&&") == 0) {
+        mlir::Value lhs = dsp_build_expr(args, dsp_ctx, ctx);
+        mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
+        if (!lhs || !rhs)
+          return {};
+
+        if (!coerce_binary_numeric_operands(lhs, rhs, b, loc))
+          return {};
+
+        if (lhs.getType().isInteger(1))
+          return b.create<mlir::arith::AndIOp>(loc, lhs, rhs);
+
+        if (is_float_like(lhs.getType())) {
+          auto zero = b.create<mlir::arith::ConstantOp>(
+              loc, mlir::FloatAttr::get(lhs.getType(), 0.0));
+          auto one = b.create<mlir::arith::ConstantOp>(
+              loc, mlir::FloatAttr::get(lhs.getType(), 1.0));
+
+          auto lhs_nz = b.create<mlir::arith::CmpFOp>(
+              loc, mlir::arith::CmpFPredicate::ONE, lhs, zero);
+          auto rhs_nz = b.create<mlir::arith::CmpFOp>(
+              loc, mlir::arith::CmpFPredicate::ONE, rhs, zero);
+          auto all = b.create<mlir::arith::AndIOp>(loc, lhs_nz, rhs_nz);
+          return b.create<mlir::arith::SelectOp>(loc, all, one, zero);
+        }
+
+        auto zero = b.create<mlir::arith::ConstantOp>(
+            loc, b.getIntegerAttr(lhs.getType(), 0));
+        auto one = b.create<mlir::arith::ConstantOp>(
+            loc, b.getIntegerAttr(lhs.getType(), 1));
+
+        auto lhs_nz = b.create<mlir::arith::CmpIOp>(
+            loc, mlir::arith::CmpIPredicate::ne, lhs, zero);
+        auto rhs_nz = b.create<mlir::arith::CmpIOp>(
+            loc, mlir::arith::CmpIPredicate::ne, rhs, zero);
+        auto all = b.create<mlir::arith::AndIOp>(loc, lhs_nz, rhs_nz);
+        return b.create<mlir::arith::SelectOp>(loc, all, one, zero);
       }
 
       if (strcmp(fn, "array_at") == 0) {
@@ -440,6 +719,54 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
             dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx, ctx);
 
         return b.create<dsp::ArrayAtOp>(loc, array, idx)->getResult(0);
+      }
+
+      if (strcmp(fn, "array_set") == 0) {
+
+        mlir::Value array =
+            dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx, ctx);
+
+        mlir::Value idx =
+            dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx, ctx);
+
+        mlir::Value val =
+            dsp_build_expr(ast->data.AST_APPLICATION.args + 2, dsp_ctx, ctx);
+
+        return b.create<dsp::ArraySetOp>(loc, array, idx, val)->getResult(0);
+      }
+
+      if (strcmp(fn, "Double") == 0) {
+
+        mlir::Value val =
+            dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx, ctx);
+        return coerce_to_f64(val, b, loc);
+      }
+
+      if (strcmp(fn, "Int") == 0) {
+
+        mlir::Value val =
+            dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx, ctx);
+
+        return coerce_to_i32(val, b, loc);
+      }
+
+      if (strcmp(fn, "wrap_upper") == 0) {
+        mlir::Value lhs = dsp_build_expr(args, dsp_ctx, ctx);
+        mlir::Value rhs = dsp_build_expr(args + 1, dsp_ctx, ctx);
+        if (!lhs || !rhs)
+          return {};
+
+        lhs = coerce_to_f64(lhs, b, loc);
+        rhs = coerce_to_f64(rhs, b, loc);
+
+        auto module = dsp_ctx.frame_fn->getParentOfType<mlir::ModuleOp>();
+        auto callee = get_or_create_runtime_decl(
+            module, b, loc, "wrap_upper",
+            b.getFunctionType({b.getF64Type(), b.getF64Type()},
+                              {b.getF64Type()}));
+        auto call = b.create<mlir::func::CallOp>(loc, callee,
+                                                 mlir::ValueRange{lhs, rhs});
+        return call.getResult(0);
       }
     }
 
@@ -530,6 +857,8 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
                                    rec.num_inputs, inputs)
           .getResult();
     }
+    printf("constructor??\n");
+    print_ast(ast);
 
     return {};
   }
@@ -540,6 +869,7 @@ mlir::Value dsp_build_expr(Ast *ast, DspBuildCtx &dsp_ctx, JITLangCtx *ctx) {
     print_ast(ast);
 
     mlir::Type elem_ty = mlir_array_elem_type_from_ylc(ast->type, b);
+
     if (!elem_ty) {
       fprintf(
           stderr,

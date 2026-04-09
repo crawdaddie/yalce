@@ -32,3 +32,10 @@ void dsp_write_output(void *node_raw, int64_t frame, double val) {
 double ylc_read_inlet_node(void *node_raw, int64_t frame) {
   return ((Node *)node_raw)->output.buf[frame];
 }
+
+double wrap_upper(double limit, double v) {
+  if (v >= limit) {
+    return v - limit;
+  }
+  return v;
+}

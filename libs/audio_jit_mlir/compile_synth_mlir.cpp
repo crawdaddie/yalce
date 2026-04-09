@@ -117,6 +117,9 @@ extern "C" void mlir_registry_init() { g_registry.records.clear(); }
 
 extern "C" MlirSynthRecord mlir_registry_get(int id) { return g_registry[id]; }
 extern "C" int mlir_registry_len() { return g_registry.len(); }
+extern "C" int mlir_registry_extend(MlirSynthRecord rec) {
+  return g_registry.extend(rec);
+}
 
 extern "C" void mlir_registry_set_ctor_ptr(int id, void *ptr) {
   __atomic_store_n(&g_registry[id].ctor_ptr, ptr, __ATOMIC_RELEASE);
@@ -353,8 +356,6 @@ static void link_frame_dependencies(llvm::Module &dst, llvm::LLVMContext &ctx) {
     auto *owned = static_cast<mlir::OwningOpRef<mlir::ModuleOp> *>(
         g_registry[id].mlir_module);
     std::string synth_prefix = std::string(g_registry[id].name) + ".";
-    std::string frame_name = synth_prefix + "frame";
-
     auto dep_mod =
         mlir::cast<mlir::ModuleOp>((*owned)->getOperation()->clone());
     if (!lower_to_llvm_dialect(dep_mod)) {
@@ -374,16 +375,47 @@ static void link_frame_dependencies(llvm::Module &dst, llvm::LLVMContext &ctx) {
       continue;
     }
 
-    // Only the dependency frame body is needed in the caller module.
-    // Keeping ctor/init/perform causes duplicate exported symbols once the
-    // dependency has already been added to the JIT as its own synth module.
+    llvm::StringSet<> keep_funcs;
+    llvm::SmallVector<std::string> worklist;
+    auto enqueue_func = [&](llvm::StringRef name) {
+      if (keep_funcs.insert(name).second)
+        worklist.push_back(name.str());
+    };
+
+    std::string init_name = synth_prefix + "init";
+    std::string frame_name = synth_prefix + "frame";
+    if (auto *decl = dst.getFunction(init_name); decl && decl->isDeclaration())
+      enqueue_func(init_name);
+    if (auto *decl = dst.getFunction(frame_name); decl && decl->isDeclaration())
+      enqueue_func(frame_name);
+
+    while (!worklist.empty()) {
+      std::string cur = worklist.pop_back_val();
+      llvm::Function *fn = dep_llvm->getFunction(cur);
+      if (!fn)
+        continue;
+      for (auto &bb : *fn) {
+        for (auto &inst : bb) {
+          if (auto *call = llvm::dyn_cast<llvm::CallBase>(&inst)) {
+            if (auto *callee = call->getCalledFunction()) {
+              if (!callee->isDeclaration())
+                enqueue_func(callee->getName());
+            }
+          }
+        }
+      }
+    }
+
+    llvm::SmallVector<std::string> linked_defs;
     llvm::SmallVector<llvm::Function *> to_erase;
     for (auto &dep_fn : *dep_llvm) {
-      if (!dep_fn.getName().starts_with(synth_prefix))
+      if (dep_fn.isDeclaration())
         continue;
-      if (dep_fn.getName() == frame_name)
+      if (!keep_funcs.contains(dep_fn.getName())) {
+        to_erase.push_back(&dep_fn);
         continue;
-      to_erase.push_back(&dep_fn);
+      }
+      linked_defs.push_back(dep_fn.getName().str());
     }
     for (llvm::Function *fn : to_erase)
       fn->eraseFromParent();
@@ -394,11 +426,12 @@ static void link_frame_dependencies(llvm::Module &dst, llvm::LLVMContext &ctx) {
       continue;
     }
 
-    for (auto &linked_fn : dst) {
-      if (!linked_fn.getName().starts_with(synth_prefix))
+    for (llvm::StringRef fn_name : linked_defs) {
+      llvm::Function *linked_fn = dst.getFunction(fn_name);
+      if (!linked_fn)
         continue;
-      linked_fn.setLinkage(llvm::GlobalValue::PrivateLinkage);
-      linked_fn.removeFnAttr(llvm::Attribute::NoInline);
+      linked_fn->setLinkage(llvm::GlobalValue::PrivateLinkage);
+      linked_fn->removeFnAttr(llvm::Attribute::NoInline);
     }
   }
 }
@@ -474,6 +507,14 @@ static bool collect_synth_specs(Ast *source,
     return !out.empty();
   }
 
+  if (source->tag == AST_MODULE) {
+    Ast *body = source->data.AST_LAMBDA.body;
+    if (body && body->tag == AST_BODY) {
+      AST_LIST_ITER(body->data.AST_BODY.stmts, ({ pushLet(l->ast); }));
+      return !out.empty();
+    }
+  }
+
   return false;
 }
 
@@ -534,8 +575,61 @@ static void build_synth_decls(mlir::ModuleOp mod, mlir::OpBuilder &b,
   build_perform_stub(perform_fn, b, loc, ptr_ty);
 }
 
+static int64_t estimate_group_synth_state_bytes(mlir::ModuleOp mod,
+                                                llvm::StringRef synth_name) {
+  auto cloned = mlir::cast<mlir::ModuleOp>(mod.getOperation()->clone());
+  std::string synth_prefix = (synth_name + ".").str();
+  llvm::SmallVector<mlir::func::FuncOp> funcs_to_erase;
+  for (mlir::func::FuncOp fn : cloned.getOps<mlir::func::FuncOp>()) {
+    llvm::StringRef fn_name = fn.getName();
+    if (!fn_name.contains('.'))
+      continue;
+    if (fn_name.starts_with(synth_prefix))
+      continue;
+    funcs_to_erase.push_back(fn);
+  }
+  for (mlir::func::FuncOp fn : funcs_to_erase)
+    fn.erase();
+
+  if (!run_dsp_state_passes(g_mlir_ctx, cloned))
+    return 0;
+
+  auto frame_fn =
+      cloned.lookupSymbol<mlir::func::FuncOp>((synth_name + ".frame").str());
+  if (!frame_fn)
+    return 0;
+  if (auto attr = frame_fn->getAttrOfType<mlir::IntegerAttr>("dsp.state_bytes"))
+    return attr.getInt();
+  return dsp::assign_dsp_state_offsets(frame_fn);
+}
+
+static void update_group_subsynth_metadata(
+    mlir::ModuleOp mod, llvm::ArrayRef<SynthBuildSpec> specs,
+    llvm::ArrayRef<int64_t> grouped_state_bytes) {
+  llvm::StringMap<std::pair<int32_t, int32_t>> meta_by_name;
+  for (auto [i, spec] : llvm::enumerate(specs)) {
+    meta_by_name[spec.name] = {
+        (int32_t)grouped_state_bytes[i],
+        (int32_t)spec.numInputs,
+    };
+  }
+
+  mod.walk([&](dsp::SubSynthOp op) {
+    auto it = meta_by_name.find(op.getSynthName());
+    if (it == meta_by_name.end())
+      return;
+    op->setAttr("state_bytes",
+                mlir::IntegerAttr::get(op.getStateBytesAttr().getType(),
+                                       it->second.first));
+    op->setAttr("num_inputs",
+                mlir::IntegerAttr::get(op.getNumInputsAttr().getType(),
+                                       it->second.second));
+  });
+}
+
 static int compile_synth_specs(llvm::ArrayRef<SynthBuildSpec> specs,
-                               JITLangCtx *ctx, const char *dumpLabel) {
+                               JITLangCtx *ctx, const char *dumpLabel,
+                               int firstId) {
   if (specs.empty())
     return -1;
 
@@ -549,15 +643,27 @@ static int compile_synth_specs(llvm::ArrayRef<SynthBuildSpec> specs,
 
   llvm::SmallVector<mlir::func::FuncOp> frameFns;
   llvm::SmallVector<int64_t> stateBytesBySpec;
+  llvm::SmallVector<int64_t> groupedStateBytes;
   frameFns.reserve(specs.size());
   stateBytesBySpec.resize(specs.size(), 0);
+  groupedStateBytes.resize(specs.size(), 0);
 
-  for (const SynthBuildSpec &spec : specs) {
+  for (auto [i, spec] : llvm::enumerate(specs)) {
     mlir::func::FuncOp ctor_fn, init_fn, frame_fn, perform_fn;
     build_synth_decls(mod, b, loc, spec, ctx, ctor_fn, init_fn, frame_fn,
                       perform_fn);
     frameFns.push_back(frame_fn);
+
+    if (firstId >= 0) {
+      MlirSynthRecord rec = g_registry[firstId + (int)i];
+      rec.state_bytes = (int)estimate_group_synth_state_bytes(mod, spec.name);
+      rec.num_inputs = spec.numInputs;
+      g_registry[firstId + (int)i] = rec;
+      groupedStateBytes[i] = rec.state_bytes;
+    }
   }
+
+  update_group_subsynth_metadata(mod, specs, groupedStateBytes);
 
   llvm::errs() << "\n=== Pre-State MLIR [" << dumpLabel << "] ===\n";
   mod.print(llvm::errs());
@@ -585,13 +691,36 @@ static int compile_synth_specs(llvm::ArrayRef<SynthBuildSpec> specs,
   storedMods.reserve(specs.size());
   for (size_t i = 0; i < specs.size(); ++i) {
     auto stored = mlir::cast<mlir::ModuleOp>(mod.getOperation()->clone());
-    std::string synth_prefix = specs[i].name + ".";
+    llvm::StringSet<> keep_funcs;
+    llvm::SmallVector<std::string> worklist;
+    auto enqueue_func = [&](llvm::StringRef name) {
+      if (keep_funcs.insert(name).second)
+        worklist.push_back(name.str());
+    };
+    enqueue_func(specs[i].name + ".ctor");
+    enqueue_func(specs[i].name + ".init");
+    enqueue_func(specs[i].name + ".frame");
+    enqueue_func(specs[i].name + ".perform");
+
+    while (!worklist.empty()) {
+      std::string cur = worklist.pop_back_val();
+      auto fn = stored.lookupSymbol<mlir::func::FuncOp>(cur);
+      if (!fn)
+        continue;
+      fn.walk([&](mlir::func::CallOp call) {
+        llvm::StringRef callee = call.getCallee();
+        if (!callee.contains('.'))
+          return;
+        enqueue_func(callee);
+      });
+    }
+
     llvm::SmallVector<mlir::func::FuncOp> funcs_to_erase;
     for (mlir::func::FuncOp fn : stored.getOps<mlir::func::FuncOp>()) {
       llvm::StringRef fn_name = fn.getName();
       if (!fn_name.contains('.'))
         continue;
-      if (fn_name.starts_with(synth_prefix))
+      if (keep_funcs.contains(fn_name))
         continue;
       funcs_to_erase.push_back(fn);
     }
@@ -642,7 +771,6 @@ static int compile_synth_specs(llvm::ArrayRef<SynthBuildSpec> specs,
     return -1;
   }
 
-  int firstId = -1;
   for (auto [i, spec] : llvm::enumerate(specs)) {
     auto ctor_sym = g_jit->lookup(spec.name + ".ctor");
     if (!ctor_sym) {
@@ -668,9 +796,15 @@ static int compile_synth_specs(llvm::ArrayRef<SynthBuildSpec> specs,
     rec.mlir_module = storedMods[i];
     rec.state_bytes = (int)stateBytesBySpec[i];
     rec.num_inputs = spec.numInputs;
-    int id = g_registry.extend(rec);
-    if (firstId < 0)
-      firstId = id;
+    int id;
+    if (firstId >= 0) {
+      id = firstId + (int)i;
+      g_registry[id] = rec;
+    } else {
+      id = g_registry.extend(rec);
+      if (firstId < 0)
+        firstId = id;
+    }
     fprintf(stderr, "audio_jit_mlir: compiled '%s' id=%d\n", spec.name.c_str(),
             id);
   }
@@ -699,11 +833,16 @@ extern "C" int mlir_compile_synth(void *ast_raw, const char *name,
       .name = name,
       .numInputs = num_inputs,
   });
-  return compile_synth_specs(specs, ctx, name);
+  return compile_synth_specs(specs, ctx, name, -1);
 }
 
 extern "C" int mlir_compile_synth_group(void *source_ast, void *ctx_raw,
                                         int *out_count) {
+  return mlir_compile_synth_group_into(source_ast, ctx_raw, out_count, -1);
+}
+
+extern "C" int mlir_compile_synth_group_into(void *source_ast, void *ctx_raw,
+                                             int *out_count, int first_id) {
   Ast *source = static_cast<Ast *>(source_ast);
   JITLangCtx *ctx = static_cast<JITLangCtx *>(ctx_raw);
 
@@ -723,5 +862,5 @@ extern "C" int mlir_compile_synth_group(void *source_ast, void *ctx_raw,
     dump_label += (i == 0) ? ":" : ",";
     dump_label += spec.name;
   }
-  return compile_synth_specs(specs, ctx, dump_label.c_str());
+  return compile_synth_specs(specs, ctx, dump_label.c_str(), first_id);
 }

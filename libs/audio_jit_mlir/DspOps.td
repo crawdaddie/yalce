@@ -103,6 +103,12 @@ def ArraySetOp : Dsp_Op<"array_set"> {
     I32:$index,
     AnyType:$value
   );
+  let results = (outs Dsp_ArrayTypeConstraint:$result);
+  let extraClassDeclaration = [{
+    static void build(::mlir::OpBuilder &b, ::mlir::OperationState &state,
+                      ::mlir::Value array, ::mlir::Value index,
+                      ::mlir::Value value);
+  }];
 }
 
 def PhasorOp : Dsp_Op<"phasor"> {
@@ -117,6 +123,7 @@ def PhasorOp : Dsp_Op<"phasor"> {
   }];
 }
 
+
 def PhasorStatefulOp : Dsp_Op<"phasor_stateful"> {
   let arguments = (ins
     LLVM_AnyPointer:$phase_slot,
@@ -129,6 +136,34 @@ def PhasorStatefulOp : Dsp_Op<"phasor_stateful"> {
                       ::mlir::Value phase_slot, ::mlir::Value freq, double spf);
   }];
 }
+def PhasorSyncOp : Dsp_Op<"phasor_sync"> {
+  let arguments = (ins
+    F64:$freq,
+    F64:$trig,
+    F64Attr:$spf
+  );
+  let results = (outs F64:$result);
+  let extraClassDeclaration = [{
+    static void build(::mlir::OpBuilder &b, ::mlir::OperationState &state,
+                      ::mlir::Value freq, ::mlir::Value trig, double spf);
+  }];
+}
+
+def PhasorSyncStatefulOp : Dsp_Op<"phasor_sync_stateful"> {
+  let arguments = (ins
+    LLVM_AnyPointer:$phase_slot,
+    F64:$freq,
+    F64:$trig,
+    F64Attr:$spf
+  );
+  let results = (outs F64:$result);
+  let extraClassDeclaration = [{
+    static void build(::mlir::OpBuilder &b, ::mlir::OperationState &state,
+                      ::mlir::Value phase_slot, ::mlir::Value freq,
+                      ::mlir::Value trig, double spf);
+  }];
+}
+
 
 def Tabread2Op : Dsp_Op<"tabread2"> {
   let arguments = (ins

@@ -8,6 +8,7 @@
 #include "../../lang/backend_llvm/codegen.h"
 #include "../../lang/backend_llvm/function_extern.h"
 #include "../../lang/backend_llvm/lib_registry.h"
+#include "../../lang/backend_llvm/module.h"
 #include "../../lang/backend_llvm/symbols.h"
 #include "../../lang/backend_llvm/types.h"
 #include "../../lang/common.h"
@@ -36,6 +37,44 @@ int STYPE_AUDIO_JIT_BUILTIN_HANDLER;
 int STYPE_AUDIO_JIT_INLINE_LAMBDA;
 int STYPE_AUDIO_JIT_SYNTH_INLET;
 int STYPE_AUDIO_JIT_LOCAL_ARRAY;
+
+static void **g_mlir_global_storage_array = NULL;
+static int *g_mlir_global_storage_capacity = NULL;
+
+void ylc_mlir_set_global_storage(void **storage_array, int *storage_capacity) {
+  g_mlir_global_storage_array = storage_array;
+  g_mlir_global_storage_capacity = storage_capacity;
+}
+
+double ylc_mlir_get_global_f64(int slot) {
+  if (!g_mlir_global_storage_array || slot < 0 ||
+      (g_mlir_global_storage_capacity &&
+       slot >= *g_mlir_global_storage_capacity) ||
+      !g_mlir_global_storage_array[slot]) {
+    return 0.0;
+  }
+  return *(double *)g_mlir_global_storage_array[slot];
+}
+
+int ylc_mlir_get_global_i32(int slot) {
+  if (!g_mlir_global_storage_array || slot < 0 ||
+      (g_mlir_global_storage_capacity &&
+       slot >= *g_mlir_global_storage_capacity) ||
+      !g_mlir_global_storage_array[slot]) {
+    return 0;
+  }
+  return *(int *)g_mlir_global_storage_array[slot];
+}
+
+int ylc_mlir_get_global_i1(int slot) {
+  if (!g_mlir_global_storage_array || slot < 0 ||
+      (g_mlir_global_storage_capacity &&
+       slot >= *g_mlir_global_storage_capacity) ||
+      !g_mlir_global_storage_array[slot]) {
+    return 0;
+  }
+  return *(int *)g_mlir_global_storage_array[slot] ? 1 : 0;
+}
 
 // let array_of_buf = extern fn Ptr -> Array of Double;
 // let bufsize = extern fn Ptr -> Int;
@@ -207,21 +246,61 @@ static void bind_compiled_mlir_synth(Ast *binding, JITLangCtx *ctx, int new_id) 
   ht_set_hash(ctx->frame->table, name, hash_string(name, strlen(name)), sym);
 }
 
+static int synth_num_inputs(Ast *lambda) {
+  int num_inputs = 0;
+  if (!lambda || is_void_func(lambda->type))
+    return 0;
+  for (AstList *p = lambda->data.AST_LAMBDA.params; p; p = p->next) {
+    if (p->ast->tag == AST_IDENTIFIER)
+      num_inputs++;
+    else if (p->ast->tag == AST_TUPLE)
+      num_inputs += p->ast->data.AST_LIST.len;
+  }
+  return num_inputs;
+}
+
+static Ast *group_compile_source_body(Ast *source) {
+  if (!source)
+    return NULL;
+  if (source->tag == AST_BODY)
+    return source;
+  if (source->tag == AST_MODULE)
+    return source->data.AST_LAMBDA.body;
+  if (source->tag == AST_LET && source->data.AST_LET.expr &&
+      source->data.AST_LET.expr->tag == AST_MODULE)
+    return source->data.AST_LET.expr->data.AST_LAMBDA.body;
+  return NULL;
+}
+
 LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
+  ylc_mlir_set_global_storage(ctx->global_storage_array,
+                              ctx->global_storage_capacity);
 
   Ast *source = ast->data.AST_APPLICATION.args;
-  if (source && source->tag == AST_BODY) {
-    int count = 0;
-    int first_id = mlir_compile_synth_group(source, ctx, &count);
-    if (first_id < 0) {
-      fprintf(stderr, "audio_jit_mlir: grouped compile failed\n");
-      return NULL;
+  Ast *group_body = group_compile_source_body(source);
+  if (group_body) {
+    JITLangCtx *compile_ctx = ctx;
+    JITSymbol *module_symbol = NULL;
+    Ast *module_binding = NULL;
+    Ast *module_ast = NULL;
+
+    if (source->tag == AST_LET && source->data.AST_LET.expr &&
+        source->data.AST_LET.expr->tag == AST_MODULE) {
+      module_binding = source->data.AST_LET.binding;
+      module_ast = source->data.AST_LET.expr;
+      module_symbol =
+          create_module_symbol(module_ast->type, NULL, module_ast, ctx, module);
+      compile_ctx = module_symbol->symbol_data.STYPE_MODULE.ctx;
+
+      const char *mod_binding = module_binding->data.AST_IDENTIFIER.value;
+      ht_set_hash(ctx->frame->table, mod_binding,
+                  hash_string(mod_binding, strlen(mod_binding)), module_symbol);
     }
 
-    int idx = 0;
-    AST_LIST_ITER(source->data.AST_BODY.stmts, ({
+    int first_id = mlir_registry_len();
+    AST_LIST_ITER(group_body->data.AST_BODY.stmts, ({
       Ast *stmt = l->ast;
       if (!stmt || stmt->tag != AST_LET)
         continue;
@@ -230,7 +309,33 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
       if (!binding || binding->tag != AST_IDENTIFIER || !lambda ||
           lambda->tag != AST_LAMBDA)
         continue;
-      bind_compiled_mlir_synth(binding, ctx, first_id + idx);
+
+      MlirSynthRecord rec = {0};
+      rec.name = strdup(binding->data.AST_IDENTIFIER.value);
+      rec.num_inputs = synth_num_inputs(lambda);
+      int id = mlir_registry_extend(rec);
+      bind_compiled_mlir_synth(binding, compile_ctx, id);
+    }));
+
+    int count = 0;
+    int compiled_first_id =
+        mlir_compile_synth_group_into(group_body, compile_ctx, &count, first_id);
+    if (compiled_first_id < 0) {
+      fprintf(stderr, "audio_jit_mlir: grouped compile failed\n");
+      return NULL;
+    }
+
+    int idx = 0;
+    AST_LIST_ITER(group_body->data.AST_BODY.stmts, ({
+      Ast *stmt = l->ast;
+      if (!stmt || stmt->tag != AST_LET)
+        continue;
+      Ast *binding = stmt->data.AST_LET.binding;
+      Ast *lambda = stmt->data.AST_LET.expr;
+      if (!binding || binding->tag != AST_IDENTIFIER || !lambda ||
+          lambda->tag != AST_LAMBDA)
+        continue;
+      bind_compiled_mlir_synth(binding, compile_ctx, compiled_first_id + idx);
       idx++;
     }));
     return NULL;
@@ -240,15 +345,7 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   Ast *binding = source->data.AST_LET.binding;
   const char *name = binding->data.AST_IDENTIFIER.value;
 
-  int num_inputs = 0;
-  if (!is_void_func(lambda->type)) {
-    for (AstList *p = lambda->data.AST_LAMBDA.params; p; p = p->next) {
-      if (p->ast->tag == AST_IDENTIFIER)
-        num_inputs++;
-      else if (p->ast->tag == AST_TUPLE)
-        num_inputs += p->ast->data.AST_LIST.len;
-    }
-  }
+  int num_inputs = synth_num_inputs(lambda);
 
   int new_id = mlir_compile_synth(lambda, name, ctx, num_inputs);
   if (new_id < 0) {

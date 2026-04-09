@@ -26,6 +26,12 @@ namespace dsp {
 class PhasorStatefulOp;
 } // namespace dsp
 namespace dsp {
+class PhasorSyncOp;
+} // namespace dsp
+namespace dsp {
+class PhasorSyncStatefulOp;
+} // namespace dsp
+namespace dsp {
 class StateConsumeOp;
 } // namespace dsp
 namespace dsp {
@@ -529,7 +535,7 @@ public:
 
   ::llvm::LogicalResult verify(::mlir::Location loc);
 };
-class ArraySetOp : public ::mlir::Op<ArraySetOp, ::mlir::OpTrait::ZeroRegions, ::mlir::OpTrait::ZeroResults, ::mlir::OpTrait::ZeroSuccessors, ::mlir::OpTrait::NOperands<3>::Impl, ::mlir::OpTrait::OpInvariants> {
+class ArraySetOp : public ::mlir::Op<ArraySetOp, ::mlir::OpTrait::ZeroRegions, ::mlir::OpTrait::OneResult, ::mlir::OpTrait::OneTypedResult<::mlir::Type>::Impl, ::mlir::OpTrait::ZeroSuccessors, ::mlir::OpTrait::NOperands<3>::Impl, ::mlir::OpTrait::OpInvariants> {
 public:
   using Op::Op;
   using Op::print;
@@ -596,6 +602,10 @@ public:
              std::next(getOperation()->result_begin(), valueRange.first + valueRange.second)};
   }
 
+  ::mlir::TypedValue<::mlir::Type> getResult() {
+    return ::llvm::cast<::mlir::TypedValue<::mlir::Type>>(*getODSResults(0).begin());
+  }
+
   static ::llvm::LogicalResult setPropertiesFromAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
   static ::mlir::Attribute getPropertiesAsAttr(::mlir::MLIRContext *ctx, const Properties &prop);
   static llvm::hash_code computePropertiesHash(const Properties &prop);
@@ -603,9 +613,9 @@ public:
   static void setInherentAttr(Properties &prop, llvm::StringRef name, mlir::Attribute value);
   static void populateInherentAttrs(::mlir::MLIRContext *ctx, const Properties &prop, ::mlir::NamedAttrList &attrs);
   static ::llvm::LogicalResult verifyInherentAttrs(::mlir::OperationName opName, ::mlir::NamedAttrList &attrs, llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
-  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value);
-  static ArraySetOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value);
-  static ArraySetOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Type result, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value);
+  static ArraySetOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Type result, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value);
+  static ArraySetOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Type result, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value);
   static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value);
   static ArraySetOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value);
   static ArraySetOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value);
@@ -619,6 +629,9 @@ public:
   ::llvm::LogicalResult verifyInvariants();
   static ::llvm::LogicalResult setPropertiesFromParsedAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
 public:
+  static void build(::mlir::OpBuilder &b, ::mlir::OperationState &state,
+                    ::mlir::Value array, ::mlir::Value index,
+                    ::mlir::Value value);
 };
 } // namespace dsp
 MLIR_DECLARE_EXPLICIT_TYPE_ID(dsp::ArraySetOp)
@@ -1305,6 +1318,504 @@ public:
 };
 } // namespace dsp
 MLIR_DECLARE_EXPLICIT_TYPE_ID(dsp::PhasorStatefulOp)
+
+namespace dsp {
+
+//===----------------------------------------------------------------------===//
+// dsp::PhasorSyncOp declarations
+//===----------------------------------------------------------------------===//
+
+namespace detail {
+class PhasorSyncOpGenericAdaptorBase {
+public:
+  struct Properties {
+    using spfTy = ::mlir::FloatAttr;
+    spfTy spf;
+
+    auto getSpf() const {
+      auto &propStorage = this->spf;
+      return ::llvm::cast<::mlir::FloatAttr>(propStorage);
+    }
+    void setSpf(const ::mlir::FloatAttr &propValue) {
+      this->spf = propValue;
+    }
+    bool operator==(const Properties &rhs) const {
+      return 
+        rhs.spf == this->spf &&
+        true;
+    }
+    bool operator!=(const Properties &rhs) const {
+      return !(*this == rhs);
+    }
+  };
+protected:
+  ::mlir::DictionaryAttr odsAttrs;
+  ::std::optional<::mlir::OperationName> odsOpName;
+  Properties properties;
+  ::mlir::RegionRange odsRegions;
+public:
+  PhasorSyncOpGenericAdaptorBase(::mlir::DictionaryAttr attrs, const Properties &properties, ::mlir::RegionRange regions = {}) : odsAttrs(attrs), properties(properties), odsRegions(regions) {  if (odsAttrs)
+      odsOpName.emplace("dsp.phasor_sync", odsAttrs.getContext());
+  }
+
+  PhasorSyncOpGenericAdaptorBase(PhasorSyncOp op);
+
+  std::pair<unsigned, unsigned> getODSOperandIndexAndLength(unsigned index, unsigned odsOperandsSize) {
+    return {index, 1};
+  }
+
+  const Properties &getProperties() {
+    return properties;
+  }
+
+  ::mlir::DictionaryAttr getAttributes() {
+    return odsAttrs;
+  }
+
+  ::mlir::FloatAttr getSpfAttr() {
+    auto attr = ::llvm::cast<::mlir::FloatAttr>(getProperties().spf);
+    return attr;
+  }
+
+  ::llvm::APFloat getSpf();
+};
+} // namespace detail
+template <typename RangeT>
+class PhasorSyncOpGenericAdaptor : public detail::PhasorSyncOpGenericAdaptorBase {
+  using ValueT = ::llvm::detail::ValueOfRange<RangeT>;
+  using Base = detail::PhasorSyncOpGenericAdaptorBase;
+  static constexpr int odsIndex_freq = 0;
+  static constexpr int odsIndex_trig = 1;
+public:
+  PhasorSyncOpGenericAdaptor(RangeT values, ::mlir::DictionaryAttr attrs, const Properties &properties, ::mlir::RegionRange regions = {}) : Base(attrs, properties, regions), odsOperands(values) {}
+
+  PhasorSyncOpGenericAdaptor(RangeT values, ::mlir::DictionaryAttr attrs, ::mlir::OpaqueProperties properties, ::mlir::RegionRange regions = {}) : PhasorSyncOpGenericAdaptor(values, attrs, (properties ? *properties.as<Properties *>() : Properties{}), regions) {}
+
+  PhasorSyncOpGenericAdaptor(RangeT values, ::mlir::DictionaryAttr attrs = nullptr) : PhasorSyncOpGenericAdaptor(values, attrs, Properties{}, {}) {}
+
+  PhasorSyncOpGenericAdaptor(RangeT values, const PhasorSyncOpGenericAdaptorBase &base) : Base(base), odsOperands(values) {}
+
+  template <typename LateInst = PhasorSyncOp, typename = std::enable_if_t<std::is_same_v<LateInst, PhasorSyncOp>>>
+  PhasorSyncOpGenericAdaptor(RangeT values, LateInst op) : Base(op), odsOperands(values) {}
+
+  std::pair<unsigned, unsigned> getODSOperandIndexAndLength(unsigned index) {
+    return Base::getODSOperandIndexAndLength(index, odsOperands.size());
+  }
+
+  RangeT getODSOperands(unsigned index) {
+    auto valueRange = getODSOperandIndexAndLength(index);
+    return {std::next(odsOperands.begin(), valueRange.first),
+             std::next(odsOperands.begin(), valueRange.first + valueRange.second)};
+  }
+
+  ValueT getFreq() {
+    return (*getODSOperands(0).begin());
+  }
+
+  ValueT getTrig() {
+    return (*getODSOperands(1).begin());
+  }
+
+  RangeT getOperands() {
+    return odsOperands;
+  }
+
+private:
+  RangeT odsOperands;
+};
+class PhasorSyncOpAdaptor : public PhasorSyncOpGenericAdaptor<::mlir::ValueRange> {
+public:
+  using PhasorSyncOpGenericAdaptor::PhasorSyncOpGenericAdaptor;
+  PhasorSyncOpAdaptor(PhasorSyncOp op);
+
+  ::llvm::LogicalResult verify(::mlir::Location loc);
+};
+class PhasorSyncOp : public ::mlir::Op<PhasorSyncOp, ::mlir::OpTrait::ZeroRegions, ::mlir::OpTrait::OneResult, ::mlir::OpTrait::OneTypedResult<::mlir::FloatType>::Impl, ::mlir::OpTrait::ZeroSuccessors, ::mlir::OpTrait::NOperands<2>::Impl, ::mlir::OpTrait::OpInvariants, ::mlir::BytecodeOpInterface::Trait> {
+public:
+  using Op::Op;
+  using Op::print;
+  using Adaptor = PhasorSyncOpAdaptor;
+  template <typename RangeT>
+  using GenericAdaptor = PhasorSyncOpGenericAdaptor<RangeT>;
+  using FoldAdaptor = GenericAdaptor<::llvm::ArrayRef<::mlir::Attribute>>;
+  static constexpr int odsIndex_freq = 0;
+  static constexpr int odsIndex_trig = 1;
+  using Properties = FoldAdaptor::Properties;
+  static ::llvm::ArrayRef<::llvm::StringRef> getAttributeNames() {
+    static ::llvm::StringRef attrNames[] = {::llvm::StringRef("spf")};
+    return ::llvm::ArrayRef(attrNames);
+  }
+
+  ::mlir::StringAttr getSpfAttrName() {
+    return getAttributeNameForIndex(0);
+  }
+
+  static ::mlir::StringAttr getSpfAttrName(::mlir::OperationName name) {
+    return getAttributeNameForIndex(name, 0);
+  }
+
+  static constexpr ::llvm::StringLiteral getOperationName() {
+    return ::llvm::StringLiteral("dsp.phasor_sync");
+  }
+
+  std::pair<unsigned, unsigned> getODSOperandIndexAndLength(unsigned index) {
+    return {index, 1};
+  }
+
+  ::mlir::Operation::operand_range getODSOperands(unsigned index) {
+    auto valueRange = getODSOperandIndexAndLength(index);
+    return {std::next(getOperation()->operand_begin(), valueRange.first),
+             std::next(getOperation()->operand_begin(), valueRange.first + valueRange.second)};
+  }
+
+  ::mlir::TypedValue<::mlir::FloatType> getFreq() {
+    return ::llvm::cast<::mlir::TypedValue<::mlir::FloatType>>(*getODSOperands(0).begin());
+  }
+
+  ::mlir::TypedValue<::mlir::FloatType> getTrig() {
+    return ::llvm::cast<::mlir::TypedValue<::mlir::FloatType>>(*getODSOperands(1).begin());
+  }
+
+  ::mlir::OpOperand &getFreqMutable() {
+    auto range = getODSOperandIndexAndLength(0);
+    return getOperation()->getOpOperand(range.first);
+  }
+
+  ::mlir::OpOperand &getTrigMutable() {
+    auto range = getODSOperandIndexAndLength(1);
+    return getOperation()->getOpOperand(range.first);
+  }
+
+  std::pair<unsigned, unsigned> getODSResultIndexAndLength(unsigned index) {
+    return {index, 1};
+  }
+
+  ::mlir::Operation::result_range getODSResults(unsigned index) {
+    auto valueRange = getODSResultIndexAndLength(index);
+    return {std::next(getOperation()->result_begin(), valueRange.first),
+             std::next(getOperation()->result_begin(), valueRange.first + valueRange.second)};
+  }
+
+  ::mlir::TypedValue<::mlir::FloatType> getResult() {
+    return ::llvm::cast<::mlir::TypedValue<::mlir::FloatType>>(*getODSResults(0).begin());
+  }
+
+  static ::llvm::LogicalResult setPropertiesFromAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
+  static ::mlir::Attribute getPropertiesAsAttr(::mlir::MLIRContext *ctx, const Properties &prop);
+  static llvm::hash_code computePropertiesHash(const Properties &prop);
+  static std::optional<mlir::Attribute> getInherentAttr(::mlir::MLIRContext *ctx, const Properties &prop, llvm::StringRef name);
+  static void setInherentAttr(Properties &prop, llvm::StringRef name, mlir::Attribute value);
+  static void populateInherentAttrs(::mlir::MLIRContext *ctx, const Properties &prop, ::mlir::NamedAttrList &attrs);
+  static ::llvm::LogicalResult verifyInherentAttrs(::mlir::OperationName opName, ::mlir::NamedAttrList &attrs, llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
+  static ::llvm::LogicalResult readProperties(::mlir::DialectBytecodeReader &reader, ::mlir::OperationState &state);
+  void writeProperties(::mlir::DialectBytecodeWriter &writer);
+  ::mlir::FloatAttr getSpfAttr() {
+    return ::llvm::cast<::mlir::FloatAttr>(getProperties().spf);
+  }
+
+  ::llvm::APFloat getSpf();
+  void setSpfAttr(::mlir::FloatAttr attr) {
+    getProperties().spf = attr;
+  }
+
+  void setSpf(::llvm::APFloat attrValue);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Type result, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf);
+  static PhasorSyncOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Type result, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf);
+  static PhasorSyncOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Type result, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf);
+  static PhasorSyncOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf);
+  static PhasorSyncOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Type result, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf);
+  static PhasorSyncOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Type result, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf);
+  static PhasorSyncOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Type result, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf);
+  static PhasorSyncOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf);
+  static PhasorSyncOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf);
+  static void build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes = {});
+  static PhasorSyncOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes = {});
+  static PhasorSyncOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes = {});
+  static void build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes = {});
+  static PhasorSyncOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes = {});
+  static PhasorSyncOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes = {});
+  ::llvm::LogicalResult verifyInvariantsImpl();
+  ::llvm::LogicalResult verifyInvariants();
+  static ::llvm::LogicalResult setPropertiesFromParsedAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
+private:
+  ::mlir::StringAttr getAttributeNameForIndex(unsigned index) {
+    return getAttributeNameForIndex((*this)->getName(), index);
+  }
+
+  static ::mlir::StringAttr getAttributeNameForIndex(::mlir::OperationName name, unsigned index) {
+    assert(index < 1 && "invalid attribute index");
+    assert(name.getStringRef() == getOperationName() && "invalid operation name");
+    assert(name.isRegistered() && "Operation isn't registered, missing a "
+          "dependent dialect loading?");
+    return name.getAttributeNames()[index];
+  }
+
+public:
+  static void build(::mlir::OpBuilder &b, ::mlir::OperationState &state,
+                    ::mlir::Value freq, ::mlir::Value trig, double spf);
+};
+} // namespace dsp
+MLIR_DECLARE_EXPLICIT_TYPE_ID(dsp::PhasorSyncOp)
+
+namespace dsp {
+
+//===----------------------------------------------------------------------===//
+// dsp::PhasorSyncStatefulOp declarations
+//===----------------------------------------------------------------------===//
+
+namespace detail {
+class PhasorSyncStatefulOpGenericAdaptorBase {
+public:
+  struct Properties {
+    using spfTy = ::mlir::FloatAttr;
+    spfTy spf;
+
+    auto getSpf() const {
+      auto &propStorage = this->spf;
+      return ::llvm::cast<::mlir::FloatAttr>(propStorage);
+    }
+    void setSpf(const ::mlir::FloatAttr &propValue) {
+      this->spf = propValue;
+    }
+    bool operator==(const Properties &rhs) const {
+      return 
+        rhs.spf == this->spf &&
+        true;
+    }
+    bool operator!=(const Properties &rhs) const {
+      return !(*this == rhs);
+    }
+  };
+protected:
+  ::mlir::DictionaryAttr odsAttrs;
+  ::std::optional<::mlir::OperationName> odsOpName;
+  Properties properties;
+  ::mlir::RegionRange odsRegions;
+public:
+  PhasorSyncStatefulOpGenericAdaptorBase(::mlir::DictionaryAttr attrs, const Properties &properties, ::mlir::RegionRange regions = {}) : odsAttrs(attrs), properties(properties), odsRegions(regions) {  if (odsAttrs)
+      odsOpName.emplace("dsp.phasor_sync_stateful", odsAttrs.getContext());
+  }
+
+  PhasorSyncStatefulOpGenericAdaptorBase(PhasorSyncStatefulOp op);
+
+  std::pair<unsigned, unsigned> getODSOperandIndexAndLength(unsigned index, unsigned odsOperandsSize) {
+    return {index, 1};
+  }
+
+  const Properties &getProperties() {
+    return properties;
+  }
+
+  ::mlir::DictionaryAttr getAttributes() {
+    return odsAttrs;
+  }
+
+  ::mlir::FloatAttr getSpfAttr() {
+    auto attr = ::llvm::cast<::mlir::FloatAttr>(getProperties().spf);
+    return attr;
+  }
+
+  ::llvm::APFloat getSpf();
+};
+} // namespace detail
+template <typename RangeT>
+class PhasorSyncStatefulOpGenericAdaptor : public detail::PhasorSyncStatefulOpGenericAdaptorBase {
+  using ValueT = ::llvm::detail::ValueOfRange<RangeT>;
+  using Base = detail::PhasorSyncStatefulOpGenericAdaptorBase;
+  static constexpr int odsIndex_phase_slot = 0;
+  static constexpr int odsIndex_freq = 1;
+  static constexpr int odsIndex_trig = 2;
+public:
+  PhasorSyncStatefulOpGenericAdaptor(RangeT values, ::mlir::DictionaryAttr attrs, const Properties &properties, ::mlir::RegionRange regions = {}) : Base(attrs, properties, regions), odsOperands(values) {}
+
+  PhasorSyncStatefulOpGenericAdaptor(RangeT values, ::mlir::DictionaryAttr attrs, ::mlir::OpaqueProperties properties, ::mlir::RegionRange regions = {}) : PhasorSyncStatefulOpGenericAdaptor(values, attrs, (properties ? *properties.as<Properties *>() : Properties{}), regions) {}
+
+  PhasorSyncStatefulOpGenericAdaptor(RangeT values, ::mlir::DictionaryAttr attrs = nullptr) : PhasorSyncStatefulOpGenericAdaptor(values, attrs, Properties{}, {}) {}
+
+  PhasorSyncStatefulOpGenericAdaptor(RangeT values, const PhasorSyncStatefulOpGenericAdaptorBase &base) : Base(base), odsOperands(values) {}
+
+  template <typename LateInst = PhasorSyncStatefulOp, typename = std::enable_if_t<std::is_same_v<LateInst, PhasorSyncStatefulOp>>>
+  PhasorSyncStatefulOpGenericAdaptor(RangeT values, LateInst op) : Base(op), odsOperands(values) {}
+
+  std::pair<unsigned, unsigned> getODSOperandIndexAndLength(unsigned index) {
+    return Base::getODSOperandIndexAndLength(index, odsOperands.size());
+  }
+
+  RangeT getODSOperands(unsigned index) {
+    auto valueRange = getODSOperandIndexAndLength(index);
+    return {std::next(odsOperands.begin(), valueRange.first),
+             std::next(odsOperands.begin(), valueRange.first + valueRange.second)};
+  }
+
+  ValueT getPhaseSlot() {
+    return (*getODSOperands(0).begin());
+  }
+
+  ValueT getFreq() {
+    return (*getODSOperands(1).begin());
+  }
+
+  ValueT getTrig() {
+    return (*getODSOperands(2).begin());
+  }
+
+  RangeT getOperands() {
+    return odsOperands;
+  }
+
+private:
+  RangeT odsOperands;
+};
+class PhasorSyncStatefulOpAdaptor : public PhasorSyncStatefulOpGenericAdaptor<::mlir::ValueRange> {
+public:
+  using PhasorSyncStatefulOpGenericAdaptor::PhasorSyncStatefulOpGenericAdaptor;
+  PhasorSyncStatefulOpAdaptor(PhasorSyncStatefulOp op);
+
+  ::llvm::LogicalResult verify(::mlir::Location loc);
+};
+class PhasorSyncStatefulOp : public ::mlir::Op<PhasorSyncStatefulOp, ::mlir::OpTrait::ZeroRegions, ::mlir::OpTrait::OneResult, ::mlir::OpTrait::OneTypedResult<::mlir::FloatType>::Impl, ::mlir::OpTrait::ZeroSuccessors, ::mlir::OpTrait::NOperands<3>::Impl, ::mlir::OpTrait::OpInvariants, ::mlir::BytecodeOpInterface::Trait> {
+public:
+  using Op::Op;
+  using Op::print;
+  using Adaptor = PhasorSyncStatefulOpAdaptor;
+  template <typename RangeT>
+  using GenericAdaptor = PhasorSyncStatefulOpGenericAdaptor<RangeT>;
+  using FoldAdaptor = GenericAdaptor<::llvm::ArrayRef<::mlir::Attribute>>;
+  static constexpr int odsIndex_phase_slot = 0;
+  static constexpr int odsIndex_freq = 1;
+  static constexpr int odsIndex_trig = 2;
+  using Properties = FoldAdaptor::Properties;
+  static ::llvm::ArrayRef<::llvm::StringRef> getAttributeNames() {
+    static ::llvm::StringRef attrNames[] = {::llvm::StringRef("spf")};
+    return ::llvm::ArrayRef(attrNames);
+  }
+
+  ::mlir::StringAttr getSpfAttrName() {
+    return getAttributeNameForIndex(0);
+  }
+
+  static ::mlir::StringAttr getSpfAttrName(::mlir::OperationName name) {
+    return getAttributeNameForIndex(name, 0);
+  }
+
+  static constexpr ::llvm::StringLiteral getOperationName() {
+    return ::llvm::StringLiteral("dsp.phasor_sync_stateful");
+  }
+
+  std::pair<unsigned, unsigned> getODSOperandIndexAndLength(unsigned index) {
+    return {index, 1};
+  }
+
+  ::mlir::Operation::operand_range getODSOperands(unsigned index) {
+    auto valueRange = getODSOperandIndexAndLength(index);
+    return {std::next(getOperation()->operand_begin(), valueRange.first),
+             std::next(getOperation()->operand_begin(), valueRange.first + valueRange.second)};
+  }
+
+  ::mlir::TypedValue<::mlir::LLVM::LLVMPointerType> getPhaseSlot() {
+    return ::llvm::cast<::mlir::TypedValue<::mlir::LLVM::LLVMPointerType>>(*getODSOperands(0).begin());
+  }
+
+  ::mlir::TypedValue<::mlir::FloatType> getFreq() {
+    return ::llvm::cast<::mlir::TypedValue<::mlir::FloatType>>(*getODSOperands(1).begin());
+  }
+
+  ::mlir::TypedValue<::mlir::FloatType> getTrig() {
+    return ::llvm::cast<::mlir::TypedValue<::mlir::FloatType>>(*getODSOperands(2).begin());
+  }
+
+  ::mlir::OpOperand &getPhaseSlotMutable() {
+    auto range = getODSOperandIndexAndLength(0);
+    return getOperation()->getOpOperand(range.first);
+  }
+
+  ::mlir::OpOperand &getFreqMutable() {
+    auto range = getODSOperandIndexAndLength(1);
+    return getOperation()->getOpOperand(range.first);
+  }
+
+  ::mlir::OpOperand &getTrigMutable() {
+    auto range = getODSOperandIndexAndLength(2);
+    return getOperation()->getOpOperand(range.first);
+  }
+
+  std::pair<unsigned, unsigned> getODSResultIndexAndLength(unsigned index) {
+    return {index, 1};
+  }
+
+  ::mlir::Operation::result_range getODSResults(unsigned index) {
+    auto valueRange = getODSResultIndexAndLength(index);
+    return {std::next(getOperation()->result_begin(), valueRange.first),
+             std::next(getOperation()->result_begin(), valueRange.first + valueRange.second)};
+  }
+
+  ::mlir::TypedValue<::mlir::FloatType> getResult() {
+    return ::llvm::cast<::mlir::TypedValue<::mlir::FloatType>>(*getODSResults(0).begin());
+  }
+
+  static ::llvm::LogicalResult setPropertiesFromAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
+  static ::mlir::Attribute getPropertiesAsAttr(::mlir::MLIRContext *ctx, const Properties &prop);
+  static llvm::hash_code computePropertiesHash(const Properties &prop);
+  static std::optional<mlir::Attribute> getInherentAttr(::mlir::MLIRContext *ctx, const Properties &prop, llvm::StringRef name);
+  static void setInherentAttr(Properties &prop, llvm::StringRef name, mlir::Attribute value);
+  static void populateInherentAttrs(::mlir::MLIRContext *ctx, const Properties &prop, ::mlir::NamedAttrList &attrs);
+  static ::llvm::LogicalResult verifyInherentAttrs(::mlir::OperationName opName, ::mlir::NamedAttrList &attrs, llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
+  static ::llvm::LogicalResult readProperties(::mlir::DialectBytecodeReader &reader, ::mlir::OperationState &state);
+  void writeProperties(::mlir::DialectBytecodeWriter &writer);
+  ::mlir::FloatAttr getSpfAttr() {
+    return ::llvm::cast<::mlir::FloatAttr>(getProperties().spf);
+  }
+
+  ::llvm::APFloat getSpf();
+  void setSpfAttr(::mlir::FloatAttr attr) {
+    getProperties().spf = attr;
+  }
+
+  void setSpf(::llvm::APFloat attrValue);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Type result, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf);
+  static PhasorSyncStatefulOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Type result, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf);
+  static PhasorSyncStatefulOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Type result, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf);
+  static PhasorSyncStatefulOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf);
+  static PhasorSyncStatefulOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Type result, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf);
+  static PhasorSyncStatefulOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Type result, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf);
+  static PhasorSyncStatefulOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Type result, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf);
+  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf);
+  static PhasorSyncStatefulOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf);
+  static PhasorSyncStatefulOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf);
+  static void build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes = {});
+  static PhasorSyncStatefulOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes = {});
+  static PhasorSyncStatefulOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes = {});
+  static void build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes = {});
+  static PhasorSyncStatefulOp create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes = {});
+  static PhasorSyncStatefulOp create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes = {});
+  ::llvm::LogicalResult verifyInvariantsImpl();
+  ::llvm::LogicalResult verifyInvariants();
+  static ::llvm::LogicalResult setPropertiesFromParsedAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError);
+private:
+  ::mlir::StringAttr getAttributeNameForIndex(unsigned index) {
+    return getAttributeNameForIndex((*this)->getName(), index);
+  }
+
+  static ::mlir::StringAttr getAttributeNameForIndex(::mlir::OperationName name, unsigned index) {
+    assert(index < 1 && "invalid attribute index");
+    assert(name.getStringRef() == getOperationName() && "invalid operation name");
+    assert(name.isRegistered() && "Operation isn't registered, missing a "
+          "dependent dialect loading?");
+    return name.getAttributeNames()[index];
+  }
+
+public:
+  static void build(::mlir::OpBuilder &b, ::mlir::OperationState &state,
+                    ::mlir::Value phase_slot, ::mlir::Value freq,
+                    ::mlir::Value trig, double spf);
+};
+} // namespace dsp
+MLIR_DECLARE_EXPLICIT_TYPE_ID(dsp::PhasorSyncStatefulOp)
 
 namespace dsp {
 

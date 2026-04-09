@@ -215,6 +215,13 @@ void dsp::ArrayAtOp::build(mlir::OpBuilder &b, mlir::OperationState &state,
   state.addTypes(arrType.getElementType());
 }
 
+void dsp::ArraySetOp::build(mlir::OpBuilder &b, mlir::OperationState &state,
+                            mlir::Value array, mlir::Value index,
+                            mlir::Value value) {
+  state.addOperands({array, index, value});
+  state.addTypes(array.getType());
+}
+
 static llvm::Type *lower_array_elem_type(mlir::Type ty,
                                          llvm::LLVMContext &ctx) {
   if (ty.isF64())
@@ -301,11 +308,21 @@ mlir::LogicalResult lower_array_op(mlir::Operation *op,
 mlir::LogicalResult lower_array_stateful_op(mlir::Operation *op,
                                             llvm::IRBuilderBase &builder,
                                             mlir::LLVM::ModuleTranslation &mt) {
-  (void)builder;
-  (void)mt;
-  op->emitError("dsp.array_state reached LLVM lowering before state "
-                "materialization; rewrite it to concrete state storage first");
-  return mlir::failure();
+  auto array_op = mlir::cast<dsp::ArrayStatefulOp>(op);
+  auto byte_offset_attr = op->getAttrOfType<mlir::IntegerAttr>("byte_offset");
+  if (!byte_offset_attr) {
+    op->emitError("dsp.array_state missing byte_offset for LLVM lowering");
+    return mlir::failure();
+  }
+
+  auto fn =
+      mlir::cast<mlir::LLVM::LLVMFuncOp>(op->getParentRegion()->getParentOp());
+  llvm::Value *state_ptr = mt.lookupValue(fn.getArgument(0));
+  llvm::Value *array_ptr = builder.CreateConstGEP1_64(
+      builder.getInt8Ty(), state_ptr,
+      static_cast<uint64_t>(byte_offset_attr.getInt()), "array.state");
+  mt.mapValue(array_op.getResult(), array_ptr);
+  return mlir::success();
 }
 
 mlir::LogicalResult lower_array_at_op(mlir::Operation *op,
@@ -350,6 +367,7 @@ mlir::LogicalResult lower_array_set_op(mlir::Operation *op,
   llvm::Value *elem_ptr =
       builder.CreateGEP(llvm_elem_ty, base_ptr, index, "array.set.ptr");
   builder.CreateStore(mt.lookupValue(set_op.getValue()), elem_ptr);
+  mt.mapValue(set_op.getResult(), base_ptr);
   return mlir::success();
 }
 
@@ -461,6 +479,22 @@ void dsp::PhasorStatefulOp::build(mlir::OpBuilder &b,
   state.addAttribute("spf", b.getF64FloatAttr(spf));
 }
 
+void dsp::PhasorSyncOp::build(mlir::OpBuilder &b, mlir::OperationState &state,
+                              mlir::Value freq, mlir::Value trig, double spf) {
+  state.addOperands({freq, trig});
+  state.addTypes(b.getF64Type());
+  state.addAttribute("spf", b.getF64FloatAttr(spf));
+}
+
+void dsp::PhasorSyncStatefulOp::build(mlir::OpBuilder &b,
+                                      mlir::OperationState &state,
+                                      mlir::Value phase_slot, mlir::Value freq,
+                                      mlir::Value trig, double spf) {
+  state.addOperands({phase_slot, freq, trig});
+  state.addTypes(b.getF64Type());
+  state.addAttribute("spf", b.getF64FloatAttr(spf));
+}
+
 namespace {
 
 // Lowering lives with the op so definition and translation stay in sync.
@@ -474,9 +508,10 @@ lower_phasor_stateful_op(mlir::Operation *op, llvm::IRBuilderBase &builder,
   llvm::Type *ptr_ty = builder.getPtrTy();
 
   llvm::Value *phase_ptr = mt.lookupValue(phasor.getPhaseSlot());
-  phase_ptr = builder.CreateBitCast(phase_ptr, ptr_ty, "phasor.phase_ptr");
+  phase_ptr = builder.CreateBitCast(phase_ptr, ptr_ty, "phasor.sync_phase_ptr");
 
-  llvm::Value *phase = builder.CreateLoad(f64_ty, phase_ptr, "phasor.phase");
+  llvm::Value *phase =
+      builder.CreateLoad(f64_ty, phase_ptr, "phasor.sync_phase");
 
   double spf_attr = phasor.getSpf().convertToDouble();
   llvm::Value *spf = llvm::ConstantFP::get(f64_ty, spf_attr);
@@ -505,14 +540,69 @@ lower_phasor_stateful_op(mlir::Operation *op, llvm::IRBuilderBase &builder,
   return mlir::success();
 }
 
+mlir::LogicalResult
+lower_phasor_sync_stateful_op(mlir::Operation *op, llvm::IRBuilderBase &builder,
+                              mlir::LLVM::ModuleTranslation &mt) {
+  auto phasor = mlir::cast<dsp::PhasorSyncStatefulOp>(op);
+
+  llvm::Type *f64_ty = builder.getDoubleTy();
+  llvm::Type *ptr_ty = builder.getPtrTy();
+
+  llvm::Value *phase_ptr = mt.lookupValue(phasor.getPhaseSlot());
+  phase_ptr = builder.CreateBitCast(phase_ptr, ptr_ty, "phasor.phase_ptr");
+
+  llvm::Value *phase = builder.CreateLoad(f64_ty, phase_ptr, "phasor.phase");
+
+  double spf_attr = phasor.getSpf().convertToDouble();
+  llvm::Value *spf = llvm::ConstantFP::get(f64_ty, spf_attr);
+  llvm::Value *freq = mt.lookupValue(phasor.getFreq());
+  llvm::Value *trig = mt.lookupValue(phasor.getTrig());
+  llvm::Value *zero = llvm::ConstantFP::get(f64_ty, 0.0);
+  llvm::Value *one = llvm::ConstantFP::get(f64_ty, 1.0);
+  assert(trig && "phasor_sync trig was not translated");
+
+  trig = builder.CreateFAdd(trig, zero, "phasor.sync_trig");
+
+  llvm::Value *reset = builder.CreateFCmpOGE(trig, one, "phasor.sync_reset");
+  llvm::Value *base_phase =
+      builder.CreateSelect(reset, zero, phase, "phasor.sync_base_phase");
+
+  llvm::Value *step = builder.CreateFMul(freq, spf, "phasor.sync_step");
+  llvm::Value *advanced =
+      builder.CreateFAdd(base_phase, step, "phasor.sync_advanced");
+
+  llvm::Value *ovf = builder.CreateFCmpOGE(advanced, one, "phasor.sync_ovf");
+  llvm::Value *udf = builder.CreateFCmpOLT(advanced, zero, "phasor.sync_udf");
+
+  llvm::Value *wrappedOvf =
+      builder.CreateFSub(advanced, one, "phasor.sync_wrap_ovf_val");
+  llvm::Value *next =
+      builder.CreateSelect(ovf, wrappedOvf, advanced, "phasor.sync_wrap_ovf");
+
+  llvm::Value *wrappedUdf =
+      builder.CreateFAdd(next, one, "phasor.sync_wrap_udf_val");
+  next = builder.CreateSelect(udf, wrappedUdf, next, "phasor.sync_wrap_udf");
+
+  builder.CreateStore(next, phase_ptr);
+  mt.mapValue(phasor.getResult(), base_phase);
+  return mlir::success();
+}
+
 mlir::LogicalResult lower_phasor_op(mlir::Operation *op,
                                     llvm::IRBuilderBase &builder,
                                     mlir::LLVM::ModuleTranslation &mt) {
-  (void)builder;
-  (void)mt;
   op->emitError(
       "dsp.phasor reached LLVM lowering before state materialization; "
       "rewrite it to dsp.phasor_stateful first");
+  return mlir::failure();
+}
+
+mlir::LogicalResult lower_phasor_sync_op(mlir::Operation *op,
+                                         llvm::IRBuilderBase &builder,
+                                         mlir::LLVM::ModuleTranslation &mt) {
+  op->emitError(
+      "dsp.phasor_sync reached LLVM lowering before state materialization; "
+      "rewrite it to dsp.phasor_sync_stateful first");
   return mlir::failure();
 }
 
@@ -681,6 +771,14 @@ struct DspToLLVMTranslation : public mlir::LLVMTranslationDialectInterface {
 
     if (mlir::isa<dsp::PhasorStatefulOp>(op)) {
       return lower_phasor_stateful_op(op, builder, mt);
+    }
+
+    if (mlir::isa<dsp::PhasorSyncOp>(op)) {
+      return lower_phasor_sync_op(op, builder, mt);
+    }
+
+    if (mlir::isa<dsp::PhasorSyncStatefulOp>(op)) {
+      return lower_phasor_sync_stateful_op(op, builder, mt);
     }
 
     if (mlir::isa<dsp::Tabread2Op>(op)) {

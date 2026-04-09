@@ -16,6 +16,8 @@ dsp::ArraySetOp,
 dsp::ArrayStatefulOp,
 dsp::PhasorOp,
 dsp::PhasorStatefulOp,
+dsp::PhasorSyncOp,
+dsp::PhasorSyncStatefulOp,
 dsp::StateConsumeOp,
 dsp::StateCursorOp,
 dsp::StateSlotOp,
@@ -771,29 +773,30 @@ void ArraySetOp::populateInherentAttrs(::mlir::MLIRContext *ctx, const Propertie
     return ::mlir::success();
 }
 
-void ArraySetOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value) {
+void ArraySetOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Type result, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value) {
   odsState.addOperands(array);
   odsState.addOperands(index);
   odsState.addOperands(value);
+  odsState.addTypes(result);
 }
 
-ArraySetOp ArraySetOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value) {
+ArraySetOp ArraySetOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Type result, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value) {
   ::mlir::OperationState __state__(location, getOperationName());
-  build(builder, __state__, array, index, value);
+  build(builder, __state__, result, array, index, value);
   auto __res__ = ::llvm::dyn_cast<ArraySetOp>(builder.create(__state__));
   assert(__res__ && "builder didn't return the right type");
   return __res__;
 }
 
-ArraySetOp ArraySetOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value) {
-  return create(builder, builder.getLoc(), array, index, value);
+ArraySetOp ArraySetOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Type result, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value) {
+  return create(builder, builder.getLoc(), result, array, index, value);
 }
 
 void ArraySetOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value array, ::mlir::Value index, ::mlir::Value value) {
   odsState.addOperands(array);
   odsState.addOperands(index);
   odsState.addOperands(value);
-  assert(resultTypes.size() == 0u && "mismatched number of results");
+  assert(resultTypes.size() == 1u && "mismatched number of results");
   odsState.addTypes(resultTypes);
 }
 
@@ -813,7 +816,7 @@ void ArraySetOp::build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::
   assert(operands.size() == 3u && "mismatched number of parameters");
   odsState.addOperands(operands);
   odsState.addAttributes(attributes);
-  assert(resultTypes.size() == 0u && "mismatched number of return types");
+  assert(resultTypes.size() == 1u && "mismatched number of return types");
   odsState.addTypes(resultTypes);
 }
 
@@ -834,7 +837,7 @@ void ArraySetOp::build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::
   odsState.addOperands(operands);
   odsState.useProperties(const_cast<Properties&>(properties));
   odsState.addAttributes(discardableAttributes);
-  assert(resultTypes.size() == 0u && "mismatched number of return types");
+  assert(resultTypes.size() == 1u && "mismatched number of return types");
   odsState.addTypes(resultTypes);
 }
 
@@ -869,6 +872,15 @@ ArraySetOp ArraySetOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Typ
 
     for (auto v : valueGroup2) {
       if (::mlir::failed(__mlir_ods_local_type_constraint_DspOps3(*this, v.getType(), "operand", index++)))
+        return ::mlir::failure();
+    }
+  }
+  {
+    unsigned index = 0; (void)index;
+    auto valueGroup0 = getODSResults(0);
+
+    for (auto v : valueGroup0) {
+      if (::mlir::failed(__mlir_ods_local_type_constraint_DspOps1(*this, v.getType(), "result", index++)))
         return ::mlir::failure();
     }
   }
@@ -1905,6 +1917,672 @@ PhasorStatefulOp PhasorStatefulOp::create(::mlir::ImplicitLocOpBuilder &builder,
 
 } // namespace dsp
 MLIR_DEFINE_EXPLICIT_TYPE_ID(dsp::PhasorStatefulOp)
+
+namespace dsp {
+
+//===----------------------------------------------------------------------===//
+// dsp::PhasorSyncOp definitions
+//===----------------------------------------------------------------------===//
+
+namespace detail {
+PhasorSyncOpGenericAdaptorBase::PhasorSyncOpGenericAdaptorBase(PhasorSyncOp op) : odsAttrs(op->getRawDictionaryAttrs()), odsOpName(op->getName()), properties(op.getProperties()), odsRegions(op->getRegions()) {}
+
+::llvm::APFloat PhasorSyncOpGenericAdaptorBase::getSpf() {
+  auto attr = getSpfAttr();
+  return attr.getValue();
+}
+
+} // namespace detail
+PhasorSyncOpAdaptor::PhasorSyncOpAdaptor(PhasorSyncOp op) : PhasorSyncOpGenericAdaptor(op->getOperands(), op) {}
+
+::llvm::LogicalResult PhasorSyncOpAdaptor::verify(::mlir::Location loc) {
+  auto tblgen_spf = getProperties().spf; (void)tblgen_spf;
+  if (!tblgen_spf) return emitError(loc, "'dsp.phasor_sync' op ""requires attribute 'spf'");
+
+  if (tblgen_spf && !(((::llvm::isa<::mlir::FloatAttr>(tblgen_spf))) && ((::llvm::cast<::mlir::FloatAttr>(tblgen_spf).getType().isF64()))))
+    return emitError(loc, "'dsp.phasor_sync' op ""attribute 'spf' failed to satisfy constraint: 64-bit float attribute");
+  return ::mlir::success();
+}
+
+::llvm::LogicalResult PhasorSyncOp::setPropertiesFromAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError) {
+  ::mlir::DictionaryAttr dict = ::llvm::dyn_cast<::mlir::DictionaryAttr>(attr);
+  if (!dict) {
+    emitError() << "expected DictionaryAttr to set properties";
+    return ::mlir::failure();
+  }
+
+  {
+    auto &propStorage = prop.spf;
+       auto attr = dict.get("spf");
+    if (attr) {
+      auto convertedAttr = ::llvm::dyn_cast<std::remove_reference_t<decltype(propStorage)>>(attr);
+      if (convertedAttr) {
+        propStorage = convertedAttr;
+      } else {
+        emitError() << "Invalid attribute `spf` in property conversion: " << attr;
+        return ::mlir::failure();
+      }
+    }
+  }
+  return ::mlir::success();
+}
+
+::mlir::Attribute PhasorSyncOp::getPropertiesAsAttr(::mlir::MLIRContext *ctx, const Properties &prop) {
+    ::mlir::SmallVector<::mlir::NamedAttribute> attrs;
+    ::mlir::Builder odsBuilder{ctx};
+
+    {
+      const auto &propStorage = prop.spf;
+      if (propStorage)
+        attrs.push_back(odsBuilder.getNamedAttr("spf",
+                                       propStorage));
+    }
+
+  if (!attrs.empty())
+    return odsBuilder.getDictionaryAttr(attrs);
+  return {};
+}
+
+llvm::hash_code PhasorSyncOp::computePropertiesHash(const Properties &prop) {
+  using llvm::hash_value;
+  return llvm::hash_combine(
+    llvm::hash_value(prop.spf.getAsOpaquePointer()));
+}
+
+std::optional<mlir::Attribute> PhasorSyncOp::getInherentAttr(::mlir::MLIRContext *ctx, const Properties &prop, llvm::StringRef name) {
+    if (name == "spf")
+      return prop.spf;
+  return std::nullopt;
+}
+
+void PhasorSyncOp::setInherentAttr(Properties &prop, llvm::StringRef name, mlir::Attribute value) {
+    if (name == "spf") {
+       prop.spf = ::llvm::dyn_cast_or_null<std::remove_reference_t<decltype(prop.spf)>>(value);
+       return;
+    }
+}
+
+void PhasorSyncOp::populateInherentAttrs(::mlir::MLIRContext *ctx, const Properties &prop, ::mlir::NamedAttrList &attrs) {
+    if (prop.spf) attrs.append("spf", prop.spf);
+}
+
+::llvm::LogicalResult PhasorSyncOp::verifyInherentAttrs(::mlir::OperationName opName, ::mlir::NamedAttrList &attrs, llvm::function_ref<::mlir::InFlightDiagnostic()> emitError) {
+    {
+      ::mlir::Attribute attr = attrs.get(getSpfAttrName(opName));
+      if (attr && ::mlir::failed(__mlir_ods_local_attr_constraint_DspOps2(attr, "spf", emitError)))
+        return ::mlir::failure();
+    }
+    return ::mlir::success();
+}
+
+::llvm::LogicalResult PhasorSyncOp::readProperties(::mlir::DialectBytecodeReader &reader, ::mlir::OperationState &state) {
+  auto &prop = state.getOrAddProperties<Properties>(); (void)prop;
+  if (::mlir::failed(reader.readAttribute(prop.spf)))
+    return ::mlir::failure();
+  return ::mlir::success();
+}
+
+void PhasorSyncOp::writeProperties(::mlir::DialectBytecodeWriter &writer) {
+  auto &prop = getProperties(); (void)prop;
+  writer.writeAttribute(prop.spf);
+}
+
+::llvm::APFloat PhasorSyncOp::getSpf() {
+  auto attr = getSpfAttr();
+  return attr.getValue();
+}
+
+void PhasorSyncOp::setSpf(::llvm::APFloat attrValue) {
+  getProperties().spf = ::mlir::Builder((*this)->getContext()).getFloatAttr(::mlir::Builder((*this)->getContext()).getF64Type(), attrValue);
+}
+
+void PhasorSyncOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Type result, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf) {
+  odsState.addOperands(freq);
+  odsState.addOperands(trig);
+  odsState.getOrAddProperties<Properties>().spf = spf;
+  odsState.addTypes(result);
+}
+
+PhasorSyncOp PhasorSyncOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Type result, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, result, freq, trig, spf);
+  auto __res__ = ::llvm::dyn_cast<PhasorSyncOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+PhasorSyncOp PhasorSyncOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Type result, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf) {
+  return create(builder, builder.getLoc(), result, freq, trig, spf);
+}
+
+void PhasorSyncOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf) {
+  odsState.addOperands(freq);
+  odsState.addOperands(trig);
+  odsState.getOrAddProperties<Properties>().spf = spf;
+  assert(resultTypes.size() == 1u && "mismatched number of results");
+  odsState.addTypes(resultTypes);
+}
+
+PhasorSyncOp PhasorSyncOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, resultTypes, freq, trig, spf);
+  auto __res__ = ::llvm::dyn_cast<PhasorSyncOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+PhasorSyncOp PhasorSyncOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf) {
+  return create(builder, builder.getLoc(), resultTypes, freq, trig, spf);
+}
+
+void PhasorSyncOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Type result, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf) {
+  odsState.addOperands(freq);
+  odsState.addOperands(trig);
+  odsState.getOrAddProperties<Properties>().spf = odsBuilder.getFloatAttr(odsBuilder.getF64Type(), spf);
+  odsState.addTypes(result);
+}
+
+PhasorSyncOp PhasorSyncOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Type result, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, result, freq, trig, spf);
+  auto __res__ = ::llvm::dyn_cast<PhasorSyncOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+PhasorSyncOp PhasorSyncOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Type result, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf) {
+  return create(builder, builder.getLoc(), result, freq, trig, spf);
+}
+
+void PhasorSyncOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf) {
+  odsState.addOperands(freq);
+  odsState.addOperands(trig);
+  odsState.getOrAddProperties<Properties>().spf = odsBuilder.getFloatAttr(odsBuilder.getF64Type(), spf);
+  assert(resultTypes.size() == 1u && "mismatched number of results");
+  odsState.addTypes(resultTypes);
+}
+
+PhasorSyncOp PhasorSyncOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, resultTypes, freq, trig, spf);
+  auto __res__ = ::llvm::dyn_cast<PhasorSyncOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+PhasorSyncOp PhasorSyncOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf) {
+  return create(builder, builder.getLoc(), resultTypes, freq, trig, spf);
+}
+
+void PhasorSyncOp::build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes) {
+  assert(operands.size() == 2u && "mismatched number of parameters");
+  odsState.addOperands(operands);
+  odsState.addAttributes(attributes);
+  assert(resultTypes.size() == 1u && "mismatched number of return types");
+  odsState.addTypes(resultTypes);
+
+  if (!attributes.empty()) {
+    ::mlir::OpaqueProperties properties =
+      &odsState.getOrAddProperties<PhasorSyncOp::Properties>();
+    std::optional<::mlir::RegisteredOperationName> info =
+      odsState.name.getRegisteredInfo();
+    if (failed(info->setOpPropertiesFromAttribute(odsState.name, properties,
+        odsState.attributes.getDictionary(odsState.getContext()), nullptr)))
+      ::llvm::report_fatal_error("Property conversion failed.");
+  }
+}
+
+PhasorSyncOp PhasorSyncOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, resultTypes, operands, attributes);
+  auto __res__ = ::llvm::dyn_cast<PhasorSyncOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+PhasorSyncOp PhasorSyncOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes) {
+  return create(builder, builder.getLoc(), resultTypes, operands, attributes);
+}
+
+void PhasorSyncOp::build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes) {
+  assert(operands.size() == 2u && "mismatched number of parameters");
+  odsState.addOperands(operands);
+  odsState.useProperties(const_cast<Properties&>(properties));
+  odsState.addAttributes(discardableAttributes);
+  assert(resultTypes.size() == 1u && "mismatched number of return types");
+  odsState.addTypes(resultTypes);
+}
+
+PhasorSyncOp PhasorSyncOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, resultTypes, operands, properties, discardableAttributes);
+  auto __res__ = ::llvm::dyn_cast<PhasorSyncOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+PhasorSyncOp PhasorSyncOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes) {
+  return create(builder, builder.getLoc(), resultTypes, operands, properties, discardableAttributes);
+}
+
+::llvm::LogicalResult PhasorSyncOp::verifyInvariantsImpl() {
+  auto tblgen_spf = getProperties().spf; (void)tblgen_spf;
+  if (!tblgen_spf) return emitOpError("requires attribute 'spf'");
+
+  if (::mlir::failed(__mlir_ods_local_attr_constraint_DspOps2(*this, tblgen_spf, "spf")))
+    return ::mlir::failure();
+  {
+    unsigned index = 0; (void)index;
+    auto valueGroup0 = getODSOperands(0);
+
+    for (auto v : valueGroup0) {
+      if (::mlir::failed(__mlir_ods_local_type_constraint_DspOps5(*this, v.getType(), "operand", index++)))
+        return ::mlir::failure();
+    }
+    auto valueGroup1 = getODSOperands(1);
+
+    for (auto v : valueGroup1) {
+      if (::mlir::failed(__mlir_ods_local_type_constraint_DspOps5(*this, v.getType(), "operand", index++)))
+        return ::mlir::failure();
+    }
+  }
+  {
+    unsigned index = 0; (void)index;
+    auto valueGroup0 = getODSResults(0);
+
+    for (auto v : valueGroup0) {
+      if (::mlir::failed(__mlir_ods_local_type_constraint_DspOps5(*this, v.getType(), "result", index++)))
+        return ::mlir::failure();
+    }
+  }
+  return ::mlir::success();
+}
+
+::llvm::LogicalResult PhasorSyncOp::verifyInvariants() {
+  return verifyInvariantsImpl();
+}
+
+::llvm::LogicalResult PhasorSyncOp::setPropertiesFromParsedAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError) {
+  ::mlir::DictionaryAttr dict = ::llvm::dyn_cast<::mlir::DictionaryAttr>(attr);
+  if (!dict) {
+    emitError() << "expected DictionaryAttr to set properties";
+    return ::mlir::failure();
+  }
+  // keep track of used keys in the input dictionary to be able to error out
+  // if there are some unknown ones.
+  ::mlir::DenseSet<::mlir::StringAttr> usedKeys;
+  ::mlir::MLIRContext *ctx = dict.getContext();
+  (void)ctx;
+  {
+
+    auto &propStorage = prop.spf;
+    auto spfAttrName = ::mlir::StringAttr::get(ctx, "spf");
+    auto attr = dict.get(spfAttrName);
+    usedKeys.insert(spfAttrName);
+    if (attr || /*isRequired=*/true) {
+      if (!attr) {
+        emitError() << "expected key entry for spf in DictionaryAttr to set "
+                   "Properties.";
+        return ::mlir::failure();
+      }
+      auto convertedAttr = ::llvm::dyn_cast<std::remove_reference_t<decltype(propStorage)>>(attr);
+      if (convertedAttr) {
+        propStorage = convertedAttr;
+      } else {
+        emitError() << "Invalid attribute `spf` in property conversion: " << attr;
+        return ::mlir::failure();
+      }
+    }
+  }
+
+  for (::mlir::NamedAttribute attr : dict) {
+    if (!usedKeys.contains(attr.getName()))
+      return emitError() << "unknown key '" << attr.getName() <<
+          "' when parsing properties dictionary";
+  }
+  return ::mlir::success();
+}
+
+} // namespace dsp
+MLIR_DEFINE_EXPLICIT_TYPE_ID(dsp::PhasorSyncOp)
+
+namespace dsp {
+
+//===----------------------------------------------------------------------===//
+// dsp::PhasorSyncStatefulOp definitions
+//===----------------------------------------------------------------------===//
+
+namespace detail {
+PhasorSyncStatefulOpGenericAdaptorBase::PhasorSyncStatefulOpGenericAdaptorBase(PhasorSyncStatefulOp op) : odsAttrs(op->getRawDictionaryAttrs()), odsOpName(op->getName()), properties(op.getProperties()), odsRegions(op->getRegions()) {}
+
+::llvm::APFloat PhasorSyncStatefulOpGenericAdaptorBase::getSpf() {
+  auto attr = getSpfAttr();
+  return attr.getValue();
+}
+
+} // namespace detail
+PhasorSyncStatefulOpAdaptor::PhasorSyncStatefulOpAdaptor(PhasorSyncStatefulOp op) : PhasorSyncStatefulOpGenericAdaptor(op->getOperands(), op) {}
+
+::llvm::LogicalResult PhasorSyncStatefulOpAdaptor::verify(::mlir::Location loc) {
+  auto tblgen_spf = getProperties().spf; (void)tblgen_spf;
+  if (!tblgen_spf) return emitError(loc, "'dsp.phasor_sync_stateful' op ""requires attribute 'spf'");
+
+  if (tblgen_spf && !(((::llvm::isa<::mlir::FloatAttr>(tblgen_spf))) && ((::llvm::cast<::mlir::FloatAttr>(tblgen_spf).getType().isF64()))))
+    return emitError(loc, "'dsp.phasor_sync_stateful' op ""attribute 'spf' failed to satisfy constraint: 64-bit float attribute");
+  return ::mlir::success();
+}
+
+::llvm::LogicalResult PhasorSyncStatefulOp::setPropertiesFromAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError) {
+  ::mlir::DictionaryAttr dict = ::llvm::dyn_cast<::mlir::DictionaryAttr>(attr);
+  if (!dict) {
+    emitError() << "expected DictionaryAttr to set properties";
+    return ::mlir::failure();
+  }
+
+  {
+    auto &propStorage = prop.spf;
+       auto attr = dict.get("spf");
+    if (attr) {
+      auto convertedAttr = ::llvm::dyn_cast<std::remove_reference_t<decltype(propStorage)>>(attr);
+      if (convertedAttr) {
+        propStorage = convertedAttr;
+      } else {
+        emitError() << "Invalid attribute `spf` in property conversion: " << attr;
+        return ::mlir::failure();
+      }
+    }
+  }
+  return ::mlir::success();
+}
+
+::mlir::Attribute PhasorSyncStatefulOp::getPropertiesAsAttr(::mlir::MLIRContext *ctx, const Properties &prop) {
+    ::mlir::SmallVector<::mlir::NamedAttribute> attrs;
+    ::mlir::Builder odsBuilder{ctx};
+
+    {
+      const auto &propStorage = prop.spf;
+      if (propStorage)
+        attrs.push_back(odsBuilder.getNamedAttr("spf",
+                                       propStorage));
+    }
+
+  if (!attrs.empty())
+    return odsBuilder.getDictionaryAttr(attrs);
+  return {};
+}
+
+llvm::hash_code PhasorSyncStatefulOp::computePropertiesHash(const Properties &prop) {
+  using llvm::hash_value;
+  return llvm::hash_combine(
+    llvm::hash_value(prop.spf.getAsOpaquePointer()));
+}
+
+std::optional<mlir::Attribute> PhasorSyncStatefulOp::getInherentAttr(::mlir::MLIRContext *ctx, const Properties &prop, llvm::StringRef name) {
+    if (name == "spf")
+      return prop.spf;
+  return std::nullopt;
+}
+
+void PhasorSyncStatefulOp::setInherentAttr(Properties &prop, llvm::StringRef name, mlir::Attribute value) {
+    if (name == "spf") {
+       prop.spf = ::llvm::dyn_cast_or_null<std::remove_reference_t<decltype(prop.spf)>>(value);
+       return;
+    }
+}
+
+void PhasorSyncStatefulOp::populateInherentAttrs(::mlir::MLIRContext *ctx, const Properties &prop, ::mlir::NamedAttrList &attrs) {
+    if (prop.spf) attrs.append("spf", prop.spf);
+}
+
+::llvm::LogicalResult PhasorSyncStatefulOp::verifyInherentAttrs(::mlir::OperationName opName, ::mlir::NamedAttrList &attrs, llvm::function_ref<::mlir::InFlightDiagnostic()> emitError) {
+    {
+      ::mlir::Attribute attr = attrs.get(getSpfAttrName(opName));
+      if (attr && ::mlir::failed(__mlir_ods_local_attr_constraint_DspOps2(attr, "spf", emitError)))
+        return ::mlir::failure();
+    }
+    return ::mlir::success();
+}
+
+::llvm::LogicalResult PhasorSyncStatefulOp::readProperties(::mlir::DialectBytecodeReader &reader, ::mlir::OperationState &state) {
+  auto &prop = state.getOrAddProperties<Properties>(); (void)prop;
+  if (::mlir::failed(reader.readAttribute(prop.spf)))
+    return ::mlir::failure();
+  return ::mlir::success();
+}
+
+void PhasorSyncStatefulOp::writeProperties(::mlir::DialectBytecodeWriter &writer) {
+  auto &prop = getProperties(); (void)prop;
+  writer.writeAttribute(prop.spf);
+}
+
+::llvm::APFloat PhasorSyncStatefulOp::getSpf() {
+  auto attr = getSpfAttr();
+  return attr.getValue();
+}
+
+void PhasorSyncStatefulOp::setSpf(::llvm::APFloat attrValue) {
+  getProperties().spf = ::mlir::Builder((*this)->getContext()).getFloatAttr(::mlir::Builder((*this)->getContext()).getF64Type(), attrValue);
+}
+
+void PhasorSyncStatefulOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Type result, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf) {
+  odsState.addOperands(phase_slot);
+  odsState.addOperands(freq);
+  odsState.addOperands(trig);
+  odsState.getOrAddProperties<Properties>().spf = spf;
+  odsState.addTypes(result);
+}
+
+PhasorSyncStatefulOp PhasorSyncStatefulOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Type result, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, result, phase_slot, freq, trig, spf);
+  auto __res__ = ::llvm::dyn_cast<PhasorSyncStatefulOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+PhasorSyncStatefulOp PhasorSyncStatefulOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Type result, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf) {
+  return create(builder, builder.getLoc(), result, phase_slot, freq, trig, spf);
+}
+
+void PhasorSyncStatefulOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf) {
+  odsState.addOperands(phase_slot);
+  odsState.addOperands(freq);
+  odsState.addOperands(trig);
+  odsState.getOrAddProperties<Properties>().spf = spf;
+  assert(resultTypes.size() == 1u && "mismatched number of results");
+  odsState.addTypes(resultTypes);
+}
+
+PhasorSyncStatefulOp PhasorSyncStatefulOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, resultTypes, phase_slot, freq, trig, spf);
+  auto __res__ = ::llvm::dyn_cast<PhasorSyncStatefulOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+PhasorSyncStatefulOp PhasorSyncStatefulOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::mlir::FloatAttr spf) {
+  return create(builder, builder.getLoc(), resultTypes, phase_slot, freq, trig, spf);
+}
+
+void PhasorSyncStatefulOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::Type result, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf) {
+  odsState.addOperands(phase_slot);
+  odsState.addOperands(freq);
+  odsState.addOperands(trig);
+  odsState.getOrAddProperties<Properties>().spf = odsBuilder.getFloatAttr(odsBuilder.getF64Type(), spf);
+  odsState.addTypes(result);
+}
+
+PhasorSyncStatefulOp PhasorSyncStatefulOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::Type result, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, result, phase_slot, freq, trig, spf);
+  auto __res__ = ::llvm::dyn_cast<PhasorSyncStatefulOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+PhasorSyncStatefulOp PhasorSyncStatefulOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::Type result, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf) {
+  return create(builder, builder.getLoc(), result, phase_slot, freq, trig, spf);
+}
+
+void PhasorSyncStatefulOp::build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf) {
+  odsState.addOperands(phase_slot);
+  odsState.addOperands(freq);
+  odsState.addOperands(trig);
+  odsState.getOrAddProperties<Properties>().spf = odsBuilder.getFloatAttr(odsBuilder.getF64Type(), spf);
+  assert(resultTypes.size() == 1u && "mismatched number of results");
+  odsState.addTypes(resultTypes);
+}
+
+PhasorSyncStatefulOp PhasorSyncStatefulOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, resultTypes, phase_slot, freq, trig, spf);
+  auto __res__ = ::llvm::dyn_cast<PhasorSyncStatefulOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+PhasorSyncStatefulOp PhasorSyncStatefulOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::Value phase_slot, ::mlir::Value freq, ::mlir::Value trig, ::llvm::APFloat spf) {
+  return create(builder, builder.getLoc(), resultTypes, phase_slot, freq, trig, spf);
+}
+
+void PhasorSyncStatefulOp::build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes) {
+  assert(operands.size() == 3u && "mismatched number of parameters");
+  odsState.addOperands(operands);
+  odsState.addAttributes(attributes);
+  assert(resultTypes.size() == 1u && "mismatched number of return types");
+  odsState.addTypes(resultTypes);
+
+  if (!attributes.empty()) {
+    ::mlir::OpaqueProperties properties =
+      &odsState.getOrAddProperties<PhasorSyncStatefulOp::Properties>();
+    std::optional<::mlir::RegisteredOperationName> info =
+      odsState.name.getRegisteredInfo();
+    if (failed(info->setOpPropertiesFromAttribute(odsState.name, properties,
+        odsState.attributes.getDictionary(odsState.getContext()), nullptr)))
+      ::llvm::report_fatal_error("Property conversion failed.");
+  }
+}
+
+PhasorSyncStatefulOp PhasorSyncStatefulOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, resultTypes, operands, attributes);
+  auto __res__ = ::llvm::dyn_cast<PhasorSyncStatefulOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+PhasorSyncStatefulOp PhasorSyncStatefulOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, ::llvm::ArrayRef<::mlir::NamedAttribute> attributes) {
+  return create(builder, builder.getLoc(), resultTypes, operands, attributes);
+}
+
+void PhasorSyncStatefulOp::build(::mlir::OpBuilder &, ::mlir::OperationState &odsState, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes) {
+  assert(operands.size() == 3u && "mismatched number of parameters");
+  odsState.addOperands(operands);
+  odsState.useProperties(const_cast<Properties&>(properties));
+  odsState.addAttributes(discardableAttributes);
+  assert(resultTypes.size() == 1u && "mismatched number of return types");
+  odsState.addTypes(resultTypes);
+}
+
+PhasorSyncStatefulOp PhasorSyncStatefulOp::create(::mlir::OpBuilder &builder, ::mlir::Location location, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes) {
+  ::mlir::OperationState __state__(location, getOperationName());
+  build(builder, __state__, resultTypes, operands, properties, discardableAttributes);
+  auto __res__ = ::llvm::dyn_cast<PhasorSyncStatefulOp>(builder.create(__state__));
+  assert(__res__ && "builder didn't return the right type");
+  return __res__;
+}
+
+PhasorSyncStatefulOp PhasorSyncStatefulOp::create(::mlir::ImplicitLocOpBuilder &builder, ::mlir::TypeRange resultTypes, ::mlir::ValueRange operands, const Properties &properties, ::llvm::ArrayRef<::mlir::NamedAttribute> discardableAttributes) {
+  return create(builder, builder.getLoc(), resultTypes, operands, properties, discardableAttributes);
+}
+
+::llvm::LogicalResult PhasorSyncStatefulOp::verifyInvariantsImpl() {
+  auto tblgen_spf = getProperties().spf; (void)tblgen_spf;
+  if (!tblgen_spf) return emitOpError("requires attribute 'spf'");
+
+  if (::mlir::failed(__mlir_ods_local_attr_constraint_DspOps2(*this, tblgen_spf, "spf")))
+    return ::mlir::failure();
+  {
+    unsigned index = 0; (void)index;
+    auto valueGroup0 = getODSOperands(0);
+
+    for (auto v : valueGroup0) {
+      if (::mlir::failed(__mlir_ods_local_type_constraint_DspOps6(*this, v.getType(), "operand", index++)))
+        return ::mlir::failure();
+    }
+    auto valueGroup1 = getODSOperands(1);
+
+    for (auto v : valueGroup1) {
+      if (::mlir::failed(__mlir_ods_local_type_constraint_DspOps5(*this, v.getType(), "operand", index++)))
+        return ::mlir::failure();
+    }
+    auto valueGroup2 = getODSOperands(2);
+
+    for (auto v : valueGroup2) {
+      if (::mlir::failed(__mlir_ods_local_type_constraint_DspOps5(*this, v.getType(), "operand", index++)))
+        return ::mlir::failure();
+    }
+  }
+  {
+    unsigned index = 0; (void)index;
+    auto valueGroup0 = getODSResults(0);
+
+    for (auto v : valueGroup0) {
+      if (::mlir::failed(__mlir_ods_local_type_constraint_DspOps5(*this, v.getType(), "result", index++)))
+        return ::mlir::failure();
+    }
+  }
+  return ::mlir::success();
+}
+
+::llvm::LogicalResult PhasorSyncStatefulOp::verifyInvariants() {
+  return verifyInvariantsImpl();
+}
+
+::llvm::LogicalResult PhasorSyncStatefulOp::setPropertiesFromParsedAttr(Properties &prop, ::mlir::Attribute attr, ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError) {
+  ::mlir::DictionaryAttr dict = ::llvm::dyn_cast<::mlir::DictionaryAttr>(attr);
+  if (!dict) {
+    emitError() << "expected DictionaryAttr to set properties";
+    return ::mlir::failure();
+  }
+  // keep track of used keys in the input dictionary to be able to error out
+  // if there are some unknown ones.
+  ::mlir::DenseSet<::mlir::StringAttr> usedKeys;
+  ::mlir::MLIRContext *ctx = dict.getContext();
+  (void)ctx;
+  {
+
+    auto &propStorage = prop.spf;
+    auto spfAttrName = ::mlir::StringAttr::get(ctx, "spf");
+    auto attr = dict.get(spfAttrName);
+    usedKeys.insert(spfAttrName);
+    if (attr || /*isRequired=*/true) {
+      if (!attr) {
+        emitError() << "expected key entry for spf in DictionaryAttr to set "
+                   "Properties.";
+        return ::mlir::failure();
+      }
+      auto convertedAttr = ::llvm::dyn_cast<std::remove_reference_t<decltype(propStorage)>>(attr);
+      if (convertedAttr) {
+        propStorage = convertedAttr;
+      } else {
+        emitError() << "Invalid attribute `spf` in property conversion: " << attr;
+        return ::mlir::failure();
+      }
+    }
+  }
+
+  for (::mlir::NamedAttribute attr : dict) {
+    if (!usedKeys.contains(attr.getName()))
+      return emitError() << "unknown key '" << attr.getName() <<
+          "' when parsing properties dictionary";
+  }
+  return ::mlir::success();
+}
+
+} // namespace dsp
+MLIR_DEFINE_EXPLICIT_TYPE_ID(dsp::PhasorSyncStatefulOp)
 
 namespace dsp {
 
