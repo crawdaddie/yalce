@@ -261,9 +261,9 @@ static ArrayLoopBlocks setup_array_loop(LLVMBuilderRef builder,
 
 // ---------------------------------------------------------------------------
 
-LLVMValueRef dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
-                           JITLangCtx *ctx, LLVMModuleRef module,
-                           LLVMBuilderRef builder) {
+DspValue dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
+                       JITLangCtx *ctx, LLVMModuleRef module,
+                       LLVMBuilderRef builder) {
   Ast *anon_func = ast->data.AST_APPLICATION.args;
   Ast *array_ast = ast->data.AST_APPLICATION.args + 1;
 
@@ -296,13 +296,14 @@ LLVMValueRef dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   int num_captured = collect_captured_vals(anon_func, dsp_ctx, ctx, module,
                                            builder, &captured_vals);
 
-  // frame_ty: (state_ptr, node_ptr, [idx,] element, ...captured) -> out_el
-  int max_params = 4 + num_captured;
+  // frame_ty: (state_ptr, node_ptr, out_ptr, [idx,] element, ...captured) -> void
+  int max_params = 5 + num_captured;
   LLVMTypeRef *frame_param_tys =
       malloc(sizeof(LLVMTypeRef) * (size_t)max_params);
   int frame_nparams = 0;
   frame_param_tys[frame_nparams++] = GENERIC_PTR;
   frame_param_tys[frame_nparams++] = GENERIC_PTR;
+  frame_param_tys[frame_nparams++] = LLVMPointerType(out_el_type, 0);
   if (with_index) {
     frame_param_tys[frame_nparams++] = idx_type;
   }
@@ -311,7 +312,7 @@ LLVMValueRef dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
     frame_param_tys[frame_nparams++] = LLVMTypeOf(captured_vals[i]);
   }
   LLVMTypeRef frame_ty =
-      LLVMFunctionType(out_el_type, frame_param_tys, frame_nparams, 0);
+      LLVMFunctionType(LLVMVoidType(), frame_param_tys, frame_nparams, 0);
   free(frame_param_tys);
 
   SynthRecord s = compile_lambda_to_synth_record(anon_func, "anon", frame_ty,
@@ -328,7 +329,7 @@ LLVMValueRef dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
             "Error - map function makes synth-lifetime allocations but array "
             "mapped over has size which is unknown at comptime\n");
     print_ast_err(ast);
-    return NULL;
+    return DSP_NULL;
   }
 
   int iter_state_stride = s.state_bytes ? (s.state_bytes + 7) & ~7 : 0;
@@ -337,8 +338,16 @@ LLVMValueRef dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   // Stack-allocate output data before the loop
   LLVMValueRef runtime_len =
       codegen_get_array_size(builder, array_value, in_el_type);
-  LLVMValueRef out_data_ptr =
-      LLVMBuildArrayAlloca(builder, out_el_type, runtime_len, "map.out.data");
+  LLVMValueRef *out_data_ptrs =
+      dsp_tmp_alloc(dsp_ctx, sizeof(LLVMValueRef) * (size_t)s.output_lanes, 8);
+  if (!out_data_ptrs) {
+    free(captured_vals);
+    return DSP_NULL;
+  }
+  for (int lane = 0; lane < s.output_lanes; lane++) {
+    out_data_ptrs[lane] = LLVMBuildArrayAlloca(builder, out_el_type, runtime_len,
+                                               "map.out.data");
+  }
 
   LLVMValueRef iter_region_base =
       alloc_iter_lambda_state(dsp_ctx, builder, &s, array_attrs.comptime_size,
@@ -380,21 +389,34 @@ LLVMValueRef dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   unsigned nargs = 0;
   frame_args[nargs++] = state_arg;
   frame_args[nargs++] = LLVMConstNull(GENERIC_PTR);
+  LLVMValueRef mapped_out_ptr =
+      LLVMBuildArrayAlloca(builder, out_el_type,
+                           LLVMConstInt(LLVMInt32Type(),
+                                        (uint64_t)s.output_lanes, 0),
+                           "map.out.tmp");
+  frame_args[nargs++] = mapped_out_ptr;
   if (with_index)
     frame_args[nargs++] = idx_val_body;
   frame_args[nargs++] = elem_val;
   for (int i = 0; i < num_captured; i++)
     frame_args[nargs++] = captured_vals[i];
 
-  LLVMValueRef mapped_val = LLVMBuildCall2(builder, frame_fn_ty, frame_fn,
-                                           frame_args, nargs, "map.out_elem");
+  LLVMBuildCall2(builder, frame_fn_ty, frame_fn, frame_args, nargs,
+                 "map.out_elem");
   free(frame_args);
   free(captured_vals);
-
-  LLVMValueRef out_elem_ptr =
-      LLVMBuildGEP2(builder, out_el_type, out_data_ptr,
-                    (LLVMValueRef[]){idx_i64}, 1, "map.out.elem_ptr");
-  LLVMBuildStore(builder, mapped_val, out_elem_ptr);
+  for (int lane = 0; lane < s.output_lanes; lane++) {
+    LLVMValueRef lane_idx = LLVMConstInt(i64_ty, (uint64_t)lane, 0);
+    LLVMValueRef lane_ptr =
+        LLVMBuildGEP2(builder, out_el_type, mapped_out_ptr, &lane_idx, 1,
+                      "map.out.val.ptr");
+    LLVMValueRef mapped_val =
+        LLVMBuildLoad2(builder, out_el_type, lane_ptr, "map.out.val");
+    LLVMValueRef out_elem_ptr =
+        LLVMBuildGEP2(builder, out_el_type, out_data_ptrs[lane],
+                      (LLVMValueRef[]){idx_i64}, 1, "map.out.elem_ptr");
+    LLVMBuildStore(builder, mapped_val, out_elem_ptr);
+  }
   LLVMBuildBr(builder, loop.inc);
 
   LLVMPositionBuilderAtEnd(builder, loop.inc);
@@ -407,19 +429,36 @@ LLVMValueRef dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
 
   LLVMPositionBuilderAtEnd(builder, loop.after);
 
-  LLVMTypeRef out_arr_ty = codegen_array_type(out_el_type);
-  LLVMValueRef out_arr = LLVMGetUndef(out_arr_ty);
-  out_arr =
-      LLVMBuildInsertValue(builder, out_arr, runtime_len, 0, "map.out.size");
-  out_arr = LLVMBuildInsertValue(builder, out_arr, out_data_ptr, 1,
-                                 "map.out.data_ptr");
   dsp_ctx->array_attrs =
       (DspArrayAttributes){.comptime_size = array_attrs.comptime_size};
-  return out_arr;
+  LLVMTypeRef out_arr_ty = codegen_array_type(out_el_type);
+  if (s.output_lanes <= 1) {
+    LLVMValueRef out_arr = LLVMGetUndef(out_arr_ty);
+    out_arr =
+        LLVMBuildInsertValue(builder, out_arr, runtime_len, 0, "map.out.size");
+    out_arr = LLVMBuildInsertValue(builder, out_arr, out_data_ptrs[0], 1,
+                                   "map.out.data_ptr");
+    return DSP_SCALAR(out_arr);
+  }
+
+  LLVMValueRef *lane_arrays =
+      dsp_tmp_alloc(dsp_ctx, sizeof(LLVMValueRef) * (size_t)s.output_lanes, 8);
+  if (!lane_arrays) {
+    return DSP_NULL;
+  }
+  for (int lane = 0; lane < s.output_lanes; lane++) {
+    LLVMValueRef out_arr = LLVMGetUndef(out_arr_ty);
+    out_arr =
+        LLVMBuildInsertValue(builder, out_arr, runtime_len, 0, "map.out.size");
+    out_arr = LLVMBuildInsertValue(builder, out_arr, out_data_ptrs[lane], 1,
+                                   "map.out.data_ptr");
+    lane_arrays[lane] = out_arr;
+  }
+  return DSP_MULTI(s.output_lanes, lane_arrays);
 }
 
-LLVMValueRef dsp_delay_proc(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
-                            LLVMModuleRef module, LLVMBuilderRef builder) {
+DspValue dsp_delay_proc(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
+                        LLVMModuleRef module, LLVMBuilderRef builder) {
   // Args: f (anon_func), dl (delay buffer array), inp (input signal)
   Ast *anon_func = ast->data.AST_APPLICATION.args;
   // print_ast(anon_func);
@@ -445,20 +484,21 @@ LLVMValueRef dsp_delay_proc(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       dsp_build_expr(inp_ast, dsp_ctx, ctx, module, builder).scalar;
   inp_val = ensure_float(inp_ast->type, inp_val, builder);
 
-  // 3. frame_ty: (state*, node*, i32 w, dl_struct, f64 inp, ...captured) -> f64
+  // 3. frame_ty: (state*, node*, out_ptr, i32 w, dl_struct, f64 inp, ...captured) -> void
   LLVMTypeRef dl_llvm_ty = LLVMTypeOf(dl_val);
-  int frame_nparams = 5 + num_captured;
+  int frame_nparams = 6 + num_captured;
   LLVMTypeRef *frame_param_tys =
       malloc(sizeof(LLVMTypeRef) * (size_t)frame_nparams);
   int pi = 0;
   frame_param_tys[pi++] = GENERIC_PTR;
   frame_param_tys[pi++] = GENERIC_PTR;
+  frame_param_tys[pi++] = LLVMPointerType(f64_ty, 0);
   frame_param_tys[pi++] = i32_ty;
   frame_param_tys[pi++] = dl_llvm_ty;
   frame_param_tys[pi++] = f64_ty;
   for (int i = 0; i < num_captured; i++)
     frame_param_tys[pi++] = LLVMTypeOf(captured_vals[i]);
-  LLVMTypeRef frame_ty = LLVMFunctionType(f64_ty, frame_param_tys, pi, 0);
+  LLVMTypeRef frame_ty = LLVMFunctionType(LLVMVoidType(), frame_param_tys, pi, 0);
   free(frame_param_tys);
 
   SynthRecord s = compile_lambda_to_synth_record(
@@ -499,12 +539,23 @@ LLVMValueRef dsp_delay_proc(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   // 5. Load write pointer
   LLVMValueRef w = LLVMBuildLoad2(builder, i32_ty, wp_ptr, "delay_proc.w");
 
-  // 6. Call frame_fn(fn_state, NULL, w, dl, inp, ...captured)
-  int total_args = 5 + num_captured;
+  if (s.output_lanes != 1) {
+    fprintf(stderr, "audio_jit: delay_proc callback must return a scalar\n");
+    if (captured_vals)
+      free(captured_vals);
+    return DSP_SCALAR(LLVMConstReal(f64_ty, 0.0));
+  }
+
+  // 6. Call frame_fn(fn_state, NULL, out_ptr, w, dl, inp, ...captured)
+  int total_args = 6 + num_captured;
   LLVMValueRef *frame_args = malloc(sizeof(LLVMValueRef) * (size_t)total_args);
   int ai = 0;
   frame_args[ai++] = fn_state;
   frame_args[ai++] = LLVMConstNull(GENERIC_PTR);
+  LLVMValueRef out_ptr =
+      LLVMBuildArrayAlloca(builder, f64_ty, LLVMConstInt(i32_ty, 1, 0),
+                           "delay_proc.out_ptr");
+  frame_args[ai++] = out_ptr;
   frame_args[ai++] = w;
   frame_args[ai++] = dl_val;
   frame_args[ai++] = inp_val;
@@ -512,12 +563,13 @@ LLVMValueRef dsp_delay_proc(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     frame_args[ai++] = captured_vals[i];
   LLVMValueRef frame_fn = s.frame_fn;
   LLVMTypeRef frame_fn_ty = LLVMGlobalGetValueType(frame_fn);
-  LLVMValueRef out_val =
-      LLVMBuildCall2(builder, frame_fn_ty, frame_fn, frame_args, (unsigned)ai,
-                     "delay_proc.out");
+  LLVMBuildCall2(builder, frame_fn_ty, frame_fn, frame_args, (unsigned)ai,
+                 "delay_proc.out");
   free(frame_args);
   if (captured_vals)
     free(captured_vals);
+  LLVMValueRef out_val =
+      LLVMBuildLoad2(builder, f64_ty, out_ptr, "delay_proc.out_val");
 
   // 7. dl[w] = out_val  (safe — dl lives in synth state via EA_ATTR_MUTABLE)
   set_array_element(builder, dl_val, w, out_val, f64_ty);
@@ -530,12 +582,12 @@ LLVMValueRef dsp_delay_proc(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       LLVMBuildSRem(builder, w1, max_size, "delay_proc.w_next");
   LLVMBuildStore(builder, w_next, wp_ptr);
 
-  return out_val;
+  return DSP_SCALAR(out_val);
 }
 
-LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
-                            JITLangCtx *ctx, LLVMModuleRef module,
-                            LLVMBuilderRef builder) {
+static DspValue dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
+                               JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
 
   Ast *anon_func = ast->data.AST_APPLICATION.args;
   Ast *init_ast = ast->data.AST_APPLICATION.args + 1;
@@ -563,15 +615,16 @@ LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   int num_captured = collect_captured_vals(anon_func, dsp_ctx, ctx, module,
                                            builder, &captured_vals);
 
-  // frame_ty: (state_ptr, node_ptr, [idx,] acc, element, ...captured) ->
-  // fold_type. Use LLVMTypeOf on already-built captured vals so complex DSP
+  // frame_ty: (state_ptr, node_ptr, out_ptr, [idx,] acc, element, ...captured)
+  // -> void. Use LLVMTypeOf on already-built captured vals so complex DSP
   // types (e.g. arrays of tuples) get correct struct param types.
-  int max_params = 5 + num_captured;
+  int max_params = 6 + num_captured;
   LLVMTypeRef *frame_param_tys =
       malloc(sizeof(LLVMTypeRef) * (size_t)max_params);
   int frame_nparams = 0;
   frame_param_tys[frame_nparams++] = GENERIC_PTR; // state ptr
   frame_param_tys[frame_nparams++] = GENERIC_PTR; // node ptr
+  frame_param_tys[frame_nparams++] = LLVMPointerType(fold_type, 0); // out ptr
   if (with_index) {
     frame_param_tys[frame_nparams++] = idx_type; // i32 index
   }
@@ -581,7 +634,7 @@ LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
     frame_param_tys[frame_nparams++] = LLVMTypeOf(captured_vals[i]);
   }
   LLVMTypeRef frame_ty =
-      LLVMFunctionType(fold_type, frame_param_tys, frame_nparams, 0);
+      LLVMFunctionType(LLVMVoidType(), frame_param_tys, frame_nparams, 0);
   free(frame_param_tys);
 
   SynthRecord s = compile_lambda_to_synth_record(anon_func, "anon", frame_ty,
@@ -600,7 +653,7 @@ LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
             "Error - fold function makes synth-lifetime allocations but array "
             "folded over has size which is unknown at comptime\n");
     print_ast_err(ast);
-    return NULL;
+      return DSP_NULL;
   }
 
   int iter_state_stride = s.state_bytes ? (s.state_bytes + 7) & ~7 : 0;
@@ -659,6 +712,12 @@ LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   LLVMValueRef acc_val =
       LLVMBuildLoad2(builder, fold_type, acc_alloca, "fold.acc.val");
 
+  if (s.output_lanes != 1) {
+    fprintf(stderr, "audio_jit: array fold callback must return a scalar\n");
+    free(captured_vals);
+    return DSP_SCALAR(LLVMConstNull(fold_type));
+  }
+
   LLVMValueRef frame_fn = s.frame_fn;
   LLVMTypeRef frame_fn_ty = LLVMGlobalGetValueType(frame_fn);
   unsigned frame_total_args = LLVMCountParamTypes(frame_fn_ty);
@@ -667,6 +726,9 @@ LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   unsigned nargs = 0;
   frame_args[nargs++] = state_arg;
   frame_args[nargs++] = LLVMConstNull(GENERIC_PTR);
+  LLVMValueRef next_acc_ptr =
+      LLVMBuildAlloca(builder, fold_type, "fold.next_acc_ptr");
+  frame_args[nargs++] = next_acc_ptr;
   if (with_index) {
     frame_args[nargs++] = idx_val_body; // foldi: f(idx, acc, element)
   }
@@ -676,10 +738,12 @@ LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
     frame_args[nargs++] = captured_vals[i];
   }
 
-  LLVMValueRef next_acc = LLVMBuildCall2(builder, frame_fn_ty, frame_fn,
-                                         frame_args, nargs, "fold.next_acc");
+  LLVMBuildCall2(builder, frame_fn_ty, frame_fn, frame_args, nargs,
+                 "fold.next_acc");
   free(frame_args);
   free(captured_vals);
+  LLVMValueRef next_acc =
+      LLVMBuildLoad2(builder, fold_type, next_acc_ptr, "fold.next_acc.val");
 
   LLVMBuildStore(builder, next_acc, acc_alloca);
   LLVMBuildBr(builder, inc_block);
@@ -692,17 +756,17 @@ LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   LLVMBuildBr(builder, cond_block);
 
   LLVMPositionBuilderAtEnd(builder, after_block);
-  return LLVMBuildLoad2(builder, fold_type, acc_alloca, "fold.result");
+  return DSP_SCALAR(LLVMBuildLoad2(builder, fold_type, acc_alloca, "fold.result"));
 }
 
-LLVMValueRef call_dsp_list_proc(Ast *fn_ast, Ast *ast, DspBuildCtx *dsp_ctx,
-                                JITLangCtx *ctx, LLVMModuleRef module,
-                                LLVMBuilderRef builder) {
+DspValue call_dsp_list_proc(Ast *fn_ast, Ast *ast, DspBuildCtx *dsp_ctx,
+                            JITLangCtx *ctx, LLVMModuleRef module,
+                            LLVMBuilderRef builder) {
 
   if (is_array_type(ast->data.AST_APPLICATION.args[0].type) &&
       is_ident(fn_ast, "sum")) {
 
-    return dsp_array_sum(ast, dsp_ctx, ctx, module, builder);
+    return DSP_SCALAR(dsp_array_sum(ast, dsp_ctx, ctx, module, builder));
   }
   if (is_array_type(ast->data.AST_APPLICATION.args[1].type)) {
     if (is_ident(fn_ast, "mapi")) {
@@ -731,5 +795,5 @@ LLVMValueRef call_dsp_list_proc(Ast *fn_ast, Ast *ast, DspBuildCtx *dsp_ctx,
       return dsp_array_fold(false, ast, dsp_ctx, ctx, module, builder);
     }
   }
-  return NULL;
+  return DSP_NULL;
 }

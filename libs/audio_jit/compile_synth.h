@@ -6,12 +6,19 @@
 #include "../../lang/common.h"
 #include "../../lang/parse.h"
 #include <llvm-c/Core.h>
+#include <stddef.h>
 #include <stdatomic.h>
 #include <stdint.h>
 
 typedef struct {
   int32_t comptime_size;
 } DspArrayAttributes;
+
+typedef struct {
+  size_t total_bytes;
+  size_t current_bytes;
+  unsigned char *bytes;
+} DspTmpAllocator;
 
 typedef struct {
   // state_ptr
@@ -36,6 +43,7 @@ typedef struct {
   LLVMBuilderRef init_builder;
   LLVMBuilderRef perform_builder;
   DspArrayAttributes array_attrs;
+  DspTmpAllocator *tmp_alloc;
 } DspBuildCtx;
 LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
@@ -52,6 +60,7 @@ typedef struct SynthRecord {
   LLVMValueRef frame_fn;
   LLVMValueRef perform_fn;
   _Atomic(void *) ctor_ptr; // compiled machine address, populated at runtime
+  int output_lanes;
   int state_bytes;
 } SynthRecord;
 
@@ -74,4 +83,8 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
                                            LLVMBuilderRef builder);
 
 void print_synth_record(SynthRecord rec);
+
+void *dsp_tmp_alloc(DspBuildCtx *dsp_ctx, size_t size, size_t align);
+void dsp_tmp_allocator_init(DspTmpAllocator *alloc, size_t initial_bytes);
+void dsp_tmp_allocator_free(DspTmpAllocator *alloc);
 #endif

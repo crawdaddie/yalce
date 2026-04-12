@@ -50,9 +50,11 @@ int64_t ylc_bufsize(void *node_raw) {
 }
 
 Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
-                            int state_bytes, const char *meta_name) {
+                            int output_layout, int state_bytes,
+                            const char *meta_name) {
   size_t total =
-      sizeof(Node) + (size_t)state_bytes + ((size_t)BUF_SIZE * sizeof(double));
+      sizeof(Node) + (size_t)state_bytes +
+      ((size_t)BUF_SIZE * (size_t)output_layout * sizeof(double));
   Node *node = (Node *)calloc(1, total);
   if (!node) {
     return NULL;
@@ -63,7 +65,7 @@ Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
   node->state_size = state_bytes;
   node->meta = (char *)meta_name;
   node->output = (Signal){
-      .layout = 1,
+      .layout = output_layout,
       .size = BUF_SIZE,
       .buf = (double *)((char *)node + sizeof(Node) + state_bytes),
   };

@@ -570,6 +570,17 @@ LLVMValueRef ensure_float(Type *in_type, LLVMValueRef val,
   return val;
 }
 
+LLVMValueRef _builtin_tab_osc(const char *tab_sym, int32_t tabsize,
+                              LLVMValueRef freq, DspBuildCtx *dsp_ctx,
+                              JITLangCtx *ctx, LLVMModuleRef module,
+                              LLVMBuilderRef builder) {
+
+  LLVMValueRef phasor = builtin_phasor(freq, dsp_ctx, ctx, module, builder);
+  LLVMValueRef table_ptr =
+      get_table_global_ptr(tab_sym, tabsize, module, builder);
+  return pow2_tabread(phasor, table_ptr, tabsize, builder);
+}
+
 LLVMValueRef builtin_tab_osc(const char *tab_sym, int32_t tabsize, Ast *ast,
                              DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                              LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -938,6 +949,18 @@ void dsp_write_output(void *node_raw, int64_t frame, double val) {
   ((Node *)node_raw)->output.buf[frame] = val;
 }
 
+void dsp_write_outputs(void *node_raw, int64_t frame, double *vals,
+                       int32_t count) {
+  Node *node = (Node *)node_raw;
+  int layout = node->output.layout;
+  if (count < layout) {
+    layout = count;
+  }
+  for (int32_t ch = 0; ch < layout; ch++) {
+    node->output.buf[(frame * node->output.layout) + ch] = vals[ch];
+  }
+}
+
 double ylc_read_inlet_node(void *node_raw, int64_t frame) {
   return ((Node *)node_raw)->output.buf[frame];
 }
@@ -1185,15 +1208,14 @@ LLVMValueRef build_rect(LLVMValueRef duration, LLVMValueRef trig,
                         6, "rect.sample");
 }
 
-LLVMValueRef call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
-                                               DspBuildCtx *dsp_ctx,
-                                               JITLangCtx *ctx,
-                                               LLVMModuleRef module,
-
-                                               LLVMBuilderRef builder) {
+DspValue call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
+                                           DspBuildCtx *dsp_ctx,
+                                           JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
   if (!rec.frame_fn) {
     fprintf(stderr, "audio_jit: missing frame_fn for registered synth\n");
-    return LLVMConstReal(LLVMDoubleType(), 0.0);
+    return DSP_SCALAR(LLVMConstReal(LLVMDoubleType(), 0.0));
   }
 
   int off = (dsp_ctx->state_offset + 7) & ~7;
@@ -1220,9 +1242,9 @@ LLVMValueRef call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
   LLVMTypeRef frame_fn_ty = LLVMGlobalGetValueType(frame_fn);
 
   unsigned formal_count = LLVMCountParamTypes(frame_fn_ty);
-  if (formal_count == 0) {
+  if (formal_count < 3) {
     fprintf(stderr, "audio_jit: malformed frame_fn signature\n");
-    return LLVMConstReal(LLVMDoubleType(), 0.0);
+    return DSP_SCALAR(LLVMConstReal(LLVMDoubleType(), 0.0));
   }
 
   LLVMTypeRef formal_tys[formal_count];
@@ -1231,10 +1253,15 @@ LLVMValueRef call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
 
   frame_args[0] = state_ptr;
   frame_args[1] = dsp_ctx->node_ptr;
+  LLVMValueRef out_storage = LLVMBuildArrayAlloca(
+      builder, LLVMDoubleType(),
+      LLVMConstInt(LLVMInt32Type(), (uint64_t)rec.output_lanes, 0),
+      "reg_synth.out");
+  frame_args[2] = out_storage;
 
   int arg_count = ast->data.AST_APPLICATION.len;
-  for (unsigned i = 2; i < formal_count; i++) {
-    int arg_idx = (int)i - 2;
+  for (unsigned i = 3; i < formal_count; i++) {
+    int arg_idx = (int)i - 3;
     if (arg_idx < arg_count) {
       Ast *arg_ast = ast->data.AST_APPLICATION.args + arg_idx;
       LLVMValueRef arg_val =
@@ -1248,8 +1275,30 @@ LLVMValueRef call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
     }
   }
 
-  return LLVMBuildCall2(builder, frame_fn_ty, frame_fn, frame_args,
-                        formal_count, "reg_synth.frame_call");
+  LLVMBuildCall2(builder, frame_fn_ty, frame_fn, frame_args, formal_count,
+                 "reg_synth.frame_call");
+
+  if (rec.output_lanes <= 1) {
+    LLVMValueRef zero = LLVMConstInt(LLVMInt64Type(), 0, 0);
+    LLVMValueRef out0 = LLVMBuildGEP2(builder, LLVMDoubleType(), out_storage,
+                                      &zero, 1, "reg_synth.out0.ptr");
+    return DSP_SCALAR(
+        LLVMBuildLoad2(builder, LLVMDoubleType(), out0, "reg_synth.out0"));
+  }
+
+  LLVMValueRef *vals = dsp_tmp_alloc(
+      dsp_ctx, sizeof(LLVMValueRef) * (size_t)rec.output_lanes, 8);
+  if (!vals) {
+    return DSP_NULL;
+  }
+  for (int i = 0; i < rec.output_lanes; i++) {
+    LLVMValueRef idx = LLVMConstInt(LLVMInt64Type(), (uint64_t)i, 0);
+    LLVMValueRef lane_ptr = LLVMBuildGEP2(
+        builder, LLVMDoubleType(), out_storage, &idx, 1, "reg_synth.lane.ptr");
+    vals[i] =
+        LLVMBuildLoad2(builder, LLVMDoubleType(), lane_ptr, "reg_synth.lane");
+  }
+  return DSP_MULTI(rec.output_lanes, vals);
 }
 LLVMValueRef build_lfnoise_lin(LLVMValueRef freq, LLVMValueRef lo,
                                LLVMValueRef hi, DspBuildCtx *dsp_ctx,
@@ -1945,8 +1994,30 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
 
   if (is_ident(f, "sin_osc")) {
-    return DSP_SCALAR(builtin_tab_osc("ylc_sin_table", SIN_TABSIZE, ast,
-                                      dsp_ctx, ctx, module, builder));
+
+    // return DSP_SCALAR(builtin_tab_osc("ylc_sin_table", SIN_TABSIZE, ast,
+    // dsp_ctx, ctx, module, builder));
+    DspValue freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx, ctx,
+                                   module, builder);
+
+    Type *in_type = ast->data.AST_APPLICATION.args->type;
+    if (freq.lanes > 1) {
+
+      for (int i = 0; i < freq.lanes; i++) {
+        freq.vec[i] =
+            _builtin_tab_osc("ylc_sin_table", SIN_TABSIZE,
+                             ensure_float(in_type, freq.vec[i], builder),
+                             dsp_ctx, ctx, module, builder);
+      }
+      return DSP_MULTI(freq.lanes, freq.vec);
+    } else if (freq.lanes == 1) {
+      return DSP_SCALAR(
+          _builtin_tab_osc("ylc_sin_table", SIN_TABSIZE,
+                           ensure_float(in_type, freq.scalar, builder), dsp_ctx,
+                           ctx, module, builder));
+    } else {
+      return DSP_NULL;
+    }
   }
 
   if (is_ident(f, "sq_osc")) {
@@ -2640,8 +2711,8 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     int synth_id = audio_sym_synth_id(callable_sym);
     SynthRecord rec = synth_registry_get(synth_id);
 
-    return DSP_SCALAR(call_registered_synth_in_audio_fn(ast, rec, dsp_ctx, ctx,
-                                                        module, builder));
+    return call_registered_synth_in_audio_fn(ast, rec, dsp_ctx, ctx, module,
+                                             builder);
   }
 
   if (is_ident(f, "bufplay")) {
@@ -2958,7 +3029,7 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
 
   if (is_ident(f, "delay_proc")) {
-    return DSP_SCALAR(dsp_delay_proc(ast, dsp_ctx, ctx, module, builder));
+    return dsp_delay_proc(ast, dsp_ctx, ctx, module, builder);
   }
 
   if (is_ident(f, _FORK_OPERATOR_ID)) {
@@ -2998,8 +3069,8 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     Ast *collection_proc_fn_ast;
 
     if ((collection_proc_fn_ast = get_collection_proc_func(fn_ast))) {
-      return DSP_SCALAR(call_dsp_list_proc(collection_proc_fn_ast, ast, dsp_ctx,
-                                           ctx, module, builder));
+      return call_dsp_list_proc(collection_proc_fn_ast, ast, dsp_ctx, ctx,
+                                module, builder);
     }
 
     // if (callable_sym->type == STYPE_GENERIC_FUNCTION &&

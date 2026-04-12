@@ -23,9 +23,67 @@
 #include "../../lang/types/type_ser.h"
 #include "../../lang/ylc_datatypes.h"
 #include "./dsp_build_expr.h"
+#include <stdlib.h>
 #include <string.h>
 
 static SynthRegistry synth_registry;
+
+static size_t align_up_size(size_t value, size_t align) {
+  if (align <= 1) {
+    return value;
+  }
+  return (value + align - 1) & ~(align - 1);
+}
+
+void dsp_tmp_allocator_init(DspTmpAllocator *alloc, size_t initial_bytes) {
+  if (!alloc) {
+    return;
+  }
+  alloc->total_bytes = initial_bytes;
+  alloc->current_bytes = 0;
+  alloc->bytes = initial_bytes ? malloc(initial_bytes) : NULL;
+}
+
+void dsp_tmp_allocator_free(DspTmpAllocator *alloc) {
+  if (!alloc) {
+    return;
+  }
+  free(alloc->bytes);
+  alloc->bytes = NULL;
+  alloc->total_bytes = 0;
+  alloc->current_bytes = 0;
+}
+
+void *dsp_tmp_alloc(DspBuildCtx *dsp_ctx, size_t size, size_t align) {
+  if (!dsp_ctx || !dsp_ctx->tmp_alloc || size == 0) {
+    return NULL;
+  }
+
+  DspTmpAllocator *alloc = dsp_ctx->tmp_alloc;
+  size_t offset = align_up_size(alloc->current_bytes, align);
+  size_t needed = offset + size;
+
+  if (needed > alloc->total_bytes) {
+    size_t new_total = alloc->total_bytes ? alloc->total_bytes : 256;
+    while (new_total < needed) {
+      new_total *= 2;
+    }
+    unsigned char *new_bytes = realloc(alloc->bytes, new_total);
+    if (!new_bytes) {
+      fprintf(
+          stderr,
+          "audio_jit: dsp temporary allocator failed to grow to %zu bytes\n",
+          new_total);
+      return NULL;
+    }
+    alloc->bytes = new_bytes;
+    alloc->total_bytes = new_total;
+  }
+
+  void *ptr = alloc->bytes + offset;
+  alloc->current_bytes = needed;
+  return ptr;
+}
 
 static LLVMValueRef call_dsp_symbol(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module_ref,
@@ -189,26 +247,20 @@ LLVMTypeRef synth_frame_fn_type(Ast *lambda, JITLangCtx *ctx,
       }
     }
   }
-  Type *ftype = lambda->type;
-
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
-  // Build Synth Perform func scaffold
-  LLVMTypeRef perf_ty =
-      LLVMFunctionType(GENERIC_PTR,
-                       (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR,
-                                       LLVMInt32Type(), LLVMDoubleType()},
-                       5, 0);
 
   LLVMTypeRef *frame_param_tys =
-      malloc(sizeof(LLVMTypeRef) * (size_t)(num_inputs + 2));
+      malloc(sizeof(LLVMTypeRef) * (size_t)(num_inputs + 3));
   frame_param_tys[0] = GENERIC_PTR; // state ptr
   frame_param_tys[1] = GENERIC_PTR; // enclosing node ptr
+  frame_param_tys[2] = LLVMPointerType(LLVMDoubleTypeInContext(llvm_ctx), 0);
+  // output ptr
   for (int i = 0; i < num_inputs; i++) {
 
-    frame_param_tys[i + 2] = LLVMDoubleType();
+    frame_param_tys[i + 3] = LLVMDoubleType();
   }
-  LLVMTypeRef frame_ty =
-      LLVMFunctionType(LLVMDoubleType(), frame_param_tys, num_inputs + 2, 0);
+  LLVMTypeRef frame_ty = LLVMFunctionType(LLVMVoidTypeInContext(llvm_ctx),
+                                          frame_param_tys, num_inputs + 3, 0);
   return frame_ty;
 }
 
@@ -305,6 +357,9 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
     compile_spf = 1.0 / (double)compile_sample_rate;
   }
 
+  DspTmpAllocator tmp_alloc = {0};
+  dsp_tmp_allocator_init(&tmp_alloc, 1024);
+
   DspBuildCtx dsp_ctx = {
       .ctor_builder = ctor_b,
       .init_builder = init_b,
@@ -312,6 +367,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       .perf_fn = perf_fn,
       .sample_rate = compile_sample_rate,
       .spf_scalar = compile_spf,
+      .tmp_alloc = &tmp_alloc,
   };
 
   DspBuildCtx frame_ctx = {
@@ -321,11 +377,13 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       .perf_fn = frame_fn,
       .sample_rate = compile_sample_rate,
       .spf_scalar = compile_spf,
+      .tmp_alloc = &tmp_alloc,
   };
 
-  LLVMTypeRef create_param_tys[] = {GENERIC_PTR, i32_ty, i32_ty, GENERIC_PTR};
+  LLVMTypeRef create_param_tys[] = {GENERIC_PTR, i32_ty, i32_ty, i32_ty,
+                                    GENERIC_PTR};
   LLVMTypeRef create_fn_ty =
-      LLVMFunctionType(GENERIC_PTR, create_param_tys, 4, 0);
+      LLVMFunctionType(GENERIC_PTR, create_param_tys, 5, 0);
   LLVMValueRef create_fn =
       LLVMGetNamedFunction(module, "ylc_create_audio_node");
   if (!create_fn) {
@@ -338,11 +396,12 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   LLVMValueRef create_args[] = {
       perf_fn,
       LLVMConstInt(i32_ty, (uint64_t)num_inputs, 0),
+      LLVMConstInt(i32_ty, 1, 0),
       LLVMConstInt(i32_ty, 0, 0),
       meta_str,
   };
   LLVMValueRef node_val =
-      LLVMBuildCall2(ctor_b, create_fn_ty, create_fn, create_args, 4, "node");
+      LLVMBuildCall2(ctor_b, create_fn_ty, create_fn, create_args, 5, "node");
   LLVMBuildBr(ctor_b, ctor_init_bb);
 
   LLVMPositionBuilderAtEnd(ctor_b, ctor_init_bb);
@@ -377,6 +436,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   frame_ctx.state_ptr = LLVMGetParam(frame_fn, 0);
   frame_ctx.state_base_ptr = frame_ctx.state_ptr;
   frame_ctx.node_ptr = LLVMGetParam(frame_fn, 1);
+  LLVMValueRef frame_out_ptr = LLVMGetParam(frame_fn, 2);
   {
     LLVMTypeRef i8_ptr_ty = LLVMPointerType(i8_ty, 0);
     frame_ctx.state_cursor_ptr = LLVMBuildAlloca(
@@ -406,7 +466,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
     for (AstList *p = lambda->data.AST_LAMBDA.params; p; p = p->next, idx++) {
       Ast *param_ast = p->ast;
       Type *param_type = fn_type->data.T_FN.from;
-      LLVMValueRef arg_val = LLVMGetParam(frame_fn, idx + 2);
+      LLVMValueRef arg_val = LLVMGetParam(frame_fn, idx + 3);
 
       if (param_ast->tag == AST_TUPLE) {
         // Destructure tuple param: extract each field and bind its identifier
@@ -445,7 +505,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
          cv = cv->next, cap_idx++) {
       Ast *cl = cv->ast;
       if (cl->tag == AST_IDENTIFIER) {
-        LLVMValueRef cap_val = LLVMGetParam(frame_fn, cap_idx + 2);
+        LLVMValueRef cap_val = LLVMGetParam(frame_fn, cap_idx + 3);
         LLVMTypeRef cap_llvm_ty = LLVMTypeOf(cap_val);
         JITSymbol *sym =
             new_symbol(STYPE_LOCAL_VAR, cl->type, cap_val, cap_llvm_ty);
@@ -456,18 +516,22 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
     }
   }
 
-  LLVMValueRef expr = dsp_build_expr(lambda->data.AST_LAMBDA.body, &frame_ctx,
-                                     &fn_ctx, module, frame_ctx.perform_builder)
-                          .scalar;
-
-  if (expr) {
-    expr = ensure_float(lambda->data.AST_LAMBDA.body->type, expr,
-                        frame_ctx.perform_builder);
-    LLVMBuildRet(frame_ctx.perform_builder, expr);
+  DspValue expr = dsp_build_expr(lambda->data.AST_LAMBDA.body, &frame_ctx,
+                                 &fn_ctx, module, frame_ctx.perform_builder);
+  int output_lanes = expr.lanes > 0 ? expr.lanes : 1;
+  for (int i = 0; i < output_lanes; i++) {
+    LLVMValueRef lane_val = expr.lanes > 1 ? expr.vec[i] : expr.scalar;
+    lane_val = ensure_float(lambda->data.AST_LAMBDA.body->type, lane_val,
+                            frame_ctx.perform_builder);
+    LLVMValueRef lane_idx = LLVMConstInt(i64_ty, (uint64_t)i, 0);
+    LLVMValueRef lane_ptr =
+        LLVMBuildGEP2(frame_ctx.perform_builder, f64_ty, frame_out_ptr,
+                      &lane_idx, 1, "frame.out.ptr");
+    LLVMBuildStore(frame_ctx.perform_builder, lane_val, lane_ptr);
   }
   if (!LLVMGetBasicBlockTerminator(
           LLVMGetInsertBlock(frame_ctx.perform_builder))) {
-    LLVMBuildRet(frame_ctx.perform_builder, LLVMConstReal(f64_ty, 0.0));
+    LLVMBuildRetVoid(frame_ctx.perform_builder);
   }
   if (!LLVMGetBasicBlockTerminator(
           LLVMGetInsertBlock(frame_ctx.init_builder))) {
@@ -493,7 +557,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   // as a single struct param).
   unsigned frame_total_params = LLVMCountParamTypes(frame_ty);
   unsigned frame_user_params =
-      frame_total_params > 2 ? frame_total_params - 2 : 0;
+      frame_total_params > 3 ? frame_total_params - 3 : 0;
 
   LLVMTypeRef *frame_formal_tys =
       malloc(sizeof(LLVMTypeRef) * (size_t)frame_total_params);
@@ -503,6 +567,30 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       malloc(sizeof(LLVMValueRef) * (size_t)frame_total_params);
   frame_call_args[0] = dsp_ctx.state_ptr;
   frame_call_args[1] = dsp_ctx.node_ptr;
+  LLVMTypeRef get_output_buf_fn_ty =
+      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+  LLVMValueRef get_output_buf_fn =
+      LLVMGetNamedFunction(module, "ylc_get_output_buf");
+  if (!get_output_buf_fn) {
+    get_output_buf_fn =
+        LLVMAddFunction(module, "ylc_get_output_buf", get_output_buf_fn_ty);
+    LLVMSetLinkage(get_output_buf_fn, LLVMExternalLinkage);
+  }
+  LLVMValueRef output_buf_i8 =
+      LLVMBuildCall2(dsp_ctx.perform_builder, get_output_buf_fn_ty,
+                     get_output_buf_fn, (LLVMValueRef[]){dsp_ctx.node_ptr}, 1,
+                     "output.buf.i8");
+  LLVMValueRef output_buf = LLVMBuildPointerCast(
+      dsp_ctx.perform_builder, output_buf_i8, LLVMPointerType(f64_ty, 0),
+      "output.buf");
+  LLVMValueRef output_lanes_i64 =
+      LLVMConstInt(i64_ty, (uint64_t)output_lanes, 0);
+  LLVMValueRef frame_offset = LLVMBuildMul(dsp_ctx.perform_builder, frame_i64,
+                                           output_lanes_i64, "frame.out.off");
+  LLVMValueRef frame_out_dest_ptr = LLVMBuildGEP2(
+      dsp_ctx.perform_builder, f64_ty, output_buf, &frame_offset, 1,
+      "frame.out.ptr");
+  frame_call_args[2] = frame_out_dest_ptr;
   for (unsigned i = 0; i < frame_user_params; i++) {
     LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
     LLVMValueRef inlet_slot =
@@ -513,7 +601,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
     LLVMValueRef read_args[] = {inlet_node, frame_i64};
     LLVMValueRef sample = LLVMBuildCall2(dsp_ctx.perform_builder, read_fn_ty,
                                          read_fn, read_args, 2, "inlet.sample");
-    LLVMTypeRef formal_ty = frame_formal_tys[i + 2];
+    LLVMTypeRef formal_ty = frame_formal_tys[i + 3];
     if (LLVMGetTypeKind(formal_ty) == LLVMIntegerTypeKind) {
       sample = LLVMBuildFPToSI(dsp_ctx.perform_builder, sample, formal_ty,
                                "inlet.sample.i");
@@ -523,25 +611,12 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       // at runtime (only frame_fn is), so this is safe.
       sample = LLVMGetUndef(formal_ty);
     }
-    frame_call_args[i + 2] = sample;
+    frame_call_args[i + 3] = sample;
   }
   free(frame_formal_tys);
-  LLVMValueRef frame_sample =
-      LLVMBuildCall2(dsp_ctx.perform_builder, frame_ty, frame_fn,
-                     frame_call_args, frame_total_params, "frame.call");
+  LLVMBuildCall2(dsp_ctx.perform_builder, frame_ty, frame_fn, frame_call_args,
+                 frame_total_params, "frame.call");
   free(frame_call_args);
-
-  LLVMTypeRef void_ty = LLVMVoidType();
-  LLVMTypeRef write_param_tys[] = {GENERIC_PTR, i64_ty, f64_ty};
-  LLVMTypeRef write_fn_ty = LLVMFunctionType(void_ty, write_param_tys, 3, 0);
-  LLVMValueRef write_fn = LLVMGetNamedFunction(module, "dsp_write_output");
-  if (!write_fn) {
-    write_fn = LLVMAddFunction(module, "dsp_write_output", write_fn_ty);
-    LLVMSetLinkage(write_fn, LLVMExternalLinkage);
-  }
-  LLVMValueRef write_args[] = {dsp_ctx.node_ptr, frame_i64, frame_sample};
-  LLVMBuildCall2(dsp_ctx.perform_builder, write_fn_ty, write_fn, write_args, 3,
-                 "");
 
   if (!LLVMGetBasicBlockTerminator(
           LLVMGetInsertBlock(dsp_ctx.perform_builder))) {
@@ -562,8 +637,10 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
 
   if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(dsp_ctx.ctor_builder))) {
     state_bytes = (frame_ctx.state_offset + 7) & ~7;
-    LLVMSetOperand(dsp_ctx.create_call, 2,
+    LLVMSetOperand(dsp_ctx.create_call, 3,
                    LLVMConstInt(i32_ty, (uint64_t)state_bytes, 0));
+    LLVMSetOperand(dsp_ctx.create_call, 2,
+                   LLVMConstInt(i32_ty, (uint64_t)output_lanes, 0));
     LLVMBuildCall2(dsp_ctx.ctor_builder, init_ty, init_fn,
                    (LLVMValueRef[]){ctor_state_ptr}, 1, "");
 
@@ -613,6 +690,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   LLVMDisposeBuilder(dsp_ctx.init_builder);
   LLVMDisposeBuilder(dsp_ctx.perform_builder);
   LLVMDisposeBuilder(frame_ctx.perform_builder);
+  dsp_tmp_allocator_free(&tmp_alloc);
   destroy_ctx(&fn_ctx);
 
   return (SynthRecord){.name = name,
@@ -620,6 +698,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
                        .init_fn = init_fn,
                        .frame_fn = frame_fn,
                        .perform_fn = perf_fn,
+                       .output_lanes = output_lanes,
                        .state_bytes = state_bytes};
 }
 void print_synth_record(SynthRecord rec) {

@@ -3,7 +3,7 @@ open DSP;
 
 compile_audio_fn ( 
   let y = fn () ->
-    ~[200., 600.]
+    ~[60., 6000.]
     |> sin_osc 
 );
 

@@ -16,6 +16,10 @@ typedef struct {
 
 #define DSP_SCALAR(v)                                                          \
   (DspValue) { 1, v }
+
+#define DSP_MULTI(l, v)                                                        \
+  (DspValue) { .lanes = l, .vec = v }
+
 #define DSP_NULL (DspValue){0}
 
 DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
