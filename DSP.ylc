@@ -41,6 +41,7 @@ let vec_dot = extern fn Array of Double -> Array of Double -> Double;
 let delay_proc = extern fn (Int -> Array of Double -> Double -> Double) -> Array of Double -> Double -> Double;
 
 let ~ = extern fn Array of T -> T;
+let mix = extern fn Int -> Double -> Double;
 
 #                       buf                rate      start_pos trig
 let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;

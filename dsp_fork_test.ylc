@@ -2,12 +2,13 @@ open DSP;
 
 
 compile_audio_fn ( 
-  let y = fn () ->
-    ~[60., 6000.]
-    |> sin_osc 
+  let y = fn f ->
+    ~[f, f * 1.01, f * 1.02, f * 1.03, f * 1.04, f * 1.05]
+    |> sq_osc 
+    |> mix 2
 );
 
 
-y () |> play_node
+y 100 |> play_node
 
 

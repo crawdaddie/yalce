@@ -698,6 +698,8 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
                        .init_fn = init_fn,
                        .frame_fn = frame_fn,
                        .perform_fn = perf_fn,
+                       .arg_count = num_inputs,
+                       .arg_kinds = NULL,
                        .output_lanes = output_lanes,
                        .state_bytes = state_bytes};
 }

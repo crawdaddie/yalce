@@ -20,6 +20,12 @@ typedef struct {
   unsigned char *bytes;
 } DspTmpAllocator;
 
+typedef enum {
+  DSP_SYNTH_ARG_SCALAR_ONLY = 0,
+  DSP_SYNTH_ARG_SCALAR_OR_MULTICHANNEL = 1,
+  DSP_SYNTH_ARG_ARRAY_ONLY = 2,
+} DspSynthArgKind;
+
 typedef struct {
   // state_ptr
   LLVMValueRef node_ptr;  // !llvm.ptr  — the Node* itself
@@ -60,6 +66,8 @@ typedef struct SynthRecord {
   LLVMValueRef frame_fn;
   LLVMValueRef perform_fn;
   _Atomic(void *) ctor_ptr; // compiled machine address, populated at runtime
+  int arg_count;
+  DspSynthArgKind *arg_kinds;
   int output_lanes;
   int state_bytes;
 } SynthRecord;

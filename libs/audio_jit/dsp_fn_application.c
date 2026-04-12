@@ -1995,8 +1995,6 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
   if (is_ident(f, "sin_osc")) {
 
-    // return DSP_SCALAR(builtin_tab_osc("ylc_sin_table", SIN_TABSIZE, ast,
-    // dsp_ctx, ctx, module, builder));
     DspValue freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx, ctx,
                                    module, builder);
 
@@ -2021,13 +2019,53 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
 
   if (is_ident(f, "sq_osc")) {
-    return DSP_SCALAR(builtin_tab_osc("ylc_sq_table", SQ_TABSIZE, ast, dsp_ctx,
-                                      ctx, module, builder));
+
+    DspValue freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx, ctx,
+                                   module, builder);
+
+    Type *in_type = ast->data.AST_APPLICATION.args->type;
+    if (freq.lanes > 1) {
+
+      for (int i = 0; i < freq.lanes; i++) {
+        freq.vec[i] =
+            _builtin_tab_osc("ylc_sq_table", SQ_TABSIZE,
+                             ensure_float(in_type, freq.vec[i], builder),
+                             dsp_ctx, ctx, module, builder);
+      }
+      return DSP_MULTI(freq.lanes, freq.vec);
+    } else if (freq.lanes == 1) {
+      return DSP_SCALAR(
+          _builtin_tab_osc("ylc_sq_table", SQ_TABSIZE,
+                           ensure_float(in_type, freq.scalar, builder), dsp_ctx,
+                           ctx, module, builder));
+    } else {
+      return DSP_NULL;
+    }
   }
 
   if (is_ident(f, "saw_osc")) {
-    return DSP_SCALAR(builtin_tab_osc("ylc_saw_table", SAW_TABSIZE, ast,
-                                      dsp_ctx, ctx, module, builder));
+    DspValue freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx, ctx,
+
+                                   module, builder);
+
+    Type *in_type = ast->data.AST_APPLICATION.args->type;
+    if (freq.lanes > 1) {
+
+      for (int i = 0; i < freq.lanes; i++) {
+        freq.vec[i] =
+            _builtin_tab_osc("ylc_saw_table", SAW_TABSIZE,
+                             ensure_float(in_type, freq.vec[i], builder),
+                             dsp_ctx, ctx, module, builder);
+      }
+      return DSP_MULTI(freq.lanes, freq.vec);
+    } else if (freq.lanes == 1) {
+      return DSP_SCALAR(
+          _builtin_tab_osc("ylc_saw_table", SAW_TABSIZE,
+                           ensure_float(in_type, freq.scalar, builder), dsp_ctx,
+                           ctx, module, builder));
+    } else {
+      return DSP_NULL;
+    }
   }
 
   if (is_ident(f, "phasor")) {
@@ -3034,6 +3072,10 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
   if (is_ident(f, _FORK_OPERATOR_ID)) {
     return dsp_fork(ast, dsp_ctx, ctx, module, builder);
+  }
+
+  if (is_ident(f, _FORK_MIX_ID)) {
+    return dsp_mix(ast, dsp_ctx, ctx, module, builder);
   }
 
   // if (is_ident(f, "dsp_list_foldi")) {
