@@ -15,6 +15,8 @@
 #include "./common.h"
 #include "./compile_synth.h"
 #include "./dsp_array_proc.h"
+#include "dsp_build_expr.h"
+#include "dsp_fork.h"
 #include <llvm-c/Target.h>
 #include <llvm-c/Types.h>
 
@@ -90,9 +92,6 @@ static LLVMValueRef SinOscHandler(Ast *ast, JITLangCtx *ctx,
 
   return LLVMConstInt(LLVMInt32Type(), 0, 0);
 }
-
-LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
-                            LLVMModuleRef module, LLVMBuilderRef builder);
 
 #ifndef SIN_TABSIZE
 #define SIN_TABSIZE (1 << 11)
@@ -287,9 +286,9 @@ static bool ast_is_const_zero(Ast *ast, DspBuildCtx *dsp_ctx,
   return ast_try_eval_const_num(ast, dsp_ctx, jit_ctx, &value) && value == 0.0;
 }
 
-static LLVMValueRef dsp_consume_state_cursor(LLVMValueRef cursor_ptr,
-                                             LLVMBuilderRef builder, int size,
-                                             int align, const char *name) {
+LLVMValueRef dsp_consume_state_cursor(LLVMValueRef cursor_ptr,
+                                      LLVMBuilderRef builder, int size,
+                                      int align, const char *name) {
   LLVMTypeRef i8_ty = LLVMInt8Type();
   LLVMTypeRef i8_ptr_ty = LLVMPointerType(i8_ty, 0);
   LLVMTypeRef i64_ty = LLVMInt64Type();
@@ -459,8 +458,6 @@ LLVMValueRef builtin_phasor_sinc(LLVMValueRef freq, LLVMValueRef trig,
 LLVMValueRef builtin_trig(LLVMValueRef freq, bool freq_is_const_zero,
                           DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                           LLVMModuleRef module, LLVMBuilderRef builder) {
-  (void)ctx;
-  (void)module;
 
   int off = dsp_ctx->state_offset;
   dsp_ctx->state_offset += 8;
@@ -472,7 +469,6 @@ LLVMValueRef builtin_trig(LLVMValueRef freq, bool freq_is_const_zero,
   LLVMValueRef zero_f = LLVMConstReal(f64_ty, 0.0);
   LLVMValueRef one_f = LLVMConstReal(f64_ty, 1.0);
 
-  (void)off;
   if (freq_is_const_zero) {
     if (dsp_ctx->init_state_ptr) {
       (void)dsp_consume_init_state(dsp_ctx, dsp_ctx->init_builder, 8, 8,
@@ -580,7 +576,8 @@ LLVMValueRef builtin_tab_osc(const char *tab_sym, int32_t tabsize, Ast *ast,
   Type *in_type = ast->data.AST_APPLICATION.args->type;
 
   LLVMValueRef freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                     ctx, module, builder);
+                                     ctx, module, builder)
+                          .scalar;
   freq = ensure_float(in_type, freq, builder);
   LLVMValueRef phasor = builtin_phasor(freq, dsp_ctx, ctx, module, builder);
   LLVMValueRef table_ptr =
@@ -1241,7 +1238,7 @@ LLVMValueRef call_registered_synth_in_audio_fn(Ast *ast, SynthRecord rec,
     if (arg_idx < arg_count) {
       Ast *arg_ast = ast->data.AST_APPLICATION.args + arg_idx;
       LLVMValueRef arg_val =
-          dsp_build_expr(arg_ast, dsp_ctx, ctx, module, builder);
+          dsp_build_expr(arg_ast, dsp_ctx, ctx, module, builder).scalar;
       if (LLVMGetTypeKind(formal_tys[i]) == LLVMDoubleTypeKind) {
         arg_val = ensure_float(arg_ast->type, arg_val, builder);
       }
@@ -1270,7 +1267,6 @@ LLVMValueRef build_lfnoise_lin(LLVMValueRef freq, LLVMValueRef lo,
   LLVMTypeRef f64_ty = LLVMDoubleType();
   LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
 
-  (void)off;
   LLVMValueRef base =
       dsp_consume_frame_state(dsp_ctx, builder, 16, 8, "lfnoise1.base");
   LLVMValueRef val_ptr =
@@ -1932,8 +1928,8 @@ LLVMValueRef build_array_seq(LLVMValueRef arr, LLVMValueRef trig,
   return LLVMBuildLoad2(builder, f64_ty, val_ptr, "array_seq.out");
 }
 
-LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
-                                LLVMModuleRef module, LLVMBuilderRef builder) {
+DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
+                            LLVMModuleRef module, LLVMBuilderRef builder) {
 
   Ast *f = ast->data.AST_APPLICATION.function;
 
@@ -1941,235 +1937,268 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   //         ctx->stack_ptr);
 
   if (is_ident(f, "spf")) {
-    return dsp_ctx->spf;
+    return DSP_SCALAR(dsp_ctx->spf);
   }
 
   if (is_ident(f, "samplerate")) {
-    return LLVMConstInt(LLVMInt32Type(), dsp_ctx->sample_rate, 0);
+    return DSP_SCALAR(LLVMConstInt(LLVMInt32Type(), dsp_ctx->sample_rate, 0));
   }
 
   if (is_ident(f, "sin_osc")) {
-    return builtin_tab_osc("ylc_sin_table", SIN_TABSIZE, ast, dsp_ctx, ctx,
-                           module, builder);
+    return DSP_SCALAR(builtin_tab_osc("ylc_sin_table", SIN_TABSIZE, ast,
+                                      dsp_ctx, ctx, module, builder));
   }
 
   if (is_ident(f, "sq_osc")) {
-    return builtin_tab_osc("ylc_sq_table", SQ_TABSIZE, ast, dsp_ctx, ctx,
-                           module, builder);
+    return DSP_SCALAR(builtin_tab_osc("ylc_sq_table", SQ_TABSIZE, ast, dsp_ctx,
+                                      ctx, module, builder));
   }
 
   if (is_ident(f, "saw_osc")) {
-    return builtin_tab_osc("ylc_saw_table", SAW_TABSIZE, ast, dsp_ctx, ctx,
-                           module, builder);
+    return DSP_SCALAR(builtin_tab_osc("ylc_saw_table", SAW_TABSIZE, ast,
+                                      dsp_ctx, ctx, module, builder));
   }
 
   if (is_ident(f, "phasor")) {
     LLVMValueRef freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                       ctx, module, builder);
+                                       ctx, module, builder)
+                            .scalar;
     freq = ensure_float(ast->data.AST_APPLICATION.args->type, freq, builder);
-    return builtin_phasor(freq, dsp_ctx, ctx, module, builder);
+    return DSP_SCALAR(builtin_phasor(freq, dsp_ctx, ctx, module, builder));
   }
 
   if (is_ident(f, "phasor_sinc")) {
     LLVMValueRef freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                       ctx, module, builder);
+                                       ctx, module, builder)
+                            .scalar;
     freq = ensure_float(ast->data.AST_APPLICATION.args->type, freq, builder);
 
     LLVMValueRef trig = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                       dsp_ctx, ctx, module, builder);
-    return builtin_phasor_sinc(freq, trig, dsp_ctx, ctx, module, builder);
+                                       dsp_ctx, ctx, module, builder)
+                            .scalar;
+    return DSP_SCALAR(
+        builtin_phasor_sinc(freq, trig, dsp_ctx, ctx, module, builder));
   }
 
   if (is_ident(f, "trig")) {
     Ast *freq_ast = ast->data.AST_APPLICATION.args;
-    LLVMValueRef freq = dsp_build_expr(freq_ast, dsp_ctx, ctx, module, builder);
+    LLVMValueRef freq =
+        dsp_build_expr(freq_ast, dsp_ctx, ctx, module, builder).scalar;
     freq = ensure_float(freq_ast->type, freq, builder);
 
     bool freq_is_const_zero = ast_is_const_zero(freq_ast, dsp_ctx, ctx);
 
-    return builtin_trig(freq, freq_is_const_zero, dsp_ctx, ctx, module,
-                        builder);
+    return DSP_SCALAR(
+        builtin_trig(freq, freq_is_const_zero, dsp_ctx, ctx, module, builder));
   }
   if (is_ident(f, "+")) {
     LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     if (LLVMGetTypeKind(LLVMTypeOf(l)) == LLVMIntegerTypeKind &&
         LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind)
-      return LLVMBuildAdd(builder, l, r, "signal.add");
+      return DSP_SCALAR(LLVMBuildAdd(builder, l, r, "signal.add"));
     l = ensure_float(ast->data.AST_APPLICATION.args->type, l, builder);
     r = ensure_float(ast->data.AST_APPLICATION.args[1].type, r, builder);
-    return LLVMBuildFAdd(builder, l, r, "signal.add");
+    return DSP_SCALAR(LLVMBuildFAdd(builder, l, r, "signal.add"));
   }
 
   if (is_ident(f, "-")) {
     LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     if (LLVMGetTypeKind(LLVMTypeOf(l)) == LLVMIntegerTypeKind &&
-        LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind)
-      return LLVMBuildSub(builder, l, r, "signal.sub");
+        LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind) {
+      return DSP_SCALAR(LLVMBuildSub(builder, l, r, "signal.sub"));
+    }
     l = ensure_float(ast->data.AST_APPLICATION.args->type, l, builder);
     r = ensure_float(ast->data.AST_APPLICATION.args[1].type, r, builder);
-    return LLVMBuildFSub(builder, l, r, "signal.sub");
+    return DSP_SCALAR(LLVMBuildFSub(builder, l, r, "signal.sub"));
   }
 
   if (is_ident(f, "*")) {
     LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     if (!l || !r) {
       fprintf(stderr, "audio_jit: null operand in '*' expression\n");
       print_ast(ast);
-      return NULL;
+      return DSP_NULL;
     }
     if (LLVMGetTypeKind(LLVMTypeOf(l)) == LLVMIntegerTypeKind &&
         LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind)
-      return LLVMBuildMul(builder, l, r, "signal.mul");
+      return DSP_SCALAR(LLVMBuildMul(builder, l, r, "signal.mul"));
     l = ensure_float(ast->data.AST_APPLICATION.args->type, l, builder);
     r = ensure_float(ast->data.AST_APPLICATION.args[1].type, r, builder);
-    return LLVMBuildFMul(builder, l, r, "signal.mul");
+    return DSP_SCALAR(LLVMBuildFMul(builder, l, r, "signal.mul"));
   }
 
   if (is_ident(f, "/")) {
     LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     if (LLVMGetTypeKind(LLVMTypeOf(l)) == LLVMIntegerTypeKind &&
         LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind)
-      return LLVMBuildSDiv(builder, l, r, "signal.div");
+      return DSP_SCALAR(LLVMBuildSDiv(builder, l, r, "signal.div"));
     l = ensure_float(ast->data.AST_APPLICATION.args->type, l, builder);
     r = ensure_float(ast->data.AST_APPLICATION.args[1].type, r, builder);
-    return LLVMBuildFDiv(builder, l, r, "signal.div");
+    return DSP_SCALAR(LLVMBuildFDiv(builder, l, r, "signal.div"));
   }
 
   if (is_ident(f, "%")) {
     LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     if (LLVMGetTypeKind(LLVMTypeOf(l)) == LLVMIntegerTypeKind &&
         LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind)
-      return LLVMBuildSRem(builder, l, r, "signal.rem");
+      return DSP_SCALAR(LLVMBuildSRem(builder, l, r, "signal.rem"));
     l = ensure_float(ast->data.AST_APPLICATION.args->type, l, builder);
     r = ensure_float(ast->data.AST_APPLICATION.args[1].type, r, builder);
-    return LLVMBuildFRem(builder, l, r, "signal.fmod");
+    return DSP_SCALAR(LLVMBuildFRem(builder, l, r, "signal.fmod"));
   }
   if (is_ident(f, ">")) {
     LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     if (LLVMGetTypeKind(LLVMTypeOf(l)) == LLVMIntegerTypeKind &&
         LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind)
-      return LLVMBuildICmp(builder, LLVMIntSGT, l, r, "signal.gt");
+      return DSP_SCALAR(LLVMBuildICmp(builder, LLVMIntSGT, l, r, "signal.gt"));
     l = ensure_float(ast->data.AST_APPLICATION.args->type, l, builder);
     r = ensure_float(ast->data.AST_APPLICATION.args[1].type, r, builder);
-    return LLVMBuildFCmp(builder, LLVMRealOGT, l, r, "signal.gt");
+    return DSP_SCALAR(LLVMBuildFCmp(builder, LLVMRealOGT, l, r, "signal.gt"));
   }
 
   if (is_ident(f, ">=")) {
     LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     if (LLVMGetTypeKind(LLVMTypeOf(l)) == LLVMIntegerTypeKind &&
         LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind)
-      return LLVMBuildICmp(builder, LLVMIntSGE, l, r, "signal.ge");
+      return DSP_SCALAR(LLVMBuildICmp(builder, LLVMIntSGE, l, r, "signal.ge"));
     l = ensure_float(ast->data.AST_APPLICATION.args->type, l, builder);
     r = ensure_float(ast->data.AST_APPLICATION.args[1].type, r, builder);
-    return LLVMBuildFCmp(builder, LLVMRealOGE, l, r, "signal.ge");
+    return DSP_SCALAR(LLVMBuildFCmp(builder, LLVMRealOGE, l, r, "signal.ge"));
   }
 
   if (is_ident(f, "<")) {
     LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     if (LLVMGetTypeKind(LLVMTypeOf(l)) == LLVMIntegerTypeKind &&
         LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind)
-      return LLVMBuildICmp(builder, LLVMIntSLT, l, r, "signal.lt");
+      return DSP_SCALAR(LLVMBuildICmp(builder, LLVMIntSLT, l, r, "signal.lt"));
     l = ensure_float(ast->data.AST_APPLICATION.args->type, l, builder);
     r = ensure_float(ast->data.AST_APPLICATION.args[1].type, r, builder);
-    return LLVMBuildFCmp(builder, LLVMRealOLT, l, r, "signal.lt");
+    return DSP_SCALAR(LLVMBuildFCmp(builder, LLVMRealOLT, l, r, "signal.lt"));
   }
 
   if (is_ident(f, "<=")) {
     LLVMValueRef l = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     LLVMValueRef r = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     if (LLVMGetTypeKind(LLVMTypeOf(l)) == LLVMIntegerTypeKind &&
         LLVMGetTypeKind(LLVMTypeOf(r)) == LLVMIntegerTypeKind)
-      return LLVMBuildICmp(builder, LLVMIntSLE, l, r, "signal.le");
+      return DSP_SCALAR(LLVMBuildICmp(builder, LLVMIntSLE, l, r, "signal.le"));
     l = ensure_float(ast->data.AST_APPLICATION.args->type, l, builder);
     r = ensure_float(ast->data.AST_APPLICATION.args[1].type, r, builder);
-    return LLVMBuildFCmp(builder, LLVMRealOLE, l, r, "signal.le");
+    return DSP_SCALAR(LLVMBuildFCmp(builder, LLVMRealOLE, l, r, "signal.le"));
   }
 
   if (is_ident(f, "clampup")) {
     LLVMValueRef clamp_limit =
         ensure_float(ast->data.AST_APPLICATION.args->type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
 
     LLVMValueRef input =
         ensure_float(ast->data.AST_APPLICATION.args[1].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
 
     LLVMValueRef over_limit = LLVMBuildFCmp(builder, LLVMRealOGT, input,
                                             clamp_limit, "clampup.over_limit");
-    return LLVMBuildSelect(builder, over_limit, clamp_limit, input,
-                           "clampup.out");
+    return DSP_SCALAR(LLVMBuildSelect(builder, over_limit, clamp_limit, input,
+                                      "clampup.out"));
   }
 
   if (is_ident(f, "lag")) {
     if (ast->data.AST_APPLICATION.len < 2) {
       fprintf(stderr, "Error: lag expects 2 args (lag_secs, input)\n");
-      return LLVMConstReal(LLVMDoubleType(), 0.0);
+      return DSP_SCALAR(LLVMConstReal(LLVMDoubleType(), 0.0));
     }
 
     LLVMValueRef lag_secs =
         ensure_float(ast->data.AST_APPLICATION.args[0].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 0, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
     LLVMValueRef input =
         ensure_float(ast->data.AST_APPLICATION.args[1].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
 
-    return build_lag(input, lag_secs, dsp_ctx, module, builder);
+    return DSP_SCALAR(build_lag(input, lag_secs, dsp_ctx, module, builder));
   }
 
   if (is_ident(f, "arr_choose")) {
 
     LLVMValueRef array = dsp_build_expr(ast->data.AST_APPLICATION.args + 0,
-                                        dsp_ctx, ctx, module, builder);
+                                        dsp_ctx, ctx, module, builder)
+                             .scalar;
     LLVMValueRef trig = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                       dsp_ctx, ctx, module, builder);
+                                       dsp_ctx, ctx, module, builder)
+                            .scalar;
     trig = ensure_float(ast->data.AST_APPLICATION.args[1].type, trig, builder);
 
-    return build_array_choose(array, trig, dsp_ctx, module, builder);
+    return DSP_SCALAR(
+        build_array_choose(array, trig, dsp_ctx, module, builder));
   }
 
   if (is_ident(f, "arr_seq")) {
 
     LLVMValueRef array = dsp_build_expr(ast->data.AST_APPLICATION.args + 0,
-                                        dsp_ctx, ctx, module, builder);
+                                        dsp_ctx, ctx, module, builder)
+                             .scalar;
     LLVMValueRef trig = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                       dsp_ctx, ctx, module, builder);
+                                       dsp_ctx, ctx, module, builder)
+                            .scalar;
     trig = ensure_float(ast->data.AST_APPLICATION.args[1].type, trig, builder);
 
-    return build_array_seq(array, trig, dsp_ctx, module, builder);
+    return DSP_SCALAR(build_array_seq(array, trig, dsp_ctx, module, builder));
   }
   if (is_ident(f, "white")) {
 
@@ -2182,75 +2211,84 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       LLVMSetLinkage(wn_fn, LLVMExternalLinkage);
     }
 
-    return LLVMBuildCall2(builder, wn_ty, wn_fn,
-                          (LLVMValueRef[]){LLVMConstReal(LLVMDoubleType(), -1.),
-                                           LLVMConstReal(LLVMDoubleType(), 1.)},
-                          2, "white_noise.sample");
+    return DSP_SCALAR(
+        LLVMBuildCall2(builder, wn_ty, wn_fn,
+                       (LLVMValueRef[]){LLVMConstReal(LLVMDoubleType(), -1.),
+                                        LLVMConstReal(LLVMDoubleType(), 1.)},
+                       2, "white_noise.sample"));
   }
 
   if (is_ident(f, "kill_on_end")) {
     LLVMValueRef signal =
         ensure_float(ast->data.AST_APPLICATION.args->type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
-    return build_kill_on_end(signal, dsp_ctx, module, builder);
+    return DSP_SCALAR(build_kill_on_end(signal, dsp_ctx, module, builder));
   }
 
   if (is_ident(f, "adsr")) {
     LLVMValueRef attack =
         ensure_float(ast->data.AST_APPLICATION.args->type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
     LLVMValueRef decay =
         ensure_float(ast->data.AST_APPLICATION.args[1].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
     LLVMValueRef sustain =
         ensure_float(ast->data.AST_APPLICATION.args[2].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 2, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
     LLVMValueRef release =
         ensure_float(ast->data.AST_APPLICATION.args[3].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 3, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
     LLVMValueRef trig =
         ensure_float(ast->data.AST_APPLICATION.args[4].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 4, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
-    return build_adsr(attack, decay, sustain, release, trig, dsp_ctx, module,
-                      builder);
+    return DSP_SCALAR(build_adsr(attack, decay, sustain, release, trig, dsp_ctx,
+                                 module, builder));
   }
 
   if (strcmp(f->data.AST_IDENTIFIER.value, "rect") == 0) {
     LLVMValueRef duration =
         ensure_float(ast->data.AST_APPLICATION.args->type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
     LLVMValueRef trig =
         ensure_float(ast->data.AST_APPLICATION.args[1].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
-    return build_rect(duration, trig, dsp_ctx, module, builder);
+    return DSP_SCALAR(build_rect(duration, trig, dsp_ctx, module, builder));
   }
 
   if (is_ident(f, "delay")) {
     Ast *args = ast->data.AST_APPLICATION.args;
     if (ast->data.AST_APPLICATION.len < 4) {
       fprintf(stderr, "Error: delay expects 4 args\n");
-      return LLVMConstReal(LLVMDoubleType(), 0.0);
+      return DSP_SCALAR(LLVMConstReal(LLVMDoubleType(), 0.0));
     }
 
     int32_t buf_size = 0;
     if (!eval_delay_buf_size(args + 1, dsp_ctx, ctx, &buf_size)) {
-      return LLVMConstReal(LLVMDoubleType(), 0.0);
+      return DSP_SCALAR(LLVMConstReal(LLVMDoubleType(), 0.0));
     }
     DelayBufIR db = build_delay_buf_ir(dsp_ctx, builder, buf_size, true, true);
 
@@ -2262,13 +2300,16 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         LLVMStructType((LLVMTypeRef[]){i32_ty, f64_ptr_ty}, 2, 0);
 
     LLVMValueRef delay_secs = ensure_float(
-        args[0].type, dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder),
+        args[0].type,
+        dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder).scalar,
         builder);
     LLVMValueRef fb = ensure_float(
-        args[2].type, dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder),
+        args[2].type,
+        dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder).scalar,
         builder);
     LLVMValueRef input = ensure_float(
-        args[3].type, dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder),
+        args[3].type,
+        dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder).scalar,
         builder);
 
     LLVMTypeRef fn_ty = LLVMFunctionType(
@@ -2284,15 +2325,17 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
     LLVMValueRef call_args[] = {db.buf_arr,       delay_secs, dsp_ctx->spf,
                                 db.write_pos_ptr, input,      fb};
-    return LLVMBuildCall2(builder, fn_ty, fn, call_args, 6, "delay.sample");
+    return DSP_SCALAR(
+        LLVMBuildCall2(builder, fn_ty, fn, call_args, 6, "delay.sample"));
   }
 
   if (is_ident(f, "array_size")) {
     LLVMValueRef arr = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                      ctx, module, builder);
+                                      ctx, module, builder)
+                           .scalar;
     LLVMValueRef len_i32 =
         codegen_get_array_size(builder, arr, LLVMDoubleType());
-    return len_i32;
+    return DSP_SCALAR(len_i32);
   }
 
   if (is_ident(f, "delay_line")) {
@@ -2304,24 +2347,24 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
     int32_t buf_size = 0;
     if (!eval_delay_buf_size(args, dsp_ctx, ctx, &buf_size)) {
-      return LLVMConstReal(LLVMDoubleType(), 0.0);
+      return DSP_SCALAR(LLVMConstReal(LLVMDoubleType(), 0.0));
     }
 
     DelayBufIR db = build_delay_buf_ir(dsp_ctx, builder, buf_size, true, false);
 
-    return db.buf_arr;
+    return DSP_SCALAR(db.buf_arr);
   }
 
   if (is_ident(f, "comb")) {
     Ast *args = ast->data.AST_APPLICATION.args;
     if (ast->data.AST_APPLICATION.len < 4) {
       fprintf(stderr, "Error: comb expects 4 args\n");
-      return LLVMConstReal(LLVMDoubleType(), 0.0);
+      return DSP_SCALAR(LLVMConstReal(LLVMDoubleType(), 0.0));
     }
 
     int32_t buf_size = 0;
     if (!eval_delay_buf_size(args + 1, dsp_ctx, ctx, &buf_size)) {
-      return LLVMConstReal(LLVMDoubleType(), 0.0);
+      return DSP_SCALAR(LLVMConstReal(LLVMDoubleType(), 0.0));
     }
     DelayBufIR db = build_delay_buf_ir(dsp_ctx, builder, buf_size, true, true);
 
@@ -2333,13 +2376,16 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         LLVMStructType((LLVMTypeRef[]){i32_ty, f64_ptr_ty}, 2, 0);
 
     LLVMValueRef delay_secs = ensure_float(
-        args[0].type, dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder),
+        args[0].type,
+        dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder).scalar,
         builder);
     LLVMValueRef fb = ensure_float(
-        args[2].type, dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder),
+        args[2].type,
+        dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder).scalar,
         builder);
     LLVMValueRef input = ensure_float(
-        args[3].type, dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder),
+        args[3].type,
+        dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder).scalar,
         builder);
 
     LLVMTypeRef fn_ty = LLVMFunctionType(
@@ -2353,7 +2399,8 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     }
     LLVMValueRef call_args[] = {db.buf_arr,       delay_secs, dsp_ctx->spf,
                                 db.write_pos_ptr, input,      fb};
-    return LLVMBuildCall2(builder, fn_ty, fn, call_args, 6, "comb.sample");
+    return DSP_SCALAR(
+        LLVMBuildCall2(builder, fn_ty, fn, call_args, 6, "comb.sample"));
   }
 
   // if (is_ident(f, "allpass") || is_ident(f, "allpass1")) {
@@ -2361,7 +2408,7 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     Ast *args = ast->data.AST_APPLICATION.args;
     int32_t buf_size = 0;
     if (!eval_delay_buf_size(args + 1, dsp_ctx, ctx, &buf_size)) {
-      return LLVMConstReal(LLVMDoubleType(), 0.0);
+      return DSP_SCALAR(LLVMConstReal(LLVMDoubleType(), 0.0));
     }
     DelayBufIR db = build_delay_buf_ir(dsp_ctx, builder, buf_size, true, true);
 
@@ -2373,13 +2420,16 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         LLVMStructType((LLVMTypeRef[]){i32_ty, f64_ptr_ty}, 2, 0);
 
     LLVMValueRef delay_secs = ensure_float(
-        args[0].type, dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder),
+        args[0].type,
+        dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder).scalar,
         builder);
     LLVMValueRef g = ensure_float(
-        args[2].type, dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder),
+        args[2].type,
+        dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder).scalar,
         builder);
     LLVMValueRef input = ensure_float(
-        args[3].type, dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder),
+        args[3].type,
+        dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder).scalar,
         builder);
 
     LLVMTypeRef fn_ty = LLVMFunctionType(
@@ -2395,25 +2445,32 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
     LLVMValueRef ap_args[] = {db.buf_arr,       delay_secs, dsp_ctx->spf,
                               db.write_pos_ptr, input,      g};
-    return LLVMBuildCall2(builder, fn_ty, fn, ap_args, 6, "allpass.sample");
+    return DSP_SCALAR(
+        LLVMBuildCall2(builder, fn_ty, fn, ap_args, 6, "allpass.sample"));
   }
 
   if (is_ident(f, "tabread")) {
     LLVMValueRef table = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                        ctx, module, builder);
+                                        ctx, module, builder)
+                             .scalar;
 
     LLVMValueRef phase = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                        dsp_ctx, ctx, module, builder);
-    return build_tabread(table, phase, dsp_ctx, ctx, module, builder);
+                                        dsp_ctx, ctx, module, builder)
+                             .scalar;
+    return DSP_SCALAR(
+        build_tabread(table, phase, dsp_ctx, ctx, module, builder));
   }
 
   if (is_ident(f, "tabread_samp")) {
     LLVMValueRef table = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                        ctx, module, builder);
+                                        ctx, module, builder)
+                             .scalar;
 
     LLVMValueRef phase = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                        dsp_ctx, ctx, module, builder);
-    return build_tabread_samp(table, phase, dsp_ctx, ctx, module, builder);
+                                        dsp_ctx, ctx, module, builder)
+                             .scalar;
+    return DSP_SCALAR(
+        build_tabread_samp(table, phase, dsp_ctx, ctx, module, builder));
   }
 
   if (is_ident(f, "array_set")) {
@@ -2426,13 +2483,16 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     Type *el_type = arr_type->data.T_CONS.args[0];
 
     LLVMValueRef arr = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                      ctx, module, builder);
+                                      ctx, module, builder)
+                           .scalar;
 
     LLVMValueRef index = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                        dsp_ctx, ctx, module, builder);
+                                        dsp_ctx, ctx, module, builder)
+                             .scalar;
 
     LLVMValueRef value = dsp_build_expr(ast->data.AST_APPLICATION.args + 2,
-                                        dsp_ctx, ctx, module, builder);
+                                        dsp_ctx, ctx, module, builder)
+                             .scalar;
 
     LLVMTypeRef el_llvm_ty = type_to_llvm_type(el_type, ctx, module);
     if (LLVMGetTypeKind(el_llvm_ty) == LLVMIntegerTypeKind &&
@@ -2440,52 +2500,59 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       value = LLVMBuildFPToSI(builder, value, el_llvm_ty, "f2i");
     }
     set_array_element(builder, arr, index, value, el_llvm_ty);
-    return arr;
+    return DSP_SCALAR(arr);
   }
 
   if (is_ident(f, "array_at")) {
 
     LLVMValueRef arr = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                      ctx, module, builder);
+                                      ctx, module, builder)
+                           .scalar;
     LLVMValueRef index = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                        dsp_ctx, ctx, module, builder);
+                                        dsp_ctx, ctx, module, builder)
+                             .scalar;
     // print_type(ast->type);
 
-    return get_array_element(builder, arr, index,
-                             type_to_llvm_type(ast->type, ctx, module));
+    return DSP_SCALAR(get_array_element(
+        builder, arr, index, type_to_llvm_type(ast->type, ctx, module)));
   }
   if (is_ident(f, "decay")) {
 
     LLVMValueRef T = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder);
+                                    ctx, module, builder)
+                         .scalar;
     T = ensure_float(ast->data.AST_APPLICATION.args->type, T, builder);
 
     LLVMValueRef trig = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                       dsp_ctx, ctx, module, builder);
-    return build_exp_decay(T, trig, dsp_ctx, ctx, module, builder);
+                                       dsp_ctx, ctx, module, builder)
+                            .scalar;
+    return DSP_SCALAR(build_exp_decay(T, trig, dsp_ctx, ctx, module, builder));
   }
   if (is_ident(f, "scale")) {
     // unipolar scale - ie [0,1] -> [a, b]
     LLVMValueRef lo =
         ensure_float(ast->data.AST_APPLICATION.args->type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
 
     LLVMValueRef hi =
         ensure_float(ast->data.AST_APPLICATION.args[1].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
 
     LLVMValueRef v =
         ensure_float(ast->data.AST_APPLICATION.args[2].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 2, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
     LLVMValueRef span = LLVMBuildFSub(builder, hi, lo, "scale.span");
     LLVMValueRef scaled = LLVMBuildFMul(builder, v, span, "scale.scaled");
-    return LLVMBuildFAdd(builder, lo, scaled, "scale.out");
+    return DSP_SCALAR(LLVMBuildFAdd(builder, lo, scaled, "scale.out"));
   }
 
   if (is_ident(f, "scale_bp")) {
@@ -2494,19 +2561,22 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     LLVMValueRef lo =
         ensure_float(ast->data.AST_APPLICATION.args->type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
 
     LLVMValueRef hi =
         ensure_float(ast->data.AST_APPLICATION.args[1].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
 
     LLVMValueRef v =
         ensure_float(ast->data.AST_APPLICATION.args[2].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 2, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
     LLVMValueRef span = LLVMBuildFSub(builder, hi, lo, "scale.span");
 
@@ -2516,24 +2586,28 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     v = LLVMBuildFAdd(builder, v, LLVMConstReal(LLVMDoubleType(), 0.5),
                       "input.add_half");
     LLVMValueRef scaled = LLVMBuildFMul(builder, v, span, "scale.scaled");
-    return LLVMBuildFAdd(builder, lo, scaled, "scale.out");
+    return DSP_SCALAR(LLVMBuildFAdd(builder, lo, scaled, "scale.out"));
   }
 
   if (is_ident(f, "lfnoise")) {
     // linearly interpolated noise [0, 1)
     LLVMValueRef freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                       ctx, module, builder);
+                                       ctx, module, builder)
+                            .scalar;
 
     LLVMValueRef lo = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                     dsp_ctx, ctx, module, builder);
+                                     dsp_ctx, ctx, module, builder)
+                          .scalar;
 
     LLVMValueRef hi = dsp_build_expr(ast->data.AST_APPLICATION.args + 2,
-                                     dsp_ctx, ctx, module, builder);
+                                     dsp_ctx, ctx, module, builder)
+                          .scalar;
     freq = ensure_float(ast->data.AST_APPLICATION.args->type, freq, builder);
     lo = ensure_float((ast->data.AST_APPLICATION.args + 1)->type, lo, builder);
     hi = ensure_float((ast->data.AST_APPLICATION.args + 2)->type, hi, builder);
 
-    return build_lfnoise_lin(freq, lo, hi, dsp_ctx, ctx, module, builder);
+    return DSP_SCALAR(
+        build_lfnoise_lin(freq, lo, hi, dsp_ctx, ctx, module, builder));
   }
 
   if (is_ident(f, "lfnoise0")) {
@@ -2541,18 +2615,22 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     // step noise [0, 1)
 
     LLVMValueRef freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                       ctx, module, builder);
+                                       ctx, module, builder)
+                            .scalar;
 
     LLVMValueRef lo = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                     dsp_ctx, ctx, module, builder);
+                                     dsp_ctx, ctx, module, builder)
+                          .scalar;
 
     LLVMValueRef hi = dsp_build_expr(ast->data.AST_APPLICATION.args + 2,
-                                     dsp_ctx, ctx, module, builder);
+                                     dsp_ctx, ctx, module, builder)
+                          .scalar;
     freq = ensure_float(ast->data.AST_APPLICATION.args->type, freq, builder);
     lo = ensure_float((ast->data.AST_APPLICATION.args + 1)->type, lo, builder);
     hi = ensure_float((ast->data.AST_APPLICATION.args + 2)->type, hi, builder);
 
-    return build_lfnoise_step(freq, lo, hi, dsp_ctx, ctx, module, builder);
+    return DSP_SCALAR(
+        build_lfnoise_step(freq, lo, hi, dsp_ctx, ctx, module, builder));
   }
   JITSymbol *callable_sym =
       lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
@@ -2562,31 +2640,35 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     int synth_id = audio_sym_synth_id(callable_sym);
     SynthRecord rec = synth_registry_get(synth_id);
 
-    return call_registered_synth_in_audio_fn(ast, rec, dsp_ctx, ctx, module,
-                                             builder);
+    return DSP_SCALAR(call_registered_synth_in_audio_fn(ast, rec, dsp_ctx, ctx,
+                                                        module, builder));
   }
 
   if (is_ident(f, "bufplay")) {
     LLVMValueRef buf = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                      ctx, module, builder);
+                                      ctx, module, builder)
+                           .scalar;
     LLVMValueRef rate =
         ensure_float(ast->data.AST_APPLICATION.args[1].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
     LLVMValueRef start_pos =
         ensure_float(ast->data.AST_APPLICATION.args[2].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 2, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
     LLVMValueRef trig =
         ensure_float(ast->data.AST_APPLICATION.args[3].type,
                      dsp_build_expr(ast->data.AST_APPLICATION.args + 3, dsp_ctx,
-                                    ctx, module, builder),
+                                    ctx, module, builder)
+                         .scalar,
                      builder);
 
-    return build_bufplay(buf, rate, start_pos, trig, dsp_ctx, ctx, module,
-                         builder);
+    return DSP_SCALAR(build_bufplay(buf, rate, start_pos, trig, dsp_ctx, ctx,
+                                    module, builder));
   }
 
   if (is_ident(f, "grains")) {
@@ -2594,30 +2676,35 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     double max_grains_num = 0.0;
     if (!ast_try_eval_const_num(&args[0], dsp_ctx, ctx, &max_grains_num)) {
       fprintf(stderr, "Error - max_grains needs to be a constant\n");
-      return NULL;
+      return DSP_NULL;
     }
 
     int32_t max_grains = (int32_t)max_grains_num;
     if (max_grains <= 0) {
-      return LLVMConstReal(LLVMDoubleType(), 0.0);
+      return DSP_SCALAR(LLVMConstReal(LLVMDoubleType(), 0.0));
     }
 
-    LLVMValueRef buf = dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+    LLVMValueRef buf =
+        dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder).scalar;
     LLVMValueRef rate = ensure_float(
-        args[2].type, dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder),
+        args[2].type,
+        dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder).scalar,
         builder);
     LLVMValueRef pos = ensure_float(
-        args[3].type, dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder),
+        args[3].type,
+        dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder).scalar,
         builder);
     LLVMValueRef width = ensure_float(
-        args[4].type, dsp_build_expr(args + 4, dsp_ctx, ctx, module, builder),
+        args[4].type,
+        dsp_build_expr(args + 4, dsp_ctx, ctx, module, builder).scalar,
         builder);
     LLVMValueRef trig = ensure_float(
-        args[5].type, dsp_build_expr(args + 5, dsp_ctx, ctx, module, builder),
+        args[5].type,
+        dsp_build_expr(args + 5, dsp_ctx, ctx, module, builder).scalar,
         builder);
 
-    return build_grains(max_grains, buf, rate, pos, width, trig, dsp_ctx,
-                        module, builder);
+    return DSP_SCALAR(build_grains(max_grains, buf, rate, pos, width, trig,
+                                   dsp_ctx, module, builder));
   }
 
   if (is_ident(f, "array_fill_const")) {
@@ -2627,7 +2714,7 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       fprintf(stderr, "Error: not implemented- emit non-constant / computed "
                       "array length instructions\n");
       print_ast_err(ast);
-      return NULL;
+      return DSP_NULL;
     }
 
     int len = args->data.AST_INT.value;
@@ -2678,7 +2765,8 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         LLVMBuildStore(dsp_ctx->init_builder, arr_init, arr_ptr);
 
         LLVMValueRef fill_elem = dsp_build_expr(args + 1, dsp_ctx, ctx, module,
-                                                dsp_ctx->init_builder);
+                                                dsp_ctx->init_builder)
+                                     .scalar;
         fill_elem =
             handle_type_conversions(fill_elem, (args + 1)->type, el_type, ctx,
                                     module, dsp_ctx->init_builder);
@@ -2696,7 +2784,7 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
           dsp_ctx, builder, total_bytes, 8, "array.ptr");
       LLVMValueRef arr_ptr =
           LLVMBuildBitCast(builder, arr_ptr_i8, arr_ptr_ty, "array.ptr");
-      return LLVMBuildLoad2(builder, arr_ty, arr_ptr, "array.load");
+      return DSP_SCALAR(LLVMBuildLoad2(builder, arr_ty, arr_ptr, "array.load"));
     }
 
     // Non-hoisted: allocate on frame stack and fill each frame
@@ -2705,7 +2793,7 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         LLVMBuildArrayAlloca(builder, el_llvm_ty, len_i32, "array.frame.data");
 
     LLVMValueRef fill_elem =
-        dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+        dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder).scalar;
     fill_elem = handle_type_conversions(fill_elem, (args + 1)->type, el_type,
                                         ctx, module, builder);
 
@@ -2720,7 +2808,7 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     arr_val = LLVMBuildInsertValue(builder, arr_val, len_i32, 0, "array.size");
     arr_val =
         LLVMBuildInsertValue(builder, arr_val, frame_data_ptr, 1, "array.data");
-    return arr_val;
+    return DSP_SCALAR(arr_val);
   }
 
   if (callable_sym && callable_sym->type == STYPE_AUDIO_JIT_INLINE_LAMBDA) {
@@ -2741,7 +2829,8 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
         LLVMValueRef arg_val =
             dsp_build_expr(ast->data.AST_APPLICATION.args + idx, dsp_ctx, &lctx,
-                           module, builder);
+                           module, builder)
+                .scalar;
         if (types_equal(param_type, &t_num)) {
           arg_val = ensure_float(ast->data.AST_APPLICATION.args[idx].type,
                                  arg_val, builder);
@@ -2761,19 +2850,22 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     }
 
     LLVMValueRef res = dsp_build_expr(lambda_ast->data.AST_LAMBDA.body, dsp_ctx,
-                                      &lctx, module, builder);
+                                      &lctx, module, builder)
+                           .scalar;
 
     destroy_ctx(&lctx);
 
-    return res;
+    return DSP_SCALAR(res);
   }
 
   if (is_ident(f, "vec_dot")) {
 
     LLVMValueRef vec_a = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                        ctx, module, builder);
+                                        ctx, module, builder)
+                             .scalar;
     LLVMValueRef vec_b = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                        dsp_ctx, ctx, module, builder);
+                                        dsp_ctx, ctx, module, builder)
+                             .scalar;
 
     LLVMTypeRef f64_ty = LLVMDoubleType();
     LLVMTypeRef i32_ty = LLVMInt32Type();
@@ -2798,9 +2890,9 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     LLVMValueRef b_data =
         LLVMBuildExtractValue(builder, vec_b, 1, "vec_data_ptr");
     LLVMValueRef cols = LLVMBuildExtractValue(builder, vec_a, 0, "vec_size");
-    return LLVMBuildCall2(builder, mmul_fn_ty, dot_fn,
-                          (LLVMValueRef[]){cols, a_data, b_data}, 3,
-                          "vec_dot_prod");
+    return DSP_SCALAR(LLVMBuildCall2(builder, mmul_fn_ty, dot_fn,
+                                     (LLVMValueRef[]){cols, a_data, b_data}, 3,
+                                     "vec_dot_prod"));
   }
 
   if (is_ident(f, "dsp_mmul_op")) {
@@ -2809,11 +2901,15 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
 
     LLVMValueRef matrix = dsp_build_expr(ast->data.AST_APPLICATION.args,
-                                         dsp_ctx, ctx, module, builder);
+                                         dsp_ctx, ctx, module, builder)
+                              .scalar;
+
     LLVMValueRef vec = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                      dsp_ctx, ctx, module, builder);
+                                      dsp_ctx, ctx, module, builder)
+                           .scalar;
     LLVMValueRef out = dsp_build_expr(ast->data.AST_APPLICATION.args + 2,
-                                      dsp_ctx, ctx, module, builder);
+                                      dsp_ctx, ctx, module, builder)
+                           .scalar;
 
     // All three are flat array structs: { i32 size, f64* data }
     LLVMTypeRef arr_ty = codegen_array_type(f64_ty);
@@ -2858,11 +2954,15 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     LLVMBuildCall2(
         builder, mmul_fn_ty, mmul_fn,
         (LLVMValueRef[]){rows, cols, matrix_data, vec_data, out_data}, 5, "");
-    return out;
+    return DSP_SCALAR(out);
   }
 
   if (is_ident(f, "delay_proc")) {
-    return dsp_delay_proc(ast, dsp_ctx, ctx, module, builder);
+    return DSP_SCALAR(dsp_delay_proc(ast, dsp_ctx, ctx, module, builder));
+  }
+
+  if (is_ident(f, _FORK_OPERATOR_ID)) {
+    return dsp_fork(ast, dsp_ctx, ctx, module, builder);
   }
 
   // if (is_ident(f, "dsp_list_foldi")) {
@@ -2898,8 +2998,8 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     Ast *collection_proc_fn_ast;
 
     if ((collection_proc_fn_ast = get_collection_proc_func(fn_ast))) {
-      return call_dsp_list_proc(collection_proc_fn_ast, ast, dsp_ctx, ctx,
-                                module, builder);
+      return DSP_SCALAR(call_dsp_list_proc(collection_proc_fn_ast, ast, dsp_ctx,
+                                           ctx, module, builder));
     }
 
     // if (callable_sym->type == STYPE_GENERIC_FUNCTION &&
@@ -2914,27 +3014,29 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     if (!callable) {
       fprintf(stderr, "dsp fn application failed, callable not found\n");
       print_ast_err(ast);
-      return NULL;
+      return DSP_NULL;
     }
 
     Type *f = callable_sym->symbol_type;
 
     if (is_void_func(f)) {
-      return LLVMBuildCall2(builder, LLVMGlobalGetValueType(callable), callable,
-                            NULL, 0, "call.ylc-function");
+      return DSP_SCALAR(LLVMBuildCall2(builder,
+                                       LLVMGlobalGetValueType(callable),
+                                       callable, NULL, 0, "call.ylc-function"));
     }
 
     int args_len = ast->data.AST_APPLICATION.len;
     LLVMValueRef args[args_len];
     for (int i = 0; i < args_len; i++) {
       args[i] = dsp_build_expr(ast->data.AST_APPLICATION.args + i, dsp_ctx, ctx,
-                               module, builder);
+                               module, builder)
+                    .scalar;
       if (args[i] == NULL) {
         fprintf(stderr, "Application Error: null operand to function %d\n",
                 fn_ast->tag);
         print_ast_err(ast->data.AST_APPLICATION.args + i);
         print_ast(fn_ast);
-        return NULL;
+        return DSP_NULL;
       }
       Type *t = f->data.T_FN.from;
 
@@ -2945,9 +3047,10 @@ LLVMValueRef dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       f = f->data.T_FN.to;
     }
 
-    return LLVMBuildCall2(builder, LLVMGlobalGetValueType(callable), callable,
-                          args, args_len, "call.ylc-function");
+    return DSP_SCALAR(LLVMBuildCall2(builder, LLVMGlobalGetValueType(callable),
+                                     callable, args, args_len,
+                                     "call.ylc-function"));
   }
 
-  return NULL;
+  return DSP_NULL;
 }

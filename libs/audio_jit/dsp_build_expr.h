@@ -8,8 +8,18 @@
 
 #include "./compile_synth.h"
 
-LLVMValueRef dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
-                            LLVMModuleRef module, LLVMBuilderRef builder);
+typedef struct {
+  int lanes;
+  LLVMValueRef scalar;
+  LLVMValueRef *vec;
+} DspValue;
+
+#define DSP_SCALAR(v)                                                          \
+  (DspValue) { 1, v }
+#define DSP_NULL (DspValue){0}
+
+DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
+                        LLVMModuleRef module, LLVMBuilderRef builder);
 
 LLVMValueRef dsp_consume_state_cursor(LLVMValueRef cursor_ptr,
                                       LLVMBuilderRef builder, int size,

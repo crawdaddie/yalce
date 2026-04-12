@@ -24,6 +24,7 @@ let lfnoise0 = extern fn Double -> Double -> Double -> Double;
 let kill_on_end = extern fn Double -> Double;
 let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
 let rect = extern fn Double -> Double -> Double;
+let spf = extern fn () -> Double;
 let delay = extern fn Double -> Double -> Double -> Double -> Double;
 let comb = extern fn Double -> Double -> Double -> Double -> Double;
 let allpass = extern fn Double -> Double -> Double -> Double -> Double;
@@ -31,6 +32,7 @@ let clampup = extern fn Double -> Double -> Double;
 let lag = extern fn Double -> Double -> Double;
 let arr_choose = extern fn Array of Double -> Double -> Double;
 let arr_seq = extern fn Array of Double -> Double -> Double;
+let pan2 = extern fn Double -> Double;
 
 let delay_line = extern fn Double -> Array of Double;
 let dsp_mmul_op = extern fn Array of Double -> Array of Double -> Array of Double -> Array of Double;
@@ -38,6 +40,7 @@ let vec_dot = extern fn Array of Double -> Array of Double -> Double;
 
 let delay_proc = extern fn (Int -> Array of Double -> Double -> Double) -> Array of Double -> Double -> Double;
 
+let ~ = extern fn Array of T -> T;
 
 #                       buf                rate      start_pos trig
 let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;

@@ -1,0 +1,13 @@
+open DSP;
+
+
+compile_audio_fn ( 
+  let y = fn () ->
+    ~[200., 600.]
+    |> sin_osc 
+);
+
+
+y () |> play_node
+
+

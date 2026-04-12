@@ -53,7 +53,7 @@ LLVMValueRef dsp_array_sum(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
   DspBuildCtx _dsp_ctx = *dsp_ctx;
   LLVMValueRef array_value =
-      dsp_build_expr(array_ast, &_dsp_ctx, ctx, module, builder);
+      dsp_build_expr(array_ast, &_dsp_ctx, ctx, module, builder).scalar;
   dsp_ctx->state_offset = _dsp_ctx.state_offset;
 
   LLVMValueRef runtime_len =
@@ -136,7 +136,8 @@ static int collect_captured_vals(Ast *anon_func, DspBuildCtx *dsp_ctx,
     int i = 0;
     for (AstList *cv = anon_func->data.AST_LAMBDA.closed_vals; cv;
          cv = cv->next)
-      (*out_vals)[i++] = dsp_build_expr(cv->ast, dsp_ctx, ctx, module, builder);
+      (*out_vals)[i++] =
+          dsp_build_expr(cv->ast, dsp_ctx, ctx, module, builder).scalar;
   }
   return n;
 }
@@ -318,7 +319,7 @@ LLVMValueRef dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
 
   DspBuildCtx _dsp_ctx = *dsp_ctx;
   LLVMValueRef array_value =
-      dsp_build_expr(array_ast, &_dsp_ctx, ctx, module, builder);
+      dsp_build_expr(array_ast, &_dsp_ctx, ctx, module, builder).scalar;
   DspArrayAttributes array_attrs = _dsp_ctx.array_attrs;
   dsp_ctx->state_offset = _dsp_ctx.state_offset;
 
@@ -437,9 +438,11 @@ LLVMValueRef dsp_delay_proc(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
   // 2. Build dl and inp so state_offset advances before compile_lambda
   DspBuildCtx _dsp_ctx = *dsp_ctx;
-  LLVMValueRef dl_val = dsp_build_expr(dl_ast, &_dsp_ctx, ctx, module, builder);
+  LLVMValueRef dl_val =
+      dsp_build_expr(dl_ast, &_dsp_ctx, ctx, module, builder).scalar;
   dsp_ctx->state_offset = _dsp_ctx.state_offset;
-  LLVMValueRef inp_val = dsp_build_expr(inp_ast, dsp_ctx, ctx, module, builder);
+  LLVMValueRef inp_val =
+      dsp_build_expr(inp_ast, dsp_ctx, ctx, module, builder).scalar;
   inp_val = ensure_float(inp_ast->type, inp_val, builder);
 
   // 3. frame_ty: (state*, node*, i32 w, dl_struct, f64 inp, ...captured) -> f64
@@ -588,7 +591,7 @@ LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   // state_offset back so subsequent allocations are correctly sequenced.
   DspBuildCtx _dsp_ctx = *dsp_ctx;
   LLVMValueRef array_value =
-      dsp_build_expr(array_ast, &_dsp_ctx, ctx, module, builder);
+      dsp_build_expr(array_ast, &_dsp_ctx, ctx, module, builder).scalar;
   DspArrayAttributes array_attrs = _dsp_ctx.array_attrs;
   dsp_ctx->state_offset = _dsp_ctx.state_offset;
 
@@ -604,7 +607,7 @@ LLVMValueRef dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   int iter_region_bytes = array_attrs.comptime_size * iter_state_stride;
 
   LLVMValueRef init_val =
-      dsp_build_expr(init_ast, dsp_ctx, ctx, module, builder);
+      dsp_build_expr(init_ast, dsp_ctx, ctx, module, builder).scalar;
   if (LLVMGetTypeKind(fold_type) == LLVMDoubleTypeKind) {
     init_val = ensure_float(init_ast->type, init_val, builder);
   }

@@ -22,6 +22,7 @@
 #include "../../lang/types/inference.h"
 #include "../../lang/types/type_ser.h"
 #include "../../lang/ylc_datatypes.h"
+#include "./dsp_build_expr.h"
 #include <string.h>
 
 static SynthRegistry synth_registry;
@@ -455,9 +456,9 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
     }
   }
 
-  LLVMValueRef expr =
-      dsp_build_expr(lambda->data.AST_LAMBDA.body, &frame_ctx, &fn_ctx, module,
-                     frame_ctx.perform_builder);
+  LLVMValueRef expr = dsp_build_expr(lambda->data.AST_LAMBDA.body, &frame_ctx,
+                                     &fn_ctx, module, frame_ctx.perform_builder)
+                          .scalar;
 
   if (expr) {
     expr = ensure_float(lambda->data.AST_LAMBDA.body->type, expr,
