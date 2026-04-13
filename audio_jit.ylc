@@ -12,7 +12,7 @@ compile_audio_fn (
 
     let ffreq = t |> decay 0.5 |> scale f 8000;
 
-    let osc = fn f -> saw_osc f + saw_osc (f * 1.01) + saw_osc (f * 1.02) |> (*) 0.3;;
+    let osc = fn f -> f * ~[1., 1.01, 1.02] |> saw_osc |> (*) 0.3 |> mix 1;;
     # let osc = fn f -> saw_osc f + saw_osc (f * 1.01) 
     # ;;
 
@@ -54,7 +54,7 @@ let q = 60. / 140.;
 
 compile_audio_fn (
   let fx = fn dt inp ->
-    delay dt 2. 0.3 inp 
+    delay (dt * ~[1., 1.01]) 2. 0.5 inp 
 
 );
 #hh let rfx = allpass q 2. 0.5 0. |> play_node;
@@ -108,19 +108,19 @@ defer_quant q (fn t ->
   # let hh = fn () -> closed_hh () |> play_node_offset (get_tl_tick ());;
   # let ohh = fn () -> open_hh () |> play_node_offset (get_tl_tick ());;
 
-  (dur:     pat "1 1 2",
-    hh: pat_key "c c o"
-  )
-  |> cor_zip_struct 
-  |> cor_map (fn (d, hh) ->
-    match hh with
-    | "c" -> (closed_hh () |> play_node_offset (get_tl_tick ()))
-    | "o" -> (open_hh () |> play_node_offset (get_tl_tick ()))
-    ;
-    d * q * 0.25
-  )
-  |> play_routine t schedule_event
-  ;
+  # (dur:     pat "1 1 2",
+  #   hh: pat_key "c c o"
+  # )
+  # |> cor_zip_struct 
+  # |> cor_map (fn (d, hh) ->
+  #   match hh with
+  #   | "c" -> (closed_hh () |> play_node_offset (get_tl_tick ()))
+  #   | "o" -> (open_hh () |> play_node_offset (get_tl_tick ()))
+  #   ;
+  #   d * q * 0.25
+  # )
+  # |> play_routine t schedule_event
+  # ;
 
   # pat "1 1 1 1 4 1 1 1 4 1" 
   # |> cor_loop

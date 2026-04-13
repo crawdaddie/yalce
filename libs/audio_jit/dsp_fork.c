@@ -95,12 +95,11 @@ DspValue dsp_mix(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     if (right != left && right_gain != 0.0) {
       LLVMValueRef right_term = input.vec[in_ch];
       if (right_gain != 1.0) {
-        right_term = LLVMBuildFMul(
-            builder, right_term, LLVMConstReal(f64_ty, right_gain),
-            "mix.right.term");
+        right_term =
+            LLVMBuildFMul(builder, right_term,
+                          LLVMConstReal(f64_ty, right_gain), "mix.right.term");
       }
-      out[right] =
-          LLVMBuildFAdd(builder, out[right], right_term, "mix.right");
+      out[right] = LLVMBuildFAdd(builder, out[right], right_term, "mix.right");
     }
   }
 

@@ -28,6 +28,20 @@
 
 static SynthRegistry synth_registry;
 
+static DspSynthArgKind classify_synth_arg_kind(Type *type) {
+  if (!type) {
+    return DSP_SYNTH_ARG_SCALAR_ONLY;
+  }
+  if (is_array_type(type)) {
+    return DSP_SYNTH_ARG_ARRAY_ONLY;
+  }
+  if (types_equal(type, &t_num) || types_equal(type, &t_int) ||
+      type->kind == T_VAR) {
+    return DSP_SYNTH_ARG_SCALAR_OR_MULTICHANNEL;
+  }
+  return DSP_SYNTH_ARG_SCALAR_ONLY;
+}
+
 static size_t align_up_size(size_t value, size_t align) {
   if (align <= 1) {
     return value;
@@ -281,6 +295,30 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       } else if (p->ast->tag == AST_TUPLE) {
         num_inputs += p->ast->data.AST_LIST.len;
       }
+    }
+  }
+  DspSynthArgKind *arg_kinds =
+      num_inputs ? malloc(sizeof(DspSynthArgKind) * (size_t)num_inputs) : NULL;
+  int arg_kind_idx = 0;
+  Type *input_type = lambda->type;
+  if (!is_void_fn && arg_kinds) {
+    for (AstList *p = lambda->data.AST_LAMBDA.params; p; p = p->next) {
+      if (!input_type || input_type->kind != T_FN) {
+        break;
+      }
+      Type *param_type = input_type->data.T_FN.from;
+      if (p->ast->tag == AST_TUPLE && param_type &&
+          param_type->kind == T_CONS) {
+        for (int j = 0; j < p->ast->data.AST_LIST.len; j++) {
+          Type *field_type = j < param_type->data.T_CONS.num_args
+                                 ? param_type->data.T_CONS.args[j]
+                                 : NULL;
+          arg_kinds[arg_kind_idx++] = classify_synth_arg_kind(field_type);
+        }
+      } else {
+        arg_kinds[arg_kind_idx++] = classify_synth_arg_kind(param_type);
+      }
+      input_type = input_type->data.T_FN.to;
     }
   }
   // Type *ftype = lambda->type;
@@ -576,20 +614,19 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
         LLVMAddFunction(module, "ylc_get_output_buf", get_output_buf_fn_ty);
     LLVMSetLinkage(get_output_buf_fn, LLVMExternalLinkage);
   }
-  LLVMValueRef output_buf_i8 =
-      LLVMBuildCall2(dsp_ctx.perform_builder, get_output_buf_fn_ty,
-                     get_output_buf_fn, (LLVMValueRef[]){dsp_ctx.node_ptr}, 1,
-                     "output.buf.i8");
-  LLVMValueRef output_buf = LLVMBuildPointerCast(
-      dsp_ctx.perform_builder, output_buf_i8, LLVMPointerType(f64_ty, 0),
-      "output.buf");
+  LLVMValueRef output_buf_i8 = LLVMBuildCall2(
+      dsp_ctx.perform_builder, get_output_buf_fn_ty, get_output_buf_fn,
+      (LLVMValueRef[]){dsp_ctx.node_ptr}, 1, "output.buf.i8");
+  LLVMValueRef output_buf =
+      LLVMBuildPointerCast(dsp_ctx.perform_builder, output_buf_i8,
+                           LLVMPointerType(f64_ty, 0), "output.buf");
   LLVMValueRef output_lanes_i64 =
       LLVMConstInt(i64_ty, (uint64_t)output_lanes, 0);
   LLVMValueRef frame_offset = LLVMBuildMul(dsp_ctx.perform_builder, frame_i64,
                                            output_lanes_i64, "frame.out.off");
-  LLVMValueRef frame_out_dest_ptr = LLVMBuildGEP2(
-      dsp_ctx.perform_builder, f64_ty, output_buf, &frame_offset, 1,
-      "frame.out.ptr");
+  LLVMValueRef frame_out_dest_ptr =
+      LLVMBuildGEP2(dsp_ctx.perform_builder, f64_ty, output_buf, &frame_offset,
+                    1, "frame.out.ptr");
   frame_call_args[2] = frame_out_dest_ptr;
   for (unsigned i = 0; i < frame_user_params; i++) {
     LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
@@ -699,7 +736,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
                        .frame_fn = frame_fn,
                        .perform_fn = perf_fn,
                        .arg_count = num_inputs,
-                       .arg_kinds = NULL,
+                       .arg_kinds = arg_kinds,
                        .output_lanes = output_lanes,
                        .state_bytes = state_bytes};
 }

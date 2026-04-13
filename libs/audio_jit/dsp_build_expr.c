@@ -15,9 +15,6 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
-#define DSP_SCALAR(v)                                                          \
-  (DspValue) { 1, v }
-#define DSP_NULL (DspValue){0}
 
 DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -74,17 +71,20 @@ DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       return DSP_NULL;
     }
 
+    DspValue bound_val;
     LLVMValueRef val;
     DspArrayAttributes array_attr;
 
     if (is_array_type(expr->type)) {
       DspBuildCtx _dsp_ctx = *dsp_ctx;
-      val = dsp_build_expr(expr, &_dsp_ctx, work_ctx, module, builder).scalar;
+      bound_val = dsp_build_expr(expr, &_dsp_ctx, work_ctx, module, builder);
+      val = bound_val.scalar;
       array_attr = _dsp_ctx.array_attrs;
       dsp_ctx->state_offset = _dsp_ctx.state_offset;
 
     } else {
-      val = dsp_build_expr(expr, dsp_ctx, work_ctx, module, builder).scalar;
+      bound_val = dsp_build_expr(expr, dsp_ctx, work_ctx, module, builder);
+      val = bound_val.scalar;
     }
 
     if (!val) {
@@ -130,8 +130,14 @@ DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         // print_ast(ast);
         // printf("binding array to var: size %d\n", attrs->comptime_size);
       } else {
-        JITSymbol *sym =
-            new_symbol(STYPE_LOCAL_VAR, expr->type, val, LLVMTypeOf(val));
+        JITSymbol *sym = new_symbol((symbol_type)STYPE_AUDIO_JIT_DSP_VALUE,
+                                    expr->type, val, LLVMTypeOf(val));
+        DspValue *stored =
+            dsp_ctx ? dsp_tmp_alloc(dsp_ctx, sizeof(DspValue), 8) : NULL;
+        if (stored) {
+          *stored = bound_val;
+          sym->symbol_data._USER_DEFINED_SYMBOL = stored;
+        }
         ht_set_hash(work_ctx->frame->table, chars, hash_string(chars, len),
                     sym);
       }
@@ -191,6 +197,10 @@ DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       DspArrayAttributes *attr = sym->symbol_data._USER_DEFINED_SYMBOL;
       dsp_ctx->array_attrs = *attr;
       return DSP_SCALAR(sym->val);
+    }
+    if (sym && sym->type == (symbol_type)STYPE_AUDIO_JIT_DSP_VALUE &&
+        sym->symbol_data._USER_DEFINED_SYMBOL) {
+      return *(DspValue *)sym->symbol_data._USER_DEFINED_SYMBOL;
     }
     return DSP_SCALAR(codegen(ast, ctx, module, builder));
   }

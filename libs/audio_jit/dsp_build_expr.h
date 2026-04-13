@@ -18,7 +18,7 @@ typedef struct {
   (DspValue) { 1, v }
 
 #define DSP_MULTI(l, v)                                                        \
-  (DspValue) { .lanes = l, .vec = v }
+  (DspValue) { .lanes = l, .scalar = *v, .vec = v }
 
 #define DSP_NULL (DspValue){0}
 

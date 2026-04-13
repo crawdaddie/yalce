@@ -24,11 +24,12 @@ let lfnoise0 = extern fn Double -> Double -> Double -> Double;
 let kill_on_end = extern fn Double -> Double;
 let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
 let rect = extern fn Double -> Double -> Double;
-let spf = extern fn () -> Double;
-let delay = extern fn Double -> Double -> Double -> Double -> Double;
-let comb = extern fn Double -> Double -> Double -> Double -> Double;
+# let spf = extern fn () -> Double;
+let delay =   extern fn Double -> Double -> Double -> Double -> Double;
+let comb =    extern fn Double -> Double -> Double -> Double -> Double;
 let allpass = extern fn Double -> Double -> Double -> Double -> Double;
-let clampup = extern fn Double -> Double -> Double;
+
+# let clampup = extern fn Double -> Double -> Double;
 let lag = extern fn Double -> Double -> Double;
 let arr_choose = extern fn Array of Double -> Double -> Double;
 let arr_seq = extern fn Array of Double -> Double -> Double;
@@ -66,9 +67,10 @@ compile_audio_fn (
     y
 );
 
+let _min = fn a: (Double) b: (Double) -> Math.min a b;;
 compile_audio_fn (
   let lpf = fn freq q x ->
-    let w0   = 2.0 * Math.PI * freq * (spf ()) in
+    let w0   = 2.0 * Math.PI * freq * spf in
     let cosw = Math.cos w0 in
     let sinw = Math.sin w0 in
     let alpha = sinw / (2.0 * q) in
@@ -91,7 +93,7 @@ compile_audio_fn (
 
 compile_audio_fn (
   let hpf = fn freq q x ->
-    let w0   = 2.0 * Math.PI * freq * (spf ()) in
+    let w0   = 2.0 * Math.PI * freq * spf in
     let cosw = Math.cos w0 in
     let sinw = Math.sin w0 in
     let alpha = sinw / (2.0 * q) in
@@ -242,7 +244,7 @@ compile_audio_fn (
   # one-pole lowpass: frequency in Hz
   let lpf1p = fn freq x ->
     let Z = [| 0. |];
-    let g = clampup 0.999 (2.0 * Math.PI * freq * (spf ()));
+    let g = _min 0.999 (2.0 * Math.PI * freq * spf );
     let y = Z[0] |> pole g x;
     Z[0] := y;
     y
@@ -252,7 +254,7 @@ compile_audio_fn (
   # one-pole highpass: HP = input - LP(input)
   let hpf1p = fn freq x ->
     let Z = [| 0. |];
-    let g = clampup 0.999 (2.0 * Math.PI * freq * (spf ()));
+    let g = _min 0.999 (2.0 * Math.PI * freq * spf);
     let lp = Z[0] |> pole g x;
     Z[0] := lp;
     x - lp
@@ -262,8 +264,8 @@ compile_audio_fn (
   # 4‑pole ladder with feedback + tanh drive
   let ladder = fn cutoff res drive x ->
     let Z = [| 0., 0., 0., 0. |];  # z1..z4
-    let g = 2.0 * Math.PI * cutoff * (spf ()) in
-    let g1 = clampup 0.99 g in
+    let g = 2.0 * Math.PI * cutoff * spf in
+    let g1 = _min 0.99 g in
 
     # input drive + feedback
     let u = Math.tanh (drive * x - (res * (Z[3]))) in
