@@ -2297,6 +2297,22 @@ static LLVMValueRef dsp_apply_phasor_kernel(LLVMValueRef x, void *userdata) {
 }
 
 typedef struct {
+  Type *in_type;
+  bool freq_is_const_zero;
+  DspBuildCtx *dsp_ctx;
+  JITLangCtx *ctx;
+  LLVMModuleRef module;
+  LLVMBuilderRef builder;
+} DspTrigOp;
+
+static LLVMValueRef dsp_apply_trig_kernel(LLVMValueRef x, void *userdata) {
+  DspTrigOp *op = userdata;
+  return builtin_trig(ensure_float(op->in_type, x, op->builder),
+                      op->freq_is_const_zero, op->dsp_ctx, op->ctx, op->module,
+                      op->builder);
+}
+
+typedef struct {
   Type *lag_secs_type;
   Type *input_type;
   DspBuildCtx *dsp_ctx;
@@ -2311,6 +2327,24 @@ static LLVMValueRef dsp_apply_lag_kernel(LLVMValueRef lag_secs,
   lag_secs = ensure_float(op->lag_secs_type, lag_secs, op->builder);
   input = ensure_float(op->input_type, input, op->builder);
   return build_lag(input, lag_secs, op->dsp_ctx, op->module, op->builder);
+}
+
+typedef struct {
+  Type *t_type;
+  Type *trig_type;
+  DspBuildCtx *dsp_ctx;
+  JITLangCtx *ctx;
+  LLVMModuleRef module;
+  LLVMBuilderRef builder;
+} DspDecayOp;
+
+static LLVMValueRef dsp_apply_decay_kernel(LLVMValueRef t, LLVMValueRef trig,
+                                           void *userdata) {
+  DspDecayOp *op = userdata;
+  t = ensure_float(op->t_type, t, op->builder);
+  trig = ensure_float(op->trig_type, trig, op->builder);
+  return build_exp_decay(t, trig, op->dsp_ctx, op->ctx, op->module,
+                         op->builder);
 }
 
 static DspValue build_lag_op(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
@@ -2492,14 +2526,15 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
   if (is_ident(f, "trig")) {
     Ast *freq_ast = ast->data.AST_APPLICATION.args;
-    LLVMValueRef freq =
-        dsp_build_expr(freq_ast, dsp_ctx, ctx, module, builder).scalar;
-    freq = ensure_float(freq_ast->type, freq, builder);
-
-    bool freq_is_const_zero = ast_is_const_zero(freq_ast, dsp_ctx, ctx);
-
-    return DSP_SCALAR(
-        builtin_trig(freq, freq_is_const_zero, dsp_ctx, ctx, module, builder));
+    DspValue freq = dsp_build_expr(freq_ast, dsp_ctx, ctx, module, builder);
+    DspTrigOp op = {.in_type = freq_ast->type,
+                    .freq_is_const_zero =
+                        ast_is_const_zero(freq_ast, dsp_ctx, ctx),
+                    .dsp_ctx = dsp_ctx,
+                    .ctx = ctx,
+                    .module = module,
+                    .builder = builder};
+    return dsp_lift_unary(dsp_ctx, freq, dsp_apply_trig_kernel, &op);
   }
   if (is_ident(f, "+")) {
     return multi_chan_arith(ast, dsp_ctx, ctx, module, builder, LLVMBuildAdd,
@@ -2770,16 +2805,16 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         builder, arr, index, type_to_llvm_type(ast->type, ctx, module)));
   }
   if (is_ident(f, "decay")) {
-
-    LLVMValueRef T = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder)
-                         .scalar;
-    T = ensure_float(ast->data.AST_APPLICATION.args->type, T, builder);
-
-    LLVMValueRef trig = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                       dsp_ctx, ctx, module, builder)
-                            .scalar;
-    return DSP_SCALAR(build_exp_decay(T, trig, dsp_ctx, ctx, module, builder));
+    Ast *args = ast->data.AST_APPLICATION.args;
+    DspValue t_v = dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder);
+    DspValue trig_v = dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+    DspDecayOp op = {.t_type = args[0].type,
+                     .trig_type = args[1].type,
+                     .dsp_ctx = dsp_ctx,
+                     .ctx = ctx,
+                     .module = module,
+                     .builder = builder};
+    return dsp_lift_binary(dsp_ctx, t_v, trig_v, dsp_apply_decay_kernel, &op);
   }
   if (is_ident(f, "scale")) {
     // unipolar scale - ie [0,1] -> [a, b]

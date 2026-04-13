@@ -12,15 +12,17 @@ compile_audio_fn (
 
     let ffreq = t |> decay 0.5 |> scale f 8000;
 
-    let osc = fn f -> f * ~[1., 1.01, 1.02] |> saw_osc |> (*) 0.3 |> mix 1;;
-    # let osc = fn f -> saw_osc f + saw_osc (f * 1.01) 
-    # ;;
+    let osc = fn f ->
+      f * ~[1., 1.01, 1.02]
+      |> saw_osc
+      |> (*) 0.3
+      |> mix 1
+    ;;
 
     f
     |> lag 0.3
     |> osc
     |> Filter.lpf ffreq 2.
-    # |> (*) 2 |> Math.tanh
     |> (*) (adsr 0 0.1 0.8 0.5 t)
     |> (*) (Math.db_amp -15)
 );
@@ -129,5 +131,9 @@ defer_quant q (fn t ->
   # |> play_routine t schedule_event
   # ;
 
-)
+);
 
+
+# let ylc_scope_open = extern fn Synth -> (); 
+# let _ = dlopen "libs/gui/libgui.so";
+# ylc_scope_open rfx;
