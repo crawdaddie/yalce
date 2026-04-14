@@ -3149,42 +3149,51 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
 
   if (is_ident(f, "bufplay")) {
-    DspValue buf = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx, ctx,
-                                  module, builder);
-    DspValue rate = dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                   ctx, module, builder);
-    DspValue start_pos = dsp_build_expr(ast->data.AST_APPLICATION.args + 2,
-                                        dsp_ctx, ctx, module, builder);
-    DspValue trig = dsp_build_expr(ast->data.AST_APPLICATION.args + 3, dsp_ctx,
-                                   ctx, module, builder);
+    Ast *args = ast->data.AST_APPLICATION.args;
 
-    DspValueList args = {
-        .val = rate,
-        .in_type = (ast->data.AST_APPLICATION.args + 1)->type,
-        .next =
-            &(DspValueList){
-                .val = start_pos,
-                .in_type = (ast->data.AST_APPLICATION.args + 2)->type,
-                .next =
-                    &(DspValueList){
-                        .val = trig,
-                        .in_type = (ast->data.AST_APPLICATION.args + 3)->type,
-                        .next = NULL,
-                    },
-            },
-    };
+    DspValue buf = dsp_build_expr(args, dsp_ctx, ctx, module, builder);
+
+    DspValue rate = dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+    DspValue start_pos =
+        dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
+    DspValue trig = dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder);
+
+    int max_lanes = max(dsp_value_lane_count(rate),
+                        max(dsp_value_lane_count(start_pos),
+                            dsp_value_lane_count(trig)));
+
     DspBufplayOp op = {
         .buf = buf.scalar,
         .num_channels = 1,
-        .rate_type = (ast->data.AST_APPLICATION.args + 1)->type,
-        .start_pos_type = (ast->data.AST_APPLICATION.args + 2)->type,
-        .trig_type = (ast->data.AST_APPLICATION.args + 3)->type,
+        .rate_type = args[1].type,
+        .start_pos_type = args[2].type,
+        .trig_type = args[3].type,
         .dsp_ctx = dsp_ctx,
         .ctx = ctx,
         .module = module,
         .builder = builder,
     };
-    return dsp_lift_variadic(dsp_ctx, &args, dsp_apply_bufplay_kernel, &op);
+
+    if (max_lanes <= 1) {
+      LLVMValueRef scalar_args[] = {dsp_value_lane(rate, 0),
+                                    dsp_value_lane(start_pos, 0),
+                                    dsp_value_lane(trig, 0)};
+      return DSP_SCALAR(dsp_apply_bufplay_kernel(scalar_args, 3, &op));
+    }
+
+    LLVMValueRef *vals = dsp_alloc_lane_vals(dsp_ctx, max_lanes);
+    if (!vals) {
+      return DSP_NULL;
+    }
+
+    for (int i = 0; i < max_lanes; i++) {
+      LLVMValueRef lane_args[] = {dsp_value_lane(rate, i),
+                                  dsp_value_lane(start_pos, i),
+                                  dsp_value_lane(trig, i)};
+      vals[i] = dsp_apply_bufplay_kernel(lane_args, 3, &op);
+    }
+
+    return DSP_MULTI(max_lanes, vals);
   }
 
   if (is_ident(f, "mbufplay")) {
