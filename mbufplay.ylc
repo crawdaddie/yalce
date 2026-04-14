@@ -24,7 +24,7 @@ let buf = load_soundfile "/home/adam/Desktop/193811__geoneo0__four_voices_whispe
 compile_audio_fn (
   let a = fn () ->
     ~[dust 10, dust 10]
-    |> bufplay (array_of_buf amen) 1. (lfnoise 0.5 0 1)
+    |> grains 20 (array_of_buf amen) 1. (lfnoise 0.5 0 1) 0.1
     
     |> Reverb.cathedral
 );

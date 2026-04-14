@@ -35,4 +35,7 @@ LLVMValueRef dsp_consume_frame_state(DspBuildCtx *dsp_ctx,
 LLVMValueRef dsp_consume_init_state(DspBuildCtx *dsp_ctx,
                                     LLVMBuilderRef builder, int size, int align,
                                     const char *name);
+
+int max(int a, int b);
+int min(int a, int b);
 #endif

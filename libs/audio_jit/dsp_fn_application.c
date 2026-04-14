@@ -785,10 +785,9 @@ static DspValue build_bufplay(LLVMValueRef buf, LLVMValueRef rate,
   LLVMValueRef len_f =
       LLVMBuildSIToFP(builder, len_i32, f64_ty, "bufplay.len.f64");
 
-  (void)off;
   if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
-    (void)dsp_consume_init_state(dsp_ctx, dsp_ctx->init_builder, 8, 8,
-                                 "bufplay.init.phase_base");
+    dsp_consume_init_state(dsp_ctx, dsp_ctx->init_builder, 8, 8,
+                           "bufplay.init.phase_base");
   }
   LLVMValueRef phase_base =
       dsp_consume_frame_state(dsp_ctx, builder, 8, 8, "bufplay.phase_base");
@@ -2176,6 +2175,7 @@ LLVMValueRef build_array_seq(LLVMValueRef arr, LLVMValueRef trig,
 
   return LLVMBuildLoad2(builder, f64_ty, val_ptr, "array_seq.out");
 }
+
 int min(int a, int b) {
   if (a >= b)
     return b;
@@ -2494,31 +2494,6 @@ static LLVMValueRef dsp_apply_decay_kernel(LLVMValueRef t, LLVMValueRef trig,
   trig = ensure_float(op->trig_type, trig, op->builder);
   return build_exp_decay(t, trig, op->dsp_ctx, op->ctx, op->module,
                          op->builder);
-}
-
-typedef struct {
-  LLVMValueRef buf;
-  int num_channels;
-  Type *rate_type;
-  Type *start_pos_type;
-  Type *trig_type;
-  DspBuildCtx *dsp_ctx;
-  JITLangCtx *ctx;
-  LLVMModuleRef module;
-  LLVMBuilderRef builder;
-} DspBufplayOp;
-
-static LLVMValueRef dsp_apply_bufplay_kernel(LLVMValueRef *args, int argc,
-                                             void *userdata) {
-  (void)argc;
-  DspBufplayOp *op = userdata;
-  LLVMValueRef rate = ensure_float(op->rate_type, args[0], op->builder);
-  LLVMValueRef start_pos =
-      ensure_float(op->start_pos_type, args[1], op->builder);
-  LLVMValueRef trig = ensure_float(op->trig_type, args[2], op->builder);
-  return build_bufplay(op->buf, rate, start_pos, trig, op->num_channels,
-                       op->dsp_ctx, op->ctx, op->module, op->builder)
-      .scalar;
 }
 
 static DspValue build_lag_op(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
@@ -3158,27 +3133,17 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
     DspValue trig = dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder);
 
-    int max_lanes = max(dsp_value_lane_count(rate),
-                        max(dsp_value_lane_count(start_pos),
-                            dsp_value_lane_count(trig)));
-
-    DspBufplayOp op = {
-        .buf = buf.scalar,
-        .num_channels = 1,
-        .rate_type = args[1].type,
-        .start_pos_type = args[2].type,
-        .trig_type = args[3].type,
-        .dsp_ctx = dsp_ctx,
-        .ctx = ctx,
-        .module = module,
-        .builder = builder,
-    };
+    int max_lanes =
+        max(dsp_value_lane_count(rate),
+            max(dsp_value_lane_count(start_pos), dsp_value_lane_count(trig)));
 
     if (max_lanes <= 1) {
-      LLVMValueRef scalar_args[] = {dsp_value_lane(rate, 0),
-                                    dsp_value_lane(start_pos, 0),
-                                    dsp_value_lane(trig, 0)};
-      return DSP_SCALAR(dsp_apply_bufplay_kernel(scalar_args, 3, &op));
+      return build_bufplay(
+          buf.scalar,
+          ensure_float(args[1].type, dsp_value_lane(rate, 0), builder),
+          ensure_float(args[2].type, dsp_value_lane(start_pos, 0), builder),
+          ensure_float(args[3].type, dsp_value_lane(trig, 0), builder), 1,
+          dsp_ctx, ctx, module, builder);
     }
 
     LLVMValueRef *vals = dsp_alloc_lane_vals(dsp_ctx, max_lanes);
@@ -3187,10 +3152,14 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     }
 
     for (int i = 0; i < max_lanes; i++) {
-      LLVMValueRef lane_args[] = {dsp_value_lane(rate, i),
-                                  dsp_value_lane(start_pos, i),
-                                  dsp_value_lane(trig, i)};
-      vals[i] = dsp_apply_bufplay_kernel(lane_args, 3, &op);
+      vals[i] =
+          build_bufplay(
+              buf.scalar,
+              ensure_float(args[1].type, dsp_value_lane(rate, i), builder),
+              ensure_float(args[2].type, dsp_value_lane(start_pos, i), builder),
+              ensure_float(args[3].type, dsp_value_lane(trig, i), builder), 1,
+              dsp_ctx, ctx, module, builder)
+              .scalar;
     }
 
     return DSP_MULTI(max_lanes, vals);
@@ -3244,25 +3213,42 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
     LLVMValueRef buf =
         dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder).scalar;
-    LLVMValueRef rate = ensure_float(
-        args[2].type,
-        dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder).scalar,
-        builder);
-    LLVMValueRef pos = ensure_float(
-        args[3].type,
-        dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder).scalar,
-        builder);
-    LLVMValueRef width = ensure_float(
-        args[4].type,
-        dsp_build_expr(args + 4, dsp_ctx, ctx, module, builder).scalar,
-        builder);
-    LLVMValueRef trig = ensure_float(
-        args[5].type,
-        dsp_build_expr(args + 5, dsp_ctx, ctx, module, builder).scalar,
-        builder);
+    DspValue rate = dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
+    DspValue pos = dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder);
+    DspValue width = dsp_build_expr(args + 4, dsp_ctx, ctx, module, builder);
+    DspValue trig = dsp_build_expr(args + 5, dsp_ctx, ctx, module, builder);
 
-    return DSP_SCALAR(build_grains(max_grains, buf, rate, pos, width, trig,
-                                   dsp_ctx, module, builder));
+    int max_lanes =
+        max(dsp_value_lane_count(rate),
+            max(dsp_value_lane_count(pos),
+                max(dsp_value_lane_count(width), dsp_value_lane_count(trig))));
+
+    if (max_lanes <= 1) {
+      return DSP_SCALAR(build_grains(
+          max_grains, buf,
+          ensure_float(args[2].type, dsp_value_lane(rate, 0), builder),
+          ensure_float(args[3].type, dsp_value_lane(pos, 0), builder),
+          ensure_float(args[4].type, dsp_value_lane(width, 0), builder),
+          ensure_float(args[5].type, dsp_value_lane(trig, 0), builder), dsp_ctx,
+          module, builder));
+    }
+
+    LLVMValueRef *vals = dsp_alloc_lane_vals(dsp_ctx, max_lanes);
+    if (!vals) {
+      return DSP_NULL;
+    }
+
+    for (int i = 0; i < max_lanes; i++) {
+      vals[i] = build_grains(
+          max_grains, buf,
+          ensure_float(args[2].type, dsp_value_lane(rate, i), builder),
+          ensure_float(args[3].type, dsp_value_lane(pos, i), builder),
+          ensure_float(args[4].type, dsp_value_lane(width, i), builder),
+          ensure_float(args[5].type, dsp_value_lane(trig, i), builder), dsp_ctx,
+          module, builder);
+    }
+
+    return DSP_MULTI(max_lanes, vals);
   }
 
   if (is_ident(f, "array_fill_const")) {

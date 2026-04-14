@@ -21,6 +21,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
 Ast *get_collection_proc_func(Ast *fn_ast) {
   if (fn_ast->tag == AST_RECORD_ACCESS) {
     return get_collection_proc_func(fn_ast->data.AST_RECORD_ACCESS.member);
@@ -296,7 +297,8 @@ DspValue dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   int num_captured = collect_captured_vals(anon_func, dsp_ctx, ctx, module,
                                            builder, &captured_vals);
 
-  // frame_ty: (state_ptr, node_ptr, out_ptr, [idx,] element, ...captured) -> void
+  // frame_ty: (state_ptr, node_ptr, out_ptr, [idx,] element, ...captured) ->
+  // void
   int max_params = 5 + num_captured;
   LLVMTypeRef *frame_param_tys =
       malloc(sizeof(LLVMTypeRef) * (size_t)max_params);
@@ -345,8 +347,8 @@ DspValue dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
     return DSP_NULL;
   }
   for (int lane = 0; lane < s.output_lanes; lane++) {
-    out_data_ptrs[lane] = LLVMBuildArrayAlloca(builder, out_el_type, runtime_len,
-                                               "map.out.data");
+    out_data_ptrs[lane] =
+        LLVMBuildArrayAlloca(builder, out_el_type, runtime_len, "map.out.data");
   }
 
   LLVMValueRef iter_region_base =
@@ -389,11 +391,10 @@ DspValue dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   unsigned nargs = 0;
   frame_args[nargs++] = state_arg;
   frame_args[nargs++] = LLVMConstNull(GENERIC_PTR);
-  LLVMValueRef mapped_out_ptr =
-      LLVMBuildArrayAlloca(builder, out_el_type,
-                           LLVMConstInt(LLVMInt32Type(),
-                                        (uint64_t)s.output_lanes, 0),
-                           "map.out.tmp");
+  LLVMValueRef mapped_out_ptr = LLVMBuildArrayAlloca(
+      builder, out_el_type,
+      LLVMConstInt(LLVMInt32Type(), (uint64_t)s.output_lanes, 0),
+      "map.out.tmp");
   frame_args[nargs++] = mapped_out_ptr;
   if (with_index)
     frame_args[nargs++] = idx_val_body;
@@ -407,9 +408,8 @@ DspValue dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   free(captured_vals);
   for (int lane = 0; lane < s.output_lanes; lane++) {
     LLVMValueRef lane_idx = LLVMConstInt(i64_ty, (uint64_t)lane, 0);
-    LLVMValueRef lane_ptr =
-        LLVMBuildGEP2(builder, out_el_type, mapped_out_ptr, &lane_idx, 1,
-                      "map.out.val.ptr");
+    LLVMValueRef lane_ptr = LLVMBuildGEP2(builder, out_el_type, mapped_out_ptr,
+                                          &lane_idx, 1, "map.out.val.ptr");
     LLVMValueRef mapped_val =
         LLVMBuildLoad2(builder, out_el_type, lane_ptr, "map.out.val");
     LLVMValueRef out_elem_ptr =
@@ -622,8 +622,8 @@ static DspValue dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   LLVMTypeRef *frame_param_tys =
       malloc(sizeof(LLVMTypeRef) * (size_t)max_params);
   int frame_nparams = 0;
-  frame_param_tys[frame_nparams++] = GENERIC_PTR; // state ptr
-  frame_param_tys[frame_nparams++] = GENERIC_PTR; // node ptr
+  frame_param_tys[frame_nparams++] = GENERIC_PTR;                   // state ptr
+  frame_param_tys[frame_nparams++] = GENERIC_PTR;                   // node ptr
   frame_param_tys[frame_nparams++] = LLVMPointerType(fold_type, 0); // out ptr
   if (with_index) {
     frame_param_tys[frame_nparams++] = idx_type; // i32 index
@@ -653,7 +653,7 @@ static DspValue dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
             "Error - fold function makes synth-lifetime allocations but array "
             "folded over has size which is unknown at comptime\n");
     print_ast_err(ast);
-      return DSP_NULL;
+    return DSP_NULL;
   }
 
   int iter_state_stride = s.state_bytes ? (s.state_bytes + 7) & ~7 : 0;
@@ -756,7 +756,8 @@ static DspValue dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   LLVMBuildBr(builder, cond_block);
 
   LLVMPositionBuilderAtEnd(builder, after_block);
-  return DSP_SCALAR(LLVMBuildLoad2(builder, fold_type, acc_alloca, "fold.result"));
+  return DSP_SCALAR(
+      LLVMBuildLoad2(builder, fold_type, acc_alloca, "fold.result"));
 }
 
 DspValue call_dsp_list_proc(Ast *fn_ast, Ast *ast, DspBuildCtx *dsp_ctx,
