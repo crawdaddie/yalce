@@ -21,7 +21,7 @@ endif
 
 # Add common flags
 CFLAGS += -std=c99 -Wall -Wextra
-CC := clang
+CC ?= clang
 
 # Source and target
 SRC := ffi_gen.c

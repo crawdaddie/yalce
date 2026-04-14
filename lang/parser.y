@@ -369,8 +369,13 @@ type_decl:
 
   | TYPE type_args '=' type_expr {
                                     Ast *args = $2;
-                                    Ast *name = args->data.AST_LAMBDA.params;
-                                    args->data.AST_LAMBDA.params = args->data.AST_LAMBDA.params + 1;
+                                    AstList *name_param = args->data.AST_LAMBDA.params;
+                                    Ast *name = name_param->ast;
+                                    args->data.AST_LAMBDA.params = name_param->next;
+                                    if (args->data.AST_LAMBDA.type_annotations != NULL) {
+                                      args->data.AST_LAMBDA.type_annotations =
+                                          args->data.AST_LAMBDA.type_annotations->next;
+                                    }
                                     args->data.AST_LAMBDA.len--;
                                     args->data.AST_LAMBDA.body = $4;
                                     Ast *type_decl = ast_let(name, args, NULL);

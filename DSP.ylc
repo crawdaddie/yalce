@@ -24,12 +24,11 @@ let lfnoise0 = extern fn Double -> Double -> Double -> Double;
 let kill_on_end = extern fn Double -> Double;
 let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
 let rect = extern fn Double -> Double -> Double;
-# let spf = extern fn () -> Double;
+
 let delay =   extern fn Double -> Double -> Double -> Double -> Double;
 let comb =    extern fn Double -> Double -> Double -> Double -> Double;
 let allpass = extern fn Double -> Double -> Double -> Double -> Double;
 
-# let clampup = extern fn Double -> Double -> Double;
 let lag = extern fn Double -> Double -> Double;
 let arr_choose = extern fn Array of Double -> Double -> Double;
 let arr_seq = extern fn Array of Double -> Double -> Double;
@@ -50,6 +49,7 @@ let mbufplay = extern fn Int -> Array of Double -> Double -> Double -> Double ->
 
 #                      max_grains   buf                rate      pos       width     trig
 let grains = extern fn Int ->       Array of Double -> Double -> Double -> Double -> Double;
+
 
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
 

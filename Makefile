@@ -11,6 +11,8 @@ ifeq ($(MAKECMDGOALS),debug)
 endif
 
 LLVM_CONFIG := $(LLVM)/bin/llvm-config
+CC ?= clang
+CXX ?= clang++
 
 # macOS-specific settings
 READLINE_PREFIX := ${READLINE_PREFIX}
@@ -35,12 +37,12 @@ CFLAGS += `$(LLVM_CONFIG) --cflags`
 CFLAGS += -I`$(LLVM_CONFIG) --includedir`
 
 
-LANG_CC := clang $(CFLAGS)
+LANG_CC := $(CC) $(CFLAGS)
 LANG_CC += -g
 LANG_CC += -Wall
 
 # C++ compiler for coroutine passes
-LANG_CXX := clang++ $(CFLAGS)
+LANG_CXX := $(CXX) $(CFLAGS)
 LANG_CXX += -g
 LANG_CXX += -Wall
 LANG_CXX += -std=c++17

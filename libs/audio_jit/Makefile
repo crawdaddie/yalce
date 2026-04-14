@@ -1,6 +1,6 @@
 include ../../.env
 
-CC          = clang
+CC ?= clang
 LLVM        = ${LLVM_PATH}
 LLVM_CONFIG = $(LLVM)/bin/llvm-config
 

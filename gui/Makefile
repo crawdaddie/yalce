@@ -4,8 +4,9 @@ include ../.env
 # VST Library path
 # VST_LIB_PATH := ${VST_LIB_PATH}
 # VST_BUILD_PATH := $(VST_LIB_PATH)/build
-CC := clang -g
-CC += -DYLC_LANG_DYN_LIB
+CC ?= clang
+CFLAGS += -g
+CFLAGS += -DYLC_LANG_DYN_LIB
 CFLAGS := -Wall -Wextra -fPIC -I. \
 					-I${SDL2_PATH}/include \
 					-I${SDL2_PATH}/include/SDL2 \

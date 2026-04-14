@@ -31,7 +31,7 @@ endif
 
 COMPILER_OPTIONS += -I$(VST_LIB_PATH)/src -I../lang/
 
-CC = clang
+CC ?= clang
 
 SHARED_LIB_TARGET := $(BUILD_DIR)/libyalce_synth.so
 

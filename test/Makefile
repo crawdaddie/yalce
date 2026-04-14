@@ -1,10 +1,12 @@
 # Directories
+include ../.env
+
 BUILD_DIR := ../build/test
 LANG_SRC_DIR := ../lang
-READLINE_PREFIX := $(shell brew --prefix readline)
+READLINE_PREFIX ?= ${READLINE_PREFIX}
 
 # Compiler and flags
-CC := clang
+CC ?= clang
 CFLAGS := -g -I$(LANG_SRC_DIR) -I$(READLINE_PREFIX)/include
 LDFLAGS := -L$(READLINE_PREFIX)/lib -lreadline
 
@@ -71,4 +73,3 @@ test_scripts:
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT) $(YACC_HEADER)
-

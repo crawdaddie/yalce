@@ -882,9 +882,9 @@ Subst *solve_constraints___(Constraint *constraints) {
     if (existing_subst->kind == T_TYPECLASS_RESOLVE &&
         IS_PRIMITIVE_TYPE(new_type)) {
 
-      VarList *frees = free_vars_type(NULL, existing_subst);
-      for (VarList *f = frees; f; f = f->next) {
-        subst = update_substitution(subst, f->var, new_type);
+      TypeList *frees = free_vars_type(NULL, existing_subst);
+      for (TypeList *f = frees; f; f = f->next) {
+        subst = update_substitution(subst, f->type->data.T_VAR, new_type);
       }
       continue;
     }

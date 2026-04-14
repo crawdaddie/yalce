@@ -238,7 +238,7 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
 
 Type *compute_typescheme(Ast *expr, TICtx *ctx) {
   Type *computed = compute_type_expression(expr, ctx);
-  return generalize(computed, ctx->env);
+  return generalize(computed, ctx);
 }
 
 Type *infer_type_declaration(Ast *ast, TICtx *ctx) {

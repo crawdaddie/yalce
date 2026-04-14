@@ -1,7 +1,7 @@
 include .env
 
 JSONC := ${JSONC}
-CC = clang
+CC ?= clang
 CFLAGS = -Wall -Wextra -I./src -I/usr/local/include -I$(JSONC)/include
 LDFLAGS = -L/usr/local/lib -L$(JSONC)/lib -ljson-c
 
