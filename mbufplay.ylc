@@ -1,0 +1,33 @@
+open DSP;
+open engine/bindings/Synth; 
+open engine/bindings/Sched; 
+
+let amen = load_soundfile "fat_amen_mono_48000.wav";
+# let buf = load_soundfile "whisper.wav";
+let buf = load_soundfile "/home/adam/Desktop/193811__geoneo0__four_voices_whispering_2.wav";
+# /home/adam/Desktop/Snakes of Russia - Oblations Sample Pack 2/Snakes of Russia - Oblations Sample Pack/Textures/SOR_OB_Texture_Beginning_Dm.wav";
+
+
+  # let y = fn () ->
+    # let t = trig 0;
+    # mbufplay 2 (array_of_buf buf) 1 0 (trig 0)
+
+# compile_audio_fn (
+#   let dust = fn density ->  
+#     let thresh = density * spf ;   # density (events/sec) * (1/sample_rate) = prob per sample
+#     let z = Math.rand_double ()  ;            # uniform [0, 1)
+#     match (z < thresh) with
+#     | true -> 1.
+#     | _ -> 0.
+# );
+
+compile_audio_fn (
+  let a = fn () ->
+    ~[dust 10, dust 10]
+    |> bufplay (array_of_buf amen) 1. (lfnoise 0.1 0 1)
+    |> Reverb.cathedral
+);
+
+# dust 8 |> play_node;
+a () |> play_node;
+
