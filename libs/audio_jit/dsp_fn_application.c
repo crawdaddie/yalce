@@ -3134,12 +3134,13 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     DspValue trig = dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder);
 
     int max_lanes =
-        max(dsp_value_lane_count(rate),
-            max(dsp_value_lane_count(start_pos), dsp_value_lane_count(trig)));
+        max(dsp_value_lane_count(buf),
+            max(dsp_value_lane_count(rate), max(dsp_value_lane_count(start_pos),
+                                                dsp_value_lane_count(trig))));
 
     if (max_lanes <= 1) {
       return build_bufplay(
-          buf.scalar,
+          dsp_value_lane(buf, 0),
           ensure_float(args[1].type, dsp_value_lane(rate, 0), builder),
           ensure_float(args[2].type, dsp_value_lane(start_pos, 0), builder),
           ensure_float(args[3].type, dsp_value_lane(trig, 0), builder), 1,
@@ -3154,7 +3155,7 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     for (int i = 0; i < max_lanes; i++) {
       vals[i] =
           build_bufplay(
-              buf.scalar,
+              dsp_value_lane(buf, i),
               ensure_float(args[1].type, dsp_value_lane(rate, i), builder),
               ensure_float(args[2].type, dsp_value_lane(start_pos, i), builder),
               ensure_float(args[3].type, dsp_value_lane(trig, i), builder), 1,

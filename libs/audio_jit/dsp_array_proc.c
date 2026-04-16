@@ -484,7 +484,8 @@ DspValue dsp_delay_proc(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       dsp_build_expr(inp_ast, dsp_ctx, ctx, module, builder).scalar;
   inp_val = ensure_float(inp_ast->type, inp_val, builder);
 
-  // 3. frame_ty: (state*, node*, out_ptr, i32 w, dl_struct, f64 inp, ...captured) -> void
+  // 3. frame_ty: (state*, node*, out_ptr, i32 w, dl_struct, f64 inp,
+  // ...captured) -> void
   LLVMTypeRef dl_llvm_ty = LLVMTypeOf(dl_val);
   int frame_nparams = 6 + num_captured;
   LLVMTypeRef *frame_param_tys =
@@ -498,7 +499,8 @@ DspValue dsp_delay_proc(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   frame_param_tys[pi++] = f64_ty;
   for (int i = 0; i < num_captured; i++)
     frame_param_tys[pi++] = LLVMTypeOf(captured_vals[i]);
-  LLVMTypeRef frame_ty = LLVMFunctionType(LLVMVoidType(), frame_param_tys, pi, 0);
+  LLVMTypeRef frame_ty =
+      LLVMFunctionType(LLVMVoidType(), frame_param_tys, pi, 0);
   free(frame_param_tys);
 
   SynthRecord s = compile_lambda_to_synth_record(
@@ -552,9 +554,8 @@ DspValue dsp_delay_proc(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   int ai = 0;
   frame_args[ai++] = fn_state;
   frame_args[ai++] = LLVMConstNull(GENERIC_PTR);
-  LLVMValueRef out_ptr =
-      LLVMBuildArrayAlloca(builder, f64_ty, LLVMConstInt(i32_ty, 1, 0),
-                           "delay_proc.out_ptr");
+  LLVMValueRef out_ptr = LLVMBuildArrayAlloca(
+      builder, f64_ty, LLVMConstInt(i32_ty, 1, 0), "delay_proc.out_ptr");
   frame_args[ai++] = out_ptr;
   frame_args[ai++] = w;
   frame_args[ai++] = dl_val;
@@ -714,8 +715,8 @@ static DspValue dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
 
   if (s.output_lanes != 1) {
     fprintf(stderr, "audio_jit: array fold callback must return a scalar\n");
-    free(captured_vals);
-    return DSP_SCALAR(LLVMConstNull(fold_type));
+    // free(captured_vals);
+    // return DSP_SCALAR(LLVMConstNull(fold_type));
   }
 
   LLVMValueRef frame_fn = s.frame_fn;
@@ -764,37 +765,24 @@ DspValue call_dsp_list_proc(Ast *fn_ast, Ast *ast, DspBuildCtx *dsp_ctx,
                             JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
 
-  if (is_array_type(ast->data.AST_APPLICATION.args[0].type) &&
-      is_ident(fn_ast, "sum")) {
+  if (is_ident(fn_ast, "sum")) {
 
     return DSP_SCALAR(dsp_array_sum(ast, dsp_ctx, ctx, module, builder));
   }
-  if (is_array_type(ast->data.AST_APPLICATION.args[1].type)) {
-    if (is_ident(fn_ast, "mapi")) {
-      return dsp_array_map(true, ast, dsp_ctx, ctx, module, builder);
-    }
-    if (is_ident(fn_ast, "map")) {
-      return dsp_array_map(false, ast, dsp_ctx, ctx, module, builder);
-    }
+  if (is_ident(fn_ast, "mapi")) {
+    return dsp_array_map(true, ast, dsp_ctx, ctx, module, builder);
+  }
+  if (is_ident(fn_ast, "map")) {
+    return dsp_array_map(false, ast, dsp_ctx, ctx, module, builder);
   }
 
-  if (is_array_type(ast->data.AST_APPLICATION.args[2].type)) {
-    if (is_ident(fn_ast, "foldi")) {
-      return dsp_array_fold(true, ast, dsp_ctx, ctx, module, builder);
-    }
-
-    if (is_ident(fn_ast, "fold")) {
-      return dsp_array_fold(false, ast, dsp_ctx, ctx, module, builder);
-    }
-
-  } else if (is_list_type(ast->data.AST_APPLICATION.args[2].type)) {
-    if (is_ident(fn_ast, "foldi")) {
-      return dsp_array_fold(true, ast, dsp_ctx, ctx, module, builder);
-    }
-
-    if (is_ident(fn_ast, "fold")) {
-      return dsp_array_fold(false, ast, dsp_ctx, ctx, module, builder);
-    }
+  if (is_ident(fn_ast, "foldi")) {
+    return dsp_array_fold(true, ast, dsp_ctx, ctx, module, builder);
   }
+
+  if (is_ident(fn_ast, "fold")) {
+    return dsp_array_fold(false, ast, dsp_ctx, ctx, module, builder);
+  }
+
   return DSP_NULL;
 }
