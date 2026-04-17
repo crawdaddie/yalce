@@ -644,11 +644,25 @@ NodeRef play_into_idx(NodeRef target, int idx, NodeRef node) {
 
   return play_node_before(target, node);
 }
+
 int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
+
   SNDFILE *infile;
   SF_INFO sfinfo;
   int readcount;
   memset(&sfinfo, 0, sizeof(sfinfo));
+
+  if (*filename == '~') {
+    char *HOME = getenv("HOME");
+    if (!HOME) {
+      fprintf(stderr, "could not resolve ~");
+      return 1;
+    }
+
+    char *mem = calloc(strlen(HOME) + strlen(filename), sizeof(char));
+    sprintf(mem, "%s%s", HOME, filename + 1);
+    filename = mem;
+  }
 
   if (!(infile =
             sf_open(filename, SFM_READ,

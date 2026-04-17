@@ -559,6 +559,217 @@ static LLVMValueRef pow2_tabread(LLVMValueRef phasor, LLVMValueRef table_ptr,
   LLVMValueRef b_term = LLVMBuildFMul(builder, frac, b, "tab.b_term");
   return LLVMBuildFAdd(builder, a_term, b_term, "tab.sample");
 }
+
+static LLVMValueRef get_floor_intrinsic(LLVMModuleRef module) {
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef floor_fn_ty =
+      LLVMFunctionType(f64_ty, (LLVMTypeRef[]){f64_ty}, 1, 0);
+  LLVMValueRef floor_fn = LLVMGetNamedFunction(module, "llvm.floor.f64");
+  if (!floor_fn) {
+    floor_fn = LLVMAddFunction(module, "llvm.floor.f64", floor_fn_ty);
+    LLVMSetLinkage(floor_fn, LLVMExternalLinkage);
+  }
+  return floor_fn;
+}
+
+static LLVMValueRef build_wrap_unit_phase(LLVMValueRef phase,
+                                          LLVMModuleRef module,
+                                          LLVMBuilderRef builder,
+                                          const char *name) {
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef floor_fn_ty =
+      LLVMFunctionType(f64_ty, (LLVMTypeRef[]){f64_ty}, 1, 0);
+  LLVMValueRef floor_fn = get_floor_intrinsic(module);
+  LLVMValueRef floored =
+      LLVMBuildCall2(builder, floor_fn_ty, floor_fn, &phase, 1, "pm.floor");
+  return LLVMBuildFSub(builder, phase, floored, name);
+}
+
+static LLVMValueRef build_pow2_cubic_tabread(LLVMValueRef phase,
+                                             LLVMValueRef table_ptr,
+                                             int32_t table_size,
+                                             LLVMBuilderRef builder,
+                                             const char *prefix) {
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef i64_ty = LLVMInt64Type();
+
+  LLVMValueRef scaled =
+      LLVMBuildFMul(builder, phase, LLVMConstReal(f64_ty, (double)table_size),
+                    "pm.tab.scaled");
+  LLVMValueRef index = LLVMBuildFPToSI(builder, scaled, i32_ty, "pm.tab.index");
+  LLVMValueRef index_f =
+      LLVMBuildSIToFP(builder, index, f64_ty, "pm.tab.index_f");
+  LLVMValueRef frac = LLVMBuildFSub(builder, scaled, index_f, "pm.tab.frac");
+
+  LLVMValueRef mask = LLVMConstInt(i32_ty, (uint64_t)(table_size - 1), 0);
+  LLVMValueRef one = LLVMConstInt(i32_ty, 1, 0);
+  LLVMValueRef two = LLVMConstInt(i32_ty, 2, 0);
+
+  LLVMValueRef idx1 = LLVMBuildAnd(builder, index, mask, "pm.tab.idx1");
+  LLVMValueRef idx0 = LLVMBuildAnd(
+      builder, LLVMBuildSub(builder, index, one, "pm.tab.idx0_raw"), mask,
+      "pm.tab.idx0");
+  LLVMValueRef idx2 = LLVMBuildAnd(
+      builder, LLVMBuildAdd(builder, index, one, "pm.tab.idx2_raw"), mask,
+      "pm.tab.idx2");
+  LLVMValueRef idx3 = LLVMBuildAnd(
+      builder, LLVMBuildAdd(builder, index, two, "pm.tab.idx3_raw"), mask,
+      "pm.tab.idx3");
+
+  LLVMValueRef idx0_i64 =
+      LLVMBuildZExt(builder, idx0, i64_ty, "pm.tab.idx0.64");
+  LLVMValueRef idx1_i64 =
+      LLVMBuildZExt(builder, idx1, i64_ty, "pm.tab.idx1.64");
+  LLVMValueRef idx2_i64 =
+      LLVMBuildZExt(builder, idx2, i64_ty, "pm.tab.idx2.64");
+  LLVMValueRef idx3_i64 =
+      LLVMBuildZExt(builder, idx3, i64_ty, "pm.tab.idx3.64");
+
+  LLVMValueRef y0_ptr =
+      LLVMBuildGEP2(builder, f64_ty, table_ptr, &idx0_i64, 1, "pm.tab.y0_ptr");
+  LLVMValueRef y1_ptr =
+      LLVMBuildGEP2(builder, f64_ty, table_ptr, &idx1_i64, 1, "pm.tab.y1_ptr");
+  LLVMValueRef y2_ptr =
+      LLVMBuildGEP2(builder, f64_ty, table_ptr, &idx2_i64, 1, "pm.tab.y2_ptr");
+  LLVMValueRef y3_ptr =
+      LLVMBuildGEP2(builder, f64_ty, table_ptr, &idx3_i64, 1, "pm.tab.y3_ptr");
+
+  LLVMValueRef y0 = LLVMBuildLoad2(builder, f64_ty, y0_ptr, "pm.tab.y0");
+  LLVMValueRef y1 = LLVMBuildLoad2(builder, f64_ty, y1_ptr, "pm.tab.y1");
+  LLVMValueRef y2 = LLVMBuildLoad2(builder, f64_ty, y2_ptr, "pm.tab.y2");
+  LLVMValueRef y3 = LLVMBuildLoad2(builder, f64_ty, y3_ptr, "pm.tab.y3");
+
+  LLVMValueRef half = LLVMConstReal(f64_ty, 0.5);
+  LLVMValueRef one_half = LLVMConstReal(f64_ty, 1.5);
+  LLVMValueRef two_f = LLVMConstReal(f64_ty, 2.0);
+  LLVMValueRef two_half = LLVMConstReal(f64_ty, 2.5);
+
+  LLVMValueRef c0 = y1;
+  LLVMValueRef c1 = LLVMBuildFMul(
+      builder, half, LLVMBuildFSub(builder, y2, y0, "pm.tab.c1.diff"),
+      "pm.tab.c1");
+  LLVMValueRef c2 = LLVMBuildFSub(
+      builder,
+      LLVMBuildFAdd(
+          builder,
+          LLVMBuildFSub(builder, y0,
+                        LLVMBuildFMul(builder, two_half, y1, "pm.tab.c2.2p5y1"),
+                        "pm.tab.c2.left"),
+          LLVMBuildFMul(builder, two_f, y2, "pm.tab.c2.2y2"), "pm.tab.c2.mid"),
+      LLVMBuildFMul(builder, half, y3, "pm.tab.c2.0p5y3"), "pm.tab.c2");
+  LLVMValueRef c3 = LLVMBuildFAdd(
+      builder,
+      LLVMBuildFMul(builder, half,
+                    LLVMBuildFSub(builder, y3, y0, "pm.tab.c3.diff0"),
+                    "pm.tab.c3.a"),
+      LLVMBuildFMul(builder, one_half,
+                    LLVMBuildFSub(builder, y1, y2, "pm.tab.c3.diff1"),
+                    "pm.tab.c3.b"),
+      "pm.tab.c3");
+
+  LLVMValueRef acc =
+      LLVMBuildFAdd(builder, LLVMBuildFMul(builder, c3, frac, "pm.tab.poly0"),
+                    c2, "pm.tab.poly1");
+  acc =
+      LLVMBuildFAdd(builder, LLVMBuildFMul(builder, acc, frac, "pm.tab.poly2"),
+                    c1, "pm.tab.poly3");
+  acc = LLVMBuildFAdd(
+      builder, LLVMBuildFMul(builder, acc, frac, "pm.tab.poly4"), c0, prefix);
+  return acc;
+}
+
+static LLVMValueRef build_pm_osc(LLVMValueRef carrier_freq,
+                                 LLVMValueRef mod_index, LLVMValueRef mod_ratio,
+                                 DspBuildCtx *dsp_ctx, LLVMModuleRef module,
+                                 LLVMBuilderRef builder) {
+  int off = (dsp_ctx->state_offset + 7) & ~7;
+  dsp_ctx->state_offset = off + 16;
+
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef i64_ty = LLVMInt64Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+
+  if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
+    LLVMValueRef init_base = dsp_consume_init_state(
+        dsp_ctx, dsp_ctx->init_builder, 16, 8, "pm.init.base");
+    LLVMValueRef init_carrier_ptr = LLVMBuildBitCast(
+        dsp_ctx->init_builder, init_base, f64_ptr_ty, "pm.init.carrier_ptr");
+    LLVMValueRef init_mod_ptr_i8 = LLVMBuildGEP2(
+        dsp_ctx->init_builder, i8_ty, init_base,
+        (LLVMValueRef[]){LLVMConstInt(i64_ty, 8, 0)}, 1, "pm.init.mod_ptr_i8");
+    LLVMValueRef init_mod_ptr = LLVMBuildBitCast(
+        dsp_ctx->init_builder, init_mod_ptr_i8, f64_ptr_ty, "pm.init.mod_ptr");
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, 0.0),
+                   init_carrier_ptr);
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, 0.0),
+                   init_mod_ptr);
+  }
+
+  LLVMValueRef base =
+      dsp_consume_frame_state(dsp_ctx, builder, 16, 8, "pm.base");
+  LLVMValueRef carrier_ptr =
+      LLVMBuildBitCast(builder, base, f64_ptr_ty, "pm.carrier_ptr");
+  LLVMValueRef mod_ptr_i8 = LLVMBuildGEP2(
+      builder, i8_ty, base, (LLVMValueRef[]){LLVMConstInt(i64_ty, 8, 0)}, 1,
+      "pm.mod_ptr_i8");
+  LLVMValueRef mod_ptr =
+      LLVMBuildBitCast(builder, mod_ptr_i8, f64_ptr_ty, "pm.mod_ptr");
+
+  LLVMTypeRef fn_ty = LLVMFunctionType(
+      f64_ty,
+      (LLVMTypeRef[]){f64_ty, f64_ty, f64_ty, f64_ty, f64_ptr_ty, f64_ptr_ty},
+      6, 0);
+  LLVMValueRef fn = LLVMGetNamedFunction(module, "pm_osc_samp");
+  if (!fn) {
+    fn = LLVMAddFunction(module, "pm_osc_samp", fn_ty);
+    LLVMSetLinkage(fn, LLVMExternalLinkage);
+  }
+
+  LLVMValueRef call_args[] = {carrier_freq, mod_index, mod_ratio, dsp_ctx->spf,
+                              carrier_ptr,  mod_ptr};
+  return LLVMBuildCall2(builder, fn_ty, fn, call_args, 6, "pm.sample");
+}
+
+static LLVMValueRef build_phase_osc(LLVMValueRef phase_input,
+                                    LLVMValueRef carrier_freq,
+                                    DspBuildCtx *dsp_ctx,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  int off = (dsp_ctx->state_offset + 7) & ~7;
+  dsp_ctx->state_offset = off + 8;
+
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+
+  if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
+    LLVMValueRef init_base = dsp_consume_init_state(
+        dsp_ctx, dsp_ctx->init_builder, 8, 8, "phase_osc.init.base");
+    LLVMValueRef init_carrier_ptr =
+        LLVMBuildBitCast(dsp_ctx->init_builder, init_base, f64_ptr_ty,
+                         "phase_osc.init.carrier_ptr");
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, 0.0),
+                   init_carrier_ptr);
+  }
+
+  LLVMValueRef base = dsp_consume_frame_state(dsp_ctx, builder, 8, 8,
+                                              "phase_osc.base");
+  LLVMValueRef carrier_ptr =
+      LLVMBuildBitCast(builder, base, f64_ptr_ty, "phase_osc.carrier_ptr");
+
+  LLVMTypeRef fn_ty = LLVMFunctionType(
+      f64_ty, (LLVMTypeRef[]){f64_ty, f64_ty, f64_ty, f64_ptr_ty}, 4, 0);
+  LLVMValueRef fn = LLVMGetNamedFunction(module, "phase_osc_samp");
+  if (!fn) {
+    fn = LLVMAddFunction(module, "phase_osc_samp", fn_ty);
+    LLVMSetLinkage(fn, LLVMExternalLinkage);
+  }
+
+  LLVMValueRef call_args[] = {phase_input, carrier_freq, dsp_ctx->spf,
+                              carrier_ptr};
+  return LLVMBuildCall2(builder, fn_ty, fn, call_args, 4, "phase_osc.sample");
+}
 LLVMValueRef ensure_float(Type *in_type, LLVMValueRef val,
                           LLVMBuilderRef builder) {
   if (!val) {
@@ -1124,6 +1335,120 @@ double rect_samp(double duration, double trig, double prev_trig, double spf,
 
   *remaining_ptr = remaining;
   *prev_trig_ptr = trig;
+  return out;
+}
+
+double pm_osc_samp(double carrier_freq, double mod_index, double mod_ratio,
+                   double spf, double *carrier_phase_ptr,
+                   double *modulator_phase_ptr) {
+  const double turns_per_radian = 1.0 / (2.0 * M_PI);
+  double carrier_phase = *carrier_phase_ptr;
+  double modulator_phase = *modulator_phase_ptr;
+
+  const double table_size = (double)SIN_TABSIZE;
+  const int table_mask = SIN_TABSIZE - 1;
+  double modulator_freq = carrier_freq * mod_ratio;
+
+  double mod_phase_scaled = modulator_phase * table_size;
+  int mod_index_int = (int)mod_phase_scaled;
+  double mod_frac = mod_phase_scaled - (double)mod_index_int;
+  mod_index_int &= table_mask;
+
+  int mod_idx_0 = (mod_index_int - 1) & table_mask;
+  int mod_idx_1 = mod_index_int;
+  int mod_idx_2 = (mod_index_int + 1) & table_mask;
+  int mod_idx_3 = (mod_index_int + 2) & table_mask;
+
+  double mod_y0 = ylc_sin_table[mod_idx_0];
+  double mod_y1 = ylc_sin_table[mod_idx_1];
+  double mod_y2 = ylc_sin_table[mod_idx_2];
+  double mod_y3 = ylc_sin_table[mod_idx_3];
+
+  double mod_c0 = mod_y1;
+  double mod_c1 = 0.5 * (mod_y2 - mod_y0);
+  double mod_c2 = mod_y0 - 2.5 * mod_y1 + 2.0 * mod_y2 - 0.5 * mod_y3;
+  double mod_c3 = 0.5 * (mod_y3 - mod_y0) + 1.5 * (mod_y1 - mod_y2);
+
+  double modulator_value =
+      ((mod_c3 * mod_frac + mod_c2) * mod_frac + mod_c1) * mod_frac + mod_c0;
+  modulator_value *= (mod_index * turns_per_radian);
+
+  double modulated_phase = carrier_phase + modulator_value;
+  modulated_phase -= floor(modulated_phase);
+
+  double carrier_phase_scaled = modulated_phase * table_size;
+  int carrier_index_int = (int)carrier_phase_scaled;
+  double carrier_frac = carrier_phase_scaled - (double)carrier_index_int;
+  carrier_index_int &= table_mask;
+
+  int carr_idx_0 = (carrier_index_int - 1) & table_mask;
+  int carr_idx_1 = carrier_index_int;
+  int carr_idx_2 = (carrier_index_int + 1) & table_mask;
+  int carr_idx_3 = (carrier_index_int + 2) & table_mask;
+
+  double carr_y0 = ylc_sin_table[carr_idx_0];
+  double carr_y1 = ylc_sin_table[carr_idx_1];
+  double carr_y2 = ylc_sin_table[carr_idx_2];
+  double carr_y3 = ylc_sin_table[carr_idx_3];
+
+  double carr_c0 = carr_y1;
+  double carr_c1 = 0.5 * (carr_y2 - carr_y0);
+  double carr_c2 = carr_y0 - 2.5 * carr_y1 + 2.0 * carr_y2 - 0.5 * carr_y3;
+  double carr_c3 = 0.5 * (carr_y3 - carr_y0) + 1.5 * (carr_y1 - carr_y2);
+
+  double carrier_value = ((carr_c3 * carrier_frac + carr_c2) * carrier_frac +
+                          carr_c1) *
+                             carrier_frac +
+                         carr_c0;
+
+  modulator_phase += modulator_freq * spf;
+  modulator_phase -= floor(modulator_phase);
+
+  carrier_phase += carrier_freq * spf;
+  carrier_phase -= floor(carrier_phase);
+
+  *modulator_phase_ptr = modulator_phase;
+  *carrier_phase_ptr = carrier_phase;
+  return carrier_value;
+}
+
+double phase_osc_samp(double phase_input, double carrier_freq, double spf,
+                      double *carrier_phase_ptr) {
+  const double turns_per_radian = 1.0 / (2.0 * M_PI);
+  const double table_size = (double)SIN_TABSIZE;
+  const int table_mask = SIN_TABSIZE - 1;
+
+  double carrier_phase = *carrier_phase_ptr;
+  double modulated_phase = carrier_phase + (phase_input * turns_per_radian);
+  modulated_phase -= floor(modulated_phase);
+
+  double carrier_phase_scaled = modulated_phase * table_size;
+  int carrier_index_int = (int)carrier_phase_scaled;
+  double carrier_frac = carrier_phase_scaled - (double)carrier_index_int;
+  carrier_index_int &= table_mask;
+
+  int idx_0 = (carrier_index_int - 1) & table_mask;
+  int idx_1 = carrier_index_int;
+  int idx_2 = (carrier_index_int + 1) & table_mask;
+  int idx_3 = (carrier_index_int + 2) & table_mask;
+
+  double y0 = ylc_sin_table[idx_0];
+  double y1 = ylc_sin_table[idx_1];
+  double y2 = ylc_sin_table[idx_2];
+  double y3 = ylc_sin_table[idx_3];
+
+  double c0 = y1;
+  double c1 = 0.5 * (y2 - y0);
+  double c2 = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3;
+  double c3 = 0.5 * (y3 - y0) + 1.5 * (y1 - y2);
+
+  double out =
+      ((c3 * carrier_frac + c2) * carrier_frac + c1) * carrier_frac + c0;
+
+  carrier_phase += carrier_freq * spf;
+  carrier_phase -= floor(carrier_phase);
+
+  *carrier_phase_ptr = carrier_phase;
   return out;
 }
 
@@ -2255,6 +2580,35 @@ static DspValue dsp_lift_binary(DspBuildCtx *dsp_ctx, DspValue a, DspValue b,
   return DSP_MULTI(lanes, vals);
 }
 
+typedef LLVMValueRef (*DspTernaryKernel)(LLVMValueRef a, LLVMValueRef b,
+                                         LLVMValueRef c, void *userdata);
+
+static DspValue dsp_lift_ternary(DspBuildCtx *dsp_ctx, DspValue a, DspValue b,
+                                 DspValue c, DspTernaryKernel kernel,
+                                 void *userdata) {
+  int lanes = max(dsp_value_lane_count(a),
+                  max(dsp_value_lane_count(b), dsp_value_lane_count(c)));
+  if (lanes <= 0) {
+    return DSP_NULL;
+  }
+
+  if (lanes == 1) {
+    return DSP_SCALAR(kernel(dsp_value_lane(a, 0), dsp_value_lane(b, 0),
+                             dsp_value_lane(c, 0), userdata));
+  }
+
+  LLVMValueRef *vals = dsp_alloc_lane_vals(dsp_ctx, lanes);
+  if (!vals) {
+    return DSP_NULL;
+  }
+
+  for (int i = 0; i < lanes; i++) {
+    vals[i] = kernel(dsp_value_lane(a, i), dsp_value_lane(b, i),
+                     dsp_value_lane(c, i), userdata);
+  }
+  return DSP_MULTI(lanes, vals);
+}
+
 typedef struct DspValueList {
   DspValue val;
   Type *in_type;
@@ -2459,6 +2813,26 @@ static LLVMValueRef dsp_apply_trig_kernel(LLVMValueRef x, void *userdata) {
   return builtin_trig(ensure_float(op->in_type, x, op->builder),
                       op->freq_is_const_zero, op->dsp_ctx, op->ctx, op->module,
                       op->builder);
+}
+
+typedef struct {
+  Type *freq_type;
+  Type *mod_index_type;
+  Type *mod_ratio_type;
+  DspBuildCtx *dsp_ctx;
+  LLVMModuleRef module;
+  LLVMBuilderRef builder;
+} DspPmOp;
+
+static LLVMValueRef dsp_apply_pm_kernel(LLVMValueRef freq,
+                                        LLVMValueRef mod_index,
+                                        LLVMValueRef mod_ratio,
+                                        void *userdata) {
+  DspPmOp *op = userdata;
+  return build_pm_osc(ensure_float(op->freq_type, freq, op->builder),
+                      ensure_float(op->mod_index_type, mod_index, op->builder),
+                      ensure_float(op->mod_ratio_type, mod_ratio, op->builder),
+                      op->dsp_ctx, op->module, op->builder);
 }
 
 typedef struct {
@@ -2680,6 +3054,80 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                       .module = module,
                       .builder = builder};
     return dsp_lift_unary(dsp_ctx, freq, dsp_apply_phasor_kernel, &op);
+  }
+
+  if (is_ident(f, "pm_osc")) {
+    Ast *args = ast->data.AST_APPLICATION.args;
+    DspValue mod_index =
+        dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder);
+    DspValue mod_ratio =
+        dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+    DspValue freq =
+        dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
+
+    int max_lanes = max(dsp_value_lane_count(mod_index),
+                        max(dsp_value_lane_count(mod_ratio),
+                            dsp_value_lane_count(freq)));
+    if (max_lanes <= 0) {
+      return DSP_NULL;
+    }
+
+    if (max_lanes == 1) {
+      return DSP_SCALAR(build_pm_osc(
+          ensure_float(args[2].type, dsp_value_lane(freq, 0), builder),
+          ensure_float(args[0].type, dsp_value_lane(mod_index, 0), builder),
+          ensure_float(args[1].type, dsp_value_lane(mod_ratio, 0), builder),
+          dsp_ctx, module, builder));
+    }
+
+    LLVMValueRef *vals = dsp_alloc_lane_vals(dsp_ctx, max_lanes);
+    if (!vals) {
+      return DSP_NULL;
+    }
+
+    for (int i = 0; i < max_lanes; i++) {
+      vals[i] = build_pm_osc(
+          ensure_float(args[2].type, dsp_value_lane(freq, i), builder),
+          ensure_float(args[0].type, dsp_value_lane(mod_index, i), builder),
+          ensure_float(args[1].type, dsp_value_lane(mod_ratio, i), builder),
+          dsp_ctx, module, builder);
+    }
+
+    return DSP_MULTI(max_lanes, vals);
+  }
+
+  if (is_ident(f, "phase_osc")) {
+    Ast *args = ast->data.AST_APPLICATION.args;
+    DspValue phase_input =
+        dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder);
+    DspValue freq = dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+
+    int max_lanes =
+        max(dsp_value_lane_count(phase_input), dsp_value_lane_count(freq));
+    if (max_lanes <= 0) {
+      return DSP_NULL;
+    }
+
+    if (max_lanes == 1) {
+      return DSP_SCALAR(build_phase_osc(
+          ensure_float(args[0].type, dsp_value_lane(phase_input, 0), builder),
+          ensure_float(args[1].type, dsp_value_lane(freq, 0), builder), dsp_ctx,
+          module, builder));
+    }
+
+    LLVMValueRef *vals = dsp_alloc_lane_vals(dsp_ctx, max_lanes);
+    if (!vals) {
+      return DSP_NULL;
+    }
+
+    for (int i = 0; i < max_lanes; i++) {
+      vals[i] = build_phase_osc(
+          ensure_float(args[0].type, dsp_value_lane(phase_input, i), builder),
+          ensure_float(args[1].type, dsp_value_lane(freq, i), builder), dsp_ctx,
+          module, builder);
+    }
+
+    return DSP_MULTI(max_lanes, vals);
   }
 
   if (is_ident(f, "phasor_sinc")) {

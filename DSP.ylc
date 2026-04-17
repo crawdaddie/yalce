@@ -1,6 +1,9 @@
 open engine/bindings/Synth;
 open engine/bindings/Sched;
 
+type Signal = Double;
+type Scalar = Double;
+
 let compile_audio_fn = extern fn T -> T;
 let pat = extern fn String -> Coroutine of Double;
 let pat_key = extern fn String -> Coroutine of String;
@@ -8,6 +11,10 @@ let pat_key = extern fn String -> Coroutine of String;
 let sin_osc = extern fn Double -> Double;
 let sq_osc = extern fn Double -> Double;
 let saw_osc = extern fn Double -> Double;
+let pm_osc = extern fn Double -> Double -> Double -> Double;
+
+let phase_osc = extern fn Double -> Double -> Double;
+
 let white = extern fn () -> Double;
 let phasor = extern fn Double -> Double;
 let phasor_sinc = extern fn Double -> Double -> Double;

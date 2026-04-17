@@ -1,0 +1,12 @@
+open DSP;
+open engine/bindings/Synth; 
+
+
+# let get_env = fn e ->
+#   match getenv (cstr e) with
+#   | 0 -> None
+#   | p -> Some (String (strlen p) p)
+# ;;
+#
+# print `{get_env "HOME"}\n`;
+load_soundfile "~/Sounds/Alon Mor's Sample Packs (2015-2017)/kicks/Kick 4 (Berries).wav";

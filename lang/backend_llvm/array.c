@@ -504,6 +504,7 @@ LLVMValueRef ArrayConstructor(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef ArrayConstructorHandler(Ast *ast, JITLangCtx *ctx,
                                      LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
+  print_ast(ast);
   Type *ptr_type = (ast->data.AST_APPLICATION.args + 1)->type;
   LLVMValueRef data_ptr =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
