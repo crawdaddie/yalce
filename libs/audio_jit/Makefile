@@ -20,7 +20,7 @@ LIB_NAME    = libaudio_jit
 DYNAMIC_LIB = $(LIB_NAME).so
 BUILD_DIR   = build
 
-SOURCES = audio_jit.c compile_synth.c dsp_fn_application.c dsp_build_expr.c pattern_coroutine.c dsp_array_proc.c dsp_fork.c dsp_runtime.c
+SOURCES = audio_jit.c compile_synth.c dsp_fn_application.c dsp_build_expr.c pattern_coroutine.c dsp_array_proc.c dsp_fork.c dsp_runtime.c dsp_spectral.c
 OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(SOURCES))
 LOCAL_HEADERS = $(wildcard *.h)
 ENGINE_HEADERS = $(wildcard ../../engine/*.h)

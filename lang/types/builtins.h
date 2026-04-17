@@ -73,4 +73,5 @@ extern Type asbytes_scheme;
 
 extern Type typeof_scheme;
 extern Type cor_zip_scheme;
+extern Type is_null_type;
 #endif

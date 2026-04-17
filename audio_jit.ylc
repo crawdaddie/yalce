@@ -134,6 +134,6 @@ defer_quant q (fn t ->
 );
 
 
-# let ylc_scope_open = extern fn Synth -> (); 
-# let _ = dlopen "libs/gui/libgui.so";
-# ylc_scope_open rfx;
+let ylc_scope_open = extern fn Synth -> (); 
+let _ = dlopen "libs/gui/libgui.so";
+ylc_scope_open rfx;

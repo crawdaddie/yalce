@@ -2,21 +2,19 @@ open DSP;
 open engine/bindings/Synth; 
 open engine/bindings/Sched; 
 
-let k = load_soundfile "/home/adam/Desktop/Snakes of Russia - Oblations Sample Pack 2/Snakes of Russia - Oblations Sample Pack/Kicks/SOR_OB_Kick_Gajan.wav";
-let l = load_soundfile "/home/adam/Desktop/Snakes of Russia - Oblations Sample Pack 2/Snakes of Russia - Oblations Sample Pack/Percussion/SOR_OB_Granular Perc_Rolling.wav";
+let k = load_soundfile "~/Sounds/Snakes of Russia - Oblations Sample Pack 2_1/Snakes of Russia - Oblations Sample Pack/Kicks/SOR_OB_Kick_Gajan.wav";
+let l = load_soundfile "~/Sounds/Snakes of Russia - Oblations Sample Pack 2_1/Snakes of Russia - Oblations Sample Pack/Percussion/SOR_OB_Granular Perc_Rolling.wav";
 
 compile_audio_fn (
   let a = fn () ->
-  # let t = trig (lfnoise 1 1 32);
   let t = dust 16;
-  # trig (lfnoise 1 1 32);
 
   dsp_array.fold (fn s b -> 
     s + mbufplay 2 (array_of_buf b) 1. 0. t
   ) 0. [k, l] 
-  |> mix 1
-  |> (*) (13 * adsr 0. 0.5 0.1 0.2 t)
-  |> Math.tanh
+  # |> mix 1
+  |> (*) (adsr 0. 0.5 0.1 0.2 t)
+  # |> Math.tanh
 
 );
 

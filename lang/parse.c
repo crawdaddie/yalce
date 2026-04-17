@@ -1255,9 +1255,17 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
   fully_qualified_name = check_path(fully_qualified_name, rel_path);
 
   if (!fully_qualified_name) {
-    fprintf(stderr, "Error module %s not found in path\n", mod_name);
-    return NULL;
+    // fprintf(stderr, "Error module %s not found in path\n", mod_name);
+    // return NULL;
+    //
+    Ast *import_ast = Ast_new(AST_IMPORT);
+    import_ast->data.AST_IMPORT.identifier = mod_id_chars;
+    // import_ast->data.AST_IMPORT.fully_qualified_name = fully_qualified_name;
+    import_ast->data.AST_IMPORT.import_all = import_all;
+
+    return import_ast;
   }
+
   if (!get_module(fully_qualified_name)) {
     register_module_ast(fully_qualified_name, NULL);
   }

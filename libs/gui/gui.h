@@ -2,6 +2,7 @@
 #define GUI_H
 
 #include "../../engine/node.h"
+#include "../../lang/ylc_datatypes.h"
 #include <SDL3/SDL.h>
 
 // ============================================================================
@@ -32,11 +33,16 @@ void ylc_window_open(int type_id, const char *title, int w, int h, void *state);
 // ============================================================================
 
 #define YLC_WINDOW_SCOPE 0
+#define YLC_WINDOW_ARRAY_EDITOR 1
 
 // Open an oscilloscope window for `node`. Creates a tap node internally.
 void ylc_scope_open(Node *node);
 
 // Like ylc_scope_open but returns the tap node (pass-through).
 Node *ylc_scope_tap(Node *source);
+
+// Open a simple array editor window for a YLC double array.
+void ylc_array_editor_open(_DoubleArray data, double min_value,
+                           double max_value);
 
 #endif

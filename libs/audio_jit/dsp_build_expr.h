@@ -21,6 +21,8 @@ typedef struct {
   (DspValue) { .lanes = l, .scalar = *v, .vec = v }
 
 #define DSP_NULL (DspValue){0}
+#define DSP_ZERO                                                               \
+  (DspValue) { 1, LLVMConstReal(LLVMDoubleType(), 0) }
 
 DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                         LLVMModuleRef module, LLVMBuilderRef builder);

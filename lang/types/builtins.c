@@ -658,6 +658,8 @@ Type create_iter_scheme() {
                 {.T_SCHEME = {.num_vars = 1, .vars = vars_mem, .type = f}}};
 }
 
+Type is_null_type = MAKE_FN_TYPE_2(&t_ptr, &t_bool);
+
 void initialize_builtin_types() {
   ht_init(&builtin_types);
   static TypeClass tc_int[] = {{
@@ -861,6 +863,8 @@ void initialize_builtin_types() {
 
   cor_zip_scheme = create_cor_zip_scheme();
   add_builtin("cor_zip", &cor_zip_scheme);
+
+  add_builtin("is_null", &is_null_type);
 
   // print_builtin_types();
 }

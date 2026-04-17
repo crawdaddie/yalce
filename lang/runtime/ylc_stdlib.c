@@ -109,6 +109,7 @@ _String string_add(_String a, _String b) {
 }
 
 char *cstr(_String s) { return s.chars; }
+_String from_cstr(int len, char *s) { return (_String){len, s}; }
 
 int char_to_hex_int(char c) {
   // Convert the character to lowercase for easier processing

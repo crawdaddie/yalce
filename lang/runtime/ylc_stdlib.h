@@ -38,6 +38,7 @@ _String string_concat(_String *strings, int num_strings);
 
 _String string_add(_String a, _String b);
 char *cstr(_String);
+_String from_cstr(int len, char *s);
 
 int char_to_hex_int(char c);
 

@@ -268,7 +268,14 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
 
     if (ast->data.AST_IMPORT.import_all) {
       buffer = strcat(buffer, "import * from ");
-      buffer = strcat(buffer, ast->data.AST_IMPORT.fully_qualified_name);
+
+      if (ast->data.AST_IMPORT.fully_qualified_name) {
+        buffer = strcat(buffer, ast->data.AST_IMPORT.fully_qualified_name);
+      } else {
+
+        buffer = strcat(buffer, ast->data.AST_IMPORT.identifier);
+      }
+
       break;
     }
 

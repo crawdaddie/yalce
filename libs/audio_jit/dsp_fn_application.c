@@ -15,8 +15,9 @@
 #include "./common.h"
 #include "./compile_synth.h"
 #include "./dsp_array_proc.h"
-#include "dsp_build_expr.h"
-#include "dsp_fork.h"
+#include "./dsp_build_expr.h"
+#include "./dsp_fork.h"
+#include "./dsp_spectral.h"
 #include <llvm-c/Target.h>
 #include <llvm-c/Types.h>
 
@@ -727,15 +728,14 @@ static LLVMValueRef build_pm_osc(LLVMValueRef carrier_freq,
     LLVMSetLinkage(fn, LLVMExternalLinkage);
   }
 
-  LLVMValueRef call_args[] = {carrier_freq, mod_index, mod_ratio, dsp_ctx->spf,
-                              carrier_ptr,  mod_ptr};
+  LLVMValueRef call_args[] = {carrier_freq, mod_index,   mod_ratio,
+                              dsp_ctx->spf, carrier_ptr, mod_ptr};
   return LLVMBuildCall2(builder, fn_ty, fn, call_args, 6, "pm.sample");
 }
 
 static LLVMValueRef build_phase_osc(LLVMValueRef phase_input,
                                     LLVMValueRef carrier_freq,
-                                    DspBuildCtx *dsp_ctx,
-                                    LLVMModuleRef module,
+                                    DspBuildCtx *dsp_ctx, LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
   int off = (dsp_ctx->state_offset + 7) & ~7;
   dsp_ctx->state_offset = off + 8;
@@ -753,8 +753,8 @@ static LLVMValueRef build_phase_osc(LLVMValueRef phase_input,
                    init_carrier_ptr);
   }
 
-  LLVMValueRef base = dsp_consume_frame_state(dsp_ctx, builder, 8, 8,
-                                              "phase_osc.base");
+  LLVMValueRef base =
+      dsp_consume_frame_state(dsp_ctx, builder, 8, 8, "phase_osc.base");
   LLVMValueRef carrier_ptr =
       LLVMBuildBitCast(builder, base, f64_ptr_ty, "phase_osc.carrier_ptr");
 
@@ -769,6 +769,47 @@ static LLVMValueRef build_phase_osc(LLVMValueRef phase_input,
   LLVMValueRef call_args[] = {phase_input, carrier_freq, dsp_ctx->spf,
                               carrier_ptr};
   return LLVMBuildCall2(builder, fn_ty, fn, call_args, 4, "phase_osc.sample");
+}
+
+static LLVMValueRef build_bank_osc(LLVMValueRef amps, LLVMValueRef phases,
+                                   LLVMValueRef freq, DspBuildCtx *dsp_ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+  int off = (dsp_ctx->state_offset + 7) & ~7;
+  dsp_ctx->state_offset = off + 8;
+
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef arr_ty =
+      LLVMStructType((LLVMTypeRef[]){i32_ty, f64_ptr_ty}, 2, 0);
+
+  if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
+    LLVMValueRef init_base = dsp_consume_init_state(
+        dsp_ctx, dsp_ctx->init_builder, 8, 8, "bank_osc.init.base");
+    LLVMValueRef init_phase_ptr =
+        LLVMBuildBitCast(dsp_ctx->init_builder, init_base, f64_ptr_ty,
+                         "bank_osc.init.phase_ptr");
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, 0.0),
+                   init_phase_ptr);
+  }
+
+  LLVMValueRef phase_base =
+      dsp_consume_frame_state(dsp_ctx, builder, 8, 8, "bank_osc.phase_base");
+  LLVMValueRef phase_ptr =
+      LLVMBuildBitCast(builder, phase_base, f64_ptr_ty, "bank_osc.phase_ptr");
+
+  LLVMTypeRef fn_ty = LLVMFunctionType(
+      f64_ty, (LLVMTypeRef[]){arr_ty, arr_ty, f64_ty, f64_ty, f64_ptr_ty}, 5,
+      0);
+  LLVMValueRef fn = LLVMGetNamedFunction(module, "bank_osc_samp");
+  if (!fn) {
+    fn = LLVMAddFunction(module, "bank_osc_samp", fn_ty);
+    LLVMSetLinkage(fn, LLVMExternalLinkage);
+  }
+
+  LLVMValueRef call_args[] = {amps, phases, freq, dsp_ctx->spf, phase_ptr};
+  return LLVMBuildCall2(builder, fn_ty, fn, call_args, 5, "bank_osc.sample");
 }
 LLVMValueRef ensure_float(Type *in_type, LLVMValueRef val,
                           LLVMBuilderRef builder) {
@@ -1341,7 +1382,7 @@ double rect_samp(double duration, double trig, double prev_trig, double spf,
 double pm_osc_samp(double carrier_freq, double mod_index, double mod_ratio,
                    double spf, double *carrier_phase_ptr,
                    double *modulator_phase_ptr) {
-  const double turns_per_radian = 1.0 / (2.0 * M_PI);
+  const double turns_per_unit = 0.5;
   double carrier_phase = *carrier_phase_ptr;
   double modulator_phase = *modulator_phase_ptr;
 
@@ -1371,7 +1412,7 @@ double pm_osc_samp(double carrier_freq, double mod_index, double mod_ratio,
 
   double modulator_value =
       ((mod_c3 * mod_frac + mod_c2) * mod_frac + mod_c1) * mod_frac + mod_c0;
-  modulator_value *= (mod_index * turns_per_radian);
+  modulator_value *= (mod_index * turns_per_unit);
 
   double modulated_phase = carrier_phase + modulator_value;
   modulated_phase -= floor(modulated_phase);
@@ -1396,10 +1437,10 @@ double pm_osc_samp(double carrier_freq, double mod_index, double mod_ratio,
   double carr_c2 = carr_y0 - 2.5 * carr_y1 + 2.0 * carr_y2 - 0.5 * carr_y3;
   double carr_c3 = 0.5 * (carr_y3 - carr_y0) + 1.5 * (carr_y1 - carr_y2);
 
-  double carrier_value = ((carr_c3 * carrier_frac + carr_c2) * carrier_frac +
-                          carr_c1) *
-                             carrier_frac +
-                         carr_c0;
+  double carrier_value =
+      ((carr_c3 * carrier_frac + carr_c2) * carrier_frac + carr_c1) *
+          carrier_frac +
+      carr_c0;
 
   modulator_phase += modulator_freq * spf;
   modulator_phase -= floor(modulator_phase);
@@ -1414,12 +1455,12 @@ double pm_osc_samp(double carrier_freq, double mod_index, double mod_ratio,
 
 double phase_osc_samp(double phase_input, double carrier_freq, double spf,
                       double *carrier_phase_ptr) {
-  const double turns_per_radian = 1.0 / (2.0 * M_PI);
+  const double turns_per_unit = 0.5;
   const double table_size = (double)SIN_TABSIZE;
   const int table_mask = SIN_TABSIZE - 1;
 
   double carrier_phase = *carrier_phase_ptr;
-  double modulated_phase = carrier_phase + (phase_input * turns_per_radian);
+  double modulated_phase = carrier_phase + (phase_input * turns_per_unit);
   modulated_phase -= floor(modulated_phase);
 
   double carrier_phase_scaled = modulated_phase * table_size;
@@ -1450,6 +1491,45 @@ double phase_osc_samp(double phase_input, double carrier_freq, double spf,
 
   *carrier_phase_ptr = carrier_phase;
   return out;
+}
+
+double bank_osc_samp(_DoubleArray amps, _DoubleArray phases, double freq,
+                     double spf, double *phase_ptr) {
+  if (!amps.data || amps.size <= 0 || !phase_ptr) {
+    return 0.0;
+  }
+
+  double phase = *phase_ptr;
+  double output = 0.0;
+  double norm = 1.0;
+  const double turns_per_unit = 0.5;
+  const int table_mask = SIN_TABSIZE - 1;
+
+  for (int32_t i = 0; i < amps.size; i++) {
+    double amp = amps.data[i];
+    double phase_offset = (phases.data && i < phases.size)
+                              ? phases.data[i] * turns_per_unit
+                              : 0.0;
+    double partial_phase = ((double)(i + 1) * phase) + phase_offset;
+    partial_phase -= floor(partial_phase);
+
+    double d_index = partial_phase * (double)SIN_TABSIZE;
+    int index = (int)d_index;
+    double frac = d_index - (double)index;
+
+    double a = ylc_sin_table[index & table_mask];
+    double b = ylc_sin_table[(index + 1) & table_mask];
+    double sample = ((1.0 - frac) * a) + (frac * b);
+
+    output += sample * amp;
+    norm += amp;
+  }
+
+  phase += freq * spf;
+  phase -= floor(phase);
+  *phase_ptr = phase;
+
+  return output / norm;
 }
 
 double grain_samp(double *buf, int64_t buf_size, double trig, double pos,
@@ -3062,12 +3142,11 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder);
     DspValue mod_ratio =
         dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
-    DspValue freq =
-        dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
+    DspValue freq = dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
 
-    int max_lanes = max(dsp_value_lane_count(mod_index),
-                        max(dsp_value_lane_count(mod_ratio),
-                            dsp_value_lane_count(freq)));
+    int max_lanes =
+        max(dsp_value_lane_count(mod_index),
+            max(dsp_value_lane_count(mod_ratio), dsp_value_lane_count(freq)));
     if (max_lanes <= 0) {
       return DSP_NULL;
     }
@@ -3124,6 +3203,40 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       vals[i] = build_phase_osc(
           ensure_float(args[0].type, dsp_value_lane(phase_input, i), builder),
           ensure_float(args[1].type, dsp_value_lane(freq, i), builder), dsp_ctx,
+          module, builder);
+    }
+
+    return DSP_MULTI(max_lanes, vals);
+  }
+  if (is_ident(f, "bank_osc")) {
+
+    Ast *args = ast->data.AST_APPLICATION.args;
+
+    DspValue amps = dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder);
+    DspValue phases = dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+    DspValue freq = dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
+
+    int max_lanes = dsp_value_lane_count(freq);
+    if (max_lanes <= 0) {
+      return DSP_NULL;
+    }
+
+    if (max_lanes == 1) {
+      return DSP_SCALAR(build_bank_osc(
+          amps.scalar, phases.scalar,
+          ensure_float(args[2].type, dsp_value_lane(freq, 0), builder), dsp_ctx,
+          module, builder));
+    }
+
+    LLVMValueRef *vals = dsp_alloc_lane_vals(dsp_ctx, max_lanes);
+    if (!vals) {
+      return DSP_NULL;
+    }
+
+    for (int i = 0; i < max_lanes; i++) {
+      vals[i] = build_bank_osc(
+          amps.scalar, phases.scalar,
+          ensure_float(args[2].type, dsp_value_lane(freq, i), builder), dsp_ctx,
           module, builder);
     }
 
@@ -3977,6 +4090,15 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return dsp_mix(ast, dsp_ctx, ctx, module, builder);
   }
 
+  if (is_ident(f, "ifft")) {
+    return dsp_ifft_region(ast, dsp_ctx, ctx, module, builder);
+  }
+
+  // if (is_ident(f, "fft")) {
+  //
+  //   return dsp_fft_region(ast, dsp_ctx, ctx, module, builder);
+  // }
+
   if (callable_sym) {
     LLVMValueRef callable = callable_sym->val;
 
@@ -3998,7 +4120,8 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     // if (callable_sym->type == STYPE_GENERIC_FUNCTION &&
     //     !is_closure(callable_sym->symbol_type)) {
     //   callable_type = resolve_sym_type(expected_fn_type,
-    //                                    callable_sym->symbol_type, ctx->env);
+    //                                    callable_sym->symbol_type,
+    //                                    ctx->env);
     //   callable = get_specific_callable(callable_sym, callable_type, ctx,
     //   module,
     //                                    builder);

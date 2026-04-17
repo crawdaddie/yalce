@@ -889,6 +889,15 @@ LLVMValueRef CharConstructorHandler(Ast *ast, JITLangCtx *ctx,
       ast->data.AST_APPLICATION.args->type, module, builder);
 }
 
+LLVMValueRef HandleIsNullPtr(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                             LLVMBuilderRef builder) {
+  LLVMValueRef ptr_val =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  LLVMTypeRef ptr_ty = LLVMTypeOf(ptr_val);
+  LLVMValueRef null_ptr = LLVMConstNull(ptr_ty);
+  return LLVMBuildICmp(builder, LLVMIntEQ, ptr_val, null_ptr, "is_null_ptr");
+}
+
 LLVMValueRef int_constructor_handler(Ast *ast, JITLangCtx *ctx,
                                      LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
@@ -1624,6 +1633,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("cor_zip_struct", &cor_zip_scheme, CorZipStructHandler);
 
   GENERIC_FN_SYMBOL("fn_composition", NULL, HandleFnComposition);
+
+  GENERIC_FN_SYMBOL("is_null", &is_null_type, HandleIsNullPtr);
 
   // GENERIC_FN_SYMBOL("null_coroutine", &null_coroutine,
   //                   codegen_dummy_coroutine_ref);

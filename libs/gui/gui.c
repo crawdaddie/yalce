@@ -231,6 +231,221 @@ static void scope_destroy(void *state) {
 }
 
 // ============================================================================
+// Array editor window type (id = YLC_WINDOW_ARRAY_EDITOR = 1)
+// ============================================================================
+
+typedef struct {
+  _DoubleArray data;
+  int selected_index;
+  bool dragging;
+  double value_min;
+  double value_max;
+} ArrayEditorState;
+
+static double array_editor_clamp(double lo, double hi, double v) {
+  if (v < lo)
+    return lo;
+  if (v > hi)
+    return hi;
+  return v;
+}
+
+static void array_editor_screen_to_value(ArrayEditorState *s, int x, int y,
+                                         int width, int height, int *index_out,
+                                         double *value_out) {
+  const int margin = 24;
+  int plot_w = width - 2 * margin;
+  int plot_h = height - 2 * margin;
+  if (plot_w <= 1)
+    plot_w = 1;
+  if (plot_h <= 1)
+    plot_h = 1;
+
+  int size = s->data.size > 0 ? s->data.size : 1;
+  double x_ratio = (double)(x - margin) / (double)plot_w;
+  int index = (int)(x_ratio * (double)(size - 1) + 0.5);
+  if (index < 0)
+    index = 0;
+  if (index >= size)
+    index = size - 1;
+
+  double y_ratio = (double)(height - margin - y) / (double)plot_h;
+  double value = s->value_min + y_ratio * (s->value_max - s->value_min);
+  value = array_editor_clamp(s->value_min, s->value_max, value);
+
+  *index_out = index;
+  *value_out = value;
+}
+
+static void array_editor_draw(SDL_Window *win, SDL_Renderer *ren, void *state) {
+  ArrayEditorState *s = (ArrayEditorState *)state;
+  int width = 0, height = 0;
+  SDL_GetWindowSize(win, &width, &height);
+
+  SDL_SetRenderDrawColor(ren, 242, 242, 238, 255);
+  SDL_RenderClear(ren);
+
+  const int margin = 24;
+  const int plot_w = width - 2 * margin;
+  const int plot_h = height - 2 * margin;
+  SDL_FRect plot = {(float)margin, (float)margin, (float)plot_w, (float)plot_h};
+
+  SDL_SetRenderDrawColor(ren, 255, 255, 255, 255);
+  SDL_RenderFillRect(ren, &plot);
+
+  SDL_SetRenderDrawColor(ren, 220, 220, 220, 255);
+  for (int i = 0; i <= 8; i++) {
+    float x = (float)margin + ((float)plot_w * (float)i / 8.0f);
+    SDL_RenderLine(ren, x, (float)margin, x, (float)(height - margin));
+  }
+  for (int i = 0; i <= 8; i++) {
+    float y = (float)margin + ((float)plot_h * (float)i / 8.0f);
+    SDL_RenderLine(ren, (float)margin, y, (float)(width - margin), y);
+  }
+
+  SDL_SetRenderDrawColor(ren, 90, 90, 90, 255);
+  SDL_RenderRect(ren, &plot);
+
+  if (!s || !s->data.data || s->data.size <= 0) {
+    SDL_RenderPresent(ren);
+    return;
+  }
+
+  for (int i = 0; i < s->data.size; i++) {
+    double value = s->data.data[i];
+    double normalized = (value - s->value_min) / (s->value_max - s->value_min);
+    normalized = array_editor_clamp(0.0, 1.0, normalized);
+
+    double bar_w = (double)plot_w / (double)s->data.size;
+    float x = (float)margin + (float)(i * bar_w);
+    float w = (float)(bar_w - 2.0);
+    if (w < 2.0f)
+      w = 2.0f;
+    float h = (float)(normalized * (double)plot_h);
+    SDL_FRect bar = {x + 1.0f, (float)(height - margin) - h, w, h};
+
+    if (i == s->selected_index) {
+      SDL_SetRenderDrawColor(ren, 210, 70, 50, 255);
+    } else {
+      SDL_SetRenderDrawColor(ren, 40, 130, 190, 255);
+    }
+    // SDL_RenderFillRect(ren, &bar);
+  }
+
+  SDL_SetRenderDrawColor(ren, 35, 35, 35, 255);
+  for (int i = 0; i < s->data.size - 1; i++) {
+    float x0 =
+        (float)margin + ((float)i / (float)(s->data.size - 1)) * (float)plot_w;
+    float x1 = (float)margin +
+               ((float)(i + 1) / (float)(s->data.size - 1)) * (float)plot_w;
+    double n0 =
+        (s->data.data[i] - s->value_min) / (s->value_max - s->value_min);
+    double n1 =
+        (s->data.data[i + 1] - s->value_min) / (s->value_max - s->value_min);
+    n0 = array_editor_clamp(0.0, 1.0, n0);
+    n1 = array_editor_clamp(0.0, 1.0, n1);
+    float y0 = (float)(height - margin) - (float)(n0 * (double)plot_h);
+    float y1 = (float)(height - margin) - (float)(n1 * (double)plot_h);
+    SDL_RenderLine(ren, x0, y0, x1, y1);
+  }
+
+  for (int i = 0; i < s->data.size; i++) {
+    float x =
+        (float)margin +
+        ((s->data.size > 1 ? (float)i / (float)(s->data.size - 1) : 0.0f) *
+         (float)plot_w);
+    double n = (s->data.data[i] - s->value_min) / (s->value_max - s->value_min);
+    n = array_editor_clamp(0.0, 1.0, n);
+    float y = (float)(height - margin) - (float)(n * (double)plot_h);
+    SDL_FRect p = {x - 3.0f, y - 3.0f, 6.0f, 6.0f};
+    if (i == s->selected_index) {
+      SDL_SetRenderDrawColor(ren, 210, 70, 50, 255);
+    } else {
+      SDL_SetRenderDrawColor(ren, 15, 15, 15, 255);
+    }
+    SDL_RenderFillRect(ren, &p);
+  }
+
+  SDL_RenderPresent(ren);
+}
+
+static void array_editor_on_event(SDL_Event *e, SDL_Window *win,
+                                  SDL_Renderer *ren, void *state) {
+  (void)ren;
+  ArrayEditorState *s = (ArrayEditorState *)state;
+  SDL_WindowID wid = 0;
+
+  switch (e->type) {
+  case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    wid = e->button.windowID;
+    break;
+  case SDL_EVENT_MOUSE_BUTTON_UP:
+    wid = e->button.windowID;
+    break;
+  case SDL_EVENT_MOUSE_MOTION:
+    wid = e->motion.windowID;
+    break;
+  case SDL_EVENT_KEY_DOWN:
+    wid = e->key.windowID;
+    break;
+  default:
+    return;
+  }
+
+  if (SDL_GetWindowID(win) != wid || !s || !s->data.data || s->data.size <= 0)
+    return;
+
+  int width = 0, height = 0;
+  SDL_GetWindowSize(win, &width, &height);
+
+  if (e->type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+      e->button.button == SDL_BUTTON_LEFT) {
+    int index = 0;
+    double value = 0.0;
+    s->dragging = true;
+    array_editor_screen_to_value(s, e->button.x, e->button.y, width, height,
+                                 &index, &value);
+    s->selected_index = index;
+    s->data.data[index] = value;
+    return;
+  }
+
+  if (e->type == SDL_EVENT_MOUSE_BUTTON_UP &&
+      e->button.button == SDL_BUTTON_LEFT) {
+    s->dragging = false;
+    return;
+  }
+
+  if (e->type == SDL_EVENT_MOUSE_MOTION && s->dragging) {
+    int index = 0;
+    double value = 0.0;
+    array_editor_screen_to_value(s, e->motion.x, e->motion.y, width, height,
+                                 &index, &value);
+    s->selected_index = index;
+    s->data.data[index] = value;
+    return;
+  }
+
+  if (e->type == SDL_EVENT_KEY_DOWN && s->selected_index >= 0) {
+    double step = (s->value_max - s->value_min) * 0.05;
+    if (step <= 0.0)
+      step = 1.0;
+    if (e->key.key == SDLK_LEFT && s->selected_index > 0)
+      s->selected_index--;
+    else if (e->key.key == SDLK_RIGHT && s->selected_index < s->data.size - 1)
+      s->selected_index++;
+    else if (e->key.key == SDLK_UP)
+      s->data.data[s->selected_index] = array_editor_clamp(
+          s->value_min, s->value_max, s->data.data[s->selected_index] + step);
+    else if (e->key.key == SDLK_DOWN)
+      s->data.data[s->selected_index] = array_editor_clamp(
+          s->value_min, s->value_max, s->data.data[s->selected_index] - step);
+  }
+}
+
+static void array_editor_destroy(void *state) { free(state); }
+
+// ============================================================================
 // Public scope API
 // ============================================================================
 
@@ -271,6 +486,27 @@ void ylc_scope_open(Node *node) {
   }
 
   scope_enqueue(ring);
+}
+
+void ylc_array_editor_open(_DoubleArray data, double min_value,
+                           double max_value) {
+
+  if (!data.data || data.size <= 0 || max_value <= min_value) {
+    return;
+  }
+
+  ArrayEditorState *s = calloc(1, sizeof(ArrayEditorState));
+  if (!s) {
+    return;
+  }
+  s->data = data;
+  s->selected_index = -1;
+  s->dragging = false;
+  s->value_min = min_value;
+  s->value_max = max_value;
+
+  ylc_window_open(YLC_WINDOW_ARRAY_EDITOR, "array editor", 800, 320, s);
+  return;
 }
 
 // ============================================================================
@@ -346,8 +582,15 @@ __attribute__((constructor)) static void ylc_gui_init(void) {
       .on_event = scope_on_event,
       .destroy = scope_destroy,
   });
+  ylc_window_type_register((YLCWindowType){
+      .id = YLC_WINDOW_ARRAY_EDITOR,
+      .draw = array_editor_draw,
+      .on_event = array_editor_on_event,
+      .destroy = array_editor_destroy,
+  });
 
   __set_break_repl_flag(true);
   __set_break_repl_cb(sdl_main_loop);
-  fprintf(stderr, "libgui: SDL3 scope ready\n");
+
+  fprintf(stderr, "libgui: ready\n");
 }

@@ -1896,6 +1896,24 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   case AST_IMPORT: {
     const char *key = ast->data.AST_IMPORT.fully_qualified_name;
+    if (!key) {
+      key = ast->data.AST_IMPORT.identifier;
+      TypeEnv *mod_type_env = lookup_type_ref(ctx->env, key);
+      Type *mod_type = mod_type_env->type;
+
+      if (ast->data.AST_IMPORT.import_all) {
+        for (int i = 0; i < mod_type->data.T_CONS.num_args; i++) {
+          ctx->env = env_extend(ctx->env, mod_type->data.T_CONS.names[i],
+                                mod_type->data.T_CONS.args[i]);
+          ctx->env->is_opened_var = true;
+        }
+
+      } else {
+        ctx->env = env_extend(ctx->env, ast->data.AST_IMPORT.identifier, type);
+      }
+      return mod_type;
+    }
+
     YLCModule *mod = get_module(key);
 
     if (!mod) {
