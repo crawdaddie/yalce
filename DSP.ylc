@@ -58,30 +58,36 @@ let mbufplay = extern fn Int -> Array of Double -> Double -> Double -> Double ->
 #                      max_grains   buf                rate      pos       width     trig
 let grains = extern fn Int ->       Array of Double -> Double -> Double -> Double -> Double;
 
+import std/Math;
 type Bin = Ptr;
-type FreqSignal = Ptr;
+type Complex = (Double, Double);
+type FreqSignal = Array of Complex;
+# (Double, Double);
+
+let mag   = fn (re, im): (Complex) -> Math.sqrt ((re * re) + (im * im)) ;;
+let phase = fn (re, im): (Complex) -> Math.atan2 im re;;
+let polar = fn mag: (Double) theta: (Double) -> (mag * Math.cos theta, mag * Math.sin theta) ;;
 
 let Spectral = module () ->
   let fft = extern fn Int -> Int
-                  -> (T -> FreqSignal)
+                  -> (FreqSignal -> FreqSignal)
                   -> Array of Signal
-                  -> FreqSignal;
+                  -> Signal;
 
-  let ifft = extern fn FreqSignal -> Signal;
+  # let ifft = extern fn FreqSignal -> Signal;
 
   let freq_map = extern fn (Bin -> Bin) -> FreqSignal -> FreqSignal;
   let freq_zip = extern fn (Bin -> Bin -> Bin)
                       -> FreqSignal -> FreqSignal -> FreqSignal;
 
-  let mag   = extern fn Bin -> Double;
-  let phase = extern fn Bin -> Double;
-  let polar = extern fn Double -> Double -> Bin;
+
+  # let polar = fn re im -> 
+  # let polar = extern fn Double -> Double -> Complex;
 ;
 
 
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
 
-import std/Math;
 
 let Filter = module () ->
 compile_audio_fn (

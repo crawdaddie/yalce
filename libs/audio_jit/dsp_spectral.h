@@ -65,8 +65,8 @@ static inline LLVMValueRef fdom_lane(FDomValue v, int i) {
 //
 // This returns a normal sample-domain DspValue because the region includes
 // analysis, spectral processing, and synthesis.
-FDomValue dsp_fft_region(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
-                         LLVMModuleRef module, LLVMBuilderRef builder);
+DspValue dsp_fft_region(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
+                        LLVMModuleRef module, LLVMBuilderRef builder);
 
 DspValue dsp_ifft_region(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                          LLVMModuleRef module, LLVMBuilderRef builder);

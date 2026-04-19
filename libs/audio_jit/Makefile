@@ -15,6 +15,7 @@ CFLAGS += -Wno-unused-parameter -Wno-unused-function
 
 LDFLAGS   = -shared
 LDFLAGS  += `$(LLVM_CONFIG) --libs core linker passes` -lLLVM-21
+LDFLAGS  += -lfftw3 -lm
 
 LIB_NAME    = libaudio_jit
 DYNAMIC_LIB = $(LIB_NAME).so

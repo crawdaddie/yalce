@@ -4090,8 +4090,8 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return dsp_mix(ast, dsp_ctx, ctx, module, builder);
   }
 
-  if (is_ident(f, "ifft")) {
-    return dsp_ifft_region(ast, dsp_ctx, ctx, module, builder);
+  if (is_ident(f, "fft")) {
+    return dsp_fft_region(ast, dsp_ctx, ctx, module, builder);
   }
 
   // if (is_ident(f, "fft")) {

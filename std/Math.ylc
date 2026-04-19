@@ -22,6 +22,9 @@ let double_array_init = extern fn Int -> Double -> Ptr;
 let double_array = extern fn Int -> Double -> Array of Double;
 let pow = extern fn Double -> Double -> Double;
 let tanh = extern fn Double -> Double;
+
+let atan = extern fn Double -> Double;
+let atan2 = extern fn Double -> Double -> Double;
 let ilog2 = extern fn Int -> Int;
 let u64pow = extern fn Uint64 -> Uint64 -> Uint64;
 

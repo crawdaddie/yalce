@@ -1,0 +1,9 @@
+let getenv = extern fn Ptr of Char -> Ptr of Char;
+let strlen = extern fn Ptr of Char -> Int;
+let from_cstr = extern fn Int -> Ptr of Char -> String;
+
+let get_env = fn e ->
+  match getenv (cstr e) with
+  | p if (is_null p == false) -> Some (from_cstr (strlen p) p)
+  | _ -> None
+;;

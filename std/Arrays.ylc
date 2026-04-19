@@ -38,6 +38,16 @@ let map = fn f a ->
   res
 ;;
 
+let mapi = fn f a ->
+  let res = array_fill_const (array_size a) (f 0 (a[0]));
+  for i = 1 .. (array_size a) in (
+    let v = f i (a [i]);
+    res[i] :=  v
+  );
+  res
+;;
+
+
 
 
 let last = fn x: (Array of T) ->
