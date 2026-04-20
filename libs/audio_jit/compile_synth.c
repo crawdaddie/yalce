@@ -272,6 +272,7 @@ LLVMTypeRef synth_frame_fn_type(Ast *lambda, JITLangCtx *ctx,
 
 SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
                                            LLVMTypeRef frame_ty,
+                                           DspBuildCtx *enclosing_dsp_ctx,
                                            JITLangCtx *ctx,
                                            LLVMModuleRef module,
                                            LLVMBuilderRef builder) {
@@ -397,6 +398,8 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       .perf_fn = perf_fn,
       .sample_rate = compile_sample_rate,
       .spf_scalar = compile_spf,
+      .spectral_fft_size =
+          enclosing_dsp_ctx ? enclosing_dsp_ctx->spectral_fft_size : 0,
       .tmp_alloc = &tmp_alloc,
   };
 
@@ -407,6 +410,8 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       .perf_fn = frame_fn,
       .sample_rate = compile_sample_rate,
       .spf_scalar = compile_spf,
+      .spectral_fft_size =
+          enclosing_dsp_ctx ? enclosing_dsp_ctx->spectral_fft_size : 0,
       .tmp_alloc = &tmp_alloc,
   };
 
@@ -763,8 +768,8 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
     synth_id = synth_registry_len();
   }
 
-  SynthRecord rec = compile_lambda_to_synth_record(lambda, name, frame_ty, ctx,
-                                                   module, builder);
+  SynthRecord rec = compile_lambda_to_synth_record(
+      lambda, name, frame_ty, NULL, ctx, module, builder);
 
   // Emit a runtime call to ylc_register_synth_ctor(synth_id, cons_fn) so that
   // synth_ctor_table is populated with the real compiled address when the

@@ -317,8 +317,8 @@ DspValue dsp_array_map(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
       LLVMFunctionType(LLVMVoidType(), frame_param_tys, frame_nparams, 0);
   free(frame_param_tys);
 
-  SynthRecord s = compile_lambda_to_synth_record(anon_func, "anon", frame_ty,
-                                                 ctx, module, builder);
+  SynthRecord s = compile_lambda_to_synth_record(
+      anon_func, "anon", frame_ty, dsp_ctx, ctx, module, builder);
 
   DspBuildCtx _dsp_ctx = *dsp_ctx;
   LLVMValueRef array_value =
@@ -504,7 +504,7 @@ DspValue dsp_delay_proc(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   free(frame_param_tys);
 
   SynthRecord s = compile_lambda_to_synth_record(
-      anon_func, "delay_proc", frame_ty, ctx, module, builder);
+      anon_func, "delay_proc", frame_ty, dsp_ctx, ctx, module, builder);
 
   // 4. Frame state: 4-byte write pointer (zeroed by ctor) + lambda state
   int wp_off = (dsp_ctx->state_offset + 3) & ~3;
@@ -595,7 +595,13 @@ static DspValue dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
   Ast *array_ast = ast->data.AST_APPLICATION.args + 2;
 
   Type *arr_type = array_ast->type;
+  // print_ast(ast);
+  // printf("array type: ");
+  // print_type(arr_type);
   Type *_el_type = arr_type->data.T_CONS.args[0];
+
+  // printf("el type: ");
+  // print_type(_el_type);
   if (_el_type->kind == T_VAR) {
     _el_type = &t_num;
   }
@@ -638,8 +644,8 @@ static DspValue dsp_array_fold(bool with_index, Ast *ast, DspBuildCtx *dsp_ctx,
       LLVMFunctionType(LLVMVoidType(), frame_param_tys, frame_nparams, 0);
   free(frame_param_tys);
 
-  SynthRecord s = compile_lambda_to_synth_record(anon_func, "anon", frame_ty,
-                                                 ctx, module, builder);
+  SynthRecord s = compile_lambda_to_synth_record(
+      anon_func, "anon", frame_ty, dsp_ctx, ctx, module, builder);
 
   // Build array via a copy of dsp_ctx to capture array_attrs, then sync
   // state_offset back so subsequent allocations are correctly sequenced.

@@ -46,7 +46,8 @@ DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     if (in_expr) {
       inner_ctx = *ctx;
       ht_init(&inner_table);
-      inner_frame = (StackFrame){.table = &inner_table, .next = inner_ctx.frame};
+      inner_frame =
+          (StackFrame){.table = &inner_table, .next = inner_ctx.frame};
       inner_ctx.frame = &inner_frame;
       inner_ctx.stack_ptr = ctx->stack_ptr + 1;
       inner_ctx.coro_ctx = ctx->coro_ctx;
@@ -169,6 +170,7 @@ DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     const char *id_name = ast->data.AST_IDENTIFIER.value;
     if (dsp_ctx && id_name) {
       LLVMTypeRef f64_ty = LLVMDoubleType();
+      LLVMTypeRef f32_ty = LLVMInt32Type();
       if (strcmp(id_name, "sample_rate") == 0) {
         return DSP_SCALAR(LLVMConstReal(f64_ty, (double)dsp_ctx->sample_rate));
       }
@@ -176,6 +178,10 @@ DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       if (strcmp(id_name, "spf") == 0) {
         return DSP_SCALAR(
             LLVMConstReal(f64_ty, 1.0 / (double)dsp_ctx->sample_rate));
+      }
+
+      if (strcmp(id_name, "fft_size") == 0) {
+        return DSP_SCALAR(LLVMConstInt(f32_ty, dsp_ctx->spectral_fft_size, 0));
       }
     }
     JITSymbol *sym = lookup_id_ast(ast, ctx);

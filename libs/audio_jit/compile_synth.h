@@ -90,6 +90,7 @@ int synth_registry_len();
 
 SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
                                            LLVMTypeRef frame_ty,
+                                           DspBuildCtx *enclosing_dsp_ctx,
                                            JITLangCtx *ctx,
                                            LLVMModuleRef module,
 

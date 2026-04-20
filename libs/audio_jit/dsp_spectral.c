@@ -1,5 +1,4 @@
 #include "./dsp_spectral.h"
-#include "./dsp_fn_application.h"
 #include "../../engine/ctx.h"
 #include "../../lang/backend_llvm/array.h"
 #include "../../lang/backend_llvm/codegen.h"
@@ -10,6 +9,7 @@
 #include "../../lang/types/type_ser.h"
 #include "../../lang/ylc_datatypes.h"
 #include "./common.h"
+#include "./dsp_fn_application.h"
 #include "function.h"
 #include <fftw3.h>
 #include <llvm-c/Target.h>
@@ -867,6 +867,7 @@ DspValue dsp_fft_region(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
   if (!(inputs_ast->tag == AST_ARRAY || inputs_ast->tag == AST_LIST)) {
     fprintf(stderr, "fft inputs must be a literal array/list\n");
+    print_ast_err(inputs_ast);
     return DSP_NULL;
   }
 
@@ -1186,8 +1187,9 @@ DspValue dsp_spectral_env_real(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   Ast *size_ast = args;
   Ast *in_ast = args + 1;
   if (!(ast_is_const(size_ast, ctx) && size_ast->tag == AST_INT)) {
-    fprintf(stderr,
-            "pv_env_real requires a constant integer size as its first argument\n");
+    fprintf(
+        stderr,
+        "pv_env_real requires a constant integer size as its first argument\n");
     print_ast_err(ast);
     return DSP_NULL;
   }
@@ -1207,11 +1209,12 @@ DspValue dsp_spectral_env_real(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return DSP_NULL;
   }
 
-  LLVMValueRef in_arr = dsp_build_expr(in_ast, dsp_ctx, ctx, module, builder).scalar;
+  LLVMValueRef in_arr =
+      dsp_build_expr(in_ast, dsp_ctx, ctx, module, builder).scalar;
   LLVMTypeRef in_arr_ty = LLVMTypeOf(in_arr);
   LLVMTypeRef out_arr_ty = LLVMTypeOf(out_arr);
-  LLVMTypeRef fn_ty =
-      LLVMFunctionType(out_arr_ty, (LLVMTypeRef[]){in_arr_ty, out_arr_ty}, 2, 0);
+  LLVMTypeRef fn_ty = LLVMFunctionType(
+      out_arr_ty, (LLVMTypeRef[]){in_arr_ty, out_arr_ty}, 2, 0);
   LLVMValueRef fn = LLVMGetNamedFunction(module, "pv_env_real_fill");
   if (!fn) {
     fn = LLVMAddFunction(module, "pv_env_real_fill", fn_ty);
@@ -1219,8 +1222,7 @@ DspValue dsp_spectral_env_real(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
 
   out_arr = LLVMBuildCall2(builder, fn_ty, fn,
-                           (LLVMValueRef[]){in_arr, out_arr}, 2,
-                           "pv_env_real");
+                           (LLVMValueRef[]){in_arr, out_arr}, 2, "pv_env_real");
   return DSP_SCALAR(out_arr);
 }
 
