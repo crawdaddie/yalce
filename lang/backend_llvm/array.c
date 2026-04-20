@@ -112,13 +112,16 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef array_struct = LLVMGetUndef(array_type);
 
   LLVMValueRef data_ptr;
+  // if (ctx->allocator) {
+  //   printf("use custom allocator in this code\n");
+  //   print_ast(ast);
+  // } else
   // printf("create array %d \n", find_allocation_strategy(ast, ctx));
   // print_ast(ast);
   if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
     data_ptr = LLVMBuildArrayAlloca(builder, element_type, size_const,
                                     "array_data_alloc");
   } else {
-
     data_ptr = LLVMBuildArrayMalloc(builder, element_type, size_const,
                                     "array_data_alloc");
   }

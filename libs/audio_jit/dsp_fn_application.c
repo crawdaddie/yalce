@@ -3917,6 +3917,22 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return DSP_SCALAR(arr_val);
   }
 
+  if (is_ident(f, "pv_env")) {
+    return dsp_spectral_env(ast, dsp_ctx, ctx, module, builder);
+  }
+
+  if (is_ident(f, "pv_env_real")) {
+    return dsp_spectral_env_real(ast, dsp_ctx, ctx, module, builder);
+  }
+
+  if (is_ident(f, "pv_scale_mag")) {
+    return dsp_spectral_scale_mag(ast, dsp_ctx, ctx, module, builder);
+  }
+
+  if (is_ident(f, "pv_div_mag")) {
+    return dsp_spectral_div_mag(ast, dsp_ctx, ctx, module, builder);
+  }
+
   if (callable_sym && callable_sym->type == STYPE_AUDIO_JIT_INLINE_LAMBDA) {
 
     Ast *lambda_ast = callable_sym->symbol_data._USER_DEFINED_SYMBOL;

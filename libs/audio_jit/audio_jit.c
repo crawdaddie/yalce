@@ -53,9 +53,8 @@ int64_t ylc_bufsize(void *node_raw) {
 Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
                             int output_layout, int state_bytes,
                             const char *meta_name) {
-  size_t total =
-      sizeof(Node) + (size_t)state_bytes +
-      ((size_t)BUF_SIZE * (size_t)output_layout * sizeof(double));
+  size_t total = sizeof(Node) + (size_t)state_bytes +
+                 ((size_t)BUF_SIZE * (size_t)output_layout * sizeof(double));
   Node *node = (Node *)calloc(1, total);
   if (!node) {
     return NULL;
@@ -138,6 +137,7 @@ __attribute__((constructor)) static void ylc_audio_jit_init(void) {
 
   ht *stack = ylc_jit_ctx->frame->table;
   register_builtin(stack, "compile_audio_fn", CompileAudioFnHandler);
+  register_builtin(stack, "compile_spectral_fn", CompileSpectralFnHandler);
   fprintf(stderr, "libaudio_jit: registered compile_audio_fn\n");
   printf("sample rates: %d %f\n", ctx_sample_rate(), ctx_spf());
 

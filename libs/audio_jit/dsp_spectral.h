@@ -98,6 +98,22 @@ LLVMValueRef dsp_phase(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 LLVMValueRef dsp_polar(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                        LLVMModuleRef module, LLVMBuilderRef builder);
 
+DspValue dsp_spectral_env(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
+                          LLVMModuleRef module, LLVMBuilderRef builder);
+
+DspValue dsp_spectral_env_real(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
+                               LLVMModuleRef module, LLVMBuilderRef builder);
+
+DspValue dsp_spectral_scale_mag(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
+                                LLVMModuleRef module, LLVMBuilderRef builder);
+
+DspValue dsp_spectral_div_mag(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
+                              LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder);
+
 // Optional domain/type checks if you want explicit guarding in build_expr/fn
 // application.
 bool dsp_is_freq_signal_type(Type *t);

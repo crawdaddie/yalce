@@ -25,6 +25,10 @@ typedef struct {
   LLVMMetadataRef di_compile_unit;
   const char *source_filename;
 } DebugCtx;
+
+typedef struct {
+} AllocatorCtx;
+
 typedef struct {
   // ht stack[STACK_MAX];
   int stack_ptr;
@@ -35,7 +39,8 @@ typedef struct {
   int *global_storage_capacity;
   const char *module_name;
   void *coro_ctx;
-  LLVMValueRef allocator;
+  AllocatorCtx *allocator;
+  // LLVMValueRef allocator;
   bool tail_expression;
 
   DebugCtx debug_ctx;

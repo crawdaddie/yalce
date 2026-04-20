@@ -1,6 +1,8 @@
 open engine/bindings/Synth;
 open engine/bindings/Sched;
 
+import std/Math;
+
 type Signal = Double;
 type Scalar = Double;
 
@@ -58,11 +60,8 @@ let mbufplay = extern fn Int -> Array of Double -> Double -> Double -> Double ->
 #                      max_grains   buf                rate      pos       width     trig
 let grains = extern fn Int ->       Array of Double -> Double -> Double -> Double -> Double;
 
-import std/Math;
-type Bin = Ptr;
 type Complex = (Double, Double);
 type FreqSignal = Array of Complex;
-# (Double, Double);
 
 let mag   = fn (re, im): (Complex) -> Math.sqrt ((re * re) + (im * im)) ;;
 let phase = fn (re, im): (Complex) -> Math.atan2 im re;;
@@ -73,12 +72,6 @@ let Spectral = module () ->
                   -> (FreqSignal -> FreqSignal)
                   -> Array of Signal
                   -> Signal;
-
-  # let ifft = extern fn FreqSignal -> Signal;
-
-  let freq_map = extern fn (Bin -> Bin) -> FreqSignal -> FreqSignal;
-  let freq_zip = extern fn (Bin -> Bin -> Bin)
-                      -> FreqSignal -> FreqSignal -> FreqSignal;
 
 
   # let polar = fn re im -> 

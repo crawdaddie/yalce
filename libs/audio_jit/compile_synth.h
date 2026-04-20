@@ -49,11 +49,16 @@ typedef struct {
   LLVMBuilderRef init_builder;
   LLVMBuilderRef perform_builder;
   DspArrayAttributes array_attrs;
+  int spectral_fft_size;
+  int spectral_hop_size;
   DspTmpAllocator *tmp_alloc;
 } DspBuildCtx;
 LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder);
+LLVMValueRef CompileSpectralFnHandler(Ast *ast, JITLangCtx *ctx,
+                                      LLVMModuleRef module,
+                                      LLVMBuilderRef builder);
 
 void init_synth_registry();
 
