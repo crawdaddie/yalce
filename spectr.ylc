@@ -35,11 +35,9 @@ let cmix = fn (ar, ai) (br, bi) t ->
   (ar * (1. - t) + br * t, ai * (1. - t) + bi * t)
 ;;
 
-# comjj
-#   let spectral_envelope = fn out spec ->
-#
-#
-# );
+let cmag = fn (ar, ai) -> Math.sqrt (ar * ar + ai * ai);;
+let cphase = fn (ar, ai) -> Math.atan2 ai ar;;
+let c_from_polar = fn m: (Double) p: (Double) -> (m * Math.cos p, m * Math.sin p) ;; 
 
 
 let pv_env = extern fn FreqSignal -> FreqSignal;
@@ -50,46 +48,25 @@ let pv_scale_mag = extern fn FreqSignal -> FreqSignal -> FreqSignal;
 compile_audio_fn (
   let x = fn () ->
     open Spectral;
+
     [
-      mbufplay 2 (array_of_buf buf) 1. 0. (trig 0) |> mix 1,
-      (~[100., 150.] |> saw_osc |> mix 1) + 0.2 * white (),
+      ~[lfnoise 0.5 60 80, lfnoise 0.5 60 80] |> saw_osc |> mix 1,
+      # ~[60., 60 * 1.01] |> saw_osc |> mix 1,
+      mbufplay 2 (array_of_buf buf) 1. 0. (trig 0) |> mix 1 |> Reverb.cathedral,
+      # white ()
     ]
     |> fft 2048 128
     (fn mod car ->
-      let mod_env = pv_env_real 1024 mod;
-
-      # let car_env = pv_env car;
-      # let flat_car = pv_div_mag car car_env;
-      # pv_scale_mag flat_car mod_env
-      mod
+      let mod_env = pv_env_real 512 mod;
+      let car_env = pv_env_real 512 car;
+      dsp_array.foldi (fn i r (cr, ci) ->
+        let x = i / fft_size;
+        let fact = (tabread mod_env x) / (tabread car_env x);
+        r[i] := (fact * cr, fact * ci);
+        r
+      ) car car
     )
-
 );
-      # spectral_vocoder_mod_carrier mod car out
-      # let n = array_size out;
-      # # for i = 0 .. n in (
-      # #   let prev = out[i];
-      # #   out [i] := cmix prev (mod[i]) 0.5
-      # # );
-      # # out
-      # let nyq = n / 2;
-      # #
-      # out[0] := (mag (mod[0]), 0.);
-      #
-      # for i = 1 .. nyq in (
-      #   let prev = out[i];
-      #   let m = mag (mod[i]);
-      #   let p = phase (car[i]);
-      #   let z = cmix prev (polar m p) 0.5;
-      #   out[i] := z;
-      #   out[n - i] := conjugate z
-      # );
-      #
-      #
-      # out[nyq] := (mag (mod[nyq]), 0.);
-      # out
-
-      # freq_zip (fn m c -> polar (mag m) (phase c)) mod car
-      # mod
 
 x () |> play_node
+

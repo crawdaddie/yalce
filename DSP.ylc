@@ -320,7 +320,7 @@ let dsp_list = module () ->
 
 let dsp_array = module () ->
   let fold = extern fn (R -> T -> T) -> R -> Array of T -> R;
-  let foldi = extern fn (Int -> R -> T -> T) -> R -> Array of T -> R;
+  let foldi = extern fn (Int -> R -> T -> R) -> R -> Array of T -> R;
   let map = extern fn (T -> R) -> Array of T -> Array of R;
   let mapi = extern fn (Int -> T -> R) -> Array of T -> Array of R;
   let iter = extern fn (T -> ()) -> Array of T -> ();
