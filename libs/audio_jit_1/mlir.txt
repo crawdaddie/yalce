@@ -1,0 +1,689 @@
+
+ ▐▛███▜▌   Claude Code v2.1.45
+▝▜█████▛▘  Sonnet 4.6 · Claude Pro
+  ▘▘ ▝▝    ~/projects/yalce
+
+✻ Conversation compacted (ctrl+o for history)
+
+  ⎿  Read libs/audio_jit/Makefile (43 lines)
+  ⎿  Referenced file libs/audio_jit/audio_jit.cpp
+  ⎿  Read libs/audio_jit/audio_jit.h (20 lines)
+  ⎿  Read ../../.cache/yay/mlir/PKGBUILD (53 lines)
+
+● Read 1 file (ctrl+o to expand)
+
+● Now let me check the correct MLIR 21 name for the reconcile unrealized casts
+  pass:
+
+● Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Good. Now I have all the info needed. The fixes are:
+
+  1. Line 152: arith::ConstantIntOp → arith::ConstantOp with getI32IntegerAttr
+  2. Lines 154-156: .getResult(0) → .getResult()
+  3. Lines 187-188: arith::ConstantFloatOp wrong order — already using
+  arith::ConstantOp elsewhere, fix this one too
+  4. Lines 248-258: arith::ConstantFloatOp → arith::ConstantOp with
+  getF64FloatAttr
+  5. Line 378: fn.addEntryBlock() → fn.addEntryBlock(b)
+  6. Line 413-414: .getResult(0) → .getResult()
+  7. Line 426: createConvertSCFToCFPass() → createSCFToControlFlowPass()
+  8. Line 429: missing include for createReconcileUnrealizedCastsPass — add the
+  header
+
+● Update(libs/audio_jit/audio_jit.cpp)
+  ⎿  Added 1 line
+      23  #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
+      24  #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h
+          "
+      25  #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
+      26 +#include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnr
+         +ealizedCasts.h"                                                
+      27  #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
+      28  #include "mlir/Dialect/Arith/IR/Arith.h"
+      29  #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
+
+● Update(libs/audio_jit/audio_jit.cpp)
+  ⎿  Added 1 line, removed 1 line
+      150    auto fn_ty = LLVM::LLVMFunctionType::get(f64, {ptr, i32, i64
+           }, false);
+      151    auto fn = declareExtern(actx.mod, b, "ylc_read_inlet", fn_ty
+           );
+      152  
+      153 -  Value idx = b.create<arith::ConstantIntOp>(loc, inlet_idx, i
+          -32);                                                          
+      153 +  Value idx = b.create<arith::ConstantOp>(loc, b.getI32Integer
+          +Attr(inlet_idx));                                             
+      154    Value frame = b.create<arith::IndexCastOp>(loc, i64, actx.fr
+           ame_idx);
+      155    return b
+      156        .create<LLVM::CallOp>(loc, fn, ValueRange{actx.inputs_pt
+           r, idx, frame})
+  ⎿  Found 9 new diagnostic issues in 1 file (ctrl+o to expand)
+
+● Searched for 3 patterns (ctrl+o to expand)
+
+❯ here are the new build errors: ❯ make -C libs/audio_jit                   
+  make: Entering directory '/home/adam/projects/yalce/libs/audio_jit'       
+  clang++ -fPIC -g -std=c++17 -I../../lang -I../../lang/backend_llvm        
+  -I../../engine `/usr/bin/llvm-config --cflags` -I/usr/include             
+  -Wno-unused-parameter -Wno-unused-function -c audio_jit.cpp -o            
+  audio_jit.o                                                               
+  In file included from audio_jit.cpp:11:                                   
+  In file included from ./audio_jit.h:4:                                    
+  In file included from ../../lang/../lang/backend_llvm/common.h:7:         
+  In file included from ../../lang/types/inference.h:5:                     
+  ../../lang/types/./type.h:298:9: warning: empty struct has size 0 in C,   
+  size 1 in C++ [-Wextern-c-compat]                                         
+    298 | typedef struct VariantContext {                                   
+        |         ^                                                         
+  audio_jit.cpp:157:18: error: too many arguments to function call,         
+  expected 0, have 1                                                        
+    155 |   return b                                                        
+        |          ~                                                        
+    156 |       .create<LLVM::CallOp>(loc, fn, ValueRange{actx.inputs_ptr,  
+  idx, frame})                                                              
+        |                                                                   
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~   
+    157 |       .getResult(0);                                              
+        |       ~~~~~~~~~~ ^                                                
+  /usr/include/mlir/Dialect/LLVMIR/LLVMOps.h.inc:5936:36: note: 'getResult' 
+   declared here                                                            
+   5936 |   ::mlir::TypedValue<::mlir::Type> getResult() {                  
+        |                                    ^                              
+  audio_jit.cpp:379:34: error: too few arguments to function call, single   
+  argument 'builder' was not                                                
+        specified                                                           
+    379 |   auto *entry = fn.addEntryBlock();                               
+        |                 ~~~~~~~~~~~~~~~~ ^                                
+  /usr/include/mlir/Dialect/LLVMIR/LLVMOps.h.inc:16987:10: note:            
+  'addEntryBlock' declared here                                             
+   16987 |   Block *addEntryBlock(OpBuilder &builder);                      
+         |          ^             ~~~~~~~~~~~~~~~~~~                        
+  audio_jit.cpp:415:22: error: too many arguments to function call,         
+  expected 0, have 1                                                        
+    414 |       b.create<LLVM::CallOp>(loc, get_buf_fn,                     
+  ValueRange{actx.node_ptr})                                                
+        |                                                                   
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~        
+    415 |           .getResult(0);                                          
+        |           ~~~~~~~~~~ ^                                            
+  /usr/include/mlir/Dialect/LLVMIR/LLVMOps.h.inc:5936:36: note: 'getResult' 
+   declared here                                                            
+   5936 |   ::mlir::TypedValue<::mlir::Type> getResult() {                  
+        |                                    ^                              
+  audio_jit.cpp:427:14: error: use of undeclared identifier                 
+  'createConvertSCFToCFPass'                                                
+    427 |   pm.addPass(createConvertSCFToCFPass());                         
+        |              ^~~~~~~~~~~~~~~~~~~~~~~~                             
+  In file included from audio_jit.cpp:25:                                   
+  In file included from                                                     
+  /usr/include/mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h:17:           
+  In file included from                                                     
+  /usr/include/mlir/Interfaces/FunctionInterfaces.h:17:                     
+  /usr/include/mlir/IR/Builders.h:506:31: error: no viable conversion from  
+  'llvm::APFloat' to 'FloatType'                                            
+    506 |     OpTy::build(*this, state, std::forward<Args>(args)...);       
+        |                               ^~~~~~~~~~~~~~~~~~~~~~~~            
+  audio_jit.cpp:188:17: note: in instantiation of function template         
+  specialization                                                            
+        'mlir::OpBuilder::create<mlir::arith::ConstantFloatOp,              
+  llvm::APFloat, mlir::FloatType>' requested here                           
+    188 |   return actx.b.create<arith::ConstantFloatOp>(actx.loc,          
+  APFloat(1.0),                                                             
+        |                 ^                                                 
+  /usr/include/mlir/Support/InterfaceSupport.h:100:3: note: candidate       
+  inherited constructor not viable: no                                      
+        known conversion from 'llvm::APFloat' to 'std::nullptr_t' for 1st   
+  argument                                                                  
+    100 |   Interface(std::nullptr_t) : BaseType(ValueT()),                 
+  conceptImpl(nullptr) {}                                                   
+        |   ^         ~~~~~~~~~~~~~~                                        
+  /usr/include/mlir/IR/BuiltinTypeInterfaces.h.inc:116:77: note:            
+  constructor from base class                                               
+        'TypeInterface<mlir::FloatType,                                     
+  mlir::detail::FloatTypeInterfaceTraits>' inherited here                   
+    116 |   using ::mlir::TypeInterface<FloatType,                          
+  detail::FloatTypeInterfaceTraits>::TypeInterface;                         
+        |                                                                   
+             ^                                                              
+  /usr/include/mlir/IR/BuiltinTypeInterfaces.h.inc:114:7: note: candidate   
+  constructor                                                               
+        (the implicit copy constructor) not viable: no known conversion     
+  from 'llvm::APFloat' to 'const FloatType &' for 1st                       
+        argument                                                            
+    114 | class FloatType : public ::mlir::TypeInterface<FloatType,         
+  detail::FloatTypeInterfaceTraits> {                                       
+        |       ^~~~~~~~~                                                   
+  /usr/include/mlir/IR/BuiltinTypeInterfaces.h.inc:114:7: note: candidate   
+  constructor                                                               
+        (the implicit move constructor) not viable: no known conversion     
+  from 'llvm::APFloat' to 'FloatType &&' for 1st argument                   
+    114 | class FloatType : public ::mlir::TypeInterface<FloatType,         
+  detail::FloatTypeInterfaceTraits> {                                       
+        |       ^~~~~~~~~                                                   
+  /usr/include/mlir/Support/InterfaceSupport.h:106:3: note: candidate       
+  template ignored: requirement                                             
+        'std::is_base_of<mlir::detail::Interface<mlir::FloatType,           
+  mlir::Type, mlir::detail::FloatTypeInterfaceTraits,                       
+        mlir::Type, mlir::TypeTrait::TraitBase>::Trait<llvm::APFloat>,      
+  llvm::APFloat>::value' was not satisfied                                  
+        [with T = llvm::APFloat]                                            
+    106 |   Interface(T t)                                                  
+        |   ^                                                               
+  /usr/include/mlir/Support/InterfaceSupport.h:94:12: note: explicit        
+  constructor is not a candidate                                            
+     94 |   explicit Interface(ValueT t = ValueT())                         
+        |            ^                                                      
+  /usr/include/mlir/Dialect/Arith/IR/Arith.h:86:75: note: passing argument  
+  to parameter 'type' here                                                  
+     86 |   static void build(OpBuilder &builder, OperationState &result,   
+  FloatType type,                                                           
+        |                                                                   
+           ^                                                                
+  1 warning and 5 errors generated.                                         
+  make: *** [Makefile:37: audio_jit.o] Error 1                              
+  make: Leaving directory '/home/adam/projects/yalce/libs/audio_jit'        
+
+● Five errors to fix — let me do them all at once:
+
+● Update(libs/audio_jit/audio_jit.cpp)
+  ⎿  Added 1 line, removed 1 line
+      154    Value frame = b.create<arith::IndexCastOp>(loc, i64, actx.fr
+           ame_idx);
+      155    return b
+      156        .create<LLVM::CallOp>(loc, fn, ValueRange{actx.inputs_pt
+           r, idx, frame})
+      157 -      .getResult(0);                                          
+      157 +      .getResult();                                           
+      158  }
+      159  
+      160  // Write the final computed sample to node->output.buf[frame_i
+           dx].
+
+● Update(libs/audio_jit/audio_jit.cpp)
+  ⎿  Added 2 lines, removed 2 lines
+      185  // TODO: allocate envelope state; emit attack/sustain/release 
+           phase machine
+      186  static Value emitAslr(AudioBuildCtx &actx, Value /*attack*/, V
+           alue /*sus_lvl*/,
+      187                        Value /*sus_dur*/, Value /*release*/, Va
+           lue /*trig*/) {
+      188 -  return actx.b.create<arith::ConstantFloatOp>(actx.loc, APFlo
+          -at(1.0),                                                      
+      189 -                                               actx.b.getF64Ty
+          -pe());                                                        
+      188 +  return actx.b.create<arith::ConstantFloatOp>(actx.loc, actx.
+          +b.getF64Type(),                                               
+      189 +                                               APFloat(1.0)); 
+      190  }
+      191  
+      192  // TODO: codegen fn_ast as an MLIR func (reuse existing codege
+           n path),
+
+● Update(libs/audio_jit/audio_jit.cpp)
+  ⎿  Added 3 lines, removed 3 lines
+      247  
+      248    case AST_DOUBLE:
+      249      return b.create<arith::ConstantFloatOp>(
+      250 -        loc, APFloat(ast->data.AST_DOUBLE.value), b.getF64Type
+          -());                                                          
+      250 +        loc, b.getF64Type(), APFloat(ast->data.AST_DOUBLE.valu
+          +e));                                                          
+      251  
+      252    case AST_FLOAT:
+      253      return b.create<arith::ConstantFloatOp>(
+      254 -        loc, APFloat((double)ast->data.AST_FLOAT.value), b.get
+          -F64Type());                                                   
+      254 +        loc, b.getF64Type(), APFloat((double)ast->data.AST_FLO
+          +AT.value));                                                   
+      255  
+      256    case AST_INT:
+      257      // Integers in audio context are treated as f64 constants.
+      258      return b.create<arith::ConstantFloatOp>(
+      259 -        loc, APFloat((double)ast->data.AST_INT.value), b.getF6
+          -4Type());                                                     
+      259 +        loc, b.getF64Type(), APFloat((double)ast->data.AST_INT
+          +.value));                                                     
+      260  
+      261    case AST_IDENTIFIER: {
+      262      std::string name(ast->data.AST_IDENTIFIER.value,
+  ⎿  Found 1 new diagnostic issue in 1 file (ctrl+o to expand)
+
+● Update(libs/audio_jit/audio_jit.cpp)
+  ⎿  Added 1 line, removed 1 line
+      376  
+      377    b.setInsertionPointToEnd(mod.getBody());
+      378    auto fn = b.create<LLVM::LLVMFuncOp>(loc, "audio_synth_perfo
+           rm", fn_type);
+      379 -  auto *entry = fn.addEntryBlock();                           
+      379 +  auto *entry = fn.addEntryBlock(b);                          
+      380    b.setInsertionPointToStart(entry);
+      381  
+      382    AudioBuildCtx actx(mlir_ctx, mod, loc);
+
+● Update(libs/audio_jit/audio_jit.cpp)
+  ⎿  Added 1 line, removed 1 line
+      412    auto get_buf_fn = declareExtern(mod, b, "ylc_get_output_buf"
+           , get_buf_ty);
+      413    Value out_buf =
+      414        b.create<LLVM::CallOp>(loc, get_buf_fn, ValueRange{actx.
+           node_ptr})
+      415 -          .getResult(0);                                      
+      415 +          .getResult();                                       
+      416    b.create<LLVM::ReturnOp>(loc, ValueRange{out_buf});
+      417  
+      418    return {std::move(module_ref), actx.state_offset};
+
+● Update(libs/audio_jit/audio_jit.cpp)
+  ⎿  Added 1 line, removed 1 line
+      424  
+      425  static LogicalResult runLoweringPasses(ModuleOp mod, MLIRConte
+           xt *ctx) {
+      426    PassManager pm(ctx);
+      427 -  pm.addPass(createConvertSCFToCFPass());                     
+      427 +  pm.addPass(createSCFToControlFlowPass());                   
+      428    pm.addPass(createConvertControlFlowToLLVMPass());
+      429    pm.addPass(createArithToLLVMConversionPass());
+      430    pm.addPass(createReconcileUnrealizedCastsPass());
+
+● Now the linter is still complaining about line 249 — that's likely stale. Let
+  me verify the actual file looks right and try building:
+
+● Bash(make -C /home/adam/projects/yalce/libs/audio_jit 2>&1)
+  ⎿  make: Entering directory '/home/adam/projects/yalce/libs/audio_jit'
+     make: Nothing to be done for 'all'.
+     make: Leaving directory '/home/adam/projects/yalce/libs/audio_jit'
+
+● Bash(make -C /home/adam/projects/yalce/libs/audio_jit clean && make -C
+      /home/adam/projects/yalce/libs/audio_jit 2>&1)
+  ⎿  make: Entering directory '/home/adam/projects/yalce/libs/audio_jit'
+     rm -f audio_jit.o libaudio_jit.so
+     make: Leaving directory '/home/adam/projects/yalce/libs/audio_jit'
+     … +14 lines (ctrl+o to expand)
+
+● Clean build — just the one pre-existing warning about the empty struct in
+  type.h (a C/C++ ABI difference, not our code). libaudio_jit.so is now built
+  successfully.
+
+✻ Brewed for 54s
+
+❯ so how do I actually create my own dialect and convert it to LLVM IR,     
+  also if I have one MLIR module per function invocation, how can I reuse   
+  pre-compiled MLIR functions in new ones?                                  
+
+● Two separate questions, both good ones.
+
+  ---
+  1. Creating a custom dialect
+
+  There are two ways — TableGen (the official way) and pure C++ (simpler for an
+  embedded case like this).
+
+  TableGen approach requires a CMake build to run mlir-tblgen on .td files →
+  generates .h.inc/.cpp.inc. Good for large dialects. Overkill for a single .cpp
+   library.
+
+  Pure C++ op definition — you subclass mlir::Op<> directly:
+
+  // In audio_jit.cpp, before the rest of the code
+
+  class AudioDialect : public mlir::Dialect {
+  public:
+    explicit AudioDialect(MLIRContext *ctx)
+        : Dialect(getDialectNamespace(), ctx, TypeID::get<AudioDialect>()) {
+      addOperations<InletOp, OutletOp, OscOp>();
+    }
+    static StringRef getDialectNamespace() { return "audio"; }
+  };
+
+  class InletOp : public mlir::Op<InletOp,
+      mlir::OpTrait::ZeroRegions, mlir::OpTrait::OneResult,
+      mlir::OpTrait::ZeroSuccessors> {
+  public:
+    using Op::Op;
+    static StringRef getOperationName() { return "audio.inlet"; }
+    static void build(OpBuilder &b, OperationState &state, int32_t idx) {
+      state.addTypes(b.getF64Type());
+      state.addAttribute("idx", b.getI32IntegerAttr(idx));
+    }
+    int32_t getIdx() {
+      return (*this)->getAttrOfType<IntegerAttr>("idx").getInt();
+    }
+    static LogicalResult verify(InletOp) { return success(); }
+  };
+
+  Then register it in get_mlir_ctx():
+  g_mlir_ctx->loadDialect<AudioDialect, arith::ArithDialect, ...>();
+
+  Lowering the custom dialect to LLVM means writing a ConversionPattern for each
+   op:
+
+  struct InletOpLowering : public ConversionPattern {
+    InletOpLowering(MLIRContext *ctx)
+        : ConversionPattern(InletOp::getOperationName(), 1, ctx) {}
+
+    LogicalResult matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+                                  ConversionPatternRewriter &rewriter) const 
+  override {
+      auto inlet = cast<InletOp>(op);
+      // emit the ylc_read_inlet call (same as emitInlet() today)
+      auto fn = declareExtern(..., "ylc_read_inlet", ...);
+      Value idx = rewriter.create<arith::ConstantOp>(...,
+  rewriter.getI32IntegerAttr(inlet.getIdx()));
+      Value frame = ...; // need frame_idx threaded somehow
+      rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, fn, ValueRange{inputs_ptr,
+  idx, frame});
+      return success();
+    }
+  };
+
+  // Pass that runs the patterns
+  struct AudioToLLVMPass : public PassWrapper<AudioToLLVMPass,
+  OperationPass<ModuleOp>> {
+    void runOnOperation() override {
+      ConversionTarget target(getContext());
+      target.addLegalDialect<LLVM::LLVMDialect>();
+      target.addIllegalDialect<AudioDialect>();
+      RewritePatternSet patterns(&getContext());
+      patterns.add<InletOpLowering>(&getContext());
+      if (failed(applyPartialConversion(getOperation(), target,
+  std::move(patterns))))
+        signalPassFailure();
+    }
+  };
+
+  Then add it first in runLoweringPasses():
+  pm.addPass(std::make_unique<AudioToLLVMPass>());
+  pm.addPass(createSCFToControlFlowPass());
+  // ...
+
+  The main benefit of a proper dialect is that you can inspect, transform, and
+  print your IR at the audio level before lowering — useful for loop fusion,
+  common subexpression elimination on audio nodes, etc.
+
+  ---
+  2. Reusing pre-compiled functions across invocations
+
+  The key insight: once a function is linked into the MCJIT llvm::Module, it's 
+  already there for all future compilations. LLVMGetNamedFunction finds it. So
+  the cheapest form of reuse is already built in — you just need unique names
+  and a before-compile check.
+
+  Pattern: name-based caching
+
+  // In CompileAudioFnHandler, before building MLIR:
+  std::string fn_name = "audio_synth_" + std::to_string(fn_id++); // or hash the
+   AST
+
+  // Check if already compiled into the MCJIT module
+  if (LLVMValueRef existing = LLVMGetNamedFunction(module_ref, fn_name.c_str()))
+    return existing;
+
+  Pattern: persistent library module for shared helpers
+
+  For things like oscillator kernels, envelope shapes, or wavetable readers that
+   many synths share — compile them once into a separate "library" MLIR module,
+  lower it, and keep the resulting llvm::Module around:
+
+  static llvm::Module *g_audio_lib = nullptr; // compiled once
+
+  static void ensureAudioLib(llvm::Module *mcjit_module) {
+    if (g_audio_lib) return;
+    // build MLIR module with shared helpers (osc, aslr, etc.)
+    auto [mlir_mod, _] = buildAudioLibModule(get_mlir_ctx());
+    runLoweringPasses(*mlir_mod, get_mlir_ctx());
+    auto lib = mlir::translateModuleToLLVMIR(*mlir_mod,
+  mcjit_module->getContext());
+    g_audio_lib = lib.get();
+    lib.release(); // we keep it
+    llvm::Linker::linkModules(*mcjit_module,
+  std::unique_ptr<llvm::Module>(g_audio_lib));
+  }
+
+  Each per-synth MLIR module then just declares those helpers as extern (via
+  declareExtern) and calls them — the linker resolves them since they're already
+   in the MCJIT module.
+
+  Pattern: persistent MLIR module (if you want to optimize across functions)
+
+  If you want cross-function MLIR-level optimization (e.g., fusing two synth
+  loops), maintain one global OwningOpRef<ModuleOp> and add functions to it.
+  Only lower when you're ready to JIT. The catch: after lowering you lose the
+  audio-level IR, so you'd need to keep the original MLIR around separately if
+  you want to re-optimize later.
+
+  static OwningOpRef<ModuleOp> g_audio_mlir_mod; // persistent
+
+  // Add each synth function to it
+  g_audio_mlir_mod->push_back(new_fn);
+
+  // Lower + link only when triggered (e.g., by a "compile_all" call)
+
+  For your current use case, the name-based MCJIT cache + a shared helper
+  library module is probably the right level of complexity.
+
+✻ Churned for 60s
+
+❯ /export 
+  ⎿  Conversation exported to: libs/audio_jit/mlir.txt
+
+❯ I want cross-function MLIR-level optimisation _and_ LLVM IR-level         
+  optimisation                                                              
+
+● That requires a two-phase lifecycle with explicit separation between
+  "accumulate" and "compile":
+
+  Architecture
+
+  Phase 1 — Accumulate (per synth fn)
+    CompileAudioFnHandler()
+      → add FuncOp to g_mlir_pending
+      → return forward-declaration LLVMValueRef (or trampoline ptr)
+
+  Phase 2 — Flush (explicit or threshold-triggered)
+    compile_audio_flush()
+      → run MLIR-level passes on g_mlir_pending   ← cross-function MLIR opts
+      → lower to LLVM dialect
+      → translateModuleToLLVMIR() → llvm::Module
+      → run LLVM PassBuilder O3 on llvm::Module   ← cross-function LLVM opts
+      → Linker::linkModules into MCJIT
+      → reset g_mlir_pending to fresh module
+
+
+  The "what to return before flush" problem
+
+  CompileAudioFnHandler must return an LLVMValueRef immediately so the Yalce JIT
+   can wire up the node. Three options:
+
+  Option A — Force eager flush. Simple: flush inside CompileAudioFnHandler every
+   time. You lose cross-function MLIR opts but keep cross-function LLVM opts
+  (since you can pass the per-function module through the full LLVM pipeline
+  before linking). Good starting point.
+
+  Option B — Trampoline pointer. Each synth is called through an i8** global
+  that the engine dereferences. On re-optimization, update the pointer — the
+  engine transparently picks up the new version without restart. This is what
+  LLVM's lazy JIT (ORC) does internally.
+
+  Option C — Two-tier: eager preview + optimized replacement. Compile eagerly on
+   first call (unoptimized, available immediately). On compile_audio_flush,
+  recompile the whole batch with full opts and use LLVMAddGlobalMapping / COMDAT
+   linkage to replace the definitions. Complex but gives best of both worlds.
+
+  Option A is the right starting point; B unlocks live re-optimization.
+
+  LLVM IR optimization (C++ API)
+
+  After translateModuleToLLVMIR, before linkModules:
+
+  #include "llvm/Passes/PassBuilder.h"
+  #include "llvm/Analysis/CGSCCPassManager.h"
+
+  static void runLLVMOptPasses(llvm::Module &mod) {
+    llvm::PassBuilder pb;
+    llvm::LoopAnalysisManager     lam;
+    llvm::FunctionAnalysisManager fam;
+    llvm::CGSCCAnalysisManager    cgam;
+    llvm::ModuleAnalysisManager   mam;
+    pb.registerModuleAnalyses(mam);
+    pb.registerCGSCCAnalyses(cgam);
+    pb.registerFunctionAnalyses(fam);
+    pb.registerLoopAnalyses(lam);
+    pb.crossRegisterProxies(lam, fam, cgam, mam);
+    // O3 + vectorization + inlining across all synth functions together
+    auto mpm = pb.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
+    mpm.run(mod, mam);
+  }
+
+  Add llvm/Passes/PassBuilder.h and link -lLLVMPasses (or just use -lLLVM-21
+  which includes everything).
+
+  MLIR cross-function passes
+
+  Before lowering, on the accumulated module:
+
+  static LogicalResult runMLIROptPasses(ModuleOp mod, MLIRContext *ctx) {
+    PassManager pm(ctx);
+    // intra- and inter-procedural canonicalization
+    pm.addPass(createCanonicalizerPass());
+    // eliminate redundant node computations across synths
+    pm.addPass(createCSEPass());
+    // loop-level fusion: two adjacent scf.for over nframes → one loop
+    // (requires mlir/Dialect/SCF/Transforms/Passes.h)
+    pm.addNestedPass<func::FuncOp>(createLoopFusionPass());
+    // if you add an audio dialect: run your custom fusion pass here
+    return pm.run(mod);
+  }
+
+  createLoopFusionPass() from mlir/Dialect/Affine/Transforms/Passes.h (affine
+  dialect) or SCF loop coalescing — worth checking which applies to scf.for. For
+   the custom audio dialect, you'd write a pass that fuses audio.inlet reads
+  shared across two synths into one, etc.
+
+  Concrete next step
+
+  The minimal useful shape is:
+
+  // Global state
+  static OwningOpRef<ModuleOp> g_mlir_pending;   // accumulating, high-level
+  static int g_pending_count = 0;
+
+  // In CompileAudioFnHandler: add function, force flush for now
+  static std::string nextSynthName() {
+    return "audio_synth_" + std::to_string(g_pending_count++);
+  }
+
+  // New builtin: compile_audio_flush
+  // Runs both pass pipelines and links into MCJIT
+  LLVMValueRef CompileAudioFlushHandler(Ast *, JITLangCtx *, LLVMModuleRef 
+  module_ref, LLVMBuilderRef) {
+    if (!g_mlir_pending) return /* null */;
+
+    runMLIROptPasses(*g_mlir_pending, get_mlir_ctx());
+    runLoweringPasses(*g_mlir_pending, get_mlir_ctx());
+
+    llvm::Module *mcjit = reinterpret_cast<llvm::Module *>(module_ref);
+    auto llvm_mod = mlir::translateModuleToLLVMIR(*g_mlir_pending,
+  mcjit->getContext());
+    runLLVMOptPasses(*llvm_mod);
+    llvm::Linker::linkModules(*mcjit, std::move(llvm_mod));
+
+    g_mlir_pending = ModuleOp::create(UnknownLoc::get(get_mlir_ctx())); // reset
+    return LLVMConstInt(LLVMInt32Type(), 1, 0);
+  }
+
+  Register both compile_audio_fn (accumulates) and compile_audio_flush (compiles
+   the batch) in ylc_audio_jit_init. The Yalce side calls compile_audio_flush
+  after defining all the synths for a patch.
+
+✻ Cogitated for 1m 7s
+
+❯ so let's just use the dsp IR and then lower to LLVM - will the normal     
+  optimisation passes still work? it will usually manage to do the loop     
+  fusions anyway                                                            
+
+● Yes — once you're in LLVM IR the passes don't care how it was generated. O3
+  does: inline → canonicalize → loop fusion → vectorize. As long as the lowered
+  IR is clean structured loops, the loop fusion pass will fuse adjacent
+  same-trip-count loops automatically after inlining.
+
+  The one thing to be aware of: fusion across function boundaries requires
+  inlining first. So the topology matters:
+
+  Works well with loop fusion:
+
+  ; after inlining synth_a and synth_b into caller:
+  for i in 0..nframes:          ; loop 1 (synth_a's body)
+    ...
+  for i in 0..nframes:          ; loop 2 (synth_b's body) — fused by LLVM
+    ...
+
+
+  Won't fuse if each synth's loop is in a separate non-inlined function. So mark
+   your lowered perform functions alwaysinline (or inlinehint) so O3 can see
+  through them.
+
+  Simplified pipeline
+
+  Drop the arith/scf intermediates. The DSP dialect lowers straight to LLVM
+  dialect:
+
+  DSP dialect
+    dsp.perform  → llvm loop over nframes
+    dsp.inlet    → llvm.call @ylc_read_inlet
+    dsp.osc      → inline LLVM IR (sin, phase accumulation)
+    dsp.bufplay  → LLVM IR (interpolated table read)
+    dsp.env_aslr → LLVM IR (phase state machine)
+         ↓
+    LLVM dialect (single pass, no intermediate dialects)
+         ↓
+    translateModuleToLLVMIR
+         ↓
+    LLVM O3 (inline → loop-fusion → vectorize → instcombine)
+         ↓
+    linkModules into MCJIT
+
+
+  Lowering pass is just one ConversionPattern per DSP op, each emitting LLVM
+  dialect ops directly. No SCFToControlFlow or ArithToLLVM passes needed.
+
+  DSP dialect sketch
+
+  // Ops that make sense at the audio IR level
+  // dsp.inlet    %idx : i32 → f64
+  // dsp.outlet   %val : f64 → ()
+  // dsp.osc      %freq : f64, %state_ptr : !llvm.ptr → f64
+  // dsp.bufplay  %buf : !llvm.ptr, %rate : f64, %trig : f64, %state_ptr : 
+  !llvm.ptr → f64
+  // dsp.env_aslr %a, %sl, %sd, %r, %trig : f64, %state_ptr : !llvm.ptr → f64
+  // dsp.perform  (%node_ptr, %state_ptr, %inputs_ptr, %nframes, %spf) { body } 
+  → !llvm.ptr
+
+  dsp.perform is the only op that generates a loop — it's a region-based op
+  containing the other DSP ops in its body. Lowering it emits the LLVM loop and
+  passes frame_idx as a block argument into the region, then each nested DSP op
+  lowers in that context.
+
+  dsp.osc / dsp.bufplay / dsp.env_aslr carry a %state_ptr operand (a GEP into
+  the node's state block at a fixed offset determined at compile time) — this is
+   how stateful ops work without needing a separate allocation step.
+
+  State offsets at DSP IR level
+
+  The nice thing about having a proper dialect: you can attach the state offset
+  as an op attribute, computed during buildSynthExpr as you encounter stateful
+  ops:
+
+  // When lowering dsp.osc:
+  int offset = actx.state_offset;
+  actx.state_offset += sizeof(double); // phase accumulator
+  auto gep = rewriter.create<LLVM::GEPOp>(loc, ptr_ty, state_ptr,
+                 ValueRange{rewriter.create<LLVM::ConstantOp>(loc, i64_ty,
+                     rewriter.getI64IntegerAttr(offset))});
+  // gep is the per-osc phase pointer; osc body reads/writes it inline
+
+  This is cleaner than the current AudioBuildCtx::state_offset side-channel
+  because the offset is visible in the IR.
+
+✻ Worked for 49s

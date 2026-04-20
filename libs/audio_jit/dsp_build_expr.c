@@ -39,11 +39,17 @@ DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     Ast *in_expr = ast->data.AST_LET.in_expr;
     JITLangCtx *work_ctx = ctx;
     JITLangCtx inner_ctx;
+    ht inner_table;
+    StackFrame inner_frame;
     bool pushed_ctx = false;
 
     if (in_expr) {
-      STACK_ALLOC_CTX_PUSH(_inner_ctx, ctx)
-      inner_ctx = _inner_ctx;
+      inner_ctx = *ctx;
+      ht_init(&inner_table);
+      inner_frame = (StackFrame){.table = &inner_table, .next = inner_ctx.frame};
+      inner_ctx.frame = &inner_frame;
+      inner_ctx.stack_ptr = ctx->stack_ptr + 1;
+      inner_ctx.coro_ctx = ctx->coro_ctx;
       work_ctx = &inner_ctx;
       pushed_ctx = true;
     }

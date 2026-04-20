@@ -144,7 +144,7 @@ compile_audio_fn (
 
 compile_audio_fn (
   let bpf = fn freq q x ->
-    let w0   = 2.0 * Math.PI * freq * (spf ()) in
+    let w0   = 2.0 * Math.PI * freq * spf in
     let cosw = Math.cos w0 in
     let sinw = Math.sin w0 in
     let alpha = sinw / (2.0 * q) in
@@ -167,7 +167,7 @@ compile_audio_fn (
 
 compile_audio_fn (
   let notch = fn freq q x ->
-    let w0   = 2.0 * Math.PI * freq * (spf ()) in
+    let w0   = 2.0 * Math.PI * freq * spf in
     let cosw = Math.cos w0 in
     let sinw = Math.sin w0 in
     let alpha = sinw / (2.0 * q) in
@@ -190,7 +190,7 @@ compile_audio_fn (
 
 compile_audio_fn (
   let lowshelf = fn freq q gain_db x ->
-    let w0   = 2.0 * Math.PI * freq * (spf ()) in
+    let w0   = 2.0 * Math.PI * freq * spf in
     let cosw = Math.cos w0 in
     let sinw = Math.sin w0 in
     let A = Math.pow 10.0 (gain_db / 40.0) in
@@ -215,7 +215,7 @@ compile_audio_fn (
 
 compile_audio_fn (
   let highshelf = fn freq q gain_db x ->
-    let w0   = 2.0 * Math.PI * freq * (spf ()) in
+    let w0   = 2.0 * Math.PI * freq * spf in
     let cosw = Math.cos w0 in
     let sinw = Math.sin w0 in
     let A = Math.pow 10.0 (gain_db / 40.0) in
@@ -240,7 +240,7 @@ compile_audio_fn (
 
 compile_audio_fn (
   let peak = fn freq q gain_db x ->
-    let w0   = 2.0 * Math.PI * freq * (spf ()) in
+    let w0   = 2.0 * Math.PI * freq * spf in
     let cosw = Math.cos w0 in
     let sinw = Math.sin w0 in
     let alpha = sinw / (2.0 * q) in
