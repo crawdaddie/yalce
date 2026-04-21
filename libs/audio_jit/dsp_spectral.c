@@ -8,6 +8,7 @@
 #include "../../lang/types/builtins.h"
 #include "../../lang/types/type_ser.h"
 #include "../../lang/ylc_datatypes.h"
+#include "./bin_scrambler_runtime.h"
 #include "./common.h"
 #include "./dsp_fn_application.h"
 #include "function.h"
@@ -73,10 +74,42 @@ typedef void (*SpectralKernelFn)(void *state_raw, void *node_raw,
 
 static int spectral_kernel_counter = 0;
 
+static int spectral_collect_captured_vals(Ast *fn_ast, DspBuildCtx *dsp_ctx,
+                                          JITLangCtx *ctx, LLVMModuleRef module,
+                                          LLVMBuilderRef builder,
+                                          DspValue **out_vals,
+                                          Type ***out_lang_tys) {
+  int n = 0;
+  if (fn_ast->tag == AST_LAMBDA && fn_ast->type && fn_ast->type->closure_meta) {
+    n = fn_ast->type->closure_meta->data.T_CONS.num_args;
+  }
+
+  *out_vals = NULL;
+  *out_lang_tys = NULL;
+  if (n <= 0) {
+    return 0;
+  }
+
+  *out_vals = malloc(sizeof(DspValue) * (size_t)n);
+  *out_lang_tys = malloc(sizeof(Type *) * (size_t)n);
+  int i = 0;
+  for (AstList *cv = fn_ast->data.AST_LAMBDA.closed_vals; cv; cv = cv->next) {
+    (*out_vals)[i] = dsp_build_expr(cv->ast, dsp_ctx, ctx, module, builder);
+    (*out_lang_tys)[i] = cv->ast->type;
+    i++;
+  }
+  return n;
+}
+
 typedef struct {
   LLVMValueRef init_fn;
   LLVMValueRef frame_fn;
   int state_bytes;
+  int num_captures;
+  LLVMTypeRef *capture_tys;
+  Type **capture_lang_tys;
+  int *capture_offsets;
+  int capture_bytes;
 } SpectralKernelRecord;
 
 static inline double spectral_complex_mag(Complex z) {
@@ -593,10 +626,10 @@ static void spectral_build_array_copy(LLVMBuilderRef builder,
   (void)arr_ty;
 }
 
-static SpectralKernelRecord
-compile_spectral_frame_record(Ast *fn_ast, Type *fn_type, TypeEnv *env,
-                              DspBuildCtx *enclosing_dsp_ctx, JITLangCtx *ctx,
-                              LLVMModuleRef module, LLVMBuilderRef builder) {
+static SpectralKernelRecord compile_spectral_frame_record(
+    Ast *fn_ast, Type *fn_type, TypeEnv *env, DspBuildCtx *enclosing_dsp_ctx,
+    JITLangCtx *ctx, LLVMModuleRef module, LLVMBuilderRef builder,
+    int num_captures, LLVMTypeRef *capture_tys, Type **capture_lang_tys) {
   SpectralKernelRecord rec = {0};
   if (!fn_ast || !fn_type || fn_ast->tag != AST_LAMBDA) {
     return rec;
@@ -625,7 +658,7 @@ compile_spectral_frame_record(Ast *fn_ast, Type *fn_type, TypeEnv *env,
 
   int num_params = fn_ast->data.AST_LAMBDA.len;
   LLVMTypeRef *frame_param_tys =
-      malloc(sizeof(LLVMTypeRef) * (size_t)(num_params + 3));
+      malloc(sizeof(LLVMTypeRef) * (size_t)(num_params + 3 + num_captures));
   if (!frame_param_tys) {
     free(name);
     return rec;
@@ -642,8 +675,11 @@ compile_spectral_frame_record(Ast *fn_ast, Type *fn_type, TypeEnv *env,
     walk_type =
         walk_type && walk_type->kind == T_FN ? walk_type->data.T_FN.to : NULL;
   }
-  LLVMTypeRef frame_ty =
-      LLVMFunctionType(LLVMVoidType(), frame_param_tys, num_params + 3, 0);
+  for (int i = 0; i < num_captures; i++) {
+    frame_param_tys[num_params + 3 + i] = capture_tys[i];
+  }
+  LLVMTypeRef frame_ty = LLVMFunctionType(LLVMVoidType(), frame_param_tys,
+                                          num_params + 3 + num_captures, 0);
   free(frame_param_tys);
 
   LLVMValueRef frame_fn = LLVMAddFunction(module, frame_name, frame_ty);
@@ -749,6 +785,24 @@ compile_spectral_frame_record(Ast *fn_ast, Type *fn_type, TypeEnv *env,
         bind_type && bind_type->kind == T_FN ? bind_type->data.T_FN.to : NULL;
   }
 
+  int base_cap_idx = idx;
+  for (AstList *cv = fn_ast->data.AST_LAMBDA.closed_vals; cv;
+       cv = cv->next, idx++) {
+    Ast *cl = cv->ast;
+    if (cl->tag != AST_IDENTIFIER) {
+      continue;
+    }
+    LLVMValueRef cap_val = LLVMGetParam(frame_fn, idx + 3);
+    LLVMTypeRef cap_llvm_ty = LLVMTypeOf(cap_val);
+    Type *cap_lang_ty =
+        capture_lang_tys ? capture_lang_tys[idx - base_cap_idx] : cl->type;
+    JITSymbol *sym =
+        new_symbol(STYPE_LOCAL_VAR, cap_lang_ty, cap_val, cap_llvm_ty);
+    const char *name = cl->data.AST_IDENTIFIER.value;
+    int len = cl->data.AST_IDENTIFIER.length;
+    ht_set_hash(fn_ctx.frame->table, name, hash_string(name, len), sym);
+  }
+
   DspValue expr = dsp_build_expr(fn_ast->data.AST_LAMBDA.body, &frame_ctx,
                                  &fn_ctx, module, frame_builder);
   Type *ret_type = fn_return_type(fn_type);
@@ -767,6 +821,9 @@ compile_spectral_frame_record(Ast *fn_ast, Type *fn_type, TypeEnv *env,
   rec.init_fn = init_fn;
   rec.frame_fn = frame_fn;
   rec.state_bytes = (frame_ctx.state_offset + 7) & ~7;
+  rec.num_captures = num_captures;
+  rec.capture_tys = capture_tys;
+  rec.capture_lang_tys = capture_lang_tys;
 
   LLVMDisposeBuilder(frame_builder);
   LLVMDisposeBuilder(init_builder);
@@ -823,11 +880,28 @@ static LLVMValueRef compile_spectral_kernel_wrapper(Ast *fn_ast,
   frame_args[1] = wrapper_node_ptr;
   frame_args[2] = out_ptr;
   for (unsigned i = 0; i < user_argc; i++) {
-    LLVMValueRef idx = LLVMConstInt(i32_ty, i, 0);
-    LLVMValueRef in_ptr = LLVMBuildGEP2(builder, array_ty, inputs_ptr, &idx, 1,
-                                        "spectral.in.gep");
-    frame_args[i + 3] =
-        LLVMBuildLoad2(builder, array_ty, in_ptr, "spectral.in");
+    if (i < (unsigned)num_ins) {
+      LLVMValueRef idx = LLVMConstInt(i32_ty, i, 0);
+      LLVMValueRef in_ptr = LLVMBuildGEP2(builder, array_ty, inputs_ptr, &idx,
+                                          1, "spectral.in.gep");
+      frame_args[i + 3] =
+          LLVMBuildLoad2(builder, array_ty, in_ptr, "spectral.in");
+    } else {
+      unsigned cap_i = i - (unsigned)num_ins;
+      LLVMTypeRef cap_ty = rec.capture_tys[cap_i];
+      LLVMTypeRef cap_ptr_ty = LLVMPointerType(cap_ty, 0);
+      LLVMValueRef cap_ptr_i8 = LLVMBuildGEP2(
+          builder, i8_ty, wrapper_state_ptr,
+          (LLVMValueRef[]){LLVMConstInt(
+              LLVMInt64Type(),
+              (uint64_t)rec.state_bytes + (uint64_t)rec.capture_offsets[cap_i],
+              0)},
+          1, "spectral.cap.ptr.i8");
+      LLVMValueRef cap_ptr =
+          LLVMBuildBitCast(builder, cap_ptr_i8, cap_ptr_ty, "spectral.cap.ptr");
+      frame_args[i + 3] =
+          LLVMBuildLoad2(builder, cap_ty, cap_ptr, "spectral.cap");
+    }
   }
 
   LLVMBuildCall2(builder, frame_fn_ty, rec.frame_fn, frame_args, user_argc + 3,
@@ -903,16 +977,49 @@ DspValue dsp_fft_region(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
   LLVMValueRef kernel_ptr = LLVMConstNull(i8_ptr_ty);
   SpectralKernelRecord kernel_rec = {0};
+  DspValue *captured_vals = NULL;
+  Type **capture_lang_tys = NULL;
+  int num_captures = 0;
   int prev_fft_size = dsp_ctx->spectral_fft_size;
   int prev_hop_size = dsp_ctx->spectral_hop_size;
   dsp_ctx->spectral_fft_size = fft_size;
   dsp_ctx->spectral_hop_size = hop_size;
 
   if (fn_ast->tag == AST_LAMBDA && fn_type) {
-    kernel_rec = compile_spectral_frame_record(fn_ast, fn_type,
-                                               spectral_fn_compilation_env,
-                                               dsp_ctx, ctx, module, builder);
-    kernel_state_bytes = (kernel_rec.state_bytes + 7) & ~7;
+    num_captures =
+        spectral_collect_captured_vals(fn_ast, dsp_ctx, ctx, module, builder,
+                                       &captured_vals, &capture_lang_tys);
+    LLVMTypeRef *capture_tys = NULL;
+    int *capture_offsets = NULL;
+    int capture_bytes = 0;
+    if (num_captures > 0) {
+      LLVMTargetDataRef dl = LLVMGetModuleDataLayout(module);
+      capture_tys = malloc(sizeof(LLVMTypeRef) * (size_t)num_captures);
+      capture_offsets = malloc(sizeof(int) * (size_t)num_captures);
+      int cursor = 0;
+      for (int i = 0; i < num_captures; i++) {
+        LLVMValueRef cap_val = captured_vals[i].lanes > 1
+                                   ? captured_vals[i].vec[0]
+                                   : captured_vals[i].scalar;
+        LLVMTypeRef cap_ty = LLVMTypeOf(cap_val);
+        capture_tys[i] = cap_ty;
+        int align = (int)LLVMABIAlignmentOfType(dl, cap_ty);
+        if (align < 1) {
+          align = 1;
+        }
+        cursor = spectral_align_up_i32(cursor, align);
+        capture_offsets[i] = cursor;
+        cursor += (int)LLVMABISizeOfType(dl, cap_ty);
+      }
+      capture_bytes = spectral_align_up_i32(cursor, 8);
+    }
+    kernel_rec = compile_spectral_frame_record(
+        fn_ast, fn_type, spectral_fn_compilation_env, dsp_ctx, ctx, module,
+        builder, num_captures, capture_tys, capture_lang_tys);
+    kernel_rec.capture_offsets = capture_offsets;
+    kernel_rec.capture_bytes = capture_bytes;
+    kernel_state_bytes =
+        spectral_align_up_i32(kernel_rec.state_bytes, 8) + capture_bytes;
     per_lane_state_bytes = lane_state_bytes + kernel_state_bytes;
     total_state_bytes = per_lane_state_bytes * max_lanes;
     dsp_ctx->state_offset = off + total_state_bytes;
@@ -997,21 +1104,38 @@ DspValue dsp_fft_region(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
           ptr);
     }
 
+    LLVMValueRef kernel_state_ptr = LLVMBuildGEP2(
+        builder, i8_ty, state_base,
+        (LLVMValueRef[]){LLVMConstInt(i64_ty, (uint64_t)lane_state_bytes, 0)},
+        1, "spectral.kernel.state");
+    for (int cap_i = 0; cap_i < num_captures; cap_i++) {
+      LLVMValueRef cap_lane = captured_vals[cap_i].lanes > 1
+                                  ? captured_vals[cap_i].vec[0]
+                                  : captured_vals[cap_i].scalar;
+      LLVMTypeRef cap_ty = kernel_rec.capture_tys[cap_i];
+      LLVMTypeRef cap_ptr_ty = LLVMPointerType(cap_ty, 0);
+      LLVMValueRef cap_dst_i8 =
+          LLVMBuildGEP2(builder, i8_ty, kernel_state_ptr,
+                        (LLVMValueRef[]){LLVMConstInt(
+                            i64_ty,
+                            (uint64_t)kernel_rec.state_bytes +
+                                (uint64_t)kernel_rec.capture_offsets[cap_i],
+                            0)},
+                        1, "spectral.cap.dst.i8");
+      LLVMValueRef cap_dst =
+          LLVMBuildBitCast(builder, cap_dst_i8, cap_ptr_ty, "spectral.cap.dst");
+      LLVMBuildStore(builder, cap_lane, cap_dst);
+    }
+
     return DSP_SCALAR(LLVMBuildCall2(
         builder, samp_fn_ty, samp_fn,
-        (LLVMValueRef[]){
-            LLVMBuildBitCast(builder, state_base, i8_ptr_ty,
-                             "spectral.state.i8"),
-            LLVMBuildBitCast(builder, in_storage, f64_ptr_ty,
-                             "spectral.inputs.ptr"),
-            kernel_ptr,
-            LLVMBuildBitCast(
-                builder,
-                LLVMBuildGEP2(builder, i8_ty, state_base,
-                              (LLVMValueRef[]){LLVMConstInt(
-                                  i64_ty, (uint64_t)lane_state_bytes, 0)},
-                              1, "spectral.kernel.state"),
-                i8_ptr_ty, "spectral.kernel.state.i8")},
+        (LLVMValueRef[]){LLVMBuildBitCast(builder, state_base, i8_ptr_ty,
+                                          "spectral.state.i8"),
+                         LLVMBuildBitCast(builder, in_storage, f64_ptr_ty,
+                                          "spectral.inputs.ptr"),
+                         kernel_ptr,
+                         LLVMBuildBitCast(builder, kernel_state_ptr, i8_ptr_ty,
+                                          "spectral.kernel.state.i8")},
         4, "spectral.sample"));
   }
 
@@ -1046,21 +1170,39 @@ DspValue dsp_fft_region(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
           ptr);
     }
 
+    LLVMValueRef kernel_state_ptr = LLVMBuildGEP2(
+        builder, i8_ty, lane_state,
+        (LLVMValueRef[]){LLVMConstInt(i64_ty, (uint64_t)lane_state_bytes, 0)},
+        1, "spectral.kernel.state");
+    for (int cap_i = 0; cap_i < num_captures; cap_i++) {
+      LLVMValueRef cap_lane =
+          captured_vals[cap_i].lanes > 1
+              ? captured_vals[cap_i].vec[lane % captured_vals[cap_i].lanes]
+              : captured_vals[cap_i].scalar;
+      LLVMTypeRef cap_ty = kernel_rec.capture_tys[cap_i];
+      LLVMTypeRef cap_ptr_ty = LLVMPointerType(cap_ty, 0);
+      LLVMValueRef cap_dst_i8 =
+          LLVMBuildGEP2(builder, i8_ty, kernel_state_ptr,
+                        (LLVMValueRef[]){LLVMConstInt(
+                            i64_ty,
+                            (uint64_t)kernel_rec.state_bytes +
+                                (uint64_t)kernel_rec.capture_offsets[cap_i],
+                            0)},
+                        1, "spectral.cap.dst.i8");
+      LLVMValueRef cap_dst =
+          LLVMBuildBitCast(builder, cap_dst_i8, cap_ptr_ty, "spectral.cap.dst");
+      LLVMBuildStore(builder, cap_lane, cap_dst);
+    }
+
     vals[lane] = LLVMBuildCall2(
         builder, samp_fn_ty, samp_fn,
-        (LLVMValueRef[]){
-            LLVMBuildBitCast(builder, lane_state, i8_ptr_ty,
-                             "spectral.state.i8"),
-            LLVMBuildBitCast(builder, in_storage, f64_ptr_ty,
-                             "spectral.inputs.ptr"),
-            kernel_ptr,
-            LLVMBuildBitCast(
-                builder,
-                LLVMBuildGEP2(builder, i8_ty, lane_state,
-                              (LLVMValueRef[]){LLVMConstInt(
-                                  i64_ty, (uint64_t)lane_state_bytes, 0)},
-                              1, "spectral.kernel.state"),
-                i8_ptr_ty, "spectral.kernel.state.i8")},
+        (LLVMValueRef[]){LLVMBuildBitCast(builder, lane_state, i8_ptr_ty,
+                                          "spectral.state.i8"),
+                         LLVMBuildBitCast(builder, in_storage, f64_ptr_ty,
+                                          "spectral.inputs.ptr"),
+                         kernel_ptr,
+                         LLVMBuildBitCast(builder, kernel_state_ptr, i8_ptr_ty,
+                                          "spectral.kernel.state.i8")},
         4, "spectral.sample");
   }
 
@@ -1135,6 +1277,24 @@ static LLVMValueRef spectral_alloc_hoisted_array(Ast *ast, DspBuildCtx *dsp_ctx,
   Type *el_type = ast->type->data.T_CONS.args[0];
   return spectral_alloc_hoisted_array_typed(ast, dsp_ctx, ctx, module, builder,
                                             base_name, el_type, len);
+}
+
+static LLVMValueRef spectral_alloc_hoisted_state_bytes(DspBuildCtx *dsp_ctx,
+                                                       LLVMBuilderRef builder,
+                                                       int total_bytes,
+                                                       int align,
+                                                       const char *base_name) {
+  if (!dsp_ctx) {
+    return NULL;
+  }
+  int eff_align = align > 0 ? align : 1;
+  dsp_ctx->state_offset =
+      spectral_align_up_i32(dsp_ctx->state_offset, eff_align);
+  dsp_ctx->state_offset += total_bytes;
+  LLVMValueRef run_ptr =
+      dsp_consume_frame_state(dsp_ctx, builder, total_bytes, eff_align,
+                              base_name);
+  return run_ptr;
 }
 
 static DspValue spectral_call_helper(Ast *ast, DspBuildCtx *dsp_ctx,
@@ -1236,6 +1396,100 @@ DspValue dsp_spectral_div_mag(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                               LLVMModuleRef module, LLVMBuilderRef builder) {
   return spectral_call_helper(ast, dsp_ctx, ctx, module, builder,
                               "spectral_div_mag", 2);
+}
+
+DspValue dsp_spectral_bin_scramble(Ast *ast, DspBuildCtx *dsp_ctx,
+                                   JITLangCtx *ctx, LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+  if (!dsp_ctx || ast->data.AST_APPLICATION.len < 4) {
+    return DSP_NULL;
+  }
+
+  Ast *args = ast->data.AST_APPLICATION.args;
+  LLVMValueRef in_arr =
+      dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder).scalar;
+
+  LLVMValueRef scramble_v = ensure_float(
+      args[0].type, dsp_build_expr(args, dsp_ctx, ctx, module, builder).scalar,
+      builder);
+  LLVMValueRef scatter_v = ensure_float(
+      args[1].type,
+      dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder).scalar, builder);
+  LLVMValueRef rate_v = ensure_float(
+      args[2].type,
+      dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder).scalar, builder);
+
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef i8_ptr_ty = LLVMPointerType(i8_ty, 0);
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef complex_ty =
+      LLVMStructType((LLVMTypeRef[]){f64_ty, f64_ty}, 2, 0);
+  LLVMTypeRef complex_ptr_ty = LLVMPointerType(complex_ty, 0);
+
+  LLVMValueRef out_arr = spectral_alloc_hoisted_array(
+      ast, dsp_ctx, ctx, module, builder, "pv_bin_scramble");
+  if (!out_arr) {
+    return DSP_NULL;
+  }
+
+  int state_bytes = bin_scrambler_state_bytes(dsp_ctx->spectral_fft_size);
+  LLVMValueRef state_ptr = spectral_alloc_hoisted_state_bytes(
+      dsp_ctx, builder, state_bytes, 8, "pv_bin_scramble.state");
+
+  if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
+    LLVMValueRef init_state_ptr =
+        dsp_consume_init_state(dsp_ctx, dsp_ctx->init_builder, state_bytes, 8,
+                               "pv_bin_scramble.state");
+    LLVMTypeRef init_fn_ty = LLVMFunctionType(
+        LLVMVoidType(), (LLVMTypeRef[]){i8_ptr_ty, i32_ty}, 2, 0);
+    LLVMValueRef init_fn =
+        LLVMGetNamedFunction(module, "bin_scrambler_state_init");
+    if (!init_fn) {
+      init_fn = LLVMAddFunction(module, "bin_scrambler_state_init", init_fn_ty);
+      LLVMSetLinkage(init_fn, LLVMExternalLinkage);
+    }
+    LLVMBuildCall2(
+        dsp_ctx->init_builder, init_fn_ty, init_fn,
+        (LLVMValueRef[]){
+            LLVMBuildBitCast(dsp_ctx->init_builder, init_state_ptr, i8_ptr_ty,
+                             "pv.bin_scramble.state.i8"),
+            LLVMConstInt(i32_ty, (uint64_t)dsp_ctx->spectral_fft_size, 0)},
+        2, "pv.bin_scramble.init");
+  }
+
+  LLVMValueRef in_data =
+      LLVMBuildExtractValue(builder, in_arr, 1, "pv.bin_scramble.in.data");
+  LLVMValueRef out_data =
+      LLVMBuildExtractValue(builder, out_arr, 1, "pv.bin_scramble.out.data");
+
+  LLVMTypeRef fn_ty = LLVMFunctionType(
+      LLVMVoidType(),
+      (LLVMTypeRef[]){i8_ptr_ty, complex_ptr_ty, complex_ptr_ty, f64_ty, f64_ty,
+                      f64_ty, i32_ty, i32_ty},
+      8, 0);
+  LLVMValueRef fn =
+      LLVMGetNamedFunction(module, "bin_scrambler_process_runtime");
+  if (!fn) {
+    fn = LLVMAddFunction(module, "bin_scrambler_process_runtime", fn_ty);
+    LLVMSetLinkage(fn, LLVMExternalLinkage);
+  }
+
+  LLVMBuildCall2(
+      builder, fn_ty, fn,
+      (LLVMValueRef[]){
+          LLVMBuildBitCast(builder, state_ptr, i8_ptr_ty,
+                           "pv.bin_scramble.state.i8"),
+          LLVMBuildBitCast(builder, in_data, complex_ptr_ty,
+                           "pv.bin_scramble.in.ptr"),
+          LLVMBuildBitCast(builder, out_data, complex_ptr_ty,
+                           "pv.bin_scramble.out.ptr"),
+          rate_v, scramble_v, scatter_v,
+          LLVMConstInt(i32_ty, (uint64_t)dsp_ctx->sample_rate, 0),
+          LLVMConstInt(i32_ty, (uint64_t)dsp_ctx->spectral_hop_size, 0)},
+      8, "pv.bin_scramble");
+
+  return DSP_SCALAR(out_arr);
 }
 
 // Spectral-domain combinators used only while compiling the spectral function.

@@ -388,9 +388,6 @@ DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     if (expr->type->kind == T_BOOL && len == 2 && branches[0].tag == AST_BOOL &&
         branches[2].tag == AST_BOOL && branches[0].data.AST_BOOL.value) {
 
-      printf("simplify???\n");
-      print_ast(ast);
-
       return DSP_SCALAR(LLVMBuildSelect(builder, expr_val, body_vals[0],
                                         body_vals[1], "match.sel"));
     }

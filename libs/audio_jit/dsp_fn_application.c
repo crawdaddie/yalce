@@ -3933,6 +3933,10 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return dsp_spectral_div_mag(ast, dsp_ctx, ctx, module, builder);
   }
 
+  if (is_ident(f, "pv_bin_scramble")) {
+    return dsp_spectral_bin_scramble(ast, dsp_ctx, ctx, module, builder);
+  }
+
   if (callable_sym && callable_sym->type == STYPE_AUDIO_JIT_INLINE_LAMBDA) {
 
     Ast *lambda_ast = callable_sym->symbol_data._USER_DEFINED_SYMBOL;

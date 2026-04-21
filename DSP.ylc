@@ -73,6 +73,11 @@ let Spectral = module () ->
                   -> Array of Signal
                   -> Signal;
 
+  let fft_real = extern fn Int -> Int
+                  -> (FreqSignal -> FreqSignal)
+                  -> Array of Signal
+                  -> Signal;
+
 
   # let polar = fn re im -> 
   # let polar = extern fn Double -> Double -> Complex;

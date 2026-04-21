@@ -400,6 +400,8 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       .spf_scalar = compile_spf,
       .spectral_fft_size =
           enclosing_dsp_ctx ? enclosing_dsp_ctx->spectral_fft_size : 0,
+      .spectral_hop_size =
+          enclosing_dsp_ctx ? enclosing_dsp_ctx->spectral_hop_size : 0,
       .tmp_alloc = &tmp_alloc,
   };
 
@@ -412,6 +414,8 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       .spf_scalar = compile_spf,
       .spectral_fft_size =
           enclosing_dsp_ctx ? enclosing_dsp_ctx->spectral_fft_size : 0,
+      .spectral_hop_size =
+          enclosing_dsp_ctx ? enclosing_dsp_ctx->spectral_hop_size : 0,
       .tmp_alloc = &tmp_alloc,
   };
 

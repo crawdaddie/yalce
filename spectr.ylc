@@ -45,28 +45,101 @@ let pv_env_real = extern fn Int -> FreqSignal -> FreqSignal;
 let pv_div_mag = extern fn FreqSignal -> FreqSignal -> FreqSignal;
 let pv_scale_mag = extern fn FreqSignal -> FreqSignal -> FreqSignal;
 
+let pv_bin_scramble = extern fn Double -> Double -> Double -> FreqSignal -> FreqSignal;
+
+let min = fn a: (Int) b: (Intlje) ->
+match a < b with 
+| true -> a 
+| _ -> b
+;;
+
+# compile_audio_fn (
+#   let x2 = fn () ->
+#     open Spectral;
+#
+#     [
+#       mbufplay 2 (array_of_buf buf) 1. 0. (trig 0) |> mix 1 |> Reverb.cathedral,
+#       ~[100, 150] |> saw_osc |> mix 1,
+#       # ~[60., 60 * 1.01] |> saw_osc |> mix 1,
+#       # white ()
+#     ]
+#     |> fft 2048 128
+#     (fn mod car ->
+#       let out = array_fill_const 2048 (0., 0.);
+#       out[0] := (car[0]);
+#       out[fft_size / 2] := (car[fft_size / 2]);
+#       let mod_env = pv_env_real 512 mod;
+#       let car_env = pv_env_real 512 car;
+#
+#       for k = 1 .. ((fft_size / 2) - 1) in (
+#         let cr, ci = car[k]; 
+#         let x = k / fft_size;
+#         let fact = (tabread mod_env x) / (tabread car_env x);
+#         let zr = fact * cr;
+#         let zi = fact * ci;
+#         out[k] := (zr, zi);
+#         out[fft_size - k] := (zr, -1 *zi)
+#       );
+#
+#       out
+#     )
+# );
 compile_audio_fn (
-  let x = fn () ->
-    open Spectral;
+    let x2 = fn () ->
+      open Spectral;
 
-    [
-      ~[lfnoise 0.5 60 80, lfnoise 0.5 60 80] |> saw_osc |> mix 1,
-      # ~[60., 60 * 1.01] |> saw_osc |> mix 1,
-      mbufplay 2 (array_of_buf buf) 1. 0. (trig 0) |> mix 1 |> Reverb.cathedral,
-      # white ()
-    ]
-    |> fft 2048 128
-    (fn mod car ->
-      let mod_env = pv_env_real 512 mod;
-      let car_env = pv_env_real 512 car;
-      dsp_array.foldi (fn i r (cr, ci) ->
-        let x = i / fft_size;
-        let fact = (tabread mod_env x) / (tabread car_env x);
-        r[i] := (fact * cr, fact * ci);
-        r
-      ) car car
-    )
-);
+      [
+        mbufplay 2 (array_of_buf buf) 1. 0. (trig 0) |> mix 1 |> Reverb.cathedral,
+        ~[100, 150] |> saw_osc |> mix 1,
+      ]
+      |> fft 2048 128
+      (fn mod car ->
+        let out = array_fill_const 2048 (0., 0.);
+        out[0] := car[0];
+        out[fft_size / 2] := car[fft_size / 2];
 
-x () |> play_node
+        let mod_env = pv_env_real 512 mod;
+        let car_env = pv_env_real 512 car;
 
+        dsp_array.foldi (fn i r (cr, ci) ->
+          if ((i > 0) && (i < (fft_size / 2))) then (
+            let x = i / fft_size;
+            let fact = (tabread mod_env x) / (tabread car_env x);
+            let zr = fact * cr;
+            let zi = fact * ci;
+            r[i] := (zr, zi);
+            r[fft_size - i] := (zr, -1 * zi);
+            r
+          )
+          else
+            r
+        ) out car
+      )
+  );
+
+      # dsp_array.foldi (fn i r (cr, ci) ->
+      #
+      #   let k = min i (fft_size - i);
+      #   let x = k / fft_size;
+      #   let fact = (tabread mod_env x) / (tabread car_env x);
+      #   r[k] := (fact * cr, fact * ci);
+      #   r[fft_size - k] := (fact * cr, fact * ci);
+      #   r
+      # ) car car
+#
+# compile_audio_fn (
+#   let bin_scramble = fn () ->
+#     open Spectral;
+#     let s = 0.2;
+#     let scat = 0.1;
+#     [
+#       mbufplay 2 (array_of_buf buf) 1. 0. (trig 0) |> mix 1,
+#     ]
+#     |> fft 2048 128
+#       (fn mod ->
+#         mod |> pv_bin_scramble s scat 1.
+#       )
+# );
+
+# bin_scramble () |> play_node
+x2 () |> play_node

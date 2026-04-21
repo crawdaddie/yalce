@@ -110,6 +110,10 @@ DspValue dsp_spectral_scale_mag(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 DspValue dsp_spectral_div_mag(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                               LLVMModuleRef module, LLVMBuilderRef builder);
 
+DspValue dsp_spectral_bin_scramble(Ast *ast, DspBuildCtx *dsp_ctx,
+                                   JITLangCtx *ctx, LLVMModuleRef module,
+                                   LLVMBuilderRef builder);
+
 LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder);
