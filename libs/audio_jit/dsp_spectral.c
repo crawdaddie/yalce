@@ -475,6 +475,8 @@ double spectral_region_samp(void *state_raw, double *inputs, void *kernel_raw,
   if (st->fft_size <= 0 || st->num_inputs <= 0) {
     return 0.0;
   }
+  int half_size = (st->fft_size / 2) + 1;
+  int nyquist = st->fft_size / 2;
 
   double *window = st->window;
   double *ola = st->ola;
@@ -513,7 +515,8 @@ double spectral_region_samp(void *state_raw, double *inputs, void *kernel_raw,
 
       fftw_execute(st->forward_plan);
 
-      for (int k = 0; k < st->fft_size; k++) {
+      // Store only the positive half-spectrum (DC .. Nyquist).
+      for (int k = 0; k < half_size; k++) {
         chan_spec[k][0] = st->fft_in[k][0];
         chan_spec[k][1] = st->fft_in[k][1];
       }
@@ -522,28 +525,37 @@ double spectral_region_samp(void *state_raw, double *inputs, void *kernel_raw,
     if (kernel) {
       ComplexArray input_views[st->num_inputs];
       ComplexArray out_view = {
-          .size = st->fft_size,
+          .size = half_size,
           .data = (Complex *)st->out_spec,
       };
 
       for (int ch = 0; ch < st->num_inputs; ch++) {
         input_views[ch] = (ComplexArray){
-            .size = st->fft_size,
+            .size = (st->fft_size / 2) + 1,
             .data = (Complex *)(spec + ((size_t)ch * st->fft_size)),
         };
       }
 
-      // The compiled spectral lambda runs here. It sees one YLC array per
-      // analyzed input spectrum and writes its result directly into the
-      // preallocated output spectrum view.
+      // The compiled spectral lambda runs here. It sees only the positive
+      // half-spectrum for each real-input FFT and writes only that same half
+      // of the output spectrum.
       kernel(kernel_state_raw, NULL, input_views, out_view);
     } else {
-      // Default passthrough while spectral-lambda compilation is still being
-      // wired up: resynthesise input 0 (`mod`) unchanged.
-      for (int k = 0; k < st->fft_size; k++) {
+      // Default passthrough: copy the positive half of input 0 unchanged.
+      for (int k = 0; k < half_size; k++) {
         st->out_spec[k][0] = spec[k][0];
         st->out_spec[k][1] = spec[k][1];
       }
+    }
+
+    // Rebuild the negative-frequency half so the inverse FFT stays real.
+    st->out_spec[0][1] = 0.0;
+    if ((st->fft_size & 1) == 0) {
+      st->out_spec[nyquist][1] = 0.0;
+    }
+    for (int k = 1; k < nyquist; k++) {
+      st->out_spec[st->fft_size - k][0] = st->out_spec[k][0];
+      st->out_spec[st->fft_size - k][1] = -st->out_spec[k][1];
     }
 
     fftw_execute(st->inverse_plan);
@@ -946,6 +958,7 @@ DspValue dsp_fft_region(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
 
   int fft_size = fft_size_ast->data.AST_INT.value;
+  int visible_fft_size = (fft_size / 2) + 1;
   int hop_size = hop_size_ast->data.AST_INT.value;
   int num_ins = inputs_ast->data.AST_LIST.len;
   if (fft_size <= 0 || hop_size <= 0 || num_ins <= 0) {
@@ -982,7 +995,7 @@ DspValue dsp_fft_region(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   int num_captures = 0;
   int prev_fft_size = dsp_ctx->spectral_fft_size;
   int prev_hop_size = dsp_ctx->spectral_hop_size;
-  dsp_ctx->spectral_fft_size = fft_size;
+  dsp_ctx->spectral_fft_size = visible_fft_size;
   dsp_ctx->spectral_hop_size = hop_size;
 
   if (fn_ast->tag == AST_LAMBDA && fn_type) {
@@ -1291,9 +1304,8 @@ static LLVMValueRef spectral_alloc_hoisted_state_bytes(DspBuildCtx *dsp_ctx,
   dsp_ctx->state_offset =
       spectral_align_up_i32(dsp_ctx->state_offset, eff_align);
   dsp_ctx->state_offset += total_bytes;
-  LLVMValueRef run_ptr =
-      dsp_consume_frame_state(dsp_ctx, builder, total_bytes, eff_align,
-                              base_name);
+  LLVMValueRef run_ptr = dsp_consume_frame_state(dsp_ctx, builder, total_bytes,
+                                                 eff_align, base_name);
   return run_ptr;
 }
 
@@ -1333,8 +1345,50 @@ static DspValue spectral_call_helper(Ast *ast, DspBuildCtx *dsp_ctx,
 
 DspValue dsp_spectral_env(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                           LLVMModuleRef module, LLVMBuilderRef builder) {
-  return spectral_call_helper(ast, dsp_ctx, ctx, module, builder,
-                              "spectral_env_fill", 1);
+  if (!dsp_ctx || ast->data.AST_APPLICATION.len < 2) {
+    return DSP_NULL;
+  }
+
+  Ast *args = ast->data.AST_APPLICATION.args;
+  Ast *size_ast = args;
+  Ast *in_ast = args + 1;
+  if (!(ast_is_const(size_ast, ctx) && size_ast->tag == AST_INT)) {
+    fprintf(stderr,
+            "pv_env requires a constant integer size as its first argument\n");
+    print_ast_err(ast);
+    return DSP_NULL;
+  }
+
+  int len = size_ast->data.AST_INT.value;
+  if (len <= 0 || len > 2048 ||
+      (dsp_ctx->spectral_fft_size > 0 && len > dsp_ctx->spectral_fft_size)) {
+    fprintf(stderr, "pv_env size must be in 1..fft_size (<= 2048)\n");
+    print_ast_err(ast);
+    return DSP_NULL;
+  }
+
+  Type *el_type = &t_num;
+  LLVMValueRef out_arr = spectral_alloc_hoisted_array_typed(
+      ast, dsp_ctx, ctx, module, builder, "pv_env", el_type, len);
+  if (!out_arr) {
+    return DSP_NULL;
+  }
+
+  LLVMValueRef in_arr =
+      dsp_build_expr(in_ast, dsp_ctx, ctx, module, builder).scalar;
+  LLVMTypeRef in_arr_ty = LLVMTypeOf(in_arr);
+  LLVMTypeRef out_arr_ty = LLVMTypeOf(out_arr);
+  LLVMTypeRef fn_ty = LLVMFunctionType(
+      out_arr_ty, (LLVMTypeRef[]){in_arr_ty, out_arr_ty}, 2, 0);
+  LLVMValueRef fn = LLVMGetNamedFunction(module, "pv_env_real_fill");
+  if (!fn) {
+    fn = LLVMAddFunction(module, "pv_env_real_fill", fn_ty);
+    LLVMSetLinkage(fn, LLVMExternalLinkage);
+  }
+
+  out_arr = LLVMBuildCall2(builder, fn_ty, fn,
+                           (LLVMValueRef[]){in_arr, out_arr}, 2, "pv_env");
+  return DSP_SCALAR(out_arr);
 }
 
 DspValue dsp_spectral_env_real(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,

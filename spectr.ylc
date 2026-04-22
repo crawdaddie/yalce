@@ -4,7 +4,8 @@ import std/Arrays;
 import std/Math;
 
 # let buf = load_soundfile "/home/adam/Desktop/193811__geoneo0__four_voices_whispering_2.wav";
-let buf = load_soundfile "~/Sounds/aaliyahfrag.wav";
+# let buf = load_soundfile "~/Sounds/nas/wiy_presidents.wav";
+let buf = load_soundfile "~/Sounds/nas_stuff/nas_the_illmatic_archives_4_5_6/Nas (2009) The Illmatic Archives (4 - Acapellas)/04 It Ain't Hard to Tell (Acapella).mp3";
 
 # compile_audio_fn (
 #   let x = fn () ->
@@ -84,38 +85,7 @@ match a < b with
 #       out
 #     )
 # );
-compile_audio_fn (
-    let x2 = fn () ->
-      open Spectral;
 
-      [
-        mbufplay 2 (array_of_buf buf) 1. 0. (trig 0) |> mix 1 |> Reverb.cathedral,
-        ~[100, 150] |> saw_osc |> mix 1,
-      ]
-      |> fft 2048 128
-      (fn mod car ->
-        let out = array_fill_const 2048 (0., 0.);
-        out[0] := car[0];
-        out[fft_size / 2] := car[fft_size / 2];
-
-        let mod_env = pv_env_real 512 mod;
-        let car_env = pv_env_real 512 car;
-
-        dsp_array.foldi (fn i r (cr, ci) ->
-          if ((i > 0) && (i < (fft_size / 2))) then (
-            let x = i / fft_size;
-            let fact = (tabread mod_env x) / (tabread car_env x);
-            let zr = fact * cr;
-            let zi = fact * ci;
-            r[i] := (zr, zi);
-            r[fft_size - i] := (zr, -1 * zi);
-            r
-          )
-          else
-            r
-        ) out car
-      )
-  );
 
       # dsp_array.foldi (fn i r (cr, ci) ->
       #
@@ -130,8 +100,8 @@ compile_audio_fn (
 # compile_audio_fn (
 #   let bin_scramble = fn () ->
 #     open Spectral;
-#     let s = 0.2;
-#     let scat = 0.1;
+#     let s = 0.4;
+#     let scat = 0.2;
 #     [
 #       mbufplay 2 (array_of_buf buf) 1. 0. (trig 0) |> mix 1,
 #     ]
@@ -142,4 +112,27 @@ compile_audio_fn (
 # );
 
 # bin_scramble () |> play_node
-x2 () |> play_node
+# x2 () |> play_node
+compile_audio_fn (
+  let xsynth = fn () ->
+    open Spectral;
+
+    [
+      mbufplay 2 (array_of_buf buf) 0.75 0. (trig 0) |> mix 1,
+      ~[60., 60. * 1.01] |> saw_osc |> mix 1
+    ]
+    |> fft 4096 128
+    (fn mod car ->
+      let mod_env = pv_env 512 mod;
+      let car_env = pv_env 512 car;
+      dsp_array.foldi (fn i r (cr, ci) ->
+        let x = i / fft_size;
+        let fact = (tabread mod_env x) / (tabread car_env x);
+        r[i] := (fact * cr, fact * ci);
+        r
+      ) car car
+    )
+    # |> Reverb.cathedral
+);
+
+xsynth () |> play_node

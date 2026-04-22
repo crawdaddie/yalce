@@ -33,23 +33,23 @@ let floor = extern fn Double -> Int;
 let ceil = extern fn Double -> Int;
 
 let max = fn a b ->
-match a > b with 
-| true -> a 
-| _ -> b
-;;
+  match a > b with 
+  | true -> a 
+  | _ -> b
+  ;;
 
 let min = fn a b ->
-match a < b with 
-| true -> a 
-| _ -> b
-;;
+  match a < b with 
+  | true -> a 
+  | _ -> b
+  ;;
 let clamp = fn mn mx v -> v |> min mx |> max mn ;;
 
 let abs = fn a ->
-match a > 0 with
-| true -> a
-| _ -> a * -1
-;;
+  match a > 0 with
+  | true -> a
+  | _ -> a * -1
+  ;;
 
 let normalize = fn mn mx v -> (v - mn) / (mx - mn);;
 
@@ -58,7 +58,7 @@ let chance = fn thresh f ->
   match (x <= thresh) with
   | true -> (f (); ())
   | _ -> ()
-;;
+  ;;
 
 let chance2 = fn thresh f g -> 
   let x = rand_double () in
@@ -131,4 +131,10 @@ let ilog10 = fn a ->
   ;;
   aux 0 a
 ;;
+
+# let cyclic_permutation = fn N k i ->
+# ;;
+
+
+
 
