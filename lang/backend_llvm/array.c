@@ -164,6 +164,9 @@ LLVMValueRef ArrayFillHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *_array_type = ast->type;
   Type *el_type = _array_type->data.T_CONS.args[0];
+  print_ast(ast);
+  print_type(_array_type);
+  print_type((ast->data.AST_APPLICATION.args + 1)->type);
 
   LLVMTypeRef element_type = type_to_llvm_type(el_type, ctx, module);
 
@@ -190,6 +193,7 @@ LLVMValueRef ArrayFillHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *ftype = ast->data.AST_APPLICATION.function->type;
   Type *fill_func_type = ftype->data.T_FN.to->data.T_FN.from;
+
   ast->data.AST_APPLICATION.args[1].type = fill_func_type;
 
   LLVMValueRef fill_func =

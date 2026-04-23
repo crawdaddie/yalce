@@ -81,6 +81,7 @@ Type create_arithmetic_scheme() {
   f->implements = &GenericArithmetic;
   f = type_fn(b, f);
   f = type_fn(a, f);
+  f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, FN_ATTR_PURE);
 
   TypeList *vars_mem = t_alloc(sizeof(TypeList) * 2);
   vars_mem[1] = vlist_of_typevar(b);
@@ -102,6 +103,8 @@ Type create_ord_scheme() {
   f = type_fn(b, f);
   f = type_fn(a, f);
 
+  f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, FN_ATTR_PURE);
+
   TypeList *vars_mem = t_alloc(sizeof(TypeList) * 2);
   vars_mem[1] = vlist_of_typevar(b);
   vars_mem[0] = vlist_of_typevar(a);
@@ -120,6 +123,7 @@ Type create_eq_scheme() {
   Type *f = &t_bool;
   f = type_fn(a, f);
   f = type_fn(a, f);
+  f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, FN_ATTR_PURE);
 
   TypeList *vars_mem = t_alloc(sizeof(TypeList));
 
@@ -172,6 +176,7 @@ Type create_array_offset_scheme() {
 
   Type *f = type_fn(arr, arr);
   f = type_fn(&t_int, f);
+  f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, FN_ATTR_PURE);
 
   TypeList *vars_mem = t_alloc(sizeof(TypeList));
 
@@ -260,7 +265,8 @@ Type create_array_fill_const_scheme() {
   Type *f = arr;
   f = type_fn(a, f);
   f = type_fn(&t_int, f);
-  f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, ATTR_ALLOCATES);
+  f->data.T_FN.attributes =
+      set_attr(f->data.T_FN.attributes, FN_ATTR_ALLOCATES);
 
   TypeList *vars_mem = t_alloc(sizeof(TypeList));
 
@@ -280,7 +286,8 @@ Type create_array_fill_scheme() {
   Type *f = arr;
   f = type_fn(fill_func, f);
   f = type_fn(&t_int, f);
-  f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, ATTR_ALLOCATES);
+  f->data.T_FN.attributes =
+      set_attr(f->data.T_FN.attributes, FN_ATTR_ALLOCATES);
 
   TypeList *vars_mem = t_alloc(sizeof(TypeList));
 
@@ -629,7 +636,8 @@ Type create_asbytes_scheme() {
   Type *a = tvar("a");
   Type *f = type_fn(a, &t_string);
 
-  f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, ATTR_ALLOCATES);
+  f->data.T_FN.attributes =
+      set_attr(f->data.T_FN.attributes, FN_ATTR_ALLOCATES);
 
   TypeList *vars_mem = t_alloc(sizeof(TypeList));
 

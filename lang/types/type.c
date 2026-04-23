@@ -732,14 +732,14 @@ Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2) {
   return resolution;
 }
 
-bool has_attr(TypeAttributes attrs, TypeAttributes flag) {
+bool has_attr(FnAttributes attrs, FnAttributes flag) {
   return (attrs & flag) != 0;
 }
 
-TypeAttributes set_attr(TypeAttributes attrs, TypeAttributes flag) {
+FnAttributes set_attr(FnAttributes attrs, FnAttributes flag) {
   return attrs | flag;
 }
 
-TypeAttributes clear_attr(TypeAttributes attrs, TypeAttributes flag) {
+FnAttributes clear_attr(FnAttributes attrs, FnAttributes flag) {
   return attrs & ~flag;
 }

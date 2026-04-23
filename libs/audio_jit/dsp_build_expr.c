@@ -9,12 +9,18 @@
 #include "../../lang/serde.h"
 #include "./dsp_fn_application.h"
 #include "types/builtins.h"
+#include "types/type_ser.h"
 #include <llvm-c/Target.h>
 #include <llvm-c/Types.h>
 
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+DspValue dsp_build_loop_range(Ast *binding, Ast *range, Ast *body,
+                              DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
+                              LLVMModuleRef module, LLVMBuilderRef builder) {
+  return DSP_ZERO;
+}
 
 DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -166,21 +172,46 @@ DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return DSP_SCALAR(
         LLVMConstInt(LLVMInt1Type(), ast->data.AST_BOOL.value, 0));
   }
+  case AST_LOOP: {
+    Ast *body = ast->data.AST_LET.in_expr; // Loop body
+    Ast *binding = ast->data.AST_LET.binding;
+    Ast *iter_expr = ast->data.AST_LET.expr;
+
+    STACK_ALLOC_CTX_PUSH(loop_ctx, ctx);
+    if (iter_expr->tag == AST_RANGE_EXPRESSION) {
+      return dsp_build_loop_range(binding, iter_expr, body, &loop_ctx, dsp_ctx,
+                                  module, builder);
+    }
+    return DSP_ZERO;
+  }
   case AST_IDENTIFIER: {
     const char *id_name = ast->data.AST_IDENTIFIER.value;
     if (dsp_ctx && id_name) {
+
       LLVMTypeRef f64_ty = LLVMDoubleType();
       LLVMTypeRef f32_ty = LLVMInt32Type();
+
       if (strcmp(id_name, "sample_rate") == 0) {
+
+        // printf("sr size const??? -- has attr: %d %d\n",
+        //        has_attr(ast->type->attr, ATTR_COMPILE_TIME_CONST),
+        //        ast->type->attr);
         return DSP_SCALAR(LLVMConstReal(f64_ty, (double)dsp_ctx->sample_rate));
       }
 
       if (strcmp(id_name, "spf") == 0) {
+
+        // printf("spf size const??? -- has attr: %d %d\n",
+        //        has_attr(ast->type->attr, ATTR_COMPILE_TIME_CONST),
+        //        ast->type->attr);
         return DSP_SCALAR(
             LLVMConstReal(f64_ty, 1.0 / (double)dsp_ctx->sample_rate));
       }
 
       if (strcmp(id_name, "fft_size") == 0) {
+        // printf("fft size const??? -- has attr: %d %d\n",
+        //        has_attr(ast->type->attr, ATTR_COMPILE_TIME_CONST),
+        //        ast->type->attr);
         return DSP_SCALAR(LLVMConstInt(f32_ty, dsp_ctx->spectral_fft_size, 0));
       }
     }

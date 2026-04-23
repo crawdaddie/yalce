@@ -119,7 +119,7 @@ compile_audio_fn (
 
     [
       mbufplay 2 (array_of_buf buf) 0.75 0. (trig 0) |> mix 1,
-      ~[60., 60. * 1.01] |> saw_osc |> mix 1
+      ~[60., 60. * 1.01] |> saw_osc |> mix 1,
     ]
     |> fft 4096 128
     (fn mod car ->

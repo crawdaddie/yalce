@@ -1,6 +1,6 @@
 open engine/bindings/Synth;
 open engine/bindings/Sched;
-
+let sample_rate = 48000;
 import std/Math;
 
 type Signal = Double;
@@ -77,6 +77,7 @@ let Spectral = module () ->
                   -> (FreqSignal -> FreqSignal)
                   -> Array of Signal
                   -> Signal;
+
 
 
   # let polar = fn re im -> 

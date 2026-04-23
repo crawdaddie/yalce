@@ -249,7 +249,7 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
         }
       }
 
-      if (has_attr(fn_ast->type->data.T_FN.attributes, ATTR_ALLOCATES)) {
+      if (has_attr(fn_ast->type->data.T_FN.attributes, FN_ATTR_ALLOCATES)) {
         Allocation *arr_alloc = create_alloc(NULL, ast, ctx->scope);
         return allocations_extend(allocations, arr_alloc);
       }

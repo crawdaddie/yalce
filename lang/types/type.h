@@ -173,36 +173,32 @@ enum TypeKind {
 #define TYPE_FLAGS_PRIMITIVE ((1 << T_STRING) | ((1 << T_STRING) - 1))
 
 // Bitfield attribute flags (64 max)
-typedef uint64_t TypeAttributes;
+typedef uint64_t FnAttributes;
 
 // Predefined attribute flags
-#define ATTR_NONE           0x0000000000000000ULL
-#define ATTR_PURE           0x0000000000000001ULL  // Pure function (no side effects)
-#define ATTR_INLINE         0x0000000000000002ULL  // Inline hint
-#define ATTR_NOINLINE       0x0000000000000004ULL  // Never inline
-#define ATTR_REALTIME_SAFE  0x0000000000000008ULL  // Safe for audio callback
-#define ATTR_ALLOCATES      0x0000000000000010ULL  // Module export
-#define ATTR_RECURSIVE      0x0000000000000020ULL  // Recursive function
+#define FN_ATTR_NONE           0x0000000000000000ULL
+#define FN_ATTR_PURE           0x0000000000000001ULL  // Pure function (no side effects)
+#define FN_ATTR_INLINE         0x0000000000000002ULL  // Inline hint
+#define FN_ATTR_NOINLINE       0x0000000000000004ULL  // Never inline
+#define FN_ATTR_REALTIME_SAFE  0x0000000000000008ULL  // Safe for audio callback
+#define FN_ATTR_ALLOCATES      0x0000000000000010ULL  // Module export
+#define FN_ATTR_RECURSIVE      0x0000000000000020ULL  // Recursive function
 //
-// #define ATTR_TAIL_RECURSIVE 0x0000000000000040ULL  // Tail-recursive
-// #define ATTR_MEMOIZED       0x0000000000000080ULL  // Memoization candidate
-// #define ATTR_HOT            0x0000000000000100ULL  // Hot path (optimize)
-// #define ATTR_COLD           0x0000000000000200ULL  // Cold path (deprioritize)
-// #define ATTR_UNSAFE         0x0000000000000400ULL  // Unsafe operations
-// #define ATTR_FFI            0x0000000000000800ULL  // Foreign function
-// #define ATTR_COROUTINE      0x0000000000001000ULL  // Coroutine function
-// #define ATTR_ASYNC          0x0000000000002000ULL  // Async/await
-// #define ATTR_VARIADIC       0x0000000000004000ULL  // Variadic function
-// #define ATTR_DEPRECATED     0x0000000000008000ULL  // Deprecated
-// #define ATTR_EXPERIMENTAL   0x0000000000010000ULL  // Experimental feature
-// #define ATTR_OPAQUE         0x0000000000020000ULL  // Opaque type
-
+//
+typedef uint64_t TypeAttributes;
+#define ATTR_NONE           0x0000000000000000ULL
+#define ATTR_COMPILE_TIME_CONST      0x000000000000001ULL  // compile-const - ie literal number or array
+// compile-time constant - array literal or number
+// literal or array_fill_const where size is const
+// array_size (const) == const
+// array_at (const)   != const
+//
 // Attribute query functions
-bool has_attr(TypeAttributes attrs, TypeAttributes flag);
+bool has_attr(uint64_t attrs, uint64_t flag);
 
-TypeAttributes set_attr(TypeAttributes attrs, TypeAttributes flag);
+uint64_t set_attr(uint64_t attrs, uint64_t flag);
 
-TypeAttributes clear_attr(TypeAttributes attrs, TypeAttributes flag);
+uint64_t clear_attr(uint64_t attrs, uint64_t flag);
 
 // static inline bool has_any_attr(TypeAttributes attrs, TypeAttributes flags) {
 //   return (attrs & flags) != 0;
@@ -213,8 +209,8 @@ TypeAttributes clear_attr(TypeAttributes attrs, TypeAttributes flag);
 // }
 
 // Pretty printing
-const char* attr_to_string(TypeAttributes attr);
-void print_attrs(TypeAttributes attrs);
+const char* fn_attr_to_string(FnAttributes attr);
+void print_fn_attrs(FnAttributes attrs);
 
 typedef struct TypeList {
   Type *type;
@@ -239,7 +235,7 @@ typedef struct Type {
     struct {
       struct Type *from;
       struct Type *to;
-      TypeAttributes attributes;
+      FnAttributes attributes;
     } T_FN;
 
     struct {
@@ -261,7 +257,9 @@ typedef struct Type {
   // bool is_recursive_placeholder;
   int scope;
   int yield_boundary;
+  TypeAttributes attr;
   void *meta;
+
 } Type;
 
 

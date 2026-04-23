@@ -1667,6 +1667,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
     // ...
   case AST_INT: {
     type = &t_int;
+    type->attr = set_attr(type->attr, ATTR_COMPILE_TIME_CONST);
     break;
   }
 
@@ -1681,18 +1682,22 @@ Type *infer(Ast *ast, TICtx *ctx) {
   // }
   case AST_DOUBLE: {
     type = &t_num;
+    type->attr = set_attr(type->attr, ATTR_COMPILE_TIME_CONST);
     break;
   }
   case AST_VOID: {
     type = &t_void;
+    type->attr = set_attr(type->attr, ATTR_COMPILE_TIME_CONST);
     break;
   }
   case AST_BOOL: {
     type = &t_bool;
+    type->attr = set_attr(type->attr, ATTR_COMPILE_TIME_CONST);
     break;
   }
   case AST_CHAR: {
     type = &t_char;
+    type->attr = set_attr(type->attr, ATTR_COMPILE_TIME_CONST);
     break;
   }
   case AST_STRING: {
@@ -1720,6 +1725,11 @@ Type *infer(Ast *ast, TICtx *ctx) {
     if (!type) {
       return NULL;
     }
+
+    type->attr = set_attr(type->attr, ATTR_COMPILE_TIME_CONST);
+    int *size = t_alloc(sizeof(int32_t));
+    *size = ast->data.AST_LIST.len;
+    type->meta = size;
     break;
   }
 

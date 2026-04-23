@@ -295,7 +295,47 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   }
 
   Type *x = infer_fn_application(func_type, ast, ctx);
+
+  if (is_ident(ast, "array_fill_const")) {
+
+    if (has_attr(ast->data.AST_APPLICATION.args->type->attr,
+                 ATTR_COMPILE_TIME_CONST)) {
+      x->attr = set_attr(x->attr, ATTR_COMPILE_TIME_CONST);
+    }
+  }
+
+  if (is_ident(ast, "array_size")) {
+    if (has_attr(ast->data.AST_APPLICATION.args->type->attr,
+                 ATTR_COMPILE_TIME_CONST)) {
+      x->attr = set_attr(x->attr, ATTR_COMPILE_TIME_CONST);
+      print_ast(ast);
+      print_type(x);
+      printf("has attr compile time const %d\n",
+             has_attr(x->attr, ATTR_COMPILE_TIME_CONST));
+    }
+  }
+
   return x;
+}
+
+bool has_const_args(Type *fn_type, Ast *args, int len) {
+  for (int i = 0; i < len; i++) {
+    if (!has_attr(args[i].type->attr, ATTR_COMPILE_TIME_CONST)) {
+      return false;
+    }
+  }
+
+  if (is_closure(fn_type)) {
+    Type *cl_meta = fn_type->closure_meta;
+    for (int i = 0; i < cl_meta->data.T_CONS.num_args; i++) {
+
+      Type **cl_args = cl_meta->data.T_CONS.args;
+      if (!has_attr(cl_args[i]->attr, ATTR_COMPILE_TIME_CONST)) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
@@ -383,5 +423,9 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     res->closure_meta = closure_meta;
   }
 
+  if (has_attr(expected_type->data.T_FN.attributes, FN_ATTR_PURE) &&
+      has_const_args(expected_type, args, num_args)) {
+    res->attr = set_attr(res->attr, ATTR_COMPILE_TIME_CONST);
+  }
   return res;
 }

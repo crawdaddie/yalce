@@ -15,6 +15,7 @@
 #include "../../lang/serde.h"
 #include "../../lang/types/builtins.h"
 #include "./dsp_build_expr.h"
+#include "types/type_ser.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -241,6 +242,8 @@ static LLVMBasicBlockRef dsp_build_perform_loop(LLVMValueRef perform_fn,
 LLVMTypeRef synth_frame_fn_type(Ast *lambda, JITLangCtx *ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
 
+  // print_ast(lambda);
+  // print_type(lambda->type);
   int num_inputs = 0;
   bool is_void_fn = is_void_func(lambda->type);
 
@@ -772,8 +775,8 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
     synth_id = synth_registry_len();
   }
 
-  SynthRecord rec = compile_lambda_to_synth_record(
-      lambda, name, frame_ty, NULL, ctx, module, builder);
+  SynthRecord rec = compile_lambda_to_synth_record(lambda, name, frame_ty, NULL,
+                                                   ctx, module, builder);
 
   // Emit a runtime call to ylc_register_synth_ctor(synth_id, cons_fn) so that
   // synth_ctor_table is populated with the real compiled address when the

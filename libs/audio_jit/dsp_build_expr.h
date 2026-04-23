@@ -7,11 +7,22 @@
 #include "./audio_jit.h"
 
 #include "./compile_synth.h"
+// DspValueMetaAttr
+
+typedef uint64_t DspValueMetaAttr;
+// Predefined attribute flags
+#define DSP_ATTR_NONE 0x0000000000000000ULL
+#define DSP_ATTR_COMPILE_CONST                                                 \
+  0x0000000000000001ULL // compile-time constant - array literal or number
+                        // literal or array_fill_const where size is const
+// array_size (const) == const
+// array_at (const)   != const
 
 typedef struct {
   int lanes;
   LLVMValueRef scalar;
   LLVMValueRef *vec;
+  // DspValueMetaAttr attr;
 } DspValue;
 
 #define DSP_SCALAR(v)                                                          \
