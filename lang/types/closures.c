@@ -64,6 +64,20 @@ void extend_closed_vals(Ast *fn, Ast *ref, Type *ref_type) {
   fn->data.AST_LAMBDA.num_closed_vals++;
 }
 
+static void propagate_closed_val_through_scopes(Ast *ast, Type *ref_type,
+                                                int binding_scope, TICtx *ctx) {
+  if (!ctx || !ctx->current_scope || !ast) {
+    return;
+  }
+
+  for (LambdaScope *scope = ctx->current_scope; scope; scope = scope->parent) {
+    if (scope->base_scope <= binding_scope) {
+      break;
+    }
+    extend_closed_vals(scope->fn_ast, ast, ref_type);
+  }
+}
+
 void handle_closed_over_ref(Ast *ast, TypeEnv *ref, TICtx *ctx) {
 
   int this_scope = ctx->current_fn_base_scope;
@@ -90,14 +104,12 @@ void handle_closed_over_ref(Ast *ast, TypeEnv *ref, TICtx *ctx) {
 
 void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx) {
 
-  if (!ctx->current_fn_ast) {
+  if (!ctx || !ctx->current_scope) {
     return;
   }
 
   int scope = binding_info.data.VAR.scope;
   if (scope > 0 && scope < ctx->current_fn_base_scope) {
-    ctx->current_fn_ast->data.AST_LAMBDA.num_closed_vals++;
-    ctx->current_fn_ast->data.AST_LAMBDA.closed_vals = ast_list_extend_left(
-        ctx->current_fn_ast->data.AST_LAMBDA.closed_vals, ast);
+    propagate_closed_val_through_scopes(ast, ast->type, scope, ctx);
   }
 }

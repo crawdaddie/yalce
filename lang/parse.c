@@ -9,7 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 
-ParsingContext pctx = {};
+ParsingContext pctx = {.custom_binops = NULL};
 
 const char *__base_dir = NULL;
 void set_base_dir(const char *dir) { __base_dir = dir; }
@@ -26,6 +26,9 @@ ReAllocatorFnType prealloc = __prealloc;
 custom_binops_t *__custom_binops = NULL;
 
 void add_custom_binop(const char *binop_name) {
+  if (!binop_name || binop_name[0] == '\0') {
+    return;
+  }
   // printf("add custom binop '%s'\n", binop_name);
   custom_binops_t *new_custom_binops = palloc(sizeof(custom_binops_t));
   new_custom_binops->binop = binop_name;
@@ -322,6 +325,11 @@ Ast *parse_input(char *input, const char *dirname) {
 bool is_custom_binop(const char *id) {
   custom_binops_t *bb = pctx.custom_binops;
   while (bb) {
+
+    if (!bb->binop || bb->binop[0] == '\0') {
+      return false;
+    }
+
     if (strcmp(id, bb->binop) == 0) {
       return true;
     }
