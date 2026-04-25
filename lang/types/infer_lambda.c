@@ -191,7 +191,10 @@ Type *create_closure(Ast *ast, Type *fn_type, TICtx *ctx) {
   Type **closed_types = t_alloc(sizeof(Type) * num);
 
   int i = 0;
+  // printf("LAMBDA: ");
+  // print_ast(ast);
   for (AstList *l = ast->data.AST_LAMBDA.closed_vals; l; l = l->next, i++) {
+    // print_ast(l->ast);
     // TODO: does the order here need to be reversed?
     // ast->data.AST_LAMBDA.closed_vals is in reverse order from when things are
     // used in the lambda
@@ -460,6 +463,8 @@ Type *lower_recursive_ref(Type *t, TypeEnv *env) {
 //            Γ ⊢ λ x₁ x₂ ... xₙ. e : α₁ → α₂ → ... → αₙ → τ
 //
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
+  // printf("LAMBDA\n");
+  // print_ast(ast);
   Ast *body = ast->data.AST_LAMBDA.body;
   int num_params = ast->data.AST_LAMBDA.len;
 
@@ -473,6 +478,13 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   lctx.current_fn_ast = ast;
   lctx.scope = ctx->scope + 1;
   lctx.current_fn_base_scope = lctx.scope;
+
+  LambdaScope current_scope = {
+      .fn_ast = ast,
+      .base_scope = ctx->scope + 1,
+      .parent = ctx->current_scope,
+  };
+  lctx.current_scope = &current_scope;
 
   bind_lambda_params(ast, param_types, &lctx);
 
@@ -539,6 +551,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   // printf("final lambda type [%s]\n", fn_name);
   // print_type(fn_return_type(result_type));
   lower_recursive_ref(fn_return_type(result_type), ctx->env);
+  // print_type(result_type);
 
   return result_type;
 }

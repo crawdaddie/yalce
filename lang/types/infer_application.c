@@ -308,10 +308,7 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
     if (has_attr(ast->data.AST_APPLICATION.args->type->attr,
                  ATTR_COMPILE_TIME_CONST)) {
       x->attr = set_attr(x->attr, ATTR_COMPILE_TIME_CONST);
-      print_ast(ast);
-      print_type(x);
-      printf("has attr compile time const %d\n",
-             has_attr(x->attr, ATTR_COMPILE_TIME_CONST));
+      x->meta = ast->data.AST_APPLICATION.args->type->meta;
     }
   }
 
@@ -351,7 +348,9 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
   Type **arg_types = t_alloc(sizeof(Type *) * num_args);
 
   for (int i = 0; i < num_args; i++) {
+
     arg_types[i] = infer(args + i, ctx);
+
     if (!arg_types[i]) {
       return type_error(ast, "Cannot infer argument %d type", i + 1);
     }
@@ -364,6 +363,9 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
   // Build expected type: arg1 -> arg2 -> ... -> result
   for (int i = num_args - 1; i >= 0; i--) {
     expected_type = type_fn(arg_types[i], expected_type);
+    // printf("%d: ", i);
+    // print_ast(args + i);
+    // print_type(arg_types[i]);
   }
 
   // Step 4: Unify function type with expected type

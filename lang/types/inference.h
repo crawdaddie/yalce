@@ -54,10 +54,19 @@ typedef struct TypeEnv {
   bool is_opened_var;
 } TypeEnv;
 
+typedef struct LambdaScope {
+  Ast *fn_ast;
+  int base_scope;
+  struct LambdaScope *parent;
+} LambdaScope;
+
 typedef struct TICtx {
   Subst *subst;
   TypeEnv *env;
+
   Ast *current_fn_ast;
+  LambdaScope *current_scope;
+
   Constraint *constraints;
   Type *yielded_type;
   int scope;

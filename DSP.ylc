@@ -63,17 +63,12 @@ let grains = extern fn Int ->       Array of Double -> Double -> Double -> Doubl
 type Complex = (Double, Double);
 type FreqSignal = Array of Complex;
 
-let mag   = fn (re, im): (Complex) -> Math.sqrt ((re * re) + (im * im)) ;;
-let phase = fn (re, im): (Complex) -> Math.atan2 im re;;
-let polar = fn mag: (Double) theta: (Double) -> (mag * Math.cos theta, mag * Math.sin theta) ;;
+let cmag   = fn (re, im): (Double, Double) -> Math.sqrt ((re * re) + (im * im)) ;;
+let cphase = fn (re, im): (Double, Double) -> Math.atan2 im re;;
+let cpolar = fn mag: (Double) theta: (Double) -> (mag * Math.cos theta, mag * Math.sin theta) ;;
 
 let Spectral = module () ->
   let fft = extern fn Int -> Int
-                  -> (FreqSignal -> FreqSignal)
-                  -> Array of Signal
-                  -> Signal;
-
-  let fft_real = extern fn Int -> Int
                   -> (FreqSignal -> FreqSignal)
                   -> Array of Signal
                   -> Signal;

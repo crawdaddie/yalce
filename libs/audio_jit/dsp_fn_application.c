@@ -3815,15 +3815,24 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
   if (is_ident(f, "array_fill_const")) {
     Ast *args = ast->data.AST_APPLICATION.args;
+    Type *arg_type = args->type;
 
-    if (!ast_is_const(args, ctx)) {
+    if (!has_attr(arg_type->attr, ATTR_COMPILE_TIME_CONST)) {
       fprintf(stderr, "Error: not implemented- emit non-constant / computed "
                       "array length instructions\n");
       print_ast_err(ast);
       return DSP_NULL;
     }
 
-    int len = args->data.AST_INT.value;
+    int len;
+    if (args->tag == AST_INT) {
+      len = args->data.AST_INT.value;
+    } else if (args->tag == AST_IDENTIFIER && is_ident(args, "fft_size")) {
+      len = dsp_ctx->spectral_fft_size;
+    } else {
+      fprintf(stderr,
+              "Error: could not determine array size at compile time\n");
+    }
 
     dsp_ctx->array_attrs.comptime_size = len;
 
@@ -4171,7 +4180,7 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         fprintf(stderr, "Application Error: null operand to function %d\n",
                 fn_ast->tag);
         print_ast_err(ast->data.AST_APPLICATION.args + i);
-        print_ast(fn_ast);
+        print_ast_err(fn_ast);
         return DSP_NULL;
       }
       Type *t = f->data.T_FN.from;

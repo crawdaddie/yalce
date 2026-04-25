@@ -8,6 +8,7 @@
 #include "../../lang/types/builtins.h"
 #include "../../lang/types/type_ser.h"
 #include "../../lang/ylc_datatypes.h"
+#include "./audio_jit.h"
 #include "./bin_scrambler_runtime.h"
 #include "./common.h"
 #include "./dsp_fn_application.h"
@@ -74,14 +75,163 @@ typedef void (*SpectralKernelFn)(void *state_raw, void *node_raw,
 
 static int spectral_kernel_counter = 0;
 
+static bool spectral_capture_list_has_name(AstList *list, const char *name) {
+  for (AstList *l = list; l; l = l->next) {
+    Ast *ast = l->ast;
+    if (ast && ast->tag == AST_IDENTIFIER &&
+        strcmp(ast->data.AST_IDENTIFIER.value, name) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void spectral_collect_missing_captures_from_ast(Ast *ast, Ast *fn_ast,
+                                                       JITLangCtx *ctx) {
+  if (!ast || !fn_ast) {
+    return;
+  }
+
+  switch (ast->tag) {
+  case AST_IDENTIFIER: {
+    JITSymbol *sym = lookup_id_ast(ast, ctx);
+    if (!sym) {
+      return;
+    }
+
+    if (sym->type != (symbol_type)STYPE_AUDIO_JIT_DSP_VALUE &&
+        sym->type != (symbol_type)STYPE_AUDIO_JIT_SYNTH_INLET &&
+        sym->type != (symbol_type)STYPE_AUDIO_JIT_LOCAL_ARRAY) {
+      return;
+    }
+
+    for (AstList *p = fn_ast->data.AST_LAMBDA.params; p; p = p->next) {
+      Ast *param = p->ast;
+      if (param && param->tag == AST_IDENTIFIER &&
+          strcmp(param->data.AST_IDENTIFIER.value,
+                 ast->data.AST_IDENTIFIER.value) == 0) {
+        return;
+      }
+    }
+
+    if (spectral_capture_list_has_name(fn_ast->data.AST_LAMBDA.closed_vals,
+                                       ast->data.AST_IDENTIFIER.value)) {
+      return;
+    }
+
+    fn_ast->data.AST_LAMBDA.closed_vals =
+        ast_list_extend_left(fn_ast->data.AST_LAMBDA.closed_vals, ast);
+    fn_ast->data.AST_LAMBDA.num_closed_vals++;
+    return;
+  }
+
+  case AST_BODY:
+    AST_LIST_ITER(
+        ast->data.AST_BODY.stmts,
+        ({ spectral_collect_missing_captures_from_ast(l->ast, fn_ast, ctx); }));
+    return;
+
+  case AST_LET:
+    spectral_collect_missing_captures_from_ast(ast->data.AST_LET.expr, fn_ast,
+                                               ctx);
+    spectral_collect_missing_captures_from_ast(ast->data.AST_LET.in_expr,
+                                               fn_ast, ctx);
+    return;
+
+  case AST_UNOP:
+    spectral_collect_missing_captures_from_ast(ast->data.AST_UNOP.expr, fn_ast,
+                                               ctx);
+    return;
+
+  case AST_BINOP:
+    spectral_collect_missing_captures_from_ast(ast->data.AST_BINOP.left, fn_ast,
+                                               ctx);
+    spectral_collect_missing_captures_from_ast(ast->data.AST_BINOP.right,
+                                               fn_ast, ctx);
+    return;
+
+  case AST_APPLICATION:
+    spectral_collect_missing_captures_from_ast(
+        ast->data.AST_APPLICATION.function, fn_ast, ctx);
+    for (size_t i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      spectral_collect_missing_captures_from_ast(
+          ast->data.AST_APPLICATION.args + i, fn_ast, ctx);
+    }
+    return;
+
+  case AST_LAMBDA:
+    spectral_collect_missing_captures_from_ast(ast->data.AST_LAMBDA.body,
+                                               fn_ast, ctx);
+    return;
+
+  case AST_LIST:
+  case AST_ARRAY:
+  case AST_TUPLE:
+    for (size_t i = 0; i < ast->data.AST_LIST.len; i++) {
+      spectral_collect_missing_captures_from_ast(ast->data.AST_LIST.items + i,
+                                                 fn_ast, ctx);
+    }
+    return;
+
+  case AST_MATCH:
+    spectral_collect_missing_captures_from_ast(ast->data.AST_MATCH.expr, fn_ast,
+                                               ctx);
+    for (size_t i = 0; i < ast->data.AST_MATCH.len * 2; i++) {
+      spectral_collect_missing_captures_from_ast(
+          ast->data.AST_MATCH.branches + i, fn_ast, ctx);
+    }
+    return;
+
+  case AST_RECORD_ACCESS:
+    spectral_collect_missing_captures_from_ast(
+        ast->data.AST_RECORD_ACCESS.record, fn_ast, ctx);
+    spectral_collect_missing_captures_from_ast(
+        ast->data.AST_RECORD_ACCESS.member, fn_ast, ctx);
+    return;
+
+  case AST_MATCH_GUARD_CLAUSE:
+    spectral_collect_missing_captures_from_ast(
+        ast->data.AST_MATCH_GUARD_CLAUSE.test_expr, fn_ast, ctx);
+    spectral_collect_missing_captures_from_ast(
+        ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, fn_ast, ctx);
+    return;
+
+  case AST_YIELD:
+    spectral_collect_missing_captures_from_ast(ast->data.AST_YIELD.expr, fn_ast,
+                                               ctx);
+    return;
+
+  case AST_SPREAD_OP:
+    spectral_collect_missing_captures_from_ast(ast->data.AST_SPREAD_OP.expr,
+                                               fn_ast, ctx);
+    return;
+
+  case AST_RANGE_EXPRESSION:
+    spectral_collect_missing_captures_from_ast(
+        ast->data.AST_RANGE_EXPRESSION.from, fn_ast, ctx);
+    spectral_collect_missing_captures_from_ast(
+        ast->data.AST_RANGE_EXPRESSION.to, fn_ast, ctx);
+    return;
+
+  default:
+    return;
+  }
+}
+
 static int spectral_collect_captured_vals(Ast *fn_ast, DspBuildCtx *dsp_ctx,
                                           JITLangCtx *ctx, LLVMModuleRef module,
                                           LLVMBuilderRef builder,
                                           DspValue **out_vals,
                                           Type ***out_lang_tys) {
   int n = 0;
-  if (fn_ast->tag == AST_LAMBDA && fn_ast->type && fn_ast->type->closure_meta) {
-    n = fn_ast->type->closure_meta->data.T_CONS.num_args;
+  if (fn_ast->tag == AST_LAMBDA) {
+    if (fn_ast->data.AST_LAMBDA.body != NULL) {
+      spectral_collect_missing_captures_from_ast(fn_ast->data.AST_LAMBDA.body,
+                                                 fn_ast, ctx);
+    }
+    for (AstList *cv = fn_ast->data.AST_LAMBDA.closed_vals; cv; cv = cv->next) {
+      n++;
+    }
   }
 
   *out_vals = NULL;
@@ -94,6 +244,10 @@ static int spectral_collect_captured_vals(Ast *fn_ast, DspBuildCtx *dsp_ctx,
   *out_lang_tys = malloc(sizeof(Type *) * (size_t)n);
   int i = 0;
   for (AstList *cv = fn_ast->data.AST_LAMBDA.closed_vals; cv; cv = cv->next) {
+    if (cv->ast && cv->ast->tag == AST_IDENTIFIER) {
+      fprintf(stderr, "spectral capture: %s\n",
+              cv->ast->data.AST_IDENTIFIER.value);
+    }
     (*out_vals)[i] = dsp_build_expr(cv->ast, dsp_ctx, ctx, module, builder);
     (*out_lang_tys)[i] = cv->ast->type;
     i++;

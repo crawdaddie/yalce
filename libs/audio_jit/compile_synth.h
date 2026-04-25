@@ -6,8 +6,8 @@
 #include "../../lang/common.h"
 #include "../../lang/parse.h"
 #include <llvm-c/Core.h>
-#include <stddef.h>
 #include <stdatomic.h>
+#include <stddef.h>
 #include <stdint.h>
 
 typedef struct {

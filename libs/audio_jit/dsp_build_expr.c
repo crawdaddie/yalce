@@ -214,6 +214,13 @@ DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         //        ast->type->attr);
         return DSP_SCALAR(LLVMConstInt(f32_ty, dsp_ctx->spectral_fft_size, 0));
       }
+
+      if (strcmp(id_name, "fft_hop_size") == 0) {
+        // printf("fft size const??? -- has attr: %d %d\n",
+        //        has_attr(ast->type->attr, ATTR_COMPILE_TIME_CONST),
+        //        ast->type->attr);
+        return DSP_SCALAR(LLVMConstInt(f32_ty, dsp_ctx->spectral_hop_size, 0));
+      }
     }
     JITSymbol *sym = lookup_id_ast(ast, ctx);
     if (sym && sym->type == (symbol_type)STYPE_AUDIO_JIT_SYNTH_INLET) {
