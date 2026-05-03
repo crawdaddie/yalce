@@ -1,6 +1,7 @@
 include ../../.env
 
 CC ?= clang
+CXX ?= clang++
 LLVM        = ${LLVM_PATH}
 LLVM_CONFIG = $(LLVM)/bin/llvm-config
 
@@ -13,16 +14,28 @@ CFLAGS += `$(LLVM_CONFIG) --cflags`
 # Suppress warnings from unused Yalce include surface
 CFLAGS += -Wno-unused-parameter -Wno-unused-function
 
+CXXFLAGS  = $(CFLAGS)
+CXXFLAGS += -std=c++17
+CXXFLAGS += -I../rubberband
+CXXFLAGS += -I../rubberband/rubberband
+
 LDFLAGS   = -shared
 LDFLAGS  += `$(LLVM_CONFIG) --libs core linker passes` -lLLVM-21
 LDFLAGS  += -lfftw3 -lm
+
+ifeq ($(shell uname -s),Darwin)
+LDFLAGS += -framework Accelerate
+endif
 
 LIB_NAME    = libaudio_jit
 DYNAMIC_LIB = $(LIB_NAME).so
 BUILD_DIR   = build
 
-SOURCES = audio_jit.c compile_synth.c dsp_fn_application.c dsp_build_expr.c pattern_coroutine.c dsp_array_proc.c dsp_fork.c dsp_runtime.c dsp_spectral.c bin_scrambler_runtime.c
-OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(SOURCES))
+C_SOURCES = audio_jit.c compile_synth.c dsp_fn_application.c dsp_build_expr.c pattern_coroutine.c dsp_array_proc.c dsp_fork.c dsp_runtime.c dsp_spectral.c bin_scrambler_runtime.c
+CPP_SOURCES = rubberband_ffi.cpp
+OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
+OBJECTS += $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(CPP_SOURCES))
+OBJECTS += $(BUILD_DIR)/RubberBandSingle.o
 LOCAL_HEADERS = $(wildcard *.h)
 ENGINE_HEADERS = $(wildcard ../../engine/*.h)
 ENGINE_LIB = ../../engine/build/libyalce_synth.so
@@ -30,13 +43,19 @@ ENGINE_LIB = ../../engine/build/libyalce_synth.so
 all: $(DYNAMIC_LIB)
 
 $(DYNAMIC_LIB): $(OBJECTS)
-	$(CC) $(LDFLAGS) -o $@ $^
+	$(CXX) $(LDFLAGS) -o $@ $^
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 $(BUILD_DIR)/%.o: %.c $(LOCAL_HEADERS) $(ENGINE_HEADERS) $(ENGINE_LIB) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/%.o: %.cpp $(LOCAL_HEADERS) $(ENGINE_HEADERS) $(ENGINE_LIB) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/RubberBandSingle.o: ../rubberband/single/RubberBandSingle.cpp $(ENGINE_LIB) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
 	rm -rf $(BUILD_DIR) $(DYNAMIC_LIB)

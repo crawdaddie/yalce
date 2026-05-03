@@ -3813,6 +3813,165 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return DSP_MULTI(max_lanes, vals);
   }
 
+  if (is_ident(f, "frame_arr")) {
+    Ast *args = ast->data.AST_APPLICATION.args;
+    Type *arg_type = args->type;
+
+    int len;
+    if (args->tag == AST_INT) {
+      len = args->data.AST_INT.value;
+    } else if (args->tag == AST_IDENTIFIER && is_ident(args, "fft_size")) {
+      len = dsp_ctx->spectral_fft_size;
+    } else {
+      fprintf(stderr,
+              "Error: could not determine array size at compile time\n");
+    }
+
+    dsp_ctx->array_attrs.comptime_size = len;
+
+    Type *el_type = ast->type->data.T_CONS.args[0];
+    LLVMTypeRef el_llvm_ty = type_to_llvm_type(el_type, ctx, module);
+    LLVMTypeRef arr_ty = codegen_array_type(el_llvm_ty);
+    LLVMTypeRef arr_ptr_ty = LLVMPointerType(arr_ty, 0);
+    LLVMTypeRef el_ptr_ty = LLVMPointerType(el_llvm_ty, 0);
+
+    LLVMTypeRef i8_ty = LLVMInt8Type();
+    LLVMTypeRef i32_ty = LLVMInt32Type();
+    LLVMTypeRef i64_ty = LLVMInt64Type();
+
+    LLVMTargetDataRef data_layout = LLVMGetModuleDataLayout(module);
+    int el_size = (int)LLVMABISizeOfType(data_layout, el_llvm_ty);
+    int arr_size = (int)LLVMABISizeOfType(data_layout, arr_ty);
+
+    // Non-hoisted: allocate on frame stack and fill each frame
+    LLVMValueRef len_i32 = LLVMConstInt(i32_ty, (uint64_t)len, 0);
+    LLVMValueRef frame_data_ptr =
+        LLVMBuildArrayAlloca(builder, el_llvm_ty, len_i32, "array.frame.data");
+
+    LLVMValueRef fill_elem =
+        dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder).scalar;
+    fill_elem = handle_type_conversions(fill_elem, (args + 1)->type, el_type,
+                                        ctx, module, builder);
+
+    for (int i = 0; i < len; i++) {
+      LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
+      LLVMValueRef elem_ptr = LLVMBuildGEP2(builder, el_llvm_ty, frame_data_ptr,
+                                            &idx_i64, 1, "array.frame.ptr");
+      LLVMBuildStore(builder, fill_elem, elem_ptr);
+    }
+
+    LLVMValueRef arr_val = LLVMGetUndef(arr_ty);
+    arr_val = LLVMBuildInsertValue(builder, arr_val, len_i32, 0, "array.size");
+    arr_val =
+        LLVMBuildInsertValue(builder, arr_val, frame_data_ptr, 1, "array.data");
+    return DSP_SCALAR(arr_val);
+  }
+
+  if (is_ident(f, "state_arr")) {
+    Ast *args = ast->data.AST_APPLICATION.args;
+    Type *arg_type = args->type;
+
+    int len;
+    if (args->tag == AST_INT) {
+      len = args->data.AST_INT.value;
+    } else if (args->tag == AST_IDENTIFIER && is_ident(args, "fft_size")) {
+      len = dsp_ctx->spectral_fft_size;
+    } else {
+      fprintf(stderr,
+              "Error: could not determine array size at compile time\n");
+    }
+
+    dsp_ctx->array_attrs.comptime_size = len;
+
+    Type *el_type = ast->type->data.T_CONS.args[0];
+    LLVMTypeRef el_llvm_ty = type_to_llvm_type(el_type, ctx, module);
+    LLVMTypeRef arr_ty = codegen_array_type(el_llvm_ty);
+    LLVMTypeRef arr_ptr_ty = LLVMPointerType(arr_ty, 0);
+    LLVMTypeRef el_ptr_ty = LLVMPointerType(el_llvm_ty, 0);
+
+    LLVMTypeRef i8_ty = LLVMInt8Type();
+    LLVMTypeRef i32_ty = LLVMInt32Type();
+    LLVMTypeRef i64_ty = LLVMInt64Type();
+
+    LLVMTargetDataRef data_layout = LLVMGetModuleDataLayout(module);
+    int el_size = (int)LLVMABISizeOfType(data_layout, el_llvm_ty);
+    int arr_size = (int)LLVMABISizeOfType(data_layout, arr_ty);
+
+    bool hoist_to_synth_lifetime = true;
+
+    if (hoist_to_synth_lifetime) {
+      int off = (dsp_ctx->state_offset + 7) & ~7;
+      int data_off = off + arr_size;
+      int total_bytes = arr_size + (len * el_size);
+      dsp_ctx->state_offset = data_off + (len * el_size);
+
+      if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
+        LLVMValueRef init_base = dsp_consume_init_state(
+            dsp_ctx, dsp_ctx->init_builder, total_bytes, 8, "array.ctor.base");
+        LLVMValueRef arr_ptr = LLVMBuildBitCast(
+            dsp_ctx->init_builder, init_base, arr_ptr_ty, "array.ctor.ptr");
+        LLVMValueRef ctor_base_i8 = LLVMBuildGEP2(
+            dsp_ctx->init_builder, i8_ty, init_base,
+            (LLVMValueRef[]){LLVMConstInt(i64_ty, (uint64_t)arr_size, 0)}, 1,
+            "array.ctor.base");
+        LLVMValueRef ctor_base = LLVMBuildBitCast(
+            dsp_ctx->init_builder, ctor_base_i8, el_ptr_ty, "array.ctor.data");
+
+        LLVMValueRef arr_init = LLVMGetUndef(arr_ty);
+        arr_init = LLVMBuildInsertValue(dsp_ctx->init_builder, arr_init,
+                                        LLVMConstInt(i32_ty, (uint64_t)len, 0),
+                                        0, "array.ctor.size");
+        arr_init = LLVMBuildInsertValue(dsp_ctx->init_builder, arr_init,
+                                        ctor_base, 1, "array.ctor.data_ptr");
+        LLVMBuildStore(dsp_ctx->init_builder, arr_init, arr_ptr);
+
+        LLVMValueRef fill_elem = dsp_build_expr(args + 1, dsp_ctx, ctx, module,
+                                                dsp_ctx->init_builder)
+                                     .scalar;
+        fill_elem =
+            handle_type_conversions(fill_elem, (args + 1)->type, el_type, ctx,
+                                    module, dsp_ctx->init_builder);
+
+        for (int i = 0; i < len; i++) {
+          LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
+          LLVMValueRef elem_ptr =
+              LLVMBuildGEP2(dsp_ctx->init_builder, el_llvm_ty, ctor_base,
+                            &idx_i64, 1, "array.init.ptr");
+          LLVMBuildStore(dsp_ctx->init_builder, fill_elem, elem_ptr);
+        }
+      }
+
+      LLVMValueRef arr_ptr_i8 = dsp_consume_frame_state(
+          dsp_ctx, builder, total_bytes, 8, "array.ptr");
+      LLVMValueRef arr_ptr =
+          LLVMBuildBitCast(builder, arr_ptr_i8, arr_ptr_ty, "array.ptr");
+      return DSP_SCALAR(LLVMBuildLoad2(builder, arr_ty, arr_ptr, "array.load"));
+    }
+
+    // Non-hoisted: allocate on frame stack and fill each frame
+    LLVMValueRef len_i32 = LLVMConstInt(i32_ty, (uint64_t)len, 0);
+    LLVMValueRef frame_data_ptr =
+        LLVMBuildArrayAlloca(builder, el_llvm_ty, len_i32, "array.frame.data");
+
+    LLVMValueRef fill_elem =
+        dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder).scalar;
+    fill_elem = handle_type_conversions(fill_elem, (args + 1)->type, el_type,
+                                        ctx, module, builder);
+
+    for (int i = 0; i < len; i++) {
+      LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
+      LLVMValueRef elem_ptr = LLVMBuildGEP2(builder, el_llvm_ty, frame_data_ptr,
+                                            &idx_i64, 1, "array.frame.ptr");
+      LLVMBuildStore(builder, fill_elem, elem_ptr);
+    }
+
+    LLVMValueRef arr_val = LLVMGetUndef(arr_ty);
+    arr_val = LLVMBuildInsertValue(builder, arr_val, len_i32, 0, "array.size");
+    arr_val =
+        LLVMBuildInsertValue(builder, arr_val, frame_data_ptr, 1, "array.data");
+    return DSP_SCALAR(arr_val);
+  }
+
   if (is_ident(f, "array_fill_const")) {
     Ast *args = ast->data.AST_APPLICATION.args;
     Type *arg_type = args->type;
@@ -4133,6 +4292,15 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
     if (callable_sym->type == STYPE_LAZY_EXTERN_FUNCTION) {
       callable = instantiate_extern_fn_sym(callable_sym, ctx, module, builder);
+      // LLVMDumpValue(callable);
+      // printf("\n");
+    }
+    if (callable_sym->type == STYPE_GENERIC_FUNCTION &&
+        callable_sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
+      LLVMValueRef res =
+          callable_sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
+              ast, ctx, module, builder);
+      return DSP_ZERO;
     }
 
     Type *expected_fn_type = ast->data.AST_APPLICATION.function->type;
