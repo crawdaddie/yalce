@@ -17,6 +17,7 @@
 #include "./dsp_array_proc.h"
 #include "./dsp_build_expr.h"
 #include "./dsp_fork.h"
+#include "./dsp_rubber_band.h"
 #include "./dsp_spectral.h"
 #include <llvm-c/Target.h>
 #include <llvm-c/Types.h>
@@ -3758,6 +3759,14 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
     return build_bufplay(buf, rate, start_pos, trig, num_channels, dsp_ctx, ctx,
                          module, builder);
+  }
+
+  if (is_ident(f, "rbufplay")) {
+    return dsp_rubberband_bufplay(ast, dsp_ctx, ctx, module, builder);
+  }
+
+  if (is_ident(f, "rbufplay_finer")) {
+    return dsp_rubberband_bufplay_finer(ast, dsp_ctx, ctx, module, builder);
   }
 
   if (is_ident(f, "grains")) {

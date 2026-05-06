@@ -18,4 +18,7 @@ extern int STYPE_AUDIO_JIT_SYNTH_INLET;
 extern int STYPE_AUDIO_JIT_LOCAL_ARRAY;
 extern int STYPE_AUDIO_JIT_DSP_VALUE;
 
+void *fftw_plan_forward_new(int fft_size);
+void fftw_plan_free(void *plan);
+
 #endif

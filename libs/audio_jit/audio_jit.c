@@ -22,6 +22,7 @@
 #include "./dsp_fn_application.h"
 #include "pattern_coroutine.h"
 
+#include <fftw3.h>
 #include <llvm-c/Core.h>
 #include <math.h>
 #include <stdint.h>
@@ -86,6 +87,36 @@ int ylc_rand_int(int n) {
   if (n <= 1)
     return 0;
   return rand() % n;
+}
+
+void *fftw_plan_forward_new(int fft_size) {
+  if (fft_size <= 0) {
+    return NULL;
+  }
+
+  double *in = fftw_alloc_real((size_t)fft_size);
+  fftw_complex *out = fftw_alloc_complex((size_t)(fft_size / 2 + 1));
+  if (!in || !out) {
+    if (in) {
+      fftw_free(in);
+    }
+    if (out) {
+      fftw_free(out);
+    }
+    return NULL;
+  }
+
+  fftw_plan plan = fftw_plan_dft_r2c_1d(fft_size, in, out, FFTW_MEASURE);
+  fftw_free(in);
+  fftw_free(out);
+  return (void *)plan;
+}
+
+void fftw_plan_free(void *plan) {
+  if (!plan) {
+    return;
+  }
+  fftw_destroy_plan((fftw_plan)plan);
 }
 
 Node *ylc_const_inlet(double val) {

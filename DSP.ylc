@@ -43,6 +43,8 @@ let lag = extern fn Double -> Double -> Double;
 let arr_choose = extern fn Array of Double -> Double -> Double;
 let arr_seq = extern fn Array of Double -> Double -> Double;
 let pan2 = extern fn Double -> Double;
+let fftw_plan_forward_new = extern fn Int -> Ptr;
+let fftw_plan_free = extern fn Ptr -> ();
 
 let delay_line = extern fn Double -> Array of Double;
 let dsp_mmul_op = extern fn Array of Double -> Array of Double -> Array of Double -> Array of Double;
@@ -56,6 +58,9 @@ let mix = extern fn Int -> Double -> Double;
 #                       buf                rate      start_pos trig
 let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;
 let mbufplay = extern fn Int -> Array of Double -> Double -> Double -> Double -> Double;
+
+let rbufplay = extern fn Int -> Array of Double -> Double -> Double -> Double -> Double -> Double;
+let rbufplay_finer = extern fn Int -> Array of Double -> Double -> Double -> Double -> Double -> Double;
 
 #                      max_grains   buf                rate      pos       width     trig
 let grains = extern fn Int ->       Array of Double -> Double -> Double -> Double -> Double;

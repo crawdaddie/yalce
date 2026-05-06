@@ -13,6 +13,8 @@
 #include "llvm-c/Core.h"
 #include <string.h>
 
+#define is_ident(f, name) strcmp(f->data.AST_IDENTIFIER.value, name) == 0
+
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);
 LLVMValueRef handle_constructor_module_conversion(
@@ -281,24 +283,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->type;
 
-  if (is_generic(expected_fn_type)) {
-    expected_fn_type = deep_copy_type(expected_fn_type);
-    expected_fn_type = resolve_type_in_env(expected_fn_type, ctx->env);
-    Type *ex = expected_fn_type;
-    for (int i = 0; i < ast->data.AST_APPLICATION.len;
-         i++, ex = ex->data.T_FN.to) {
-      if (ast->data.AST_APPLICATION.args[i].tag == AST_IDENTIFIER) {
-        JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.args + i, ctx);
-        if (sym && sym->type == STYPE_FUNCTION &&
-            is_closure(
-                sym->symbol_type)) { // detect closure set in current scope if
-                                     // can also be bound to a normal function
-          ex->data.T_FN.from = sym->symbol_type;
-        }
-      }
-    }
-  }
-
   Type *res_type = ast->type;
 
   if (is_closure(res_type) && application_is_partial(ast)) {
@@ -335,6 +319,11 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
+  if (is_ident(ast->data.AST_APPLICATION.function, "f")) {
+    print_ast(ast);
+    print_type(expected_fn_type);
+    print_type(sym->symbol_type);
+  }
 
   if (!sym) {
 
@@ -344,6 +333,24 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     // printf("tag %d\n", ast->data.AST_APPLICATION.function->tag);
     print_location(ast->data.AST_APPLICATION.function);
     return NULL;
+  }
+
+  if (is_generic(expected_fn_type)) {
+    expected_fn_type = deep_copy_type(expected_fn_type);
+    expected_fn_type = resolve_type_in_env(expected_fn_type, ctx->env);
+    Type *ex = expected_fn_type;
+    for (int i = 0; i < ast->data.AST_APPLICATION.len;
+         i++, ex = ex->data.T_FN.to) {
+      if (ast->data.AST_APPLICATION.args[i].tag == AST_IDENTIFIER) {
+        JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.args + i, ctx);
+        if (sym && sym->type == STYPE_FUNCTION &&
+            is_closure(
+                sym->symbol_type)) { // detect closure set in current scope if
+                                     // can also be bound to a normal function
+          ex->data.T_FN.from = sym->symbol_type;
+        }
+      }
+    }
   }
 
   if (is_closure_symbol(sym)) {

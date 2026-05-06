@@ -31,8 +31,8 @@ LIB_NAME    = libaudio_jit
 DYNAMIC_LIB = $(LIB_NAME).so
 BUILD_DIR   = build
 
-C_SOURCES = audio_jit.c compile_synth.c dsp_fn_application.c dsp_build_expr.c pattern_coroutine.c dsp_array_proc.c dsp_fork.c dsp_runtime.c dsp_spectral.c bin_scrambler_runtime.c
-CPP_SOURCES = rubberband_ffi.cpp
+C_SOURCES = audio_jit.c compile_synth.c dsp_fn_application.c dsp_build_expr.c pattern_coroutine.c dsp_array_proc.c dsp_fork.c dsp_runtime.c dsp_spectral.c dsp_rubber_band.c
+CPP_SOURCES =
 OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
 OBJECTS += $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(CPP_SOURCES))
 OBJECTS += $(BUILD_DIR)/RubberBandSingle.o
