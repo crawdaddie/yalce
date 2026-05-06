@@ -97,19 +97,6 @@ match a < b with
       #   r
       # ) car car
 #
-# compile_audio_fn (
-#   let bin_scramble = fn () ->
-#     open Spectral;
-#     let s = 0.4;
-#     let scat = 0.2;
-#     [
-#       mbufplay 2 (array_of_buf buf) 1. 0. (trig 0) |> mix 1,
-#     ]
-#     |> fft 2048 128
-#       (fn mod ->
-#         mod |> pv_bin_scramble s scat 1.
-#       )
-# );
 
 # bin_scramble () |> play_node
 # x2 () |> play_node
@@ -134,5 +121,4 @@ compile_audio_fn (
     )
     # |> Reverb.cathedral
 );
-
 xsynth () |> play_node

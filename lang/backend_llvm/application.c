@@ -315,31 +315,15 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->type;
 
-  const char *sym_name;
-  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
-    sym_name = ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
-  } else if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
-    Ast *id = ast->data.AST_APPLICATION.function;
-    while (id->tag == AST_RECORD_ACCESS) {
-      id = id->data.AST_RECORD_ACCESS.member;
-    }
+  // if (is_ident(ast->data.AST_APPLICATION.function, "f")) {
+  //   print_ast(ast);
+  //   print_type(expected_fn_type);
+  //   print_type(sym->symbol_type);
+  // }
 
-    sym_name = id->data.AST_IDENTIFIER.value;
-
-  } else {
-    sym_name = "";
-  }
-
-  JITSymbol *sym = get_callable_symbol(ast, ctx);
-  if (is_ident(ast->data.AST_APPLICATION.function, "f")) {
-    print_ast(ast);
-    print_type(expected_fn_type);
-    print_type(sym->symbol_type);
-  }
-
-  if (sym && !is_closure(expected_fn_type) && is_closure(sym->symbol_type)) {
-    expected_fn_type->closure_meta = sym->symbol_type->closure_meta;
-  }
+  // if (sym && !is_closure(expected_fn_type) && is_closure(sym->symbol_type)) {
+  //   expected_fn_type->closure_meta = sym->symbol_type->closure_meta;
+  // }
 
   if (is_generic(expected_fn_type)) {
     expected_fn_type = deep_copy_type(expected_fn_type);
@@ -380,8 +364,41 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
     return call_callable(ast, callable_type, callable, ctx, module, builder);
   }
+  const char *sym_name;
+  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
+    sym_name = ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+  } else if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
+    Ast *id = ast->data.AST_APPLICATION.function;
+    while (id->tag == AST_RECORD_ACCESS) {
+      id = id->data.AST_RECORD_ACCESS.member;
+    }
+
+    sym_name = id->data.AST_IDENTIFIER.value;
+
+  } else {
+    sym_name = "";
+  }
+
+  JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
   if (!sym) {
-    return NULL;
+
+    char *buf = malloc(sizeof(char) * 32);
+    ast_to_sexpr(ast->data.AST_APPLICATION.function, buf);
+    fprintf(stderr, "Error callable symbol `%s` not found in scope %d\n", buf,
+            ctx->stack_ptr);
+    print_location(ast->data.AST_APPLICATION.function);
+  }
+
+  if (is_ident(ast->data.AST_APPLICATION.function, "f")) {
+    print_ast(ast);
+    print_type(callable_type);
+    print_type(sym->symbol_type);
+  }
+
+  if (sym->type == STYPE_FUNCTION && !is_closure(callable_type) &&
+      is_closure(sym->symbol_type)) {
+    expected_fn_type->closure_meta = sym->symbol_type->closure_meta;
+    callable_type->closure_meta = sym->symbol_type->closure_meta;
   }
 
   if (is_closure_symbol(sym)) {
