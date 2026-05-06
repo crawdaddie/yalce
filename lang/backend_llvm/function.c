@@ -38,7 +38,13 @@ LLVMTypeRef codegen_fn_type(LLVMTypeRef opt_ret_type, Type *fn_type, int fn_len,
        f = f->data.T_FN.to, i++) {
 
     Type *t = f->data.T_FN.from;
-    if (t->kind == T_FN) {
+    if (is_closure(t)) {
+      LLVMTypeRef tref = type_to_llvm_type(t, ctx, module);
+      if (!tref) {
+        return NULL;
+      }
+      llvm_param_types[i] = tref;
+    } else if (t->kind == T_FN) {
       llvm_param_types[i] = GENERIC_PTR;
     } else if (is_pointer_type(t) && t->data.T_CONS.num_args == 0) {
       llvm_param_types[i] = GENERIC_PTR;
@@ -265,6 +271,12 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMTypeRef prototype =
       codegen_fn_type(NULL, fn_type, fn_len + num_closure_vars, ctx, module);
+
+  // print_ast(ast);
+  // LLVMDumpType(prototype);
+  // printf("\n");
+  // print_type(fn_type);
+  // printf("\n\n");
 
   if (!prototype) {
     return NULL;

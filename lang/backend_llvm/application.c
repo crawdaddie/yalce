@@ -1,6 +1,7 @@
 #include "backend_llvm/application.h"
 #include "./coroutines/coroutines.h"
 #include "adt.h"
+#include "backend_llvm/call_lowering.h"
 #include "closures.h"
 #include "coroutines/coroutine_extensions.h"
 #include "function.h"
@@ -232,8 +233,10 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
     return NULL;
   }
 
+  LoweredCallable lowered =
+      lower_callable_value(callable, callable_type, ctx, module, builder);
   LLVMTypeRef llvm_callable_type =
-      type_to_llvm_type(callable_type, ctx, module);
+      lowered_callable_llvm_type(lowered, callable_type, ctx, module);
 
   Ast _ast = *ast;
 
@@ -241,8 +244,7 @@ LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
     _ast.data.AST_APPLICATION.len = 0;
   }
 
-  return call_callable_rec(0, NULL, &_ast, callable_type, llvm_callable_type,
-                           callable, ctx, module, builder);
+  return emit_lowered_call(&_ast, lowered, callable_type, ctx, module, builder);
 }
 
 Type *resolve_sym_type(Type *exp, Type *sym_type, TypeEnv *env) {
@@ -254,6 +256,7 @@ Type *resolve_sym_type(Type *exp, Type *sym_type, TypeEnv *env) {
   Subst *subst = solve_constraints(ctx.constraints);
   env = create_env_from_subst(env, subst);
   Type *res = deep_copy_type(sym_copy);
+
   return resolve_type_in_env(res, env);
 }
 
@@ -261,6 +264,37 @@ bool is_closure_symbol(JITSymbol *sym) {
   return sym->symbol_type && is_closure(sym->symbol_type);
 }
 
+#define is_ident(f, name) strcmp(f->data.AST_IDENTIFIER.value, name) == 0
+
+JITSymbol *get_callable_symbol(Ast *ast, JITLangCtx *ctx) {
+
+  const char *sym_name;
+  if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
+    sym_name = ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+  } else if (ast->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
+    Ast *id = ast->data.AST_APPLICATION.function;
+    while (id->tag == AST_RECORD_ACCESS) {
+      id = id->data.AST_RECORD_ACCESS.member;
+    }
+
+    sym_name = id->data.AST_IDENTIFIER.value;
+
+  } else {
+    sym_name = "";
+  }
+  JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
+
+  if (!sym) {
+    fprintf(stderr, "Error callable symbol `%s` not found in scope %d\n",
+            sym_name, ctx->stack_ptr);
+    // print_ast(ast->data.AST_APPLICATION.function);
+    // printf("tag %d\n", ast->data.AST_APPLICATION.function->tag);
+    print_location(ast->data.AST_APPLICATION.function);
+    return NULL;
+  }
+
+  return sym;
+}
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   // TODO: this function is extraordinarily ugly - refactor to something a bit
@@ -283,6 +317,36 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->type;
 
+  // if (is_ident(ast->data.AST_APPLICATION.function, "f")) {
+  //   print_ast(ast);
+  //   print_type(expected_fn_type);
+  //   print_type(sym->symbol_type);
+  // }
+
+  // if (sym && !is_closure(expected_fn_type) && is_closure(sym->symbol_type)) {
+  //   expected_fn_type->closure_meta = sym->symbol_type->closure_meta;
+  // }
+
+  if (is_generic(expected_fn_type)) {
+    expected_fn_type = deep_copy_type(expected_fn_type);
+    expected_fn_type = resolve_type_in_env(expected_fn_type, ctx->env);
+    Type *ex = expected_fn_type;
+
+    for (int i = 0; i < ast->data.AST_APPLICATION.len;
+         i++, ex = ex->data.T_FN.to) {
+
+      if (ast->data.AST_APPLICATION.args[i].tag == AST_IDENTIFIER) {
+        JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.args + i, ctx);
+        if (sym && sym->type == STYPE_FUNCTION &&
+            is_closure(
+                sym->symbol_type)) { // detect closure set in current scope if
+                                     // can also be bound to a normal function
+          ex->data.T_FN.from = sym->symbol_type;
+        }
+      }
+    }
+  }
+
   Type *res_type = ast->type;
 
   if (is_closure(res_type) && application_is_partial(ast)) {
@@ -302,7 +366,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
 
     return call_callable(ast, callable_type, callable, ctx, module, builder);
   }
-
   const char *sym_name;
   if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
     sym_name = ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
@@ -319,20 +382,25 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   JITSymbol *sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
+  if (!sym) {
+
+    char *buf = malloc(sizeof(char) * 32);
+    ast_to_sexpr(ast->data.AST_APPLICATION.function, buf);
+    fprintf(stderr, "Error callable symbol `%s` not found in scope %d\n", buf,
+            ctx->stack_ptr);
+    print_location(ast->data.AST_APPLICATION.function);
+  }
+
   if (is_ident(ast->data.AST_APPLICATION.function, "f")) {
     print_ast(ast);
-    print_type(expected_fn_type);
+    print_type(callable_type);
     print_type(sym->symbol_type);
   }
 
-  if (!sym) {
-
-    fprintf(stderr, "Error callable symbol `%s` not found in scope %d\n",
-            sym_name, ctx->stack_ptr);
-    // print_ast(ast->data.AST_APPLICATION.function);
-    // printf("tag %d\n", ast->data.AST_APPLICATION.function->tag);
-    print_location(ast->data.AST_APPLICATION.function);
-    return NULL;
+  if (sym->type == STYPE_FUNCTION && !is_closure(callable_type) &&
+      is_closure(sym->symbol_type)) {
+    expected_fn_type->closure_meta = sym->symbol_type->closure_meta;
+    callable_type->closure_meta = sym->symbol_type->closure_meta;
   }
 
   if (is_generic(expected_fn_type)) {
@@ -385,6 +453,8 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_GENERIC_FUNCTION && !is_closure(sym->symbol_type)) {
+
+    // }
     callable_type =
         resolve_sym_type(expected_fn_type, sym->symbol_type, ctx->env);
 
@@ -408,7 +478,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   //   // sym->symbol_data.STYPE_MODULE.
   //   return NULL;
   // }
-
   if (sym->type == STYPE_FUNCTION) {
     callable_type = sym->symbol_type;
 

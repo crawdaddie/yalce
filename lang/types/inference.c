@@ -134,6 +134,7 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) {
 
   switch (r->kind) {
   case T_VAR: {
+    Type *saved_closure_meta = r->closure_meta;
 
     if (r->is_recursive_type_ref) {
       // TODO??? wtf
@@ -146,11 +147,21 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) {
     }
 
     if (rr && rr->kind == T_VAR) {
-      return resolve_type_in_env(rr, env);
+      Type *resolved = deep_copy_type(rr);
+      resolved = resolve_type_in_env(resolved, env);
+      if (saved_closure_meta && !resolved->closure_meta) {
+        resolved->closure_meta = deep_copy_type(saved_closure_meta);
+      }
+      return resolved;
     }
 
     if (rr) {
-      *r = *rr;
+      Type *resolved = deep_copy_type(rr);
+      resolved = resolve_type_in_env(resolved, env);
+      if (saved_closure_meta && !resolved->closure_meta) {
+        resolved->closure_meta = deep_copy_type(saved_closure_meta);
+      }
+      *r = *resolved;
     }
 
     return r;
@@ -474,6 +485,17 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
   // Case 3: Function types - recurse and merge constraints
   if (t1->kind == T_FN && t2->kind == T_FN) {
+    TICtx ur0 = {};
+    if (t1->closure_meta && t2->closure_meta) {
+      if (unify(t1->closure_meta, t2->closure_meta, &ur0) != 0) {
+        return 1;
+      }
+    } else if (t1->closure_meta && !t2->closure_meta) {
+      t2->closure_meta = deep_copy_type(t1->closure_meta);
+    } else if (!t1->closure_meta && t2->closure_meta) {
+      t1->closure_meta = deep_copy_type(t2->closure_meta);
+    }
+
     // Unify parameter types
     TICtx ur1 = {};
     if (unify(t1->data.T_FN.from, t2->data.T_FN.from, &ur1) != 0) {
@@ -493,6 +515,8 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
     }
 
     // Merge all constraints (don't solve them)
+    unify_res->constraints =
+        merge_constraints(unify_res->constraints, ur0.constraints);
     unify_res->constraints =
         merge_constraints(unify_res->constraints, ur1.constraints);
     unify_res->constraints =
