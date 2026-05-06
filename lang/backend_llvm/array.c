@@ -3,6 +3,7 @@
 #include "types.h"
 #include "types/type_ser.h"
 #include <llvm-c/Core.h>
+#include <string.h>
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
@@ -260,7 +261,6 @@ LLVMValueRef ArrayFillConstHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef size_const =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  // Get the constant fill value from arg 2 instead of a function
   LLVMValueRef const_fill_value =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 

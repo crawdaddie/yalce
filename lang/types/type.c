@@ -300,6 +300,7 @@ Type *create_tuple_type(int len, Type **contained_types) {
 Type *deep_copy_type(const Type *original) {
   Type *copy = t_alloc(sizeof(Type));
   *copy = *original;
+
   if (original->closure_meta != NULL) {
     copy->closure_meta = deep_copy_type(original->closure_meta);
   }

@@ -385,7 +385,7 @@ LLVMTypeRef closure_fn_type(Type *clos_type, LLVMTypeRef closure_rec_type,
 
   Type *t = clos_type;
 
-  while (!is_closure(t->data.T_FN.from) && t->kind == T_FN) {
+  while (t->kind == T_FN && !is_closure(t->data.T_FN.from)) {
     args_len++;
     t = t->data.T_FN.to;
   }
