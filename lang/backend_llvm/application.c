@@ -331,6 +331,11 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   JITSymbol *sym = get_callable_symbol(ast, ctx);
+  if (is_ident(ast->data.AST_APPLICATION.function, "f")) {
+    print_ast(ast);
+    print_type(expected_fn_type);
+    print_type(sym->symbol_type);
+  }
 
   if (sym && !is_closure(expected_fn_type) && is_closure(sym->symbol_type)) {
     expected_fn_type->closure_meta = sym->symbol_type->closure_meta;
