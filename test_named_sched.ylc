@@ -1,0 +1,35 @@
+open engine/bindings/Synth; 
+open engine/bindings/Sched; 
+
+
+let q = 1.;
+let pat =
+  [| 1., 2., 1., 1. |]
+  |> iter_of_array
+  |> cor_loop
+  |> cor_map (fn d -> print `yield d: {d}\n`; d)
+  ;
+
+let Patterns = module () -> 
+  type Pat = (
+    key: String,
+    pat: Coroutine of T,
+    quant: Double,
+  );
+
+  let play = fn cor: (Coroutine of T) ->
+    let q = 1.;
+    cor |> play_routine_quant q schedule_event
+
+  ;;
+;
+
+pat |> Patterns.play;
+
+
+# let n = Patterns.NamedPattern "key" pat q;
+
+# # maintain hashmap of running patterns, when one is replaced stop it and replace it with the new one
+# let named_pattern = fn key t p ->
+# ;;
+#
