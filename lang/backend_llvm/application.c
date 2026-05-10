@@ -391,12 +391,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     print_location(ast->data.AST_APPLICATION.function);
   }
 
-  if (is_ident(ast->data.AST_APPLICATION.function, "f")) {
-    print_ast(ast);
-    print_type(callable_type);
-    print_type(sym->symbol_type);
-  }
-
   if (sym->type == STYPE_FUNCTION && !is_closure(callable_type) &&
       is_closure(sym->symbol_type)) {
     expected_fn_type->closure_meta = sym->symbol_type->closure_meta;
@@ -453,8 +447,10 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->type == STYPE_GENERIC_FUNCTION && !is_closure(sym->symbol_type)) {
+    // print_ast(ast);
+    // print_type(expected_fn_type);
+    // printf("\n\n");
 
-    // }
     callable_type =
         resolve_sym_type(expected_fn_type, sym->symbol_type, ctx->env);
 

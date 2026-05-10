@@ -307,14 +307,16 @@ int jit(int argc, char **argv) {
       target, triple, "generic", "", LLVMCodeGenLevelDefault, LLVMRelocDefault,
       LLVMCodeModelDefault);
 
-  // // Set the module's target triple and data layout from the target machine
-  // LLVMSetTarget(module, triple);
-  // LLVMTargetDataRef data_layout = LLVMCreateTargetDataLayout(target_machine);
-  // char *data_layout_str = LLVMCopyStringRepOfTargetData(data_layout);
-  // LLVMSetDataLayout(module, data_layout_str);
-  // LLVMDisposeMessage(data_layout_str);
-  // LLVMDisposeTargetData(data_layout);
-  //
+  // Set the module's target triple and data layout from the target machine.
+  // This is required for correct ABI lowering of aggregates such as
+  // `{ i32, ptr }` when calling extern C functions.
+  LLVMSetTarget(module, triple);
+  LLVMTargetDataRef data_layout = LLVMCreateTargetDataLayout(target_machine);
+  char *data_layout_str = LLVMCopyStringRepOfTargetData(data_layout);
+  LLVMSetDataLayout(module, data_layout_str);
+  LLVMDisposeMessage(data_layout_str);
+  LLVMDisposeTargetData(data_layout);
+
   void *global_storage_array[GLOBAL_STORAGE_CAPACITY];
   int global_storage_capacity = GLOBAL_STORAGE_CAPACITY;
   int num_globals = 0;

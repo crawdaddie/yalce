@@ -2,6 +2,7 @@
 # Regenerate with: make -C engine ylc_bindings
 let _ = dlopen "../build/libyalce_synth.so";
 type Synth = Ptr;
+# let null_synth_ptr = fn () -> 0;;
 
 # type SynthInput = 
 #   | Scalar of Int

@@ -198,6 +198,80 @@ LLVMValueRef curried_binop(Ast *saved_arg_ast, LLVMOpcode fop, LLVMOpcode iop,
   return func;
 }
 
+static Type *resolve_ord_target_type(Type *lt, Type *rt) {
+  if (types_equal(lt, rt)) {
+    return lt;
+  }
+  if (get_typeclass_rank(lt, "ord") >= get_typeclass_rank(rt, "ord")) {
+    return lt;
+  }
+  return rt;
+}
+
+static LLVMValueRef build_ord_compare(const char *name, LLVMRealPredicate fpred,
+                                      LLVMIntPredicate spred,
+                                      LLVMIntPredicate upred, LLVMValueRef l,
+                                      LLVMValueRef r, Type *target_type,
+                                      LLVMBuilderRef builder) {
+  switch (target_type->kind) {
+  case T_INT:
+  case T_CHAR: {
+    return LLVMBuildICmp(builder, spred, l, r, name);
+  }
+  case T_UINT64: {
+    return LLVMBuildICmp(builder, upred, l, r, name);
+  }
+  case T_NUM: {
+    return LLVMBuildFCmp(builder, fpred, l, r, name);
+  }
+  default: {
+    fprintf(stderr, "Error: unrecognized operands for ord binop\n");
+    return NULL;
+  }
+  }
+}
+
+LLVMValueRef curried_comparison_binop(Ast *saved_arg_ast,
+                                      LLVMRealPredicate fpred,
+                                      LLVMIntPredicate spred,
+                                      LLVMIntPredicate upred, Type *type,
+                                      JITLangCtx *ctx, LLVMModuleRef module,
+                                      LLVMBuilderRef builder) {
+
+  Type *free_arg_type = resolve_type_in_env(type->data.T_FN.from, ctx->env);
+  Type *saved_arg_type = resolve_type_in_env(saved_arg_ast->type, ctx->env);
+  Type *target_type = resolve_ord_target_type(saved_arg_type, free_arg_type);
+
+  LLVMTypeRef llvm_return_type_ref = LLVMInt1Type();
+  LLVMTypeRef llvm_from_type_ref =
+      type_to_llvm_type(type->data.T_FN.from, ctx, module);
+
+  LLVMTypeRef curried_fn_type = LLVMFunctionType(
+      llvm_return_type_ref, (LLVMTypeRef[]){llvm_from_type_ref}, 1, 0);
+
+  START_FUNC(module, "anon_curried_cmp_binop", curried_fn_type);
+
+  LLVMValueRef saved_arg = codegen(saved_arg_ast, ctx, module, builder);
+  LLVMValueRef free_arg = LLVMGetParam(func, 0);
+
+  saved_arg = handle_type_conversions(saved_arg, saved_arg_type, target_type,
+                                      ctx, module, builder);
+  free_arg = handle_type_conversions(free_arg, free_arg_type, target_type, ctx,
+                                     module, builder);
+
+  LLVMValueRef cmp =
+      build_ord_compare("curried_cmp_binop", fpred, spred, upred, saved_arg,
+                        free_arg, target_type, builder);
+  if (!cmp) {
+    return NULL;
+  }
+
+  LLVMBuildRet(builder, cmp);
+
+  END_FUNC
+  return func;
+}
+
 LLVMValueRef SumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
@@ -282,84 +356,37 @@ LLVMValueRef ModHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef gte_val(LLVMValueRef val, LLVMValueRef from, Type *type,
                      JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
-  LLVMValueRef l = val;
-  LLVMValueRef r = from;
-
-  switch (type->kind) {
-  case T_INT:
-  case T_CHAR:
-  case T_UINT64: {
-    return LLVMBuildICmp(builder, LLVMIntSGE, l, r, "gte_int");
-  }
-  case T_NUM: {
-    return LLVMBuildFCmp(builder, LLVMRealOGE, l, r, "gte_num");
-  }
-  default: {
-    fprintf(stderr, "Error: unrecognized operands for ord binop\n");
-    return NULL;
-  }
-  }
+  return build_ord_compare("gte", LLVMRealOGE, LLVMIntSGE, LLVMIntUGE, val,
+                           from, type, builder);
 }
 
 LLVMValueRef lte_val(LLVMValueRef val, LLVMValueRef from, Type *type,
                      JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder) {
-  LLVMValueRef l = val;
-  LLVMValueRef r = from;
-
-  switch (type->kind) {
-  case T_INT:
-  case T_CHAR:
-  case T_UINT64: {
-    return LLVMBuildICmp(builder, LLVMIntSLE, l, r, "lte_int");
-  }
-  case T_NUM: {
-    return LLVMBuildFCmp(builder, LLVMRealOLE, l, r, "lte_num");
-  }
-  default: {
-    fprintf(stderr, "Error: unrecognized operands for ord binop\n");
-    return NULL;
-  }
-  }
+  return build_ord_compare("lte", LLVMRealOLE, LLVMIntSLE, LLVMIntULE, val,
+                           from, type, builder);
 }
 
-#define ORD_BINOP(_name, _flop, _iop)                                          \
+#define ORD_BINOP(_name, _flop, _sop, _uop)                                    \
   ({                                                                           \
-    Type *target_type;                                                         \
-    if (get_typeclass_rank(lt, "ord") >= get_typeclass_rank(rt, "ord")) {      \
-      target_type = lt;                                                        \
-    } else {                                                                   \
-      target_type = rt;                                                        \
-    }                                                                          \
+    Type *target_type = resolve_ord_target_type(lt, rt);                       \
     LLVMValueRef l =                                                           \
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);         \
     l = handle_type_conversions(l, lt, target_type, ctx, module, builder);     \
     LLVMValueRef r =                                                           \
         codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);     \
     r = handle_type_conversions(r, rt, target_type, ctx, module, builder);     \
-    switch (target_type->kind) {                                               \
-    case T_INT:                                                                \
-    case T_UINT64: {                                                           \
-      return LLVMBuildICmp(builder, _iop, l, r, _name "_int");                 \
-    }                                                                          \
-    case T_NUM: {                                                              \
-      return LLVMBuildFCmp(builder, _flop, l, r, _name "_num");                \
-    }                                                                          \
-    default: {                                                                 \
-      fprintf(stderr, "Error: unrecognized operands for ord binop\n");         \
-      return NULL;                                                             \
-    }                                                                          \
-    }                                                                          \
+    return build_ord_compare(_name, _flop, _sop, _uop, l, r, target_type,      \
+                             builder);                                         \
   })
 
 LLVMValueRef GtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMBuilderRef builder) {
 
   if (ast->data.AST_APPLICATION.len < 2) {
-    fprintf(stderr,
-            "Not Implemented error: currying > binop - eg ((>) 1)\n%s:%d\n",
-            __FILE__, __LINE__);
-    return NULL;
+    return curried_comparison_binop(ast->data.AST_APPLICATION.args, LLVMRealOGT,
+                                    LLVMIntSGT, LLVMIntUGT, ast->type, ctx,
+                                    module, builder);
   }
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
@@ -370,34 +397,32 @@ LLVMValueRef GtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // print_type(lt);
   // print_type(rt);
   // print_type_env(ctx->env);
-  ORD_BINOP(">", LLVMRealOGT, LLVMIntSGT);
+  ORD_BINOP(">", LLVMRealOGT, LLVMIntSGT, LLVMIntUGT);
 }
 
 LLVMValueRef GteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
   if (ast->data.AST_APPLICATION.len < 2) {
-    fprintf(stderr,
-            "Not Implemented error: currying > binop - eg ((>=) 1)\n%s:%d\n",
-            __FILE__, __LINE__);
-    return NULL;
+    return curried_comparison_binop(ast->data.AST_APPLICATION.args, LLVMRealOGE,
+                                    LLVMIntSGE, LLVMIntUGE, ast->type, ctx,
+                                    module, builder);
   }
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
   fn_type = resolve_type_in_env(fn_type, ctx->env);
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
-  ORD_BINOP(">=", LLVMRealOGE, LLVMIntSGE);
+  ORD_BINOP(">=", LLVMRealOGE, LLVMIntSGE, LLVMIntUGE);
 }
 
 LLVMValueRef LtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMBuilderRef builder) {
 
   if (ast->data.AST_APPLICATION.len < 2) {
-    fprintf(stderr,
-            "Not Implemented error: currying < binop - eg ((<) 1)\n%s:%d\n",
-            __FILE__, __LINE__);
-    return NULL;
+    return curried_comparison_binop(ast->data.AST_APPLICATION.args, LLVMRealOLT,
+                                    LLVMIntSLT, LLVMIntULT, ast->type, ctx,
+                                    module, builder);
   }
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
@@ -405,17 +430,16 @@ LLVMValueRef LtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *lt = fn_type->data.T_FN.from;
 
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
-  ORD_BINOP("<", LLVMRealOLT, LLVMIntSLT);
+  ORD_BINOP("<", LLVMRealOLT, LLVMIntSLT, LLVMIntULT);
 }
 
 LLVMValueRef LteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
   if (ast->data.AST_APPLICATION.len < 2) {
-    fprintf(stderr,
-            "Not Implemented error: currying <= binop - eg ((<=) 1)\n%s:%d\n",
-            __FILE__, __LINE__);
-    return NULL;
+    return curried_comparison_binop(ast->data.AST_APPLICATION.args, LLVMRealOLE,
+                                    LLVMIntSLE, LLVMIntULE, ast->type, ctx,
+                                    module, builder);
   }
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
@@ -424,7 +448,7 @@ LLVMValueRef LteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
 
-  ORD_BINOP("<=", LLVMRealOLE, LLVMIntSLE);
+  ORD_BINOP("<=", LLVMRealOLE, LLVMIntSLE, LLVMIntULE);
 }
 
 LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
@@ -1627,6 +1651,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
                     CorOfCorListHandler);
   GENERIC_FN_SYMBOL("iter_of_array", &iter_of_array_scheme, CorOfArrayHandler);
   GENERIC_FN_SYMBOL("play_routine", &play_routine_scheme, PlayRoutineHandler);
+  GENERIC_FN_SYMBOL("play_routine_quant", &play_routine_quant_scheme,
+                    PlayRoutineQuantHandler);
   GENERIC_FN_SYMBOL("cor_current", &cor_current_scheme, CurrentCorHandler);
   GENERIC_FN_SYMBOL("cor_try_opt", &cor_try_opt_scheme, CorUnwrapOrEndHandler);
   GENERIC_FN_SYMBOL("cor_zip", &cor_zip_scheme, CorZipHandler);

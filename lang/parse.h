@@ -295,6 +295,7 @@ struct Ast {
       Ast *expr;
       Ast *branches;
       size_t len;
+      bool allow_no_match;
     } AST_MATCH;
 
     struct AST_RECORD_ACCESS {

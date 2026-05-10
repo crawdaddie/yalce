@@ -584,6 +584,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *val_type = ast->data.AST_MATCH.expr->type;
   Type *result_type = ast->type;
   LLVMTypeRef llvm_result_type = type_to_llvm_type(result_type, ctx, module);
+  bool allow_no_match = ast->data.AST_MATCH.allow_no_match;
 
   int num_branches = ast->data.AST_MATCH.len;
 
@@ -621,7 +622,84 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     LLVMPositionBuilderAtEnd(builder, current_insert_block);
   }
 
+  LLVMBasicBlockRef skip_block = NULL;
+  if (is_tail_position && allow_no_match) {
+    skip_block = LLVMAppendBasicBlock(parent_func, "match.skip");
+  }
+
   int num_branches_to_merge = 0;
+
+  bool is_direct_bool_skip_match =
+      allow_no_match && !is_match_over_sum && num_branches == 1 &&
+      branches[0].tag == AST_BOOL && branches[0].data.AST_BOOL.value == true;
+
+  if (is_direct_bool_skip_match) {
+    Ast *branch_expr = branches + 1;
+    LLVMBasicBlockRef body_block =
+        LLVMAppendBasicBlock(parent_func, "match.body.0");
+    LLVMBasicBlockRef fail_dest =
+        is_tail_position ? skip_block : merge_block;
+
+    LLVMBuildCondBr(builder, test_val, body_block, fail_dest);
+
+    STACK_ALLOC_CTX_PUSH(branch_ctx_mem, ctx)
+    JITLangCtx branch_ctx = branch_ctx_mem;
+
+    if (val_type->alias &&
+        type_contains_recursive_ref(val_type, val_type->alias) &&
+        !lookup_type_ref(branch_ctx.env, val_type->alias)) {
+      branch_ctx.env = env_extend(branch_ctx.env, val_type->alias, val_type);
+    }
+
+    LLVMPositionBuilderAtEnd(builder, body_block);
+    if (is_tail_position) {
+      set_as_tail(branch_expr);
+    }
+
+    LLVMValueRef branch_result =
+        codegen(branch_expr, &branch_ctx, module, builder);
+
+    if (!branch_result) {
+      destroy_ctx(&branch_ctx);
+      fprintf(stderr, "failed to compile match branch\n");
+      return NULL;
+    }
+
+    LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+
+    if (is_tail_position) {
+      if (!LLVMGetBasicBlockTerminator(current_block)) {
+        if (LLVMIsACallInst(branch_result)) {
+          LLVMSetTailCall(branch_result, true);
+        }
+        build_ret(branch_result, branch_expr->type, builder);
+      }
+
+      destroy_ctx(&branch_ctx);
+      if (skip_block) {
+        LLVMPositionBuilderAtEnd(builder, skip_block);
+      }
+      return LLVMGetUndef(llvm_result_type);
+    }
+
+    if (!LLVMGetBasicBlockTerminator(current_block)) {
+      LLVMBuildBr(builder, merge_block);
+      if (result_phi && !is_void_type) {
+        LLVMAddIncoming(result_phi, &branch_result, &current_block, 1);
+      }
+      num_branches_to_merge++;
+    }
+
+    if (result_phi && !is_void_type) {
+      LLVMValueRef undef_result = LLVMGetUndef(llvm_result_type);
+      LLVMBasicBlockRef incoming_block = current_insert_block;
+      LLVMAddIncoming(result_phi, &undef_result, &incoming_block, 1);
+    }
+
+    destroy_ctx(&branch_ctx);
+    LLVMPositionBuilderAtEnd(builder, merge_block);
+    return is_void_type ? LLVMGetUndef(llvm_result_type) : result_phi;
+  }
 
   char block_name[32];
 
@@ -687,13 +765,23 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       LLVMBasicBlockRef fail_dest;
       if (i == num_branches - 1) {
-        // Last branch - pattern must match or unreachable
-        LLVMBasicBlockRef unreachable_block =
-            LLVMAppendBasicBlock(parent_func, "match.exhausted");
-        fail_dest = unreachable_block;
-        LLVMBuildCondBr(builder, pat_res, body_blocks[i], fail_dest);
-        LLVMPositionBuilderAtEnd(builder, unreachable_block);
-        LLVMBuildUnreachable(builder);
+        if (allow_no_match) {
+          fail_dest = is_tail_position ? skip_block : merge_block;
+          LLVMBuildCondBr(builder, pat_res, body_blocks[i], fail_dest);
+          if (fail_dest == merge_block && result_phi && !is_void_type) {
+            LLVMValueRef undef_result = LLVMGetUndef(llvm_result_type);
+            LLVMBasicBlockRef incoming_block = test_blocks[i];
+            LLVMAddIncoming(result_phi, &undef_result, &incoming_block, 1);
+          }
+        } else {
+          // Last branch - pattern must match or unreachable
+          LLVMBasicBlockRef unreachable_block =
+              LLVMAppendBasicBlock(parent_func, "match.exhausted");
+          fail_dest = unreachable_block;
+          LLVMBuildCondBr(builder, pat_res, body_blocks[i], fail_dest);
+          LLVMPositionBuilderAtEnd(builder, unreachable_block);
+          LLVMBuildUnreachable(builder);
+        }
       } else {
         fail_dest = test_blocks[i + 1];
         LLVMBuildCondBr(builder, pat_res, body_blocks[i], fail_dest);
@@ -763,6 +851,11 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       return is_void_type ? LLVMGetUndef(llvm_result_type) : result_phi;
     }
   } else {
+    if (allow_no_match && skip_block) {
+      LLVMPositionBuilderAtEnd(builder, skip_block);
+      return LLVMGetUndef(llvm_result_type);
+    }
+
     LLVMBasicBlockRef current = LLVMGetInsertBlock(builder);
     if (current && !LLVMGetBasicBlockTerminator(current)) {
       LLVMBuildUnreachable(builder);

@@ -34,6 +34,7 @@ void ylc_window_open(int type_id, const char *title, int w, int h, void *state);
 
 #define YLC_WINDOW_SCOPE 0
 #define YLC_WINDOW_ARRAY_EDITOR 1
+#define YLC_WINDOW_SPECTROGRAM 2
 
 // Open an oscilloscope window for `node`. Creates a tap node internally.
 void ylc_scope_open(Node *node);
@@ -44,5 +45,11 @@ Node *ylc_scope_tap(Node *source);
 // Open a simple array editor window for a YLC double array.
 void ylc_array_editor_open(_DoubleArray data, double min_value,
                            double max_value);
+
+// Open a static spectrogram window for frame-major magnitudes and optionally
+// overlay transient markers for normalized transient values above threshold.
+void ylc_spectrogram_open(_DoubleArray mag, _DoubleArray transient,
+                          int num_frames, int num_bins, double db_min,
+                          double db_max, double transient_threshold);
 
 #endif

@@ -327,7 +327,17 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       break;
     }
 
-    if (is_generic(t) && t->kind == T_CONS) {
+    if (is_generic(t) && t->kind == T_SCHEME) {
+      const char *id = ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+
+      JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, t, NULL, NULL);
+
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler =
+          GenericConsConstructorHandler;
+
+      ht *stack = (ctx->frame->table);
+      ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
+    } else if (is_generic(t) && t->kind == T_CONS) {
       const char *id = ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
 
       JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, t, NULL, NULL);

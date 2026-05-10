@@ -648,7 +648,15 @@ int32_t int32_parse(_String str) {
   return x;
 }
 
-uint64_t uint64_parse(_String str) {
+int32_t parse_int(_String str) {
+  // char copy[str.size + 1];
+  // copy[str.size] = '\0';
+  // memcpy(copy, str.chars, str.size);
+  int32_t x = (int32_t)strtol(str.chars, NULL, 10);
+  return x;
+}
+
+uint64_t parse_uint64(_String str) {
   // char copy[str.size + 1];
   // copy[str.size] = '\0';
   // memcpy(copy, str.chars, str.size);
@@ -656,7 +664,7 @@ uint64_t uint64_parse(_String str) {
   return x;
 }
 
-double double_parse(_String str) {
+double parse_double(_String str) {
   int len = str.size;
   char *copy[len + 1]; // copy input to ensure it's nul-terminated
   memcpy(copy, str.chars, len);

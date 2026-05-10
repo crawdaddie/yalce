@@ -45,11 +45,7 @@ void codegen_set_global(const char *sym_name, JITSymbol *sym,
       LLVMBuildBitCast(builder, malloced_space, _VOID_PTR_T, buf);
   int slot = *ctx->num_globals;
   sym->symbol_data.STYPE_TOP_LEVEL_VAR = slot;
-  if (strcmp(sym_name, "PI") == 0) {
-    fprintf(stderr, "[globals:set] %s slot=%d module=%s ctx=%p sym=%p\n",
-            sym_name, slot, ctx->module_name ? ctx->module_name : "<none>",
-            (void *)ctx, (void *)sym);
-  }
+
   LLVMValueRef slot_index = LLVMConstInt(LLVMInt32Type(), slot, false);
 
   LLVMValueRef indices[] = {ZERO, slot_index};
@@ -70,10 +66,6 @@ LLVMValueRef codegen_get_global(const char *sym_name, JITSymbol *sym,
   char buf[32];
   int slot = sym->symbol_data.STYPE_TOP_LEVEL_VAR;
   LLVMTypeRef llvm_type = sym->llvm_type;
-  if (strcmp(sym_name, "PI") == 0) {
-    fprintf(stderr, "[globals:get] %s slot=%d sym=%p llvm_type=%p\n", sym_name,
-            slot, (void *)sym, (void *)llvm_type);
-  }
 
   LLVMValueRef slot_index = LLVMConstInt(LLVMInt32Type(), slot, false);
 

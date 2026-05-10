@@ -209,6 +209,10 @@ LLVMValueRef compile_lambda_as_closure(Ast *expr, Type *expected_clos_type,
 
 LLVMValueRef call_function_returning_closure() {}
 
+static bool closure_env_should_stack_alloc(Ast *expr, JITLangCtx *ctx) {
+  return find_allocation_strategy(expr, ctx) == EA_STACK_ALLOC;
+}
+
 LLVMValueRef store_closure_record_values(LLVMValueRef rec_alloc, Ast *expr,
                                          Type *rec_type, LLVMValueRef fn_ptr,
                                          JITLangCtx *ctx, LLVMModuleRef module,
@@ -263,8 +267,8 @@ LLVMValueRef expr_to_closure_rec(Ast *expr, Type *clos_type, JITLangCtx *ctx,
 
   LLVMValueRef rec_storage;
 
-  if (find_allocation_strategy(expr, ctx) == EA_STACK_ALLOC) {
-    rec_storage = LLVMBuildAlloca(builder, rec_type, "closure_obj_alloc_stacc");
+  if (closure_env_should_stack_alloc(expr, ctx)) {
+    rec_storage = LLVMBuildAlloca(builder, rec_type, "closure_obj_alloc_stack");
   } else {
     rec_storage = LLVMBuildMalloc(builder, rec_type, "closure_obj_alloc_heap");
     LLVMBuildMemSet(builder, rec_storage, LLVMConstInt(LLVMInt8Type(), 0, 0),
@@ -426,7 +430,6 @@ LLVMValueRef codegen_curried_fn_closure(Type *original_fn_type, Ast *ast,
 LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-
   Type *rec_struct_type = fn_type->closure_meta;
   LLVMTypeRef rec_type = closure_record_type(fn_type, ctx, module);
   LLVMTypeRef llvm_clos_fn_type =
@@ -445,17 +448,7 @@ LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
 
   Type *clos_type = fn_type->closure_meta;
   AST_LIST_ITER(ast->data.AST_LAMBDA.closed_vals, ({
-                  // TODO - is the order here reversed? ie use n - i for the
-                  // index instead
-                  //
-                  // ast->data.AST_LAMBDA.closed_vals is a list of vals in
-                  // reverse order of usage
                   Ast *param_ast = l->ast;
-                  // printf("closed val\n");
-                  // print_ast(param_ast);
-                  // print_type(param_ast->md);
-                  // print_type_env(ctx->env);
-                  // print_type(clos_type);
                   LLVMValueRef param_val =
                       LLVMBuildStructGEP2(builder, rec_type, inner_closure_rec,
                                           i, "closed_val_from_rec");
@@ -494,7 +487,7 @@ LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
   destroy_ctx(&fn_ctx);
 
   LLVMValueRef rec_storage;
-  if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
+  if (closure_env_should_stack_alloc(ast, ctx)) {
     rec_storage = LLVMBuildAlloca(builder, rec_type, "closure_obj_alloc_stacc");
   } else {
     rec_storage = LLVMBuildMalloc(builder, rec_type, "closure_obj_alloc_heap");
@@ -502,30 +495,11 @@ LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
                     LLVMSizeOf(rec_type), 0);
   }
 
-  // LLVMValueRef vals[size];
-  // vals[0] = func;
-  // AST_LIST_ITER(ast->data.AST_LAMBDA.closed_vals, ({
-  //                 // TODO - is the order here reversed? ie use n - i for the
-  //                 // index instead
-  //                 //
-  //                 // ast->data.AST_LAMBDA.closed_vals is a list of vals in
-  //                 // reverse order of usage
-  //                 Ast *param_ast = l->ast;
-  //                 LLVMValueRef param_val =
-  //                     codegen(param_ast, ctx, module, builder);
-  //                 vals[i + 1] = param_val;
-  //               }));
-  // Store function pointer at offset 0
-  // LLVMValueRef fn_ptr_slot =
-  //     LLVMBuildStructGEP2(builder, rec_type, rec_storage, 0, "fn_ptr_slot");
-  // LLVMBuildStore(builder, func, fn_ptr_slot);
-
   AST_LIST_ITER(ast->data.AST_LAMBDA.closed_vals, ({
                   Ast *param_ast = l->ast;
                   LLVMValueRef param_val =
                       codegen(param_ast, ctx, module, builder);
 
-                  // Store at offset i+1 (offset 0 is the function pointer)
                   LLVMValueRef field_slot = LLVMBuildStructGEP2(
                       builder, rec_type, rec_storage, i, "closed_val_slot");
                   LLVMBuildStore(builder, param_val, field_slot);

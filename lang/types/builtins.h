@@ -59,6 +59,7 @@ extern Type cor_take_scheme;
 extern Type cor_combine_scheme;
 extern Type cor_try_opt_scheme;
 extern Type play_routine_scheme;
+extern Type play_routine_quant_scheme;
 
 extern Type cor_scheme;
 extern Type cor_current_scheme;

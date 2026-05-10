@@ -1084,6 +1084,135 @@ static DspValue build_bufplay(LLVMValueRef buf, LLVMValueRef rate,
   return DSP_MULTI(num_channels, vals);
 }
 
+static LLVMValueRef build_pitchshift(LLVMValueRef input, double winsize,
+                                     LLVMValueRef pitch_ratio,
+                                     LLVMValueRef pitch_dispersion,
+                                     LLVMValueRef time_dispersion,
+                                     DspBuildCtx *dsp_ctx,
+                                     LLVMModuleRef module,
+                                     LLVMBuilderRef builder) {
+  int state_bytes =
+      dsp_pitchshift_state_bytes_for(dsp_ctx->sample_rate, winsize);
+  int off = (dsp_ctx->state_offset + 7) & ~7;
+  dsp_ctx->state_offset = off + state_bytes;
+
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef init_ty = LLVMFunctionType(
+      LLVMVoidType(), (LLVMTypeRef[]){GENERIC_PTR, i32_ty, f64_ty}, 3, 0);
+  LLVMTypeRef next_ty =
+      LLVMFunctionType(f64_ty, (LLVMTypeRef[]){GENERIC_PTR, f64_ty, f64_ty,
+                                               f64_ty, f64_ty},
+                       5, 0);
+
+  if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
+    LLVMValueRef init_state_obj =
+        dsp_consume_init_state(dsp_ctx, dsp_ctx->init_builder, state_bytes, 8,
+                               "pitchshift.init.base");
+    LLVMValueRef init_fn =
+        LLVMGetNamedFunction(module, "dsp_pitchshift_state_init");
+    if (!init_fn) {
+      init_fn = LLVMAddFunction(module, "dsp_pitchshift_state_init", init_ty);
+      LLVMSetLinkage(init_fn, LLVMExternalLinkage);
+    }
+    LLVMValueRef init_args[] = {
+        init_state_obj, LLVMConstInt(i32_ty, (uint64_t)dsp_ctx->sample_rate, 0),
+        LLVMConstReal(f64_ty, winsize)};
+    LLVMBuildCall2(dsp_ctx->init_builder, init_ty, init_fn, init_args, 3, "");
+  }
+
+  LLVMValueRef state_obj = dsp_consume_frame_state(
+      dsp_ctx, builder, state_bytes, 8, "pitchshift.base");
+  LLVMValueRef next_fn =
+      LLVMGetNamedFunction(module, "dsp_pitchshift_next_sample");
+  if (!next_fn) {
+    next_fn =
+        LLVMAddFunction(module, "dsp_pitchshift_next_sample", next_ty);
+    LLVMSetLinkage(next_fn, LLVMExternalLinkage);
+  }
+
+  LLVMValueRef next_args[] = {state_obj, input, pitch_ratio, pitch_dispersion,
+                              time_dispersion};
+  return LLVMBuildCall2(builder, next_ty, next_fn, next_args, 5,
+                        "pitchshift.sample");
+}
+
+static DspValue build_pv_bufplay(LLVMValueRef analysis, LLVMValueRef pitch,
+                                 LLVMValueRef stretch, LLVMValueRef start_pos,
+                                 LLVMValueRef trig, DspBuildCtx *dsp_ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder) {
+  int state_bytes = (int)sizeof(PVBufplayRuntimeState);
+  int off = dsp_ctx->state_offset;
+  dsp_ctx->state_offset += state_bytes;
+
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+  LLVMTypeRef arr_ty =
+      LLVMStructType((LLVMTypeRef[]){i32_ty, f64_ptr_ty}, 2, 0);
+  LLVMTypeRef analysis_ty =
+      LLVMStructType((LLVMTypeRef[]){i32_ty, i32_ty, i32_ty, i32_ty, i32_ty,
+                                     arr_ty, arr_ty, arr_ty, arr_ty},
+                     9, 0);
+  LLVMTypeRef analysis_ptr_ty = LLVMPointerType(analysis_ty, 0);
+  LLVMValueRef analysis_ptr = analysis;
+  if (LLVMGetTypeKind(LLVMTypeOf(analysis)) != LLVMPointerTypeKind) {
+    analysis_ptr = LLVMBuildAlloca(builder, analysis_ty, "pvbufplay.analysis");
+    LLVMBuildStore(builder, analysis, analysis_ptr);
+  } else if (LLVMTypeOf(analysis) != analysis_ptr_ty) {
+    analysis_ptr =
+        LLVMBuildPointerCast(builder, analysis, analysis_ptr_ty, "pvbufplay.analysis.ptr");
+  }
+
+  if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
+    LLVMValueRef init_state_obj = dsp_consume_init_state(
+        dsp_ctx, dsp_ctx->init_builder, state_bytes, 8, "pv.init.base");
+    LLVMTypeRef init_ty =
+        LLVMFunctionType(LLVMVoidType(), (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+    LLVMValueRef init_fn =
+        LLVMGetNamedFunction(module, "dsp_pv_bufplay_state_init");
+    if (!init_fn) {
+      init_fn =
+          LLVMAddFunction(module, "dsp_pv_bufplay_state_init", init_ty);
+      LLVMSetLinkage(init_fn, LLVMExternalLinkage);
+    }
+    LLVMValueRef init_args[] = {init_state_obj};
+    LLVMBuildCall2(dsp_ctx->init_builder, init_ty, init_fn, init_args, 1, "");
+  }
+
+  LLVMValueRef state_obj =
+      dsp_consume_frame_state(dsp_ctx, builder, state_bytes, 8, "pv.base");
+
+  LLVMTypeRef next_ty = LLVMFunctionType(
+      LLVMVoidType(),
+      (LLVMTypeRef[]){GENERIC_PTR, analysis_ptr_ty, f64_ty, f64_ty, f64_ty,
+                      f64_ty},
+      6, 0);
+  LLVMValueRef next_fn =
+      LLVMGetNamedFunction(module, "dsp_pv_bufplay_next_frame");
+  if (!next_fn) {
+    next_fn = LLVMAddFunction(module, "dsp_pv_bufplay_next_frame", next_ty);
+    LLVMSetLinkage(next_fn, LLVMExternalLinkage);
+  }
+
+  LLVMValueRef next_args[] = {state_obj, analysis_ptr, pitch,
+                              stretch,   start_pos,       trig};
+  LLVMBuildCall2(builder, next_ty, next_fn, next_args, 6, "");
+
+  LLVMTypeRef get_ty =
+      LLVMFunctionType(f64_ty, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+  LLVMValueRef get_fn =
+      LLVMGetNamedFunction(module, "dsp_pv_bufplay_get_sample");
+  if (!get_fn) {
+    get_fn = LLVMAddFunction(module, "dsp_pv_bufplay_get_sample", get_ty);
+    LLVMSetLinkage(get_fn, LLVMExternalLinkage);
+  }
+
+  LLVMValueRef get_args[] = {state_obj};
+  return DSP_SCALAR(
+      LLVMBuildCall2(builder, get_ty, get_fn, get_args, 1, "pv.sample"));
+}
+
 static LLVMValueRef build_grains(int32_t max_grains, LLVMValueRef buf,
                                  LLVMValueRef rate, LLVMValueRef pos,
                                  LLVMValueRef width, LLVMValueRef trig,
@@ -2247,6 +2376,62 @@ static LLVMValueRef build_lag(LLVMValueRef input, LLVMValueRef lag_secs,
   return LLVMBuildCall2(builder, fn_ty, fn, lag_args, 6, "lag.sample");
 }
 
+static LLVMValueRef build_changed(LLVMValueRef input, DspBuildCtx *dsp_ctx,
+                                  LLVMModuleRef module,
+                                  LLVMBuilderRef builder) {
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef i64_ty = LLVMInt64Type();
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+  LLVMTypeRef i64_ptr_ty = LLVMPointerType(i64_ty, 0);
+
+  LLVMValueRef base_i8 =
+      dsp_consume_frame_state(dsp_ctx, builder, 16, 8, "changed.base");
+  LLVMValueRef prev_ptr =
+      LLVMBuildBitCast(builder, base_i8, f64_ptr_ty, "changed.prev_ptr");
+  LLVMValueRef seen_ptr_i8 = LLVMBuildGEP2(
+      builder, LLVMInt8Type(), base_i8,
+      (LLVMValueRef[]){LLVMConstInt(LLVMInt64Type(), 8, 0)}, 1,
+      "changed.seen_ptr_i8");
+  LLVMValueRef seen_ptr =
+      LLVMBuildBitCast(builder, seen_ptr_i8, i64_ptr_ty, "changed.seen_ptr");
+
+  if (dsp_ctx->init_builder) {
+    LLVMValueRef init_base_i8 =
+        dsp_consume_init_state(dsp_ctx, dsp_ctx->init_builder, 16, 8,
+                               "changed.init.base");
+    LLVMValueRef init_prev_ptr =
+        LLVMBuildBitCast(dsp_ctx->init_builder, init_base_i8, f64_ptr_ty,
+                         "changed.init.prev_ptr");
+    LLVMValueRef init_seen_ptr_i8 = LLVMBuildGEP2(
+        dsp_ctx->init_builder, LLVMInt8Type(), init_base_i8,
+        (LLVMValueRef[]){LLVMConstInt(LLVMInt64Type(), 8, 0)}, 1,
+        "changed.init.seen_ptr_i8");
+    LLVMValueRef init_seen_ptr =
+        LLVMBuildBitCast(dsp_ctx->init_builder, init_seen_ptr_i8, i64_ptr_ty,
+                         "changed.init.seen_ptr");
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, 0.0),
+                   init_prev_ptr);
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstInt(i64_ty, 0, 0),
+                   init_seen_ptr);
+  }
+
+  LLVMValueRef prev =
+      LLVMBuildLoad2(builder, f64_ty, prev_ptr, "changed.prev");
+  LLVMValueRef seen =
+      LLVMBuildLoad2(builder, i64_ty, seen_ptr, "changed.seen");
+  LLVMValueRef seen_nonzero =
+      LLVMBuildICmp(builder, LLVMIntNE, seen, LLVMConstInt(i64_ty, 0, 0),
+                    "changed.seen_nonzero");
+  LLVMValueRef changed =
+      LLVMBuildFCmp(builder, LLVMRealONE, input, prev, "changed.diff");
+  LLVMValueRef out_cond =
+      LLVMBuildAnd(builder, seen_nonzero, changed, "changed.out_cond");
+  LLVMBuildStore(builder, input, prev_ptr);
+  LLVMBuildStore(builder, LLVMConstInt(i64_ty, 1, 0), seen_ptr);
+  return LLVMBuildSelect(builder, out_cond, LLVMConstReal(f64_ty, 1.0),
+                         LLVMConstReal(f64_ty, 0.0), "changed.out");
+}
+
 typedef struct {
   int32_t buf_size;
   int write_pos_off;
@@ -3318,6 +3503,16 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return build_lag_op(ast, dsp_ctx, ctx, module, builder);
   }
 
+  if (is_ident(f, "changed")) {
+    LLVMValueRef input =
+        ensure_float(ast->data.AST_APPLICATION.args->type,
+                     dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
+                                    ctx, module, builder)
+                         .scalar,
+                     builder);
+    return DSP_SCALAR(build_changed(input, dsp_ctx, module, builder));
+  }
+
   if (is_ident(f, "arr_choose")) {
 
     LLVMValueRef array = dsp_build_expr(ast->data.AST_APPLICATION.args + 0,
@@ -3761,12 +3956,113 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                          module, builder);
   }
 
+  if (is_ident(f, "pitchshift")) {
+    Ast *args = ast->data.AST_APPLICATION.args;
+    double winsize_num = 0.0;
+    if (!ast_try_eval_const_num(&args[0], dsp_ctx, ctx, &winsize_num)) {
+      fprintf(stderr,
+              "Error: pitchshift expects a constant windowSize argument\n");
+      return DSP_NULL;
+    }
+    if (winsize_num <= 0.0) {
+      fprintf(stderr, "Error: pitchshift windowSize must be > 0\n");
+      return DSP_NULL;
+    }
+
+    DspValue pitch_v = dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+    DspValue pitch_disp_v =
+        dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
+    DspValue time_disp_v =
+        dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder);
+    DspValue input_v = dsp_build_expr(args + 4, dsp_ctx, ctx, module, builder);
+
+    int max_lanes =
+        max(dsp_value_lane_count(input_v),
+            max(dsp_value_lane_count(pitch_v),
+                max(dsp_value_lane_count(pitch_disp_v),
+                    dsp_value_lane_count(time_disp_v))));
+
+    if (max_lanes <= 1) {
+      return DSP_SCALAR(build_pitchshift(
+          ensure_float(args[4].type, dsp_value_lane(input_v, 0), builder),
+          winsize_num,
+          ensure_float(args[1].type, dsp_value_lane(pitch_v, 0), builder),
+          ensure_float(args[2].type, dsp_value_lane(pitch_disp_v, 0), builder),
+          ensure_float(args[3].type, dsp_value_lane(time_disp_v, 0), builder),
+          dsp_ctx, module, builder));
+    }
+
+    LLVMValueRef *vals = dsp_alloc_lane_vals(dsp_ctx, max_lanes);
+    if (!vals) {
+      return DSP_NULL;
+    }
+
+    for (int i = 0; i < max_lanes; i++) {
+      vals[i] = build_pitchshift(
+          ensure_float(args[4].type, dsp_value_lane(input_v, i), builder),
+          winsize_num,
+          ensure_float(args[1].type, dsp_value_lane(pitch_v, i), builder),
+          ensure_float(args[2].type, dsp_value_lane(pitch_disp_v, i), builder),
+          ensure_float(args[3].type, dsp_value_lane(time_disp_v, i), builder),
+          dsp_ctx, module, builder);
+    }
+
+    return DSP_MULTI(max_lanes, vals);
+  }
+
   if (is_ident(f, "rbufplay")) {
     return dsp_rubberband_bufplay(ast, dsp_ctx, ctx, module, builder);
   }
 
   if (is_ident(f, "rbufplay_finer")) {
     return dsp_rubberband_bufplay_finer(ast, dsp_ctx, ctx, module, builder);
+  }
+
+  if (is_ident(f, "pv_bufplay")) {
+    Ast *args = ast->data.AST_APPLICATION.args;
+
+    DspValue analysis_v = dsp_build_expr(args, dsp_ctx, ctx, module, builder);
+    DspValue pitch_v = dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+    DspValue stretch_v =
+        dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
+    DspValue start_pos_v =
+        dsp_build_expr(args + 3, dsp_ctx, ctx, module, builder);
+    DspValue trig_v = dsp_build_expr(args + 4, dsp_ctx, ctx, module, builder);
+
+    int max_lanes = max(dsp_value_lane_count(pitch_v),
+                        max(dsp_value_lane_count(stretch_v),
+                            max(dsp_value_lane_count(start_pos_v),
+                                dsp_value_lane_count(trig_v))));
+
+    if (max_lanes <= 1) {
+      return build_pv_bufplay(
+          dsp_value_lane(analysis_v, 0),
+          ensure_float(args[1].type, dsp_value_lane(pitch_v, 0), builder),
+          ensure_float(args[2].type, dsp_value_lane(stretch_v, 0), builder),
+          ensure_float(args[3].type, dsp_value_lane(start_pos_v, 0), builder),
+          ensure_float(args[4].type, dsp_value_lane(trig_v, 0), builder),
+          dsp_ctx, module, builder);
+    }
+
+    LLVMValueRef *vals = dsp_alloc_lane_vals(dsp_ctx, max_lanes);
+    if (!vals) {
+      return DSP_NULL;
+    }
+
+    for (int i = 0; i < max_lanes; i++) {
+      vals[i] =
+          build_pv_bufplay(
+              dsp_value_lane(analysis_v, 0),
+              ensure_float(args[1].type, dsp_value_lane(pitch_v, i), builder),
+              ensure_float(args[2].type, dsp_value_lane(stretch_v, i), builder),
+              ensure_float(args[3].type, dsp_value_lane(start_pos_v, i),
+                           builder),
+              ensure_float(args[4].type, dsp_value_lane(trig_v, i), builder),
+              dsp_ctx, module, builder)
+              .scalar;
+    }
+
+    return DSP_MULTI(max_lanes, vals);
   }
 
   if (is_ident(f, "grains")) {
@@ -4309,7 +4605,10 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
       LLVMValueRef res =
           callable_sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
               ast, ctx, module, builder);
-      return DSP_ZERO;
+      if (!res) {
+        return DSP_NULL;
+      }
+      return DSP_SCALAR(res);
     }
 
     Type *expected_fn_type = ast->data.AST_APPLICATION.function->type;

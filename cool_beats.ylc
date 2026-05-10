@@ -118,8 +118,7 @@ let Hihat = module () ->
     let pref = pattern_ref;
     cor_stop (pref[0]);
     cor
-    |> play_routine t schedule_event
-    |> array_set pref 0
+    |> play_routine t schedule_event |> array_set pref 0
   ;;
 
   let tts_pat = fn () ->

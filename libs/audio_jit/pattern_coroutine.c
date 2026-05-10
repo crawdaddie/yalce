@@ -2,6 +2,7 @@
 #include "../../lang/backend_llvm/coroutines/coroutines.h"
 #include "../../lang/backend_llvm/strings.h"
 #include "llvm-c/Core.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -263,7 +264,39 @@ static bool parse_key_token(const char **pp, char **out) {
   if (!*start || is_key_delim(*start))
     return false;
 
-  while (**pp && **pp != ' ' && **pp != '\t' && !is_key_delim(**pp))
+  if (*start == '-' || *start == '.') {
+    char *tok = malloc(2);
+    tok[0] = *start;
+    tok[1] = '\0';
+    *out = tok;
+    (*pp)++;
+    return true;
+  }
+
+  if (isdigit((unsigned char)*start)) {
+    char *tok = malloc(2);
+    tok[0] = *start;
+    tok[1] = '\0';
+    *out = tok;
+    (*pp)++;
+    return true;
+  }
+
+  if (isalpha((unsigned char)*start)) {
+    (*pp)++;
+    while (**pp == '#' || **pp == '_' || isdigit((unsigned char)**pp))
+      (*pp)++;
+
+    int len = (int)(*pp - start);
+    char *tok = malloc((size_t)len + 1);
+    memcpy(tok, start, (size_t)len);
+    tok[len] = '\0';
+    *out = tok;
+    return true;
+  }
+
+  while (**pp && **pp != ' ' && **pp != '\t' && **pp != '\n' &&
+         **pp != '\r' && **pp != '-' && **pp != '.' && !is_key_delim(**pp))
     (*pp)++;
 
   int len = (int)(*pp - start);
@@ -277,6 +310,20 @@ static bool parse_key_token(const char **pp, char **out) {
   return true;
 }
 
+static bool parse_key_char_token(const char **pp, char **out) {
+  skip_ws(pp);
+  const char c = **pp;
+  if (!c || is_key_delim(c))
+    return false;
+
+  char *tok = malloc(2);
+  tok[0] = c;
+  tok[1] = '\0';
+  *out = tok;
+  (*pp)++;
+  return true;
+}
+
 static bool parse_key_token_list(const char **pp, char close, char **tmp,
                                  int *n) {
   while (**pp && **pp != close) {
@@ -286,6 +333,26 @@ static bool parse_key_token_list(const char **pp, char close, char **tmp,
     if (*n >= MAX_SEQ_VALS)
       return false;
     if (!parse_key_token(pp, &tmp[*n])) {
+      for (int i = 0; i < *n; i++)
+        free(tmp[i]);
+      return false;
+    }
+    (*n)++;
+  }
+  if (**pp == close)
+    (*pp)++;
+  return *n > 0;
+}
+
+static bool parse_key_char_token_list(const char **pp, char close, char **tmp,
+                                      int *n) {
+  while (**pp && **pp != close) {
+    skip_ws(pp);
+    if (**pp == close)
+      break;
+    if (*n >= MAX_SEQ_VALS)
+      return false;
+    if (!parse_key_char_token(pp, &tmp[*n])) {
       for (int i = 0; i < *n; i++)
         free(tmp[i]);
       return false;
@@ -389,6 +456,111 @@ static bool parse_key_pattern(const char *src, ParsedKeyPattern *out) {
     } else {
       char *tok;
       if (!parse_key_token(&p, &tok))
+        return false;
+
+      KeyPatternStep *step = &out->steps[out->num_steps++];
+      step->kind = STEP_SEQ;
+      step->fixed_key = tok;
+      step->slots = NULL;
+      step->num_slots = 0;
+      step->counter_idx = -1;
+    }
+  }
+  return out->num_steps > 0;
+}
+
+static bool parse_key_char_slot(const char **pp, KeySlot *out) {
+  skip_ws(pp);
+  if (**pp == '[' || **pp == '{') {
+    char close = **pp == '[' ? ']' : '}';
+    out->kind = **pp == '[' ? STEP_SEQ : STEP_RAND;
+    (*pp)++;
+    char *tmp[MAX_SEQ_VALS];
+    int n = 0;
+    if (!parse_key_char_token_list(pp, close, tmp, &n))
+      return false;
+    out->count = n;
+    out->vals = malloc(sizeof(char *) * (size_t)n);
+    memcpy(out->vals, tmp, sizeof(char *) * (size_t)n);
+    return true;
+  } else {
+    char *tok;
+    if (!parse_key_char_token(pp, &tok))
+      return false;
+    out->kind = STEP_SEQ;
+    out->count = 1;
+    out->vals = malloc(sizeof(char *));
+    out->vals[0] = tok;
+    return true;
+  }
+}
+
+static bool parse_key_char_pattern(const char *src, ParsedKeyPattern *out) {
+  out->steps = calloc(MAX_STEPS, sizeof(KeyPatternStep));
+  out->num_steps = 0;
+  out->num_alt_groups = 0;
+
+  const char *p = src;
+  while (*p) {
+    skip_ws(&p);
+    if (!*p)
+      break;
+    if (out->num_steps >= MAX_STEPS)
+      return false;
+
+    if (*p == '<') {
+      p++;
+      KeySlot tmp_slots[MAX_SLOTS];
+      int num_slots = 0;
+      while (*p && *p != '>') {
+        skip_ws(&p);
+        if (*p == '>')
+          break;
+        if (num_slots >= MAX_SLOTS)
+          return false;
+        if (!parse_key_char_slot(&p, &tmp_slots[num_slots++]))
+          return false;
+      }
+      if (*p == '>')
+        p++;
+      if (num_slots == 0)
+        return false;
+
+      KeyPatternStep *step = &out->steps[out->num_steps++];
+      step->kind = STEP_ALT;
+      step->fixed_key = NULL;
+      step->num_slots = num_slots;
+      step->slots = malloc(sizeof(KeySlot) * (size_t)num_slots);
+      memcpy(step->slots, tmp_slots, sizeof(KeySlot) * (size_t)num_slots);
+      step->counter_idx = out->num_alt_groups++;
+    } else if (*p == '{') {
+      p++;
+      KeySlot tmp_slots[MAX_SLOTS];
+      int num_slots = 0;
+      while (*p && *p != '}') {
+        skip_ws(&p);
+        if (*p == '}')
+          break;
+        if (num_slots >= MAX_SLOTS)
+          return false;
+        if (!parse_key_char_slot(&p, &tmp_slots[num_slots++]))
+          return false;
+      }
+      if (*p == '}')
+        p++;
+      if (num_slots == 0)
+        return false;
+
+      KeyPatternStep *step = &out->steps[out->num_steps++];
+      step->kind = STEP_RAND;
+      step->fixed_key = NULL;
+      step->num_slots = num_slots;
+      step->slots = malloc(sizeof(KeySlot) * (size_t)num_slots);
+      memcpy(step->slots, tmp_slots, sizeof(KeySlot) * (size_t)num_slots);
+      step->counter_idx = -1;
+    } else {
+      char *tok;
+      if (!parse_key_char_token(&p, &tok))
         return false;
 
       KeyPatternStep *step = &out->steps[out->num_steps++];
@@ -974,6 +1146,245 @@ LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str,
   return coro_handle;
 }
 
+LLVMValueRef emit_key_char_pattern_coroutine(const char *pattern_str,
+                                             JITLangCtx *ctx,
+                                             LLVMModuleRef module,
+                                             LLVMBuilderRef builder) {
+  (void)ctx;
+
+  ParsedKeyPattern pat;
+  if (!parse_key_char_pattern(pattern_str, &pat)) {
+    fprintf(stderr, "emit_key_char_pattern_coroutine: failed to parse '%s'\n",
+            pattern_str);
+    return NULL;
+  }
+
+  static int uid = 0;
+  int my_id = uid++;
+  char wrapper_name[64], reset_name[64];
+  snprintf(wrapper_name, sizeof(wrapper_name), "pattern_key_chars_coro_%d",
+           my_id);
+  snprintf(reset_name, sizeof(reset_name), "pattern_key_chars_coro_%d.reset",
+           my_id);
+
+  LLVMTypeRef yield_ty = string_struct_type(LLVMPointerType(LLVMInt8Type(), 0));
+  LLVMTypeRef promise_type = CORO_PROMISE_TYPE(yield_ty);
+
+  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(
+      GENERIC_PTR, (LLVMTypeRef[]){LLVMPointerType(LLVMInt64Type(), 0)}, 1, 0);
+  LLVMValueRef wrapper_fn =
+      LLVMAddFunction(module, wrapper_name, wrapper_fn_type);
+  LLVMSetLinkage(wrapper_fn, LLVMExternalLinkage);
+  COROUTINE_ATTR_MARKING(wrapper_fn)
+  COROUTINE_BASIC_BLOCKS(wrapper_fn)
+
+  LLVMBasicBlockRef prev_bb = LLVMGetInsertBlock(builder);
+
+  LLVMPositionBuilderAtEnd(builder, entry_bb);
+
+  LLVMValueRef promise_alloca =
+      LLVMBuildAlloca(builder, promise_type, "promise");
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0),
+                 LLVMBuildStructGEP2(builder, promise_type, promise_alloca, 1,
+                                     "is_done_ptr"));
+  PROMISE_SET_RESET_FN(promise_alloca, promise_type,
+                       LLVMConstNull(GENERIC_PTR));
+  PROMISE_SET_ARGS_PTR(promise_alloca, promise_type,
+                       LLVMConstNull(GENERIC_PTR));
+
+  LLVMValueRef *alt_counters =
+      pat.num_alt_groups
+          ? malloc(sizeof(LLVMValueRef) * (size_t)pat.num_alt_groups)
+          : NULL;
+  for (int i = 0; i < pat.num_alt_groups; i++) {
+    char name[32];
+    snprintf(name, sizeof(name), "alt%d.cnt", i);
+    alt_counters[i] = LLVMBuildAlloca(builder, LLVMInt32Type(), name);
+    LLVMBuildStore(builder, LLVMConstInt(LLVMInt32Type(), 0, 0),
+                   alt_counters[i]);
+  }
+
+  LLVMValueRef coro_id = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
+      get_coro_id_intrinsic(module),
+      (LLVMValueRef[]){LLVMConstInt(LLVMInt32Type(), 0, 0), promise_alloca,
+                       LLVMConstNull(GENERIC_PTR), LLVMConstNull(GENERIC_PTR)},
+      4, "coro.id");
+
+  LLVMValueRef coro_size = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_size_intrinsic(module)),
+      get_coro_size_intrinsic(module), NULL, 0, "coro.size");
+  LLVMBuildStore(builder, coro_size, LLVMGetParam(wrapper_fn, 0));
+
+  LLVMValueRef frame =
+      LLVMBuildArrayMalloc(builder, LLVMInt8Type(), coro_size, "coro.frame");
+  LLVMValueRef handle = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_begin_intrinsic(module)),
+      get_coro_begin_intrinsic(module), (LLVMValueRef[]){coro_id, frame}, 2,
+      "coro.handle");
+
+  LLVMValueRef init_save = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){handle}, 1,
+      "init.save");
+  LLVMValueRef init_sus = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){init_save, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2,
+      "init.suspend");
+  LLVMValueRef init_sw =
+      LLVMBuildSwitch(builder, init_sus, initial_return_bb, 2);
+  LLVMAddCase(init_sw, LLVMConstInt(LLVMInt8Type(), 0, 0), start_bb);
+  LLVMAddCase(init_sw, LLVMConstInt(LLVMInt8Type(), 1, 0), cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, initial_return_bb);
+  LLVMBuildBr(builder, suspend_bb);
+
+  LLVMPositionBuilderAtEnd(builder, start_bb);
+
+  for (int i = 0; i < pat.num_steps; i++) {
+    KeyPatternStep *step = &pat.steps[i];
+    char lbl[64];
+
+    if (step->kind == STEP_SEQ) {
+      snprintf(lbl, sizeof(lbl), "kc%d", i);
+      emit_yield(wrapper_fn, module, builder, handle, promise_alloca,
+                 codegen_const_token_string(step->fixed_key, yield_ty, builder),
+                 cleanup_bb, suspend_bb, lbl);
+    } else {
+      LLVMValueRef slot_idx;
+      if (step->kind == STEP_RAND) {
+        LLVMTypeRef rand_fn_ty = LLVMFunctionType(
+            LLVMInt32Type(), (LLVMTypeRef[]){LLVMInt32Type()}, 1, 0);
+        LLVMValueRef rand_fn = LLVMGetNamedFunction(module, "ylc_rand_int");
+        if (!rand_fn) {
+          rand_fn = LLVMAddFunction(module, "ylc_rand_int", rand_fn_ty);
+          LLVMSetLinkage(rand_fn, LLVMExternalLinkage);
+        }
+        LLVMValueRef n_val = LLVMConstInt(LLVMInt32Type(), step->num_slots, 0);
+        slot_idx = LLVMBuildCall2(builder, rand_fn_ty, rand_fn, &n_val, 1,
+                                  "rand.slot");
+      } else {
+        LLVMValueRef cnt =
+            LLVMBuildLoad2(builder, LLVMInt32Type(),
+                           alt_counters[step->counter_idx], "alt.cnt");
+        LLVMValueRef rem = LLVMBuildURem(
+            builder, cnt, LLVMConstInt(LLVMInt32Type(), step->num_slots, 0),
+            "alt.rem");
+        LLVMBuildStore(builder,
+                       LLVMBuildAdd(builder, cnt,
+                                    LLVMConstInt(LLVMInt32Type(), 1, 0),
+                                    "alt.next"),
+                       alt_counters[step->counter_idx]);
+        slot_idx = rem;
+      }
+
+      LLVMBasicBlockRef after_alt_bb =
+          LLVMAppendBasicBlock(wrapper_fn, "after_alt");
+      LLVMBasicBlockRef *slot_bbs =
+          malloc(sizeof(LLVMBasicBlockRef) * (size_t)step->num_slots);
+      for (int j = 0; j < step->num_slots; j++) {
+        snprintf(lbl, sizeof(lbl), "kc%d.slot%d", i, j);
+        slot_bbs[j] = LLVMAppendBasicBlock(wrapper_fn, lbl);
+      }
+
+      LLVMValueRef sw =
+          LLVMBuildSwitch(builder, slot_idx, slot_bbs[step->num_slots - 1],
+                          step->num_slots - 1);
+      for (int j = 0; j < step->num_slots - 1; j++)
+        LLVMAddCase(sw, LLVMConstInt(LLVMInt32Type(), j, 0), slot_bbs[j]);
+
+      for (int j = 0; j < step->num_slots; j++) {
+        LLVMPositionBuilderAtEnd(builder, slot_bbs[j]);
+        KeySlot *slot = &step->slots[j];
+        if (slot->kind == STEP_RAND) {
+          LLVMTypeRef rand_fn_ty = LLVMFunctionType(
+              LLVMInt32Type(), (LLVMTypeRef[]){LLVMInt32Type()}, 1, 0);
+          LLVMValueRef rand_fn = LLVMGetNamedFunction(module, "ylc_rand_int");
+          if (!rand_fn) {
+            rand_fn = LLVMAddFunction(module, "ylc_rand_int", rand_fn_ty);
+            LLVMSetLinkage(rand_fn, LLVMExternalLinkage);
+          }
+          LLVMValueRef n_val = LLVMConstInt(LLVMInt32Type(), slot->count, 0);
+          LLVMValueRef rnd = LLVMBuildCall2(builder, rand_fn_ty, rand_fn,
+                                            &n_val, 1, "kslot.rnd");
+          LLVMBasicBlockRef after_rnd_bb =
+              LLVMAppendBasicBlock(wrapper_fn, "kslot.after_rnd");
+          LLVMBasicBlockRef *val_bbs =
+              malloc(sizeof(LLVMBasicBlockRef) * (size_t)slot->count);
+          for (int k = 0; k < slot->count; k++) {
+            snprintf(lbl, sizeof(lbl), "kc%d.sl%d.rnd%d", i, j, k);
+            val_bbs[k] = LLVMAppendBasicBlock(wrapper_fn, lbl);
+          }
+          LLVMValueRef rsw = LLVMBuildSwitch(
+              builder, rnd, val_bbs[slot->count - 1], slot->count - 1);
+          for (int k = 0; k < slot->count - 1; k++)
+            LLVMAddCase(rsw, LLVMConstInt(LLVMInt32Type(), k, 0), val_bbs[k]);
+          for (int k = 0; k < slot->count; k++) {
+            LLVMPositionBuilderAtEnd(builder, val_bbs[k]);
+            snprintf(lbl, sizeof(lbl), "kc%d.sl%d.rv%d", i, j, k);
+            emit_yield(
+                wrapper_fn, module, builder, handle, promise_alloca,
+                codegen_const_token_string(slot->vals[k], yield_ty, builder),
+                cleanup_bb, suspend_bb, lbl);
+            LLVMBuildBr(builder, after_rnd_bb);
+          }
+          free(val_bbs);
+          LLVMPositionBuilderAtEnd(builder, after_rnd_bb);
+        } else {
+          for (int k = 0; k < slot->count; k++) {
+            snprintf(lbl, sizeof(lbl), "kc%d.sl%d.v%d", i, j, k);
+            emit_yield(
+                wrapper_fn, module, builder, handle, promise_alloca,
+                codegen_const_token_string(slot->vals[k], yield_ty, builder),
+                cleanup_bb, suspend_bb, lbl);
+          }
+        }
+        LLVMBuildBr(builder, after_alt_bb);
+      }
+
+      free(slot_bbs);
+      LLVMPositionBuilderAtEnd(builder, after_alt_bb);
+    }
+  }
+
+  LLVMBuildBr(builder, start_bb);
+
+  LLVMPositionBuilderAtEnd(builder, cleanup_bb);
+  LLVMValueRef mem = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_free_intrinsic(module)),
+      get_coro_free_intrinsic(module), (LLVMValueRef[]){coro_id, handle}, 2,
+      "coro.mem");
+  LLVMBuildFree(builder, mem);
+  LLVMBuildBr(builder, suspend_bb);
+
+  LLVMPositionBuilderAtEnd(builder, suspend_bb);
+  LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
+      get_coro_end_intrinsic(module),
+      (LLVMValueRef[]){handle, LLVMConstInt(LLVMInt1Type(), 0, 0)}, 2, "");
+  LLVMBuildRet(builder, handle);
+
+  LLVMPositionBuilderAtEnd(builder, prev_bb);
+
+  LLVMValueRef frame_size_alloca =
+      LLVMBuildAlloca(builder, LLVMInt64Type(), "pat_key_chars.frame_size.out");
+  LLVMValueRef coro_handle = LLVMBuildCall2(
+      builder, wrapper_fn_type, wrapper_fn, (LLVMValueRef[]){frame_size_alloca},
+      1, "pat_key_chars.coro.handle");
+
+  LLVMValueRef reset_fn = emit_reset_fn(
+      promise_type, wrapper_fn_type, wrapper_fn, module, builder, reset_name);
+  LLVMValueRef prom_ptr = GET_PROMISE_PTR(coro_handle, promise_type);
+  PROMISE_SET_RESET_FN(prom_ptr, promise_type, reset_fn);
+  PROMISE_SET_ARGS_PTR(prom_ptr, promise_type, LLVMConstNull(GENERIC_PTR));
+
+  free(alt_counters);
+  free_parsed_key(&pat);
+
+  return coro_handle;
+}
+
 // ============================================================================
 // Builtin handler — called from ylc via compile_audio_fn or similar
 // ============================================================================
@@ -1009,4 +1420,17 @@ LLVMValueRef pattern_key_handler(Ast *ast, JITLangCtx *ctx,
     return NULL;
   }
   return emit_key_pattern_coroutine(pattern_str, ctx, module, builder);
+}
+
+LLVMValueRef pattern_key_chars_handler(Ast *ast, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+  const char *pattern_str =
+      ast_to_pattern_string(ast->data.AST_APPLICATION.args);
+  if (!pattern_str) {
+    fprintf(stderr,
+            "pat_key_chars: expected a string or format-string literal\n");
+    return NULL;
+  }
+  return emit_key_char_pattern_coroutine(pattern_str, ctx, module, builder);
 }

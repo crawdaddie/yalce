@@ -2324,6 +2324,12 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return coro_handle;
 }
 
+LLVMValueRef PlayRoutineQuantHandler(Ast *ast, JITLangCtx *ctx,
+                                     LLVMModuleRef module,
+                                     LLVMBuilderRef builder) {
+  print_ast(ast);
+  return LLVMConstReal(LLVMDoubleType(), 0.);
+}
 LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
   Ast *time_ast = ast->data.AST_APPLICATION.args;

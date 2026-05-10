@@ -1,5 +1,6 @@
 
 let PI = 3.14159265358979323846264338327950288;
+let epsilon = 0.000000000001;
 let rand_int = extern fn Int -> Int ;
 
 # uniformly distributed double between 0 and 1.0
@@ -26,6 +27,7 @@ let tanh = extern fn Double -> Double;
 let atan = extern fn Double -> Double;
 let atan2 = extern fn Double -> Double -> Double;
 let ilog2 = extern fn Int -> Int;
+let log = extern fn Double -> Double;
 let u64pow = extern fn Uint64 -> Uint64 -> Uint64;
 
 let sqrt = extern fn Double -> Double;
@@ -51,6 +53,8 @@ let abs = fn a ->
   | true -> a
   | _ -> a * -1
   ;;
+
+let neg = fn a -> -1 * a;;
 
 let normalize = fn mn mx v -> (v - mn) / (mx - mn);;
 

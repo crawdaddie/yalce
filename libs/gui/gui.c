@@ -4,6 +4,7 @@
 #include "../../engine/node.h"
 #include "../../lang/common.h"
 #include <SDL3/SDL.h>
+#include <math.h>
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -446,6 +447,158 @@ static void array_editor_on_event(SDL_Event *e, SDL_Window *win,
 static void array_editor_destroy(void *state) { free(state); }
 
 // ============================================================================
+// Spectrogram window type (id = YLC_WINDOW_SPECTROGRAM = 2)
+// ============================================================================
+
+typedef struct {
+  _DoubleArray mag;
+  _DoubleArray transient;
+  int num_frames;
+  int num_bins;
+  double db_min;
+  double db_max;
+  double transient_threshold;
+  SDL_Texture *texture;
+  uint32_t *pixels;
+} SpectrogramState;
+
+static double spectrogram_clamp(double lo, double hi, double v) {
+  if (v < lo)
+    return lo;
+  if (v > hi)
+    return hi;
+  return v;
+}
+
+static void spectrogram_palette(double t, uint8_t *r, uint8_t *g, uint8_t *b) {
+  t = spectrogram_clamp(0.0, 1.0, t);
+
+  if (t < 0.25) {
+    double u = t / 0.25;
+    *r = 0;
+    *g = (uint8_t)(20.0 + 60.0 * u);
+    *b = (uint8_t)(40.0 + 170.0 * u);
+    return;
+  }
+
+  if (t < 0.5) {
+    double u = (t - 0.25) / 0.25;
+    *r = (uint8_t)(10.0 + 40.0 * u);
+    *g = (uint8_t)(80.0 + 120.0 * u);
+    *b = (uint8_t)(210.0 - 90.0 * u);
+    return;
+  }
+
+  if (t < 0.75) {
+    double u = (t - 0.5) / 0.25;
+    *r = (uint8_t)(50.0 + 180.0 * u);
+    *g = (uint8_t)(200.0 - 60.0 * u);
+    *b = (uint8_t)(120.0 - 100.0 * u);
+    return;
+  }
+
+  {
+    double u = (t - 0.75) / 0.25;
+    *r = 230;
+    *g = (uint8_t)(140.0 + 90.0 * u);
+    *b = (uint8_t)(20.0 + 180.0 * u);
+  }
+}
+
+static void spectrogram_build_pixels(SpectrogramState *s) {
+  if (!s || !s->pixels || !s->mag.data || s->num_frames <= 0 ||
+      s->num_bins <= 0)
+    return;
+
+  for (int y = 0; y < s->num_bins; y++) {
+    int bin = s->num_bins - 1 - y;
+    for (int x = 0; x < s->num_frames; x++) {
+      int idx = x * s->num_bins + bin;
+      double mag = s->mag.data[idx];
+      if (mag < 1.0e-12)
+        mag = 1.0e-12;
+
+      double db = 20.0 * log10(mag);
+      double t = (db - s->db_min) / (s->db_max - s->db_min);
+      t *= 0.85;
+
+      uint8_t r = 0, g = 0, b = 0;
+      spectrogram_palette(t, &r, &g, &b);
+      s->pixels[y * s->num_frames + x] = ((uint32_t)255 << 24) |
+                                         ((uint32_t)r << 16) |
+                                         ((uint32_t)g << 8) | (uint32_t)b;
+    }
+  }
+}
+
+static void spectrogram_draw(SDL_Window *win, SDL_Renderer *ren, void *state) {
+  SpectrogramState *s = (SpectrogramState *)state;
+  if (!s || !s->mag.data || s->num_frames <= 0 || s->num_bins <= 0) {
+    SDL_SetRenderDrawColor(ren, 12, 12, 16, 255);
+    SDL_RenderClear(ren);
+    SDL_RenderPresent(ren);
+    return;
+  }
+
+  if (!s->texture) {
+    s->texture =
+        SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGBA8888,
+                          SDL_TEXTUREACCESS_STATIC, s->num_frames, s->num_bins);
+    if (s->texture) {
+      SDL_UpdateTexture(s->texture, NULL, s->pixels,
+                        s->num_frames * (int)sizeof(uint32_t));
+      SDL_SetTextureScaleMode(s->texture, SDL_SCALEMODE_LINEAR);
+    }
+  }
+
+  int width = 0, height = 0;
+  SDL_GetWindowSize(win, &width, &height);
+
+  SDL_SetRenderDrawColor(ren, 12, 12, 16, 255);
+  SDL_RenderClear(ren);
+
+  if (s->texture) {
+    SDL_FRect dst = {0.0f, 0.0f, (float)width, (float)height};
+    SDL_RenderTexture(ren, s->texture, NULL, &dst);
+
+    if (s->transient.data && s->transient.size >= s->num_frames) {
+      double threshold = spectrogram_clamp(0.0, 1.0, s->transient_threshold);
+      SDL_SetRenderDrawColor(ren, 255, 245, 225, 210);
+
+      for (int frame = 0; frame < s->num_frames; frame++) {
+        double strength = s->transient.data[frame];
+        if (strength < threshold)
+          continue;
+        if (strength <= 0.) {
+          continue;
+        }
+        double t = (strength - threshold) / (1.0 - threshold);
+        t = spectrogram_clamp(0.0, 1.0, t);
+        uint8_t r = (uint8_t)(255.0);
+        uint8_t g = (uint8_t)(220.0 - 140.0 * t);
+        uint8_t b = (uint8_t)(210.0 - 210.0 * t);
+        uint8_t a = (uint8_t)(90.0 + 150.0 * t);
+        SDL_SetRenderDrawColor(ren, r, g, b, a);
+        float x = ((float)frame / (float)s->num_frames) * (float)width;
+        SDL_RenderLine(ren, x, 0.0f, x, (float)height);
+      }
+    }
+  }
+
+  SDL_RenderPresent(ren);
+}
+
+static void spectrogram_destroy(void *state) {
+  SpectrogramState *s = (SpectrogramState *)state;
+  if (!s)
+    return;
+  if (s->texture)
+    SDL_DestroyTexture(s->texture);
+  free(s->pixels);
+  free(s);
+}
+
+// ============================================================================
 // Public scope API
 // ============================================================================
 
@@ -507,6 +660,47 @@ void ylc_array_editor_open(_DoubleArray data, double min_value,
 
   ylc_window_open(YLC_WINDOW_ARRAY_EDITOR, "array editor", 800, 320, s);
   return;
+}
+
+void ylc_spectrogram_open(_DoubleArray mag, _DoubleArray transient,
+                          int num_frames, int num_bins, double db_min,
+                          double db_max, double transient_threshold) {
+  if (!mag.data || mag.size <= 0 || num_frames <= 0 || num_bins <= 0 ||
+      mag.size < num_frames * num_bins || db_max <= db_min) {
+    return;
+  }
+
+  SpectrogramState *s = calloc(1, sizeof(SpectrogramState));
+  if (!s)
+    return;
+
+  s->mag = mag;
+  s->transient = transient;
+  s->num_frames = num_frames;
+  s->num_bins = num_bins;
+  s->db_min = db_min;
+  s->db_max = db_max;
+  s->transient_threshold = transient_threshold;
+  s->pixels = calloc((size_t)num_frames * (size_t)num_bins, sizeof(uint32_t));
+  if (!s->pixels) {
+    free(s);
+    return;
+  }
+
+  spectrogram_build_pixels(s);
+
+  int win_w = num_frames;
+  int win_h = num_bins;
+  if (win_w < 480)
+    win_w = 480;
+  if (win_w > 1400)
+    win_w = 1400;
+  if (win_h < 320)
+    win_h = 320;
+  if (win_h > 900)
+    win_h = 900;
+
+  ylc_window_open(YLC_WINDOW_SPECTROGRAM, "spectrogram", win_w, win_h, s);
 }
 
 // ============================================================================
@@ -587,6 +781,12 @@ __attribute__((constructor)) static void ylc_gui_init(void) {
       .draw = array_editor_draw,
       .on_event = array_editor_on_event,
       .destroy = array_editor_destroy,
+  });
+  ylc_window_type_register((YLCWindowType){
+      .id = YLC_WINDOW_SPECTROGRAM,
+      .draw = spectrogram_draw,
+      .on_event = NULL,
+      .destroy = spectrogram_destroy,
   });
 
   __set_break_repl_flag(true);

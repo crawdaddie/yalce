@@ -26,4 +26,13 @@ LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str, JITLangCtx *ctx
 
 LLVMValueRef pattern_key_handler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                  LLVMBuilderRef builder);
+
+LLVMValueRef emit_key_char_pattern_coroutine(const char *pattern_str,
+                                             JITLangCtx *ctx,
+                                             LLVMModuleRef module,
+                                             LLVMBuilderRef builder);
+
+LLVMValueRef pattern_key_chars_handler(Ast *ast, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder);
 #endif

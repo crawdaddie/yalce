@@ -617,6 +617,16 @@ Type create_play_routine_scheme() {
   f = type_fn(&t_uint64, f);
   return *f;
 }
+Type play_routine_quant_scheme;
+Type create_play_routine_quant_scheme() {
+  Type *v = &t_num;
+  Type *cor_from = create_coroutine_instance_type(v);
+
+  Type *f = type_fn(cor_from, cor_from);
+  f = type_fn(&t_ptr, f);
+  f = type_fn(&t_num, f);
+  return *f;
+}
 
 Type sizeof_scheme;
 Type create_sizeof_scheme() {

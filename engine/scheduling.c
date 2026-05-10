@@ -306,8 +306,9 @@ void *schedule_event(uint64_t now, double delay_seconds,
 
 void defer_quant(double quant, DeferQuantCallback callback) {
   int sr = ctx_sample_rate();
-  if (sr == 0)
+  if (sr == 0) {
     sr = 48000;
+  }
 
   uint64_t quant_samps = quant * sr;
   uint64_t now = get_current_sample();

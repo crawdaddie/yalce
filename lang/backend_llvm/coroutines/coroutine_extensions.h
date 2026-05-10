@@ -26,6 +26,11 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder);
 LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder);
+
+LLVMValueRef PlayRoutineQuantHandler(Ast *ast, JITLangCtx *ctx,
+                                     LLVMModuleRef module,
+                                     LLVMBuilderRef builder);
+
 LLVMValueRef CurrentCorHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder);
 LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,

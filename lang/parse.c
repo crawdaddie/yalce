@@ -737,6 +737,7 @@ Ast *ast_if_else(Ast *cond, Ast *then, Ast *elze) {
     match->data.AST_MATCH.branches[1] = *then;
     match->data.AST_MATCH.len = 1;
     match->data.AST_MATCH.expr = cond;
+    match->data.AST_MATCH.allow_no_match = true;
     return match;
   }
 
@@ -751,6 +752,7 @@ Ast *ast_if_else(Ast *cond, Ast *then, Ast *elze) {
   match->data.AST_MATCH.branches[3] = *elze;
   match->data.AST_MATCH.len = 2;
   match->data.AST_MATCH.expr = cond;
+  match->data.AST_MATCH.allow_no_match = false;
   return match;
 }
 
