@@ -76,8 +76,7 @@ void fftw_forward_execute_raw(void *plan, int32_t out_re_size,
                               double *input_data);
 void fftw_plan_free(void *plan);
 void dsp_pv_bufplay_state_init(void *state_raw);
-void dsp_pv_bufplay_next_frame(void *state_raw,
-                               YLC_SpectralAnalysis *analysis,
+void dsp_pv_bufplay_next_frame(void *state_raw, YLC_SpectralAnalysis *analysis,
                                double pitch_ratio, double stretch_ratio,
                                double start_pos, double trig);
 double dsp_pv_bufplay_get_sample(void *state_raw);
@@ -85,8 +84,7 @@ int dsp_pitchshift_state_bytes_for(int sample_rate, double winsize);
 void dsp_pitchshift_state_init(void *state_raw, int sample_rate,
                                double winsize);
 double dsp_pitchshift_next_sample(void *state_raw, double input,
-                                  double pitch_ratio,
-                                  double pitch_dispersion,
+                                  double pitch_ratio, double pitch_dispersion,
                                   double time_dispersion);
 
 #endif

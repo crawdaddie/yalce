@@ -2327,9 +2327,178 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef PlayRoutineQuantHandler(Ast *ast, JITLangCtx *ctx,
                                      LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
-  print_ast(ast);
-  return LLVMConstReal(LLVMDoubleType(), 0.);
+  Ast *quant_ast = ast->data.AST_APPLICATION.args;
+  Ast *schedule_event_ast = ast->data.AST_APPLICATION.args + 1;
+  Ast *cor_ast = ast->data.AST_APPLICATION.args + 2;
+
+  LLVMValueRef outer_handle = codegen(cor_ast, ctx, module, builder);
+  if (!outer_handle) {
+    return NULL;
+  }
+
+  LLVMValueRef schedule_event =
+      codegen(schedule_event_ast, ctx, module, builder);
+
+  if (!schedule_event) {
+    return NULL;
+  }
+
+  LLVMValueRef quant = codegen(quant_ast, ctx, module, builder);
+  if (!quant) {
+    return NULL;
+  }
+
+  LLVMValueRef func = LLVMAddFunction(
+      module, "schedule_event_wrapper",
+      LLVMFunctionType(LLVMVoidType(),
+                       (LLVMTypeRef[]){GENERIC_PTR, LLVMInt64Type()}, 2, 0));
+
+  LLVMSetLinkage(func, LLVMExternalLinkage);
+
+  LLVMTypeRef schedule_event_type =
+      LLVMFunctionType(GENERIC_PTR,
+                       (LLVMTypeRef[]){LLVMInt64Type(), LLVMDoubleType(),
+                                       GENERIC_PTR, GENERIC_PTR},
+                       4, 0);
+
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+
+  LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef finished =
+      LLVMAppendBasicBlock(func, "coro.is_finished_block");
+  LLVMBasicBlockRef not_finished =
+      LLVMAppendBasicBlock(func, "coro.resume_block");
+
+  LLVMPositionBuilderAtEnd(builder, entry);
+
+  LLVMValueRef _handle = LLVMGetParam(func, 0);
+  LLVMValueRef _u64ts = LLVMGetParam(func, 1);
+
+  // Determine yield type from the coroutine: if tuple, field 0 is the duration
+  Type *cor_yield_type_t = cor_ast->type->data.T_CONS.args[0];
+  bool yield_is_tuple =
+      (cor_yield_type_t->kind == T_CONS &&
+       strcmp(cor_yield_type_t->data.T_CONS.name, TYPE_NAME_TUPLE) == 0);
+  LLVMTypeRef yield_type = type_to_llvm_type(cor_yield_type_t, ctx, module);
+
+  LLVMValueRef resume_result =
+      codegen_handle_resume(_handle, yield_type, ctx, module, builder);
+
+  LLVMValueRef result_tag =
+      LLVMBuildExtractValue(builder, resume_result, 0, "tag");
+
+  LLVMValueRef is_done =
+      LLVMBuildICmp(builder, LLVMIntEQ, result_tag,
+                    LLVMConstInt(LLVMInt8Type(), 1, 0), "tag_eq_1");
+
+  LLVMBuildCondBr(builder, is_done, finished, not_finished);
+
+  // coroutine not finished - extract dur from yielded value and schedule next
+  LLVMPositionBuilderAtEnd(builder, not_finished);
+  LLVMValueRef promise_ptr_raw = GET_PROMISE_PTR_RAW(_handle);
+  LLVMValueRef yield_ptr = LLVMBuildBitCast(
+      builder, promise_ptr_raw, LLVMPointerType(yield_type, 0), "promise.ptr");
+
+  LLVMValueRef yielded_raw =
+      LLVMBuildLoad2(builder, yield_type, yield_ptr, "yielded.raw");
+
+  // If the yield type is a tuple, field 0 is the duration double
+  LLVMValueRef dur_value;
+  if (yield_is_tuple) {
+    dur_value = LLVMBuildExtractValue(builder, yielded_raw, 0, "dur");
+  } else {
+    dur_value = yielded_raw;
+  }
+
+  LLVMValueRef scheduler_call =
+      LLVMBuildCall2(builder, schedule_event_type, schedule_event,
+                     (LLVMValueRef[]){
+                         _u64ts,
+                         dur_value,
+                         func,
+                         _handle,
+                     },
+                     4, "schedule_next");
+  LLVMBuildRetVoid(builder);
+
+  // coroutine finished - don't continue to schedule and you can ignore the
+  // yielded val
+  LLVMPositionBuilderAtEnd(builder, finished);
+  LLVMBuildRetVoid(builder);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+  LLVMValueRef get_current_sample_fn =
+      LLVMGetNamedFunction(module, "get_current_sample");
+  if (!get_current_sample_fn) {
+    get_current_sample_fn =
+        LLVMAddFunction(module, "get_current_sample",
+                        LLVMFunctionType(LLVMInt64Type(), NULL, 0, 0));
+    LLVMSetLinkage(get_current_sample_fn, LLVMExternalLinkage);
+  }
+
+  LLVMValueRef ctx_sample_rate_fn =
+      LLVMGetNamedFunction(module, "ctx_sample_rate");
+  if (!ctx_sample_rate_fn) {
+    ctx_sample_rate_fn =
+        LLVMAddFunction(module, "ctx_sample_rate",
+                        LLVMFunctionType(LLVMInt32Type(), NULL, 0, 0));
+    LLVMSetLinkage(ctx_sample_rate_fn, LLVMExternalLinkage);
+  }
+
+  LLVMValueRef now =
+      LLVMBuildCall2(builder, LLVMGlobalGetValueType(get_current_sample_fn),
+                     get_current_sample_fn, NULL, 0, "quant.now");
+  LLVMValueRef sr_raw =
+      LLVMBuildCall2(builder, LLVMGlobalGetValueType(ctx_sample_rate_fn),
+                     ctx_sample_rate_fn, NULL, 0, "quant.sr.raw");
+  LLVMValueRef sr_is_zero =
+      LLVMBuildICmp(builder, LLVMIntEQ, sr_raw,
+                    LLVMConstInt(LLVMInt32Type(), 0, 0), "quant.sr.is_zero");
+  LLVMValueRef sr = LLVMBuildSelect(builder, sr_is_zero,
+                                    LLVMConstInt(LLVMInt32Type(), 48000, 0),
+                                    sr_raw, "quant.sr");
+
+  LLVMValueRef sr_f =
+      LLVMBuildSIToFP(builder, sr, LLVMDoubleType(), "quant.sr.f64");
+  LLVMValueRef quant_is_positive =
+      LLVMBuildFCmp(builder, LLVMRealOGT, quant,
+                    LLVMConstReal(LLVMDoubleType(), 0.0), "quant.is_positive");
+  LLVMValueRef quant_samps_f =
+      LLVMBuildFMul(builder, quant, sr_f, "quant.samps.f64");
+  LLVMValueRef quant_samps =
+      LLVMBuildFPToUI(builder, quant_samps_f, LLVMInt64Type(), "quant.samps");
+  LLVMValueRef safe_quant_samps =
+      LLVMBuildSelect(builder, quant_is_positive, quant_samps,
+                      LLVMConstInt(LLVMInt64Type(), 1, 0), "quant.samps.safe");
+  LLVMValueRef offset_in_cycle =
+      LLVMBuildURem(builder, now, safe_quant_samps, "quant.offset");
+  LLVMValueRef offset_is_zero = LLVMBuildICmp(
+      builder, LLVMIntEQ, offset_in_cycle, LLVMConstInt(LLVMInt64Type(), 0, 0),
+      "quant.offset_is_zero");
+  LLVMValueRef positive_remainder_samps =
+      LLVMBuildSelect(builder, offset_is_zero, safe_quant_samps,
+                      LLVMBuildSub(builder, safe_quant_samps, offset_in_cycle,
+                                   "quant.remainder.sub"),
+                      "quant.remainder.samps.positive");
+  LLVMValueRef remainder_samps = LLVMBuildSelect(
+      builder, quant_is_positive, positive_remainder_samps,
+      LLVMConstInt(LLVMInt64Type(), 0, 0), "quant.remainder.samps");
+  LLVMValueRef remainder_samps_f = LLVMBuildUIToFP(
+      builder, remainder_samps, LLVMDoubleType(), "quant.remainder.samps.f64");
+  LLVMValueRef remainder_secs =
+      LLVMBuildFDiv(builder, remainder_samps_f, sr_f, "quant.remainder.secs");
+
+  LLVMBuildCall2(builder, schedule_event_type, schedule_event,
+                 (LLVMValueRef[]){
+                     now,
+                     remainder_secs,
+                     func,
+                     outer_handle,
+                 },
+                 4, "call.schedule_event.quantized");
+  return outer_handle;
 }
+
 LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
   Ast *time_ast = ast->data.AST_APPLICATION.args;

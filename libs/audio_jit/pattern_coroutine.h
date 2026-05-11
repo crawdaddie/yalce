@@ -20,12 +20,15 @@ LLVMValueRef emit_pattern_coroutine(const char *pattern_str, JITLangCtx *ctx,
 LLVMValueRef pattern_handler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMBuilderRef builder);
 
-LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str, JITLangCtx *ctx,
-                                        LLVMModuleRef module,
+LLVMValueRef play_pattern_handler(Ast *ast, JITLangCtx *ctx,
+                                  LLVMModuleRef module, LLVMBuilderRef builder);
+
+LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str,
+                                        JITLangCtx *ctx, LLVMModuleRef module,
                                         LLVMBuilderRef builder);
 
-LLVMValueRef pattern_key_handler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
-                                 LLVMBuilderRef builder);
+LLVMValueRef pattern_key_handler(Ast *ast, JITLangCtx *ctx,
+                                 LLVMModuleRef module, LLVMBuilderRef builder);
 
 LLVMValueRef emit_key_char_pattern_coroutine(const char *pattern_str,
                                              JITLangCtx *ctx,
@@ -35,4 +38,6 @@ LLVMValueRef emit_key_char_pattern_coroutine(const char *pattern_str,
 LLVMValueRef pattern_key_chars_handler(Ast *ast, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder);
+
+extern int STYPE_AUDIO_JIT_LIVE_PATTERN;
 #endif

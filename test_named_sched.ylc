@@ -1,30 +1,57 @@
+open DSP;
 open engine/bindings/Synth; 
 open engine/bindings/Sched; 
 
 
 let q = 1.;
-let pat =
-  [| 1., 2., 1., 1. |]
-  |> iter_of_array
-  |> cor_loop
-  |> cor_map (fn d -> print `yield d: {d}\n`; d)
-  ;
 
-let Patterns = module () -> 
-  type Pat = (
-    key: String,
-    pat: Coroutine of T,
-    quant: Double,
-  );
 
-  let play = fn cor: (Coroutine of T) ->
-    let q = 1.;
-    cor |> play_routine_quant q schedule_event
+play_pattern 1. (
+  pat1: (
+    [| 0.1, 1., 1., 1. |]
+    |> iter_of_array
+    |> cor_loop
+    |> cor_map (fn d -> print `yield d: {d}\n`; d)
+  )
+);
 
-  ;;
-;
 
-pat |> Patterns.play;
+#
+# play_pattern 1. (
+#   pat1: (
+#     [| 0.1, 0.2, 0.5, 0.1 |]
+#     |> iter_of_array
+#     |> cor_loop
+#     |> cor_map (fn d -> print `yield d: {d}\n`; d)
+#   )
+# );
+
+
+  #
+  # pat2: (
+  #   [| 1., 2., 1., 1. |]
+  #   |> iter_of_array
+  #   |> cor_loop
+  #   |> cor_map (fn d -> print `yield d: {d}\n`; d)
+  # )
+
+# # type Dict = 
+#
+# let Patterns = module () -> 
+#   type Pat = (
+#     key: String,
+#     pat: Coroutine of T,
+#     quant: Double,
+#   );
+#
+#   let play = fn key cor ->
+#     let q = 1.;
+#     cor |> play_routine_quant q schedule_event
+#   ;;
+# ;
+#
+# pat |> Patterns.play "key";
+#
 
 
 # let n = Patterns.NamedPattern "key" pat q;

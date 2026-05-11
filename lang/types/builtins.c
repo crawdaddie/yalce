@@ -868,6 +868,9 @@ void initialize_builtin_types() {
   play_routine_scheme = create_play_routine_scheme();
   add_builtin("play_routine", &play_routine_scheme);
 
+  play_routine_quant_scheme = create_play_routine_quant_scheme();
+  add_builtin("play_routine_quant", &play_routine_quant_scheme);
+
   sizeof_scheme = create_sizeof_scheme();
   add_builtin("sizeof", &sizeof_scheme);
   add_builtin("dlopen", &dlopen_type);

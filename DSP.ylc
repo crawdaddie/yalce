@@ -122,6 +122,7 @@ let Spectral = module () ->
   # let polar = extern fn Double -> Double -> Complex;
 ;
 
+let play_pattern = extern fn Double -> T -> T;
 
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
 

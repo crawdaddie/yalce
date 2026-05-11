@@ -20,7 +20,7 @@
 #include "../../lang/ylc_datatypes.h"
 #include "./compile_synth.h"
 #include "./dsp_fn_application.h"
-#include "pattern_coroutine.h"
+#include "./pattern_coroutine.h"
 
 #include <fftw3.h>
 #include <llvm-c/Core.h>
@@ -752,6 +752,7 @@ __attribute__((constructor)) static void ylc_audio_jit_init(void) {
   STYPE_AUDIO_JIT_SYNTH_INLET = REGISTERED_JIT_SYMBOL_TYPE++;
   STYPE_AUDIO_JIT_LOCAL_ARRAY = REGISTERED_JIT_SYMBOL_TYPE++;
   STYPE_AUDIO_JIT_DSP_VALUE = REGISTERED_JIT_SYMBOL_TYPE++;
+  STYPE_AUDIO_JIT_LIVE_PATTERN = REGISTERED_JIT_SYMBOL_TYPE++;
 
   ht *stack = ylc_jit_ctx->frame->table;
   register_builtin(stack, "compile_audio_fn", CompileAudioFnHandler);
@@ -762,6 +763,8 @@ __attribute__((constructor)) static void ylc_audio_jit_init(void) {
   register_builtin(stack, "pat", pattern_handler);
   register_builtin(stack, "pat_key", pattern_key_handler);
   register_builtin(stack, "pat_key_chars", pattern_key_chars_handler);
+
+  register_builtin(stack, "play_pattern", play_pattern_handler);
 }
 
 void *null_synth_ptr() { return NULL; }

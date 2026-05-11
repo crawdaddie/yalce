@@ -44,12 +44,12 @@ static LLVMTargetMachineRef target_machine;
 void module_passes(LLVMModuleRef module, LLVMTargetMachineRef target_machine);
 
 // Non-blocking REPL state (used when GUI shares the main thread)
-static LLVMModuleRef  s_repl_module;
-static const char    *s_repl_filename;
-static const char    *s_repl_dirname;
-static JITLangCtx    *s_repl_ctx;
+static LLVMModuleRef s_repl_module;
+static const char *s_repl_filename;
+static const char *s_repl_dirname;
+static JITLangCtx *s_repl_ctx;
 static LLVMBuilderRef s_repl_builder;
-static char          *s_repl_prompt;
+static char *s_repl_prompt;
 
 void repl_begin_nonblocking(LLVMModuleRef module, const char *filename,
                             const char *dirname, JITLangCtx *ctx,
@@ -533,14 +533,14 @@ static void repl_process_line(LLVMModuleRef module, const char *filename,
 }
 
 // Accumulation buffer for multiline \ continuation in non-blocking mode
-static char  *s_repl_accum      = NULL;
-static size_t s_repl_accum_len  = 0;
+static char *s_repl_accum = NULL;
+static size_t s_repl_accum_len = 0;
 
 static void repl_line_ready(char *line) {
   if (!line) {
     // EOF
     free(s_repl_accum);
-    s_repl_accum     = NULL;
+    s_repl_accum = NULL;
     s_repl_accum_len = 0;
     rl_callback_handler_remove();
     exit(0);
@@ -554,12 +554,15 @@ static void repl_line_ready(char *line) {
   if (len > 0 && line[len - 1] == '\\') {
     // Replace trailing \ with \n and accumulate
     size_t new_len = s_repl_accum_len + len; // len-1 chars + '\n'
-    char  *tmp     = realloc(s_repl_accum, new_len + 1);
-    if (!tmp) { free(line); return; }
+    char *tmp = realloc(s_repl_accum, new_len + 1);
+    if (!tmp) {
+      free(line);
+      return;
+    }
     s_repl_accum = tmp;
     memcpy(s_repl_accum + s_repl_accum_len, line, len - 1);
     s_repl_accum[s_repl_accum_len + len - 1] = '\n';
-    s_repl_accum[s_repl_accum_len + len]     = '\0';
+    s_repl_accum[s_repl_accum_len + len] = '\0';
     s_repl_accum_len = new_len;
     free(line);
     return; // wait for more lines
@@ -567,33 +570,33 @@ static void repl_line_ready(char *line) {
 
   // Final (or only) line — append it with a trailing newline
   size_t final_len = s_repl_accum_len + len + 2; // +newline +NUL
-  char  *input     = malloc(final_len);
+  char *input = malloc(final_len);
   if (s_repl_accum_len)
     memcpy(input, s_repl_accum, s_repl_accum_len);
   memcpy(input + s_repl_accum_len, line, len);
-  input[s_repl_accum_len + len]     = '\n';
+  input[s_repl_accum_len + len] = '\n';
   input[s_repl_accum_len + len + 1] = '\0';
   free(line);
 
   // Reset accumulator
   free(s_repl_accum);
-  s_repl_accum     = NULL;
+  s_repl_accum = NULL;
   s_repl_accum_len = 0;
 
-  repl_process_line(s_repl_module, s_repl_filename, s_repl_dirname,
-                    s_repl_ctx, s_repl_builder, input);
+  repl_process_line(s_repl_module, s_repl_filename, s_repl_dirname, s_repl_ctx,
+                    s_repl_builder, input);
   free(input);
 }
 
 void repl_begin_nonblocking(LLVMModuleRef module, const char *filename,
                             const char *dirname, JITLangCtx *ctx,
                             LLVMBuilderRef builder) {
-  s_repl_module   = module;
+  s_repl_module = module;
   s_repl_filename = filename;
-  s_repl_dirname  = dirname;
-  s_repl_ctx      = ctx;
-  s_repl_builder  = builder;
-  s_repl_prompt   = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
+  s_repl_dirname = dirname;
+  s_repl_ctx = ctx;
+  s_repl_builder = builder;
+  s_repl_prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
 
   rl_callback_handler_install(s_repl_prompt, repl_line_ready);
 }

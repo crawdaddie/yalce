@@ -196,19 +196,18 @@ Type *infer_inline_module(Ast *ast, TICtx *ctx) {
   AstList *type_annotations = ast->data.AST_LAMBDA.type_annotations;
   AstList *params = ast->data.AST_LAMBDA.params;
 
-  // printf("infer parametrized module\n");
   if (ast->data.AST_LAMBDA.len > 0) {
 
     int i = 0;
     for (AstList *p = params; p; i++, p = p->next,
                  type_annotations = type_annotations ? type_annotations->next
                                                      : NULL) {
-      // Ast *param = p->ast;
-      // print_ast(param);
-      // if (type_annotations && type_annotations->ast) {
-      //   printf("constraint: ");
-      //   print_ast(type_annotations->ast);
-      // }
+      Ast *param = p->ast;
+      print_ast(param);
+      if (type_annotations && type_annotations->ast) {
+        printf("constraint: ");
+        print_ast(type_annotations->ast);
+      }
     }
   }
 
