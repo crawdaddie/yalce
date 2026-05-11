@@ -3,17 +3,58 @@ open engine/bindings/Synth;
 open engine/bindings/Sched; 
 
 
-let q = 1.;
+let q = 60. / 120.;
 
 
-play_pattern 1. (
+compile_audio_fn (
+  let kick = fn () ->
+    let t = trig 0;
+    let freq = t |> decay 0.1 |> scale 30 4000;
+    freq
+    |> sin_osc 
+    |> (+) (t |> decay 0.4 |> (*) (white ()))
+    |> (*) 2. |> Math.tanh
+    |> (*) (adsr 0 0.1 0.8 0.2 (t |> rect 0.25) |> kill_on_end)
+);
+
+compile_audio_fn (
+  let chirp = fn () ->
+    let t = trig 0;
+    let freq = t |> decay 0.1 |> scale 800 4000;
+    freq
+    |> sin_osc 
+    |> (+) (t |> decay 0.4 |> (*) (white ()))
+    |> (*) 2. |> Math.tanh
+    |> (*) (adsr 0 0.1 0.8 0.2 (t |> rect 0.25) |> kill_on_end)
+);
+
+
+play_pattern (4 * q) (
   pat1: (
-    [| 0.1, 1., 1., 1. |]
-    |> iter_of_array
+    pat "3 1 2 3 3 4" 
     |> cor_loop
-    |> cor_map (fn d -> print `yield d: {d}\n`; d)
+    |> cor_map (fn d ->
+      # print `yield d: {d}\n`;
+      let fo = get_tl_tick ();
+      kick () |> play_node_offset fo;
+      d * q * 0.25
+    )
+  ),
+
+  pat2: (
+    pat "3 3 4 3 2.5" 
+    |> cor_loop
+    |> cor_map (fn d ->
+      # print `yield d: {d}\n`;
+      let fo = get_tl_tick ();
+      chirp () |> play_node_offset fo;
+      d * q * 0.25
+    )
   )
 );
+
+
+
 
 
 #

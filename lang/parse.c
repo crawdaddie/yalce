@@ -322,6 +322,37 @@ Ast *parse_input(char *input, const char *dirname) {
   return res;
 }
 
+static void reset_parser_position(void) {
+  yylineno = 1;
+  yycolumn = 1;
+  yyabsoluteoffset = 0;
+  yyprevoffset = 0;
+}
+
+Ast *parse_input_buffer(const char *filename, const char *input) {
+  char *current_dir = get_dirname(filename);
+
+  Ast *ast_root = Ast_new(AST_BODY);
+  ast_root->data.AST_BODY.len = 0;
+  ast_root->data.AST_BODY.stmts = NULL;
+  ast_root->data.AST_BODY.tail = NULL;
+
+  pctx = (ParsingContext){
+      .filename = filename,
+      .import_current_dir = current_dir,
+      .cur_script = (char *)filename,
+      .cur_script_content = input,
+      .ast_root = ast_root,
+      .custom_binops = NULL,
+  };
+
+  YY_BUFFER_STATE new_buffer = yy_scan_string((char *)input);
+  reset_parser_position();
+  yyparse();
+  yy_delete_buffer(new_buffer);
+  return pctx.ast_root;
+}
+
 bool is_custom_binop(const char *id) {
   custom_binops_t *bb = pctx.custom_binops;
   while (bb) {
@@ -1234,16 +1265,83 @@ Ast *parse_input_script(const char *filename) {
   // Create and switch to new buffer for parsing imported file
   YY_BUFFER_STATE new_buffer = yy_scan_string((char *)input);
 
-  // Reset lexer position for new file
-  yylineno = 1;
-  yyabsoluteoffset = 0;
-
   // Parse the input
+  reset_parser_position();
   yyparse();
 
   // Save the result
   Ast *result = pctx.ast_root;
   return result;
+}
+
+static long long offset_for_line(const char *src, int target_line) {
+  if (!src || target_line <= 1) {
+    return 0;
+  }
+
+  long long offset = 0;
+  int line = 1;
+  while (src[offset] != '\0' && line < target_line) {
+    if (src[offset] == '\n') {
+      line++;
+    }
+    offset++;
+  }
+
+  return offset;
+}
+
+static void line_col_for_offset(const char *src, long long offset, int *line_out,
+                                int *col_out) {
+  int line = 1;
+  int col = 1;
+  for (long long i = 0; i < offset && src[i] != '\0'; i++) {
+    if (src[i] == '\n') {
+      line++;
+      col = 1;
+    } else {
+      col++;
+    }
+  }
+
+  *line_out = line;
+  *col_out = col;
+}
+
+bool find_top_level_range_at_line(Ast *root, const char *src, int line,
+                                  source_range *out_range) {
+  if (!root || root->tag != AST_BODY || !src || !out_range) {
+    return false;
+  }
+
+  long long cursor_offset = offset_for_line(src, line);
+  AstList *stmt = root->data.AST_BODY.stmts;
+
+  while (stmt != NULL) {
+    Ast *current = stmt->ast;
+    if (!current || !current->loc_info) {
+      stmt = stmt->next;
+      continue;
+    }
+
+    long long start = current->loc_info->absolute_offset;
+    long long end = stmt->next && stmt->next->ast && stmt->next->ast->loc_info
+                        ? stmt->next->ast->loc_info->absolute_offset
+                        : (long long)strlen(src);
+
+    if (cursor_offset >= start && cursor_offset < end) {
+      out_range->start_offset = start;
+      out_range->end_offset = end;
+      line_col_for_offset(src, start, &out_range->start_line,
+                          &out_range->start_col);
+      line_col_for_offset(src, end, &out_range->end_line, &out_range->end_col);
+      return true;
+    }
+
+    stmt = stmt->next;
+  }
+
+  return false;
 }
 
 Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {

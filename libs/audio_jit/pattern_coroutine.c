@@ -8,8 +8,8 @@
 #include "../../lang/types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <ctype.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -1561,6 +1561,10 @@ static LLVMTypeRef scheduler_callback_type(void) {
                           (LLVMTypeRef[]){GENERIC_PTR, LLVMInt64Type()}, 2, 0);
 }
 
+static LLVMTypeRef stop_callback_type(void) {
+  return LLVMFunctionType(LLVMVoidType(), (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+}
+
 static LLVMTypeRef defer_quant_callback_type(void) {
   return LLVMFunctionType(LLVMVoidType(), (LLVMTypeRef[]){LLVMInt64Type()}, 1,
                           0);
@@ -1598,7 +1602,30 @@ static LLVMValueRef ensure_push_event_fn(LLVMModuleRef module) {
   return fn;
 }
 
-static live_pattern_state_t *get_or_create_live_pattern_state(const char *name) {
+static LLVMValueRef ensure_malloc_fn(LLVMModuleRef module) {
+  LLVMValueRef fn = LLVMGetNamedFunction(module, "malloc");
+  if (!fn) {
+    LLVMTypeRef malloc_type = LLVMFunctionType(
+        GENERIC_PTR, (LLVMTypeRef[]){LLVMInt64Type()}, 1, 0);
+    fn = LLVMAddFunction(module, "malloc", malloc_type);
+    LLVMSetLinkage(fn, LLVMExternalLinkage);
+  }
+  return fn;
+}
+
+static LLVMValueRef ensure_free_fn(LLVMModuleRef module) {
+  LLVMValueRef fn = LLVMGetNamedFunction(module, "free");
+  if (!fn) {
+    LLVMTypeRef free_type =
+        LLVMFunctionType(LLVMVoidType(), (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+    fn = LLVMAddFunction(module, "free", free_type);
+    LLVMSetLinkage(fn, LLVMExternalLinkage);
+  }
+  return fn;
+}
+
+static live_pattern_state_t *
+get_or_create_live_pattern_state(const char *name) {
   for (live_pattern_state_entry_t *entry = live_pattern_states; entry != NULL;
        entry = entry->next) {
     if (strcmp(entry->name, name) == 0) {
@@ -1618,9 +1645,21 @@ static LLVMValueRef codegen_live_pattern_state_ptr(live_pattern_state_t *state,
                                                    LLVMModuleRef module) {
   (void)module;
   LLVMTypeRef state_ptr_ty = LLVMPointerType(live_pattern_struct_type(), 0);
-  LLVMValueRef addr =
-      LLVMConstInt(LLVMInt64Type(), (uintptr_t)state, 0);
+  LLVMValueRef addr = LLVMConstInt(LLVMInt64Type(), (uintptr_t)state, 0);
   return LLVMConstIntToPtr(addr, state_ptr_ty);
+}
+
+static LLVMTypeRef play_pattern_batch_item_type(void) {
+  return LLVMStructType(
+      (LLVMTypeRef[]){
+          LLVMPointerType(live_pattern_struct_type(), 0),
+          LLVMDoubleType(),
+          GENERIC_PTR,
+          GENERIC_PTR,
+          GENERIC_PTR,
+          GENERIC_PTR,
+      },
+      6, 0);
 }
 
 static LLVMValueRef emit_defer_quant_ir(LLVMValueRef quant,
@@ -1817,6 +1856,35 @@ ensure_play_pattern_defer_wrapper(const char *name, LLVMValueRef pattern_global,
   return func;
 }
 
+static LLVMValueRef ensure_play_pattern_stop_wrapper(const char *name,
+                                                     Type *cor_type,
+                                                     JITLangCtx *ctx,
+                                                     LLVMModuleRef module,
+                                                     LLVMBuilderRef builder) {
+  char wrapper_name[256];
+  snprintf(wrapper_name, sizeof(wrapper_name), "__ylc_play_pattern_stop_%s",
+           name);
+
+  LLVMValueRef func = LLVMGetNamedFunction(module, wrapper_name);
+  if (func) {
+    return func;
+  }
+
+  func = LLVMAddFunction(module, wrapper_name, stop_callback_type());
+  LLVMSetLinkage(func, LLVMInternalLinkage);
+
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
+  LLVMPositionBuilderAtEnd(builder, entry);
+
+  LLVMValueRef handle = LLVMGetParam(func, 0);
+  _cor_stop(cor_type, handle, ctx, module, builder);
+  LLVMBuildRetVoid(builder);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+  return func;
+}
+
 static LLVMValueRef ensure_play_pattern_start_wrapper(
     const char *name, LLVMValueRef pattern_global, LLVMValueRef step_wrapper,
     LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -1860,107 +1928,277 @@ static LLVMValueRef ensure_play_pattern_start_wrapper(
   return func;
 }
 
+typedef struct play_pattern_codegen_item_t {
+  LLVMValueRef result;
+  LLVMValueRef state_ptr;
+  LLVMValueRef old_handle;
+  LLVMValueRef new_handle;
+  LLVMValueRef step_wrapper;
+  LLVMValueRef stop_wrapper;
+} play_pattern_codegen_item_t;
+
+static int play_pattern_batch_counter = 0;
+
+static LLVMValueRef
+ensure_play_pattern_batch_wrapper(int batch_id, LLVMTypeRef batch_ty,
+                                  size_t item_count, LLVMModuleRef module,
+                                  LLVMBuilderRef builder) {
+  char wrapper_name[256];
+  snprintf(wrapper_name, sizeof(wrapper_name), "__ylc_play_pattern_batch_%d",
+           batch_id);
+
+  LLVMValueRef func = LLVMGetNamedFunction(module, wrapper_name);
+  if (func) {
+    return func;
+  }
+
+  func = LLVMAddFunction(module, wrapper_name, scheduler_callback_type());
+  LLVMSetLinkage(func, LLVMInternalLinkage);
+
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMBasicBlockRef entry = LLVMAppendBasicBlock(func, "entry");
+  LLVMPositionBuilderAtEnd(builder, entry);
+
+  LLVMValueRef userdata = LLVMGetParam(func, 0);
+  LLVMValueRef tick = LLVMGetParam(func, 1);
+  LLVMValueRef batch_ptr =
+      LLVMBuildBitCast(builder, userdata, LLVMPointerType(batch_ty, 0),
+                       "play_pattern.batch");
+  LLVMValueRef items_ptr =
+      LLVMBuildStructGEP2(builder, batch_ty, batch_ptr, 0, "batch.items");
+  LLVMTypeRef item_ty = play_pattern_batch_item_type();
+  LLVMTypeRef items_arr_ty = LLVMArrayType(item_ty, (unsigned)item_count);
+  LLVMValueRef schedule_event_fn = ensure_schedule_event_fn(module);
+  LLVMValueRef free_fn = ensure_free_fn(module);
+
+  for (size_t i = 0; i < item_count; i++) {
+    LLVMValueRef item_ptr = LLVMBuildGEP2(
+        builder, items_arr_ty, items_ptr,
+        (LLVMValueRef[]){
+            LLVMConstInt(LLVMInt32Type(), 0, 0),
+            LLVMConstInt(LLVMInt32Type(), i, 0),
+        },
+        2, "batch.item.stop");
+    LLVMValueRef old_handle_ptr =
+        LLVMBuildStructGEP2(builder, item_ty, item_ptr, 2, "item.old.ptr");
+    LLVMValueRef stop_fn_ptr =
+        LLVMBuildStructGEP2(builder, item_ty, item_ptr, 5, "item.stop_fn.ptr");
+    LLVMValueRef old_handle =
+        LLVMBuildLoad2(builder, GENERIC_PTR, old_handle_ptr, "item.old");
+    LLVMValueRef stop_fn_raw =
+        LLVMBuildLoad2(builder, GENERIC_PTR, stop_fn_ptr, "item.stop_fn");
+    LLVMBuildCall2(builder, stop_callback_type(), stop_fn_raw,
+                   (LLVMValueRef[]){old_handle}, 1, "");
+  }
+
+  for (size_t i = 0; i < item_count; i++) {
+    LLVMValueRef item_ptr = LLVMBuildGEP2(
+        builder, items_arr_ty, items_ptr,
+        (LLVMValueRef[]){
+            LLVMConstInt(LLVMInt32Type(), 0, 0),
+            LLVMConstInt(LLVMInt32Type(), i, 0),
+        },
+        2, "batch.item.install");
+    LLVMValueRef state_ptr_ptr =
+        LLVMBuildStructGEP2(builder, item_ty, item_ptr, 0, "item.state.ptr");
+    LLVMValueRef quant_ptr =
+        LLVMBuildStructGEP2(builder, item_ty, item_ptr, 1, "item.quant.ptr");
+    LLVMValueRef new_handle_ptr =
+        LLVMBuildStructGEP2(builder, item_ty, item_ptr, 3, "item.new.ptr");
+    LLVMValueRef state_ptr = LLVMBuildLoad2(
+        builder, LLVMPointerType(live_pattern_struct_type(), 0), state_ptr_ptr,
+        "item.state");
+    LLVMValueRef quant =
+        LLVMBuildLoad2(builder, LLVMDoubleType(), quant_ptr, "item.quant");
+    LLVMValueRef new_handle =
+        LLVMBuildLoad2(builder, GENERIC_PTR, new_handle_ptr, "item.new");
+    LLVMValueRef state_quant_ptr =
+        LLVMBuildStructGEP2(builder, live_pattern_struct_type(), state_ptr, 0,
+                            "state.quant");
+    LLVMValueRef state_coro_ptr =
+        LLVMBuildStructGEP2(builder, live_pattern_struct_type(), state_ptr, 1,
+                            "state.coro");
+    LLVMBuildStore(builder, quant, state_quant_ptr);
+    LLVMBuildStore(builder, new_handle, state_coro_ptr);
+  }
+
+  for (size_t i = 0; i < item_count; i++) {
+    LLVMValueRef item_ptr = LLVMBuildGEP2(
+        builder, items_arr_ty, items_ptr,
+        (LLVMValueRef[]){
+            LLVMConstInt(LLVMInt32Type(), 0, 0),
+            LLVMConstInt(LLVMInt32Type(), i, 0),
+        },
+        2, "batch.item.start");
+    LLVMValueRef new_handle_ptr =
+        LLVMBuildStructGEP2(builder, item_ty, item_ptr, 3, "item.new.ptr");
+    LLVMValueRef step_fn_ptr =
+        LLVMBuildStructGEP2(builder, item_ty, item_ptr, 4, "item.step_fn.ptr");
+    LLVMValueRef new_handle =
+        LLVMBuildLoad2(builder, GENERIC_PTR, new_handle_ptr, "item.new");
+    LLVMValueRef step_fn =
+        LLVMBuildLoad2(builder, GENERIC_PTR, step_fn_ptr, "item.step_fn");
+    LLVMBuildCall2(builder, schedule_event_type(), schedule_event_fn,
+                   (LLVMValueRef[]){
+                       tick,
+                       LLVMConstReal(LLVMDoubleType(), 0.0),
+                       step_fn,
+                       new_handle,
+                   },
+                   4, "schedule_start");
+  }
+
+  LLVMBuildCall2(builder, LLVMGlobalGetValueType(free_fn), free_fn,
+                 (LLVMValueRef[]){userdata}, 1, "");
+  LLVMBuildRetVoid(builder);
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+  return func;
+}
+
+static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
+                                       JITLangCtx *ctx, LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+  LLVMValueRef quantization = codegen(quant, ctx, module, builder);
+  if (!quantization) {
+    return NULL;
+  }
+
+  play_pattern_codegen_item_t items[len];
+  LLVMTypeRef results_ty[len];
+
+  for (int i = 0; i < len; i++) {
+    Ast *binding = &bindings[i];
+    if (binding->tag != AST_LET || binding->data.AST_LET.binding->tag != AST_IDENTIFIER) {
+      fprintf(stderr, "play_pattern: expected identifier binding\n");
+      return NULL;
+    }
+
+    const char *pattern_name =
+        binding->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+    LLVMValueRef coroutine =
+        codegen(binding->data.AST_LET.expr, ctx, module, builder);
+    if (!coroutine) {
+      return NULL;
+    }
+
+    JITSymbol *sym = lookup_id_ast(binding->data.AST_LET.binding, ctx);
+    live_pattern_state_t *pattern_state =
+        (sym && (int)sym->type == STYPE_AUDIO_JIT_LIVE_PATTERN)
+            ? sym->symbol_data._USER_DEFINED_SYMBOL
+            : get_or_create_live_pattern_state(pattern_name);
+    LLVMValueRef pattern_global =
+        codegen_live_pattern_state_ptr(pattern_state, module);
+    LLVMValueRef old_pattern =
+        LLVMBuildLoad2(builder, live_pattern_struct_type(), pattern_global,
+                       "live_pattern.old");
+    LLVMValueRef old_handle = LLVMBuildExtractValue(builder, old_pattern, 1,
+                                                    "live_pattern.old.coro");
+
+    Type *cor_type = sym && (int)sym->type == STYPE_AUDIO_JIT_LIVE_PATTERN &&
+                             sym->symbol_type
+                         ? sym->symbol_type
+                         : binding->data.AST_LET.expr->type;
+    LLVMValueRef step_wrapper = ensure_play_pattern_step_wrapper(
+        pattern_name, pattern_global, cor_type, ctx, module, builder);
+    LLVMValueRef stop_wrapper = ensure_play_pattern_stop_wrapper(
+        pattern_name, cor_type, ctx, module, builder);
+
+    if (sym && (int)sym->type == STYPE_AUDIO_JIT_LIVE_PATTERN) {
+      sym->val = pattern_global;
+      sym->symbol_type = cor_type;
+    } else {
+      JITSymbol *pat_sym = new_symbol(STYPE_AUDIO_JIT_LIVE_PATTERN, cor_type,
+                                      pattern_global,
+                                      LLVMPointerType(live_pattern_struct_type(),
+                                                      0));
+      pat_sym->symbol_data._USER_DEFINED_SYMBOL = pattern_state;
+      ht_set_hash(
+          ctx->frame->table, pattern_name,
+          hash_string(
+              pattern_name,
+              binding->data.AST_LET.binding->data.AST_IDENTIFIER.length),
+          pat_sym);
+    }
+
+    items[i] = (play_pattern_codegen_item_t){
+        .result = coroutine,
+        .state_ptr = pattern_global,
+        .old_handle = old_handle,
+        .new_handle = coroutine,
+        .step_wrapper = LLVMBuildBitCast(builder, step_wrapper, GENERIC_PTR,
+                                         "step.wrapper.ptr"),
+        .stop_wrapper = LLVMBuildBitCast(builder, stop_wrapper, GENERIC_PTR,
+                                         "stop.wrapper.ptr"),
+    };
+    results_ty[i] = LLVMTypeOf(coroutine);
+  }
+
+  LLVMTypeRef item_ty = play_pattern_batch_item_type();
+  LLVMTypeRef items_arr_ty = LLVMArrayType(item_ty, (unsigned)len);
+  LLVMTypeRef batch_ty = LLVMStructType((LLVMTypeRef[]){items_arr_ty}, 1, 0);
+  LLVMTargetDataRef dl = LLVMGetModuleDataLayout(module);
+  LLVMValueRef batch_size =
+      LLVMConstInt(LLVMInt64Type(), LLVMABISizeOfType(dl, batch_ty), 0);
+  LLVMValueRef malloc_fn = ensure_malloc_fn(module);
+  LLVMValueRef batch_mem = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(malloc_fn), malloc_fn,
+      (LLVMValueRef[]){batch_size}, 1, "play_pattern.batch.alloc");
+  LLVMValueRef batch_ptr =
+      LLVMBuildBitCast(builder, batch_mem, LLVMPointerType(batch_ty, 0),
+                       "play_pattern.batch.ptr");
+  LLVMValueRef batch_items_ptr =
+      LLVMBuildStructGEP2(builder, batch_ty, batch_ptr, 0, "batch.items");
+
+  for (int i = 0; i < len; i++) {
+    LLVMValueRef item_ptr = LLVMBuildGEP2(
+        builder, items_arr_ty, batch_items_ptr,
+        (LLVMValueRef[]){
+            LLVMConstInt(LLVMInt32Type(), 0, 0),
+            LLVMConstInt(LLVMInt32Type(), i, 0),
+        },
+        2, "batch.item.ptr");
+    LLVMBuildStore(builder, items[i].state_ptr,
+                   LLVMBuildStructGEP2(builder, item_ty, item_ptr, 0,
+                                       "batch.item.state.ptr"));
+    LLVMBuildStore(builder, quantization,
+                   LLVMBuildStructGEP2(builder, item_ty, item_ptr, 1,
+                                       "batch.item.quant.ptr"));
+    LLVMBuildStore(builder, items[i].old_handle,
+                   LLVMBuildStructGEP2(builder, item_ty, item_ptr, 2,
+                                       "batch.item.old.ptr"));
+    LLVMBuildStore(builder, items[i].new_handle,
+                   LLVMBuildStructGEP2(builder, item_ty, item_ptr, 3,
+                                       "batch.item.new.ptr"));
+    LLVMBuildStore(builder, items[i].step_wrapper,
+                   LLVMBuildStructGEP2(builder, item_ty, item_ptr, 4,
+                                       "batch.item.step.ptr"));
+    LLVMBuildStore(builder, items[i].stop_wrapper,
+                   LLVMBuildStructGEP2(builder, item_ty, item_ptr, 5,
+                                       "batch.item.stop.ptr"));
+  }
+
+  LLVMValueRef batch_wrapper = ensure_play_pattern_batch_wrapper(
+      play_pattern_batch_counter++, batch_ty, (size_t)len, module, builder);
+  emit_defer_quant_ir(quantization, batch_wrapper, batch_mem, module, builder);
+
+  if (len == 1) {
+    return items[0].result;
+  }
+
+  LLVMValueRef ret_struct = LLVMGetUndef(LLVMStructType(results_ty, len, 0));
+  for (int i = 0; i < len; i++) {
+    ret_struct =
+        LLVMBuildInsertValue(builder, ret_struct, items[i].result, i, "");
+  }
+  return ret_struct;
+}
+
 LLVMValueRef play_pattern(Ast *binding, Ast *quant, JITLangCtx *ctx,
                           LLVMModuleRef module, LLVMBuilderRef builder) {
-  if (binding->data.AST_LET.binding->tag != AST_IDENTIFIER) {
-    fprintf(stderr, "play_pattern: expected identifier binding\n");
-    return NULL;
-  }
-
-  const char *pattern_name =
-      binding->data.AST_LET.binding->data.AST_IDENTIFIER.value;
-  LLVMValueRef quantization = codegen(quant, ctx, module, builder);
-
-  LLVMValueRef coroutine =
-      codegen(binding->data.AST_LET.expr, ctx, module, builder);
-  Type *cor_type = binding->data.AST_LET.expr->type;
-  if (!coroutine || !cor_type) {
-    return NULL;
-  }
-
-  JITSymbol *sym = lookup_id_ast(binding->data.AST_LET.binding, ctx);
-  LLVMTypeRef pattern_struct_ty = live_pattern_struct_type();
-  live_pattern_state_t *pattern_state;
-  if (sym && (int)sym->type == STYPE_AUDIO_JIT_LIVE_PATTERN) {
-    pattern_state = sym->symbol_data._USER_DEFINED_SYMBOL;
-  } else {
-    pattern_state = get_or_create_live_pattern_state(pattern_name);
-  }
-  LLVMValueRef pattern_global =
-      codegen_live_pattern_state_ptr(pattern_state, module);
-
-  LLVMValueRef live_pattern_struct = LLVMGetUndef(pattern_struct_ty);
-  live_pattern_struct =
-      LLVMBuildInsertValue(builder, live_pattern_struct, quantization, 0,
-                           "set_live_pattern_quantization");
-
-  live_pattern_struct = LLVMBuildInsertValue(
-      builder, live_pattern_struct, coroutine, 1, "set_live_pattern_coroutine");
-  LLVMValueRef old_coroutine_to_stop = LLVMConstNull(GENERIC_PTR);
-  if (sym && (int)sym->type == STYPE_AUDIO_JIT_LIVE_PATTERN) {
-
-    LLVMValueRef old_pattern = LLVMBuildLoad2(
-        builder, pattern_struct_ty, pattern_global, "live_pattern.old");
-    old_coroutine_to_stop =
-        LLVMBuildExtractValue(builder, old_pattern, 1, "live_pattern.old.coro");
-  }
-
-  LLVMBuildStore(builder, live_pattern_struct, pattern_global);
-
-  LLVMValueRef step_wrapper = ensure_play_pattern_step_wrapper(
-      pattern_name, pattern_global, cor_type, ctx, module, builder);
-  LLVMValueRef defer_wrapper = ensure_play_pattern_defer_wrapper(
-      pattern_name, pattern_global, step_wrapper, cor_type, ctx, module,
-      builder);
-  LLVMValueRef start_wrapper = ensure_play_pattern_start_wrapper(
-      pattern_name, pattern_global, step_wrapper, module, builder);
-
-  LLVMBasicBlockRef current_bb = LLVMGetInsertBlock(builder);
-  LLVMValueRef current_fn = LLVMGetBasicBlockParent(current_bb);
-  LLVMBasicBlockRef replace_bb =
-      LLVMAppendBasicBlock(current_fn, "play_pattern.replace");
-  LLVMBasicBlockRef start_bb =
-      LLVMAppendBasicBlock(current_fn, "play_pattern.start");
-  LLVMBasicBlockRef merge_bb =
-      LLVMAppendBasicBlock(current_fn, "play_pattern.merge");
-
-  LLVMValueRef has_old_coroutine =
-      LLVMBuildIsNotNull(builder, old_coroutine_to_stop, "has_old_coroutine");
-  LLVMBuildCondBr(builder, has_old_coroutine, replace_bb, start_bb);
-
-  LLVMPositionBuilderAtEnd(builder, replace_bb);
-  emit_defer_quant_ir(quantization, defer_wrapper, old_coroutine_to_stop,
-                      module, builder);
-  LLVMBuildBr(builder, merge_bb);
-
-  LLVMPositionBuilderAtEnd(builder, start_bb);
-  emit_defer_quant_ir(quantization, start_wrapper, LLVMConstNull(GENERIC_PTR),
-                      module, builder);
-  LLVMBuildBr(builder, merge_bb);
-
-  LLVMPositionBuilderAtEnd(builder, merge_bb);
-
-  if (sym && (int)sym->type == STYPE_AUDIO_JIT_LIVE_PATTERN) {
-    printf("found pattern symbol %s\n",
-           binding->data.AST_LET.binding->data.AST_IDENTIFIER.value);
-
-  } else {
-    JITSymbol *pat_sym = new_symbol(STYPE_AUDIO_JIT_LIVE_PATTERN, binding->type,
-                                    pattern_global, pattern_struct_ty);
-    pat_sym->symbol_data._USER_DEFINED_SYMBOL = pattern_state;
-    ht_set_hash(
-        ctx->frame->table, pattern_name,
-        hash_string(pattern_name,
-                    binding->data.AST_LET.binding->data.AST_IDENTIFIER.length),
-        pat_sym);
-    printf("need new symbol %s\n",
-           binding->data.AST_LET.binding->data.AST_IDENTIFIER.value);
-  }
-  if (sym && (int)sym->type == STYPE_AUDIO_JIT_LIVE_PATTERN) {
-    sym->val = pattern_global;
-  }
-  return coroutine;
+  return play_pattern_block(binding, 1, quant, ctx, module, builder);
 }
+
 LLVMValueRef play_pattern_handler(Ast *ast, JITLangCtx *ctx,
                                   LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
@@ -1969,14 +2207,9 @@ LLVMValueRef play_pattern_handler(Ast *ast, JITLangCtx *ctx,
 
   if (pattern_record->tag == AST_TUPLE &&
       (pattern_record->data.AST_LIST.items[0].tag == AST_LET)) {
-    LLVMValueRef final;
-    Ast app = *ast;
-
-    for (size_t i = 0; i < pattern_record->data.AST_LIST.len; i++) {
-      app.data.AST_APPLICATION.args[1] = pattern_record->data.AST_LIST.items[i];
-      final = play_pattern_handler(&app, ctx, module, builder);
-    }
-    return final;
+    return play_pattern_block(pattern_record->data.AST_LIST.items,
+                              pattern_record->data.AST_LIST.len, quant_arg,
+                              ctx, module, builder);
   }
 
   if (pattern_record->tag == AST_LET) {

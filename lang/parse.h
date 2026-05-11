@@ -59,6 +59,15 @@ typedef struct loc_info {
   long long absolute_offset;
 } loc_info;
 
+typedef struct source_range {
+  long long start_offset;
+  long long end_offset;
+  int start_line;
+  int start_col;
+  int end_line;
+  int end_col;
+} source_range;
+
 typedef struct AstList {
   Ast *ast;
   struct AstList *next;
@@ -362,6 +371,7 @@ Ast *ast_arg_list_push(Ast *arg_list, Ast *arg_id, Ast *def);
 Ast *ast_arg_list_push_default(Ast *arg_id, Ast *def);
 Ast *parse_stmt_list(Ast *stmts, Ast *new_stmt);
 Ast *parse_input(char *input, const char *dirname);
+Ast *parse_input_buffer(const char *filename, const char *input);
 Ast *parse_input_script(const char *filename);
 Ast *parse_submodule(const char *module_path);
 Ast *ast_void();
@@ -477,5 +487,7 @@ Ast *body_tail(Ast *body);
 Ast *array_index_expression(Ast *array, Ast *index_expr);
 
 Ast *array_offset_expression(Ast *array, Ast *index_expr);
+bool find_top_level_range_at_line(Ast *root, const char *src, int line,
+                                  source_range *out_range);
 // Ast *array_offset_expression(Ast *array, Ast *index_expr);
 #endif

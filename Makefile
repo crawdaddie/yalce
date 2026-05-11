@@ -70,8 +70,12 @@ LANG_OBJS := $(LANG_SRCS:$(LANG_SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 LANG_OBJS += $(BUILD_DIR)/y.tab.o $(BUILD_DIR)/lex.yy.o
 LANG_CPP_OBJS := $(LANG_CPP_SRCS:$(LANG_SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
 LANG_OBJS += $(LANG_CPP_OBJS)
+RANGE_SERVER_LANG_OBJS := $(filter-out $(BUILD_DIR)/main.o,$(LANG_OBJS))
+RANGE_SERVER_SRC := tools/ylc_range_server.c
+RANGE_SERVER_OBJ := $(BUILD_DIR)/tools/ylc_range_server.o
+RANGE_SERVER_TARGET := $(BUILD_DIR)/tools/ylc_range_server
 
-.PHONY: all clean engine audio_jit gui test wasm serve_docs engine_bindings cor
+.PHONY: all clean engine audio_jit gui test wasm serve_docs engine_bindings cor range_server
 
 all: $(BUILD_DIR)/ylc
 
@@ -96,6 +100,7 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)/backend_llvm/coroutines
 	mkdir -p $(BUILD_DIR)/types
 	mkdir -p $(BUILD_DIR)/runtime
+	mkdir -p $(BUILD_DIR)/tools
 
 # Define Linux-specific YACC flags
 ifeq ($(shell uname -s),Linux)
@@ -118,6 +123,9 @@ $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR
 $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.cpp | $(BUILD_DIR)
 	$(LANG_CXX) -c -o $@ $<
 
+$(RANGE_SERVER_OBJ): $(RANGE_SERVER_SRC) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
+	$(LANG_CC) -c -o $@ $<
+
 # Build the final executable (use C++ linker since we have C++ objects)
 $(BUILD_DIR)/ylc: $(LANG_OBJS) | audio_jit gui
 	$(LANG_CXX) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
@@ -126,6 +134,11 @@ ifeq ($(shell uname -s),Darwin)
 else
 	ldd $(BUILD_DIR)/ylc || true
 endif
+
+$(RANGE_SERVER_TARGET): $(RANGE_SERVER_OBJ) $(RANGE_SERVER_LANG_OBJS) | $(BUILD_DIR)
+	$(LANG_CXX) -o $@ $(RANGE_SERVER_OBJ) $(RANGE_SERVER_LANG_OBJS) $(LANG_LD_FLAGS)
+
+range_server: $(RANGE_SERVER_TARGET)
 
 clean:
 	rm -rf $(BUILD_DIR)

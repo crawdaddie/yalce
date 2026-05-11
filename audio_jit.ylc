@@ -91,36 +91,38 @@ compile_audio_fn (
 );
 
 
-defer_quant q (fn t ->
-  pat "3 3 3 4 1 1 1" 
+play_pattern (4* q) (
+  chpat: (pat "3 3 3 4 3" 
   |> cor_loop
   |> cor_map (fn d -> trig (); d)
   |> cor_map ((*) (q * 0.25))
-  |> play_routine t schedule_event
-  ;
-  #
-  #
-  pat "3 3 3 4 3" 
+  ),
+  
+  k: (pat "4 4 8" 
   |> cor_loop
   |> cor_map (fn d -> kick () |> play_node_offset (get_tl_tick ()); d)
   |> cor_map ((*) (q * 0.25))
-  |> play_routine t schedule_event
-  ;
+  ),
+
+  hh: (
+  (dur:     pat "0.5 0.5 1. 0.5 ",
+    hh: pat_key "c c  "
+  )
+  |> cor_zip_struct 
+  |> cor_map (fn (d, hh) ->
+    match hh with
+    | "c" -> (closed_hh () |> play_node_offset (get_tl_tick ()))
+    | "o" -> (open_hh () |> play_node_offset (get_tl_tick ()))
+    ;
+    d * q * 0.25
+  ))
+ 
+);
+
 
   # let hh = fn () -> closed_hh () |> play_node_offset (get_tl_tick ());;
   # let ohh = fn () -> open_hh () |> play_node_offset (get_tl_tick ());;
 
-  # (dur:     pat "1 1 2",
-  #   hh: pat_key "c c o"
-  # )
-  # |> cor_zip_struct 
-  # |> cor_map (fn (d, hh) ->
-  #   match hh with
-  #   | "c" -> (closed_hh () |> play_node_offset (get_tl_tick ()))
-  #   | "o" -> (open_hh () |> play_node_offset (get_tl_tick ()))
-  #   ;
-  #   d * q * 0.25
-  # )
   # |> play_routine t schedule_event
   # ;
 
@@ -131,9 +133,7 @@ defer_quant q (fn t ->
   # |> play_routine t schedule_event
   # ;
 
-);
 
-
-let ylc_scope_open = extern fn Synth -> (); 
-let _ = dlopen "libs/gui/libgui.so";
-ylc_scope_open rfx;
+# let ylc_scope_open = extern fn Synth -> (); 
+# let _ = dlopen "libs/gui/libgui.so";
+# ylc_scope_open rfx;
