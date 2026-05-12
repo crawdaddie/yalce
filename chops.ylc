@@ -1,8 +1,7 @@
 open DSP;
 open engine/bindings/Synth; 
 open engine/bindings/Sched; 
-# import analysis;
-import std/Arrays;
+# import analysis; import std/Arrays;
 
 # let amen = load_soundfile "~/Sounds/BREAKS/!!JUNGLE AND DRUM N BASS ORIGIN BREAKS/140 Lyn Collins - Think (About it) 1.wav";
 
@@ -26,37 +25,43 @@ let Amen = module () ->
     # breaks 0. 0. |> play_node,
   |];
 
-  let play_break = fn k tick ->
+  let play_break = fn k len tick ->
     let ki = parse_int k;
-    synth[0] := breaks ((60. / q) / 168.) ((Double ki) / 8) |> play_node_offset tick
+    synth[0] := breaks ((60. / q) / 171.) ((Double ki) / 8) |> play_node_dur tick len 0 
   ;;
 
-  let stop_break = fn tick ->
-    set_input_scalar_offset (synth[0]) 0 tick 0.
-  ;;
+  # let stop_break = fn tick ->
+  #   set_input_scalar_offset (synth[0]) 0 tick 0.
+  # ;;
 
-  let process_key = fn key ->
+  let process_key = fn key l: (Double) ->
     let t = get_tl_tick ();
     match key with
-    | "." -> (
-        if active[0] != "" then (
-          active[0] := "";
-          stop_break t
-        );
-        ()
-    )
+    | "." -> ()
     | "-" -> ()
     | k -> (
-        if active[0] != "" then (
-          stop_break t
-        );
-
         active[0] := k;
-        play_break k t;
+        play_break k l t;
         ()
   )
   ;;
 ;
+
+defer_quant q (fn t ->
+  (dur:     pat "1",
+     k: (pat_key `
+     0-.0-.0-.0---
+     0-.0-.0-.0---
+  0 0 0 0-.5--0---
+     0-.0-.5-.5-55
+     `  )
+  )
+  |> cor_zip_struct 
+  |> cor_map (fn (d, (key, l)) ->
+    Amen.process_key key (0.25 * q * Double l);
+    d * q * 0.25
+  )
+  |> play_routine t schedule_event)
 
 # defer_quant q (fn t ->
 #   (dur:     pat "1",
@@ -76,20 +81,4 @@ let Amen = module () ->
 # );
 #
 
-let named_pattern = fn key quant pat ->
-  defer_quant q (fn t -> pat |> play_routine t schedule_event)
-;;
 
-(dur:     pat "1",
-   k: (pat_key `
-   0-1-2-3-4-5-6-7-
-   0-1-2-2-2--2-10-
-   0--0--2-2--2-10-
-   `  )
-)
-|> cor_zip_struct 
-|> cor_map (fn (d, key) ->
-  # print `key: {key}\n`;
-  Amen.process_key key;
-  d * q * 0.25
-) |> named_pattern "breaks" q

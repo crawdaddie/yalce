@@ -98,15 +98,15 @@ play_pattern (4* q) (
   |> cor_map ((*) (q * 0.25))
   ),
   
-  k: (pat "4 4 8" 
+  k: (pat "4 4 3 3 2" 
   |> cor_loop
   |> cor_map (fn d -> kick () |> play_node_offset (get_tl_tick ()); d)
   |> cor_map ((*) (q * 0.25))
   ),
 
   hh: (
-  (dur:     pat "0.5 0.5 1. 0.5 ",
-    hh: pat_key "c c  "
+  (dur:     pat "1 1 2 ",
+    hh: pat_key "c c o "
   )
   |> cor_zip_struct 
   |> cor_map (fn (d, hh) ->

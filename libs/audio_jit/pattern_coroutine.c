@@ -221,15 +221,20 @@ static bool parse_pattern(const char *src, ParsedPattern *out) {
 // ============================================================================
 
 typedef struct {
+  char *text; // malloced token string
+  int len;    // parsed sustain length, defaults to 1
+} KeyToken;
+
+typedef struct {
   PatternStepKind kind; // STEP_SEQ = sequence/scalar, STEP_RAND = random pick
-  char **vals;          // malloced token strings
+  KeyToken *vals;       // malloced token values
   int count;
 } KeySlot;
 
 typedef struct {
   PatternStepKind kind;
   // STEP_SEQ:
-  char *fixed_key; // malloced token string
+  KeyToken fixed_key;
   // STEP_ALT / STEP_RAND:
   KeySlot *slots; // malloced array of slots
   int num_slots;
@@ -248,13 +253,13 @@ static void free_parsed_key(ParsedKeyPattern *p) {
     if (s->kind != STEP_SEQ) {
       for (int j = 0; j < s->num_slots; j++) {
         for (int k = 0; k < s->slots[j].count; k++) {
-          free(s->slots[j].vals[k]);
+          free(s->slots[j].vals[k].text);
         }
         free(s->slots[j].vals);
       }
       free(s->slots);
     } else {
-      free(s->fixed_key);
+      free(s->fixed_key.text);
     }
   }
   free(p->steps);
@@ -264,7 +269,7 @@ static bool is_key_delim(char c) {
   return c == '<' || c == '>' || c == '{' || c == '}' || c == '[' || c == ']';
 }
 
-static bool parse_key_token(const char **pp, char **out) {
+static bool parse_key_token(const char **pp, KeyToken *out) {
   skip_ws(pp);
   const char *start = *pp;
   if (!*start || is_key_delim(*start))
@@ -274,30 +279,9 @@ static bool parse_key_token(const char **pp, char **out) {
     char *tok = malloc(2);
     tok[0] = *start;
     tok[1] = '\0';
-    *out = tok;
+    out->text = tok;
+    out->len = 1;
     (*pp)++;
-    return true;
-  }
-
-  if (isdigit((unsigned char)*start)) {
-    char *tok = malloc(2);
-    tok[0] = *start;
-    tok[1] = '\0';
-    *out = tok;
-    (*pp)++;
-    return true;
-  }
-
-  if (isalpha((unsigned char)*start)) {
-    (*pp)++;
-    while (**pp == '#' || **pp == '_' || isdigit((unsigned char)**pp))
-      (*pp)++;
-
-    int len = (int)(*pp - start);
-    char *tok = malloc((size_t)len + 1);
-    memcpy(tok, start, (size_t)len);
-    tok[len] = '\0';
-    *out = tok;
     return true;
   }
 
@@ -312,7 +296,14 @@ static bool parse_key_token(const char **pp, char **out) {
   char *tok = malloc((size_t)len + 1);
   memcpy(tok, start, (size_t)len);
   tok[len] = '\0';
-  *out = tok;
+  int sustain = 0;
+  const char *lookahead = *pp;
+  while (*lookahead == '-') {
+    sustain++;
+    lookahead++;
+  }
+  out->text = tok;
+  out->len = sustain + 1;
   return true;
 }
 
@@ -330,7 +321,7 @@ static bool parse_key_char_token(const char **pp, char **out) {
   return true;
 }
 
-static bool parse_key_token_list(const char **pp, char close, char **tmp,
+static bool parse_key_token_list(const char **pp, char close, KeyToken *tmp,
                                  int *n) {
   while (**pp && **pp != close) {
     skip_ws(pp);
@@ -340,7 +331,7 @@ static bool parse_key_token_list(const char **pp, char close, char **tmp,
       return false;
     if (!parse_key_token(pp, &tmp[*n])) {
       for (int i = 0; i < *n; i++)
-        free(tmp[i]);
+        free(tmp[i].text);
       return false;
     }
     (*n)++;
@@ -376,21 +367,21 @@ static bool parse_key_slot(const char **pp, KeySlot *out) {
     char close = **pp == '[' ? ']' : '}';
     out->kind = **pp == '[' ? STEP_SEQ : STEP_RAND;
     (*pp)++;
-    char *tmp[MAX_SEQ_VALS];
+    KeyToken tmp[MAX_SEQ_VALS];
     int n = 0;
     if (!parse_key_token_list(pp, close, tmp, &n))
       return false;
     out->count = n;
-    out->vals = malloc(sizeof(char *) * (size_t)n);
-    memcpy(out->vals, tmp, sizeof(char *) * (size_t)n);
+    out->vals = malloc(sizeof(KeyToken) * (size_t)n);
+    memcpy(out->vals, tmp, sizeof(KeyToken) * (size_t)n);
     return true;
   } else {
-    char *tok;
+    KeyToken tok;
     if (!parse_key_token(pp, &tok))
       return false;
     out->kind = STEP_SEQ;
     out->count = 1;
-    out->vals = malloc(sizeof(char *));
+    out->vals = malloc(sizeof(KeyToken));
     out->vals[0] = tok;
     return true;
   }
@@ -429,7 +420,7 @@ static bool parse_key_pattern(const char *src, ParsedKeyPattern *out) {
 
       KeyPatternStep *step = &out->steps[out->num_steps++];
       step->kind = STEP_ALT;
-      step->fixed_key = NULL;
+      step->fixed_key = (KeyToken){0};
       step->num_slots = num_slots;
       step->slots = malloc(sizeof(KeySlot) * (size_t)num_slots);
       memcpy(step->slots, tmp_slots, sizeof(KeySlot) * (size_t)num_slots);
@@ -454,13 +445,13 @@ static bool parse_key_pattern(const char *src, ParsedKeyPattern *out) {
 
       KeyPatternStep *step = &out->steps[out->num_steps++];
       step->kind = STEP_RAND;
-      step->fixed_key = NULL;
+      step->fixed_key = (KeyToken){0};
       step->num_slots = num_slots;
       step->slots = malloc(sizeof(KeySlot) * (size_t)num_slots);
       memcpy(step->slots, tmp_slots, sizeof(KeySlot) * (size_t)num_slots);
       step->counter_idx = -1;
     } else {
-      char *tok;
+      KeyToken tok;
       if (!parse_key_token(&p, &tok))
         return false;
 
@@ -486,8 +477,10 @@ static bool parse_key_char_slot(const char **pp, KeySlot *out) {
     if (!parse_key_char_token_list(pp, close, tmp, &n))
       return false;
     out->count = n;
-    out->vals = malloc(sizeof(char *) * (size_t)n);
-    memcpy(out->vals, tmp, sizeof(char *) * (size_t)n);
+    out->vals = malloc(sizeof(KeyToken) * (size_t)n);
+    for (int i = 0; i < n; i++) {
+      out->vals[i] = (KeyToken){.text = tmp[i], .len = 1};
+    }
     return true;
   } else {
     char *tok;
@@ -495,8 +488,8 @@ static bool parse_key_char_slot(const char **pp, KeySlot *out) {
       return false;
     out->kind = STEP_SEQ;
     out->count = 1;
-    out->vals = malloc(sizeof(char *));
-    out->vals[0] = tok;
+    out->vals = malloc(sizeof(KeyToken));
+    out->vals[0] = (KeyToken){.text = tok, .len = 1};
     return true;
   }
 }
@@ -534,7 +527,7 @@ static bool parse_key_char_pattern(const char *src, ParsedKeyPattern *out) {
 
       KeyPatternStep *step = &out->steps[out->num_steps++];
       step->kind = STEP_ALT;
-      step->fixed_key = NULL;
+      step->fixed_key = (KeyToken){0};
       step->num_slots = num_slots;
       step->slots = malloc(sizeof(KeySlot) * (size_t)num_slots);
       memcpy(step->slots, tmp_slots, sizeof(KeySlot) * (size_t)num_slots);
@@ -559,7 +552,7 @@ static bool parse_key_char_pattern(const char *src, ParsedKeyPattern *out) {
 
       KeyPatternStep *step = &out->steps[out->num_steps++];
       step->kind = STEP_RAND;
-      step->fixed_key = NULL;
+      step->fixed_key = (KeyToken){0};
       step->num_slots = num_slots;
       step->slots = malloc(sizeof(KeySlot) * (size_t)num_slots);
       memcpy(step->slots, tmp_slots, sizeof(KeySlot) * (size_t)num_slots);
@@ -571,7 +564,7 @@ static bool parse_key_char_pattern(const char *src, ParsedKeyPattern *out) {
 
       KeyPatternStep *step = &out->steps[out->num_steps++];
       step->kind = STEP_SEQ;
-      step->fixed_key = tok;
+      step->fixed_key = (KeyToken){.text = tok, .len = 1};
       step->slots = NULL;
       step->num_slots = 0;
       step->counter_idx = -1;
@@ -901,19 +894,35 @@ LLVMValueRef emit_pattern_coroutine(const char *pattern_str, JITLangCtx *ctx,
 }
 
 static LLVMValueRef codegen_const_token_string(const char *token,
-                                               LLVMTypeRef yield_ty,
+                                               LLVMTypeRef string_ty,
                                                LLVMBuilderRef builder) {
   static int lit_uid = 0;
   char global_name[64];
   snprintf(global_name, sizeof(global_name), "pat_key_tok_%d", lit_uid++);
 
   LLVMValueRef data_ptr = LLVMBuildGlobalStringPtr(builder, token, global_name);
-  LLVMValueRef str_val = LLVMGetUndef(yield_ty);
+  LLVMValueRef str_val = LLVMGetUndef(string_ty);
   str_val = LLVMBuildInsertValue(
       builder, str_val, LLVMConstInt(LLVMInt32Type(), strlen(token), 0), 0,
       "pat_key_len");
   str_val = LLVMBuildInsertValue(builder, str_val, data_ptr, 1, "pat_key_data");
   return str_val;
+}
+
+static LLVMValueRef codegen_const_key_yield(const KeyToken *token,
+                                            LLVMTypeRef yield_ty,
+                                            LLVMBuilderRef builder) {
+  LLVMTypeRef string_ty =
+      string_struct_type(LLVMPointerType(LLVMInt8Type(), 0));
+  LLVMValueRef string_val =
+      codegen_const_token_string(token->text, string_ty, builder);
+  LLVMValueRef yield_val = LLVMGetUndef(yield_ty);
+  yield_val =
+      LLVMBuildInsertValue(builder, yield_val, string_val, 0, "pat_key.key");
+  yield_val = LLVMBuildInsertValue(builder, yield_val,
+                                   LLVMConstInt(LLVMInt32Type(), token->len, 0),
+                                   1, "pat_key.sustain");
+  return yield_val;
 }
 
 LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str,
@@ -934,7 +943,10 @@ LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str,
   snprintf(wrapper_name, sizeof(wrapper_name), "pattern_key_coro_%d", my_id);
   snprintf(reset_name, sizeof(reset_name), "pattern_key_coro_%d.reset", my_id);
 
-  LLVMTypeRef yield_ty = string_struct_type(LLVMPointerType(LLVMInt8Type(), 0));
+  LLVMTypeRef string_ty =
+      string_struct_type(LLVMPointerType(LLVMInt8Type(), 0));
+  LLVMTypeRef yield_ty =
+      LLVMStructType((LLVMTypeRef[]){string_ty, LLVMInt32Type()}, 2, 0);
   LLVMTypeRef promise_type = CORO_PROMISE_TYPE(yield_ty);
 
   LLVMTypeRef wrapper_fn_type = LLVMFunctionType(
@@ -1016,7 +1028,7 @@ LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str,
     if (step->kind == STEP_SEQ) {
       snprintf(lbl, sizeof(lbl), "k%d", i);
       emit_yield(wrapper_fn, module, builder, handle, promise_alloca,
-                 codegen_const_token_string(step->fixed_key, yield_ty, builder),
+                 codegen_const_key_yield(&step->fixed_key, yield_ty, builder),
                  cleanup_bb, suspend_bb, lbl);
     } else {
       LLVMValueRef slot_idx;
@@ -1092,7 +1104,7 @@ LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str,
             snprintf(lbl, sizeof(lbl), "k%d.sl%d.rv%d", i, j, k);
             emit_yield(
                 wrapper_fn, module, builder, handle, promise_alloca,
-                codegen_const_token_string(slot->vals[k], yield_ty, builder),
+                codegen_const_key_yield(&slot->vals[k], yield_ty, builder),
                 cleanup_bb, suspend_bb, lbl);
             LLVMBuildBr(builder, after_rnd_bb);
           }
@@ -1103,7 +1115,7 @@ LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str,
             snprintf(lbl, sizeof(lbl), "k%d.sl%d.v%d", i, j, k);
             emit_yield(
                 wrapper_fn, module, builder, handle, promise_alloca,
-                codegen_const_token_string(slot->vals[k], yield_ty, builder),
+                codegen_const_key_yield(&slot->vals[k], yield_ty, builder),
                 cleanup_bb, suspend_bb, lbl);
           }
         }
@@ -1254,9 +1266,10 @@ LLVMValueRef emit_key_char_pattern_coroutine(const char *pattern_str,
 
     if (step->kind == STEP_SEQ) {
       snprintf(lbl, sizeof(lbl), "kc%d", i);
-      emit_yield(wrapper_fn, module, builder, handle, promise_alloca,
-                 codegen_const_token_string(step->fixed_key, yield_ty, builder),
-                 cleanup_bb, suspend_bb, lbl);
+      emit_yield(
+          wrapper_fn, module, builder, handle, promise_alloca,
+          codegen_const_token_string(step->fixed_key.text, yield_ty, builder),
+          cleanup_bb, suspend_bb, lbl);
     } else {
       LLVMValueRef slot_idx;
       if (step->kind == STEP_RAND) {
@@ -1329,10 +1342,10 @@ LLVMValueRef emit_key_char_pattern_coroutine(const char *pattern_str,
           for (int k = 0; k < slot->count; k++) {
             LLVMPositionBuilderAtEnd(builder, val_bbs[k]);
             snprintf(lbl, sizeof(lbl), "kc%d.sl%d.rv%d", i, j, k);
-            emit_yield(
-                wrapper_fn, module, builder, handle, promise_alloca,
-                codegen_const_token_string(slot->vals[k], yield_ty, builder),
-                cleanup_bb, suspend_bb, lbl);
+            emit_yield(wrapper_fn, module, builder, handle, promise_alloca,
+                       codegen_const_token_string(slot->vals[k].text, yield_ty,
+                                                  builder),
+                       cleanup_bb, suspend_bb, lbl);
             LLVMBuildBr(builder, after_rnd_bb);
           }
           free(val_bbs);
@@ -1340,10 +1353,10 @@ LLVMValueRef emit_key_char_pattern_coroutine(const char *pattern_str,
         } else {
           for (int k = 0; k < slot->count; k++) {
             snprintf(lbl, sizeof(lbl), "kc%d.sl%d.v%d", i, j, k);
-            emit_yield(
-                wrapper_fn, module, builder, handle, promise_alloca,
-                codegen_const_token_string(slot->vals[k], yield_ty, builder),
-                cleanup_bb, suspend_bb, lbl);
+            emit_yield(wrapper_fn, module, builder, handle, promise_alloca,
+                       codegen_const_token_string(slot->vals[k].text, yield_ty,
+                                                  builder),
+                       cleanup_bb, suspend_bb, lbl);
           }
         }
         LLVMBuildBr(builder, after_alt_bb);
@@ -1605,8 +1618,8 @@ static LLVMValueRef ensure_push_event_fn(LLVMModuleRef module) {
 static LLVMValueRef ensure_malloc_fn(LLVMModuleRef module) {
   LLVMValueRef fn = LLVMGetNamedFunction(module, "malloc");
   if (!fn) {
-    LLVMTypeRef malloc_type = LLVMFunctionType(
-        GENERIC_PTR, (LLVMTypeRef[]){LLVMInt64Type()}, 1, 0);
+    LLVMTypeRef malloc_type =
+        LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){LLVMInt64Type()}, 1, 0);
     fn = LLVMAddFunction(module, "malloc", malloc_type);
     LLVMSetLinkage(fn, LLVMExternalLinkage);
   }
@@ -1939,10 +1952,11 @@ typedef struct play_pattern_codegen_item_t {
 
 static int play_pattern_batch_counter = 0;
 
-static LLVMValueRef
-ensure_play_pattern_batch_wrapper(int batch_id, LLVMTypeRef batch_ty,
-                                  size_t item_count, LLVMModuleRef module,
-                                  LLVMBuilderRef builder) {
+static LLVMValueRef ensure_play_pattern_batch_wrapper(int batch_id,
+                                                      LLVMTypeRef batch_ty,
+                                                      size_t item_count,
+                                                      LLVMModuleRef module,
+                                                      LLVMBuilderRef builder) {
   char wrapper_name[256];
   snprintf(wrapper_name, sizeof(wrapper_name), "__ylc_play_pattern_batch_%d",
            batch_id);
@@ -1961,9 +1975,8 @@ ensure_play_pattern_batch_wrapper(int batch_id, LLVMTypeRef batch_ty,
 
   LLVMValueRef userdata = LLVMGetParam(func, 0);
   LLVMValueRef tick = LLVMGetParam(func, 1);
-  LLVMValueRef batch_ptr =
-      LLVMBuildBitCast(builder, userdata, LLVMPointerType(batch_ty, 0),
-                       "play_pattern.batch");
+  LLVMValueRef batch_ptr = LLVMBuildBitCast(
+      builder, userdata, LLVMPointerType(batch_ty, 0), "play_pattern.batch");
   LLVMValueRef items_ptr =
       LLVMBuildStructGEP2(builder, batch_ty, batch_ptr, 0, "batch.items");
   LLVMTypeRef item_ty = play_pattern_batch_item_type();
@@ -1972,13 +1985,13 @@ ensure_play_pattern_batch_wrapper(int batch_id, LLVMTypeRef batch_ty,
   LLVMValueRef free_fn = ensure_free_fn(module);
 
   for (size_t i = 0; i < item_count; i++) {
-    LLVMValueRef item_ptr = LLVMBuildGEP2(
-        builder, items_arr_ty, items_ptr,
-        (LLVMValueRef[]){
-            LLVMConstInt(LLVMInt32Type(), 0, 0),
-            LLVMConstInt(LLVMInt32Type(), i, 0),
-        },
-        2, "batch.item.stop");
+    LLVMValueRef item_ptr =
+        LLVMBuildGEP2(builder, items_arr_ty, items_ptr,
+                      (LLVMValueRef[]){
+                          LLVMConstInt(LLVMInt32Type(), 0, 0),
+                          LLVMConstInt(LLVMInt32Type(), i, 0),
+                      },
+                      2, "batch.item.stop");
     LLVMValueRef old_handle_ptr =
         LLVMBuildStructGEP2(builder, item_ty, item_ptr, 2, "item.old.ptr");
     LLVMValueRef stop_fn_ptr =
@@ -1992,44 +2005,42 @@ ensure_play_pattern_batch_wrapper(int batch_id, LLVMTypeRef batch_ty,
   }
 
   for (size_t i = 0; i < item_count; i++) {
-    LLVMValueRef item_ptr = LLVMBuildGEP2(
-        builder, items_arr_ty, items_ptr,
-        (LLVMValueRef[]){
-            LLVMConstInt(LLVMInt32Type(), 0, 0),
-            LLVMConstInt(LLVMInt32Type(), i, 0),
-        },
-        2, "batch.item.install");
+    LLVMValueRef item_ptr =
+        LLVMBuildGEP2(builder, items_arr_ty, items_ptr,
+                      (LLVMValueRef[]){
+                          LLVMConstInt(LLVMInt32Type(), 0, 0),
+                          LLVMConstInt(LLVMInt32Type(), i, 0),
+                      },
+                      2, "batch.item.install");
     LLVMValueRef state_ptr_ptr =
         LLVMBuildStructGEP2(builder, item_ty, item_ptr, 0, "item.state.ptr");
     LLVMValueRef quant_ptr =
         LLVMBuildStructGEP2(builder, item_ty, item_ptr, 1, "item.quant.ptr");
     LLVMValueRef new_handle_ptr =
         LLVMBuildStructGEP2(builder, item_ty, item_ptr, 3, "item.new.ptr");
-    LLVMValueRef state_ptr = LLVMBuildLoad2(
-        builder, LLVMPointerType(live_pattern_struct_type(), 0), state_ptr_ptr,
-        "item.state");
+    LLVMValueRef state_ptr =
+        LLVMBuildLoad2(builder, LLVMPointerType(live_pattern_struct_type(), 0),
+                       state_ptr_ptr, "item.state");
     LLVMValueRef quant =
         LLVMBuildLoad2(builder, LLVMDoubleType(), quant_ptr, "item.quant");
     LLVMValueRef new_handle =
         LLVMBuildLoad2(builder, GENERIC_PTR, new_handle_ptr, "item.new");
-    LLVMValueRef state_quant_ptr =
-        LLVMBuildStructGEP2(builder, live_pattern_struct_type(), state_ptr, 0,
-                            "state.quant");
-    LLVMValueRef state_coro_ptr =
-        LLVMBuildStructGEP2(builder, live_pattern_struct_type(), state_ptr, 1,
-                            "state.coro");
+    LLVMValueRef state_quant_ptr = LLVMBuildStructGEP2(
+        builder, live_pattern_struct_type(), state_ptr, 0, "state.quant");
+    LLVMValueRef state_coro_ptr = LLVMBuildStructGEP2(
+        builder, live_pattern_struct_type(), state_ptr, 1, "state.coro");
     LLVMBuildStore(builder, quant, state_quant_ptr);
     LLVMBuildStore(builder, new_handle, state_coro_ptr);
   }
 
   for (size_t i = 0; i < item_count; i++) {
-    LLVMValueRef item_ptr = LLVMBuildGEP2(
-        builder, items_arr_ty, items_ptr,
-        (LLVMValueRef[]){
-            LLVMConstInt(LLVMInt32Type(), 0, 0),
-            LLVMConstInt(LLVMInt32Type(), i, 0),
-        },
-        2, "batch.item.start");
+    LLVMValueRef item_ptr =
+        LLVMBuildGEP2(builder, items_arr_ty, items_ptr,
+                      (LLVMValueRef[]){
+                          LLVMConstInt(LLVMInt32Type(), 0, 0),
+                          LLVMConstInt(LLVMInt32Type(), i, 0),
+                      },
+                      2, "batch.item.start");
     LLVMValueRef new_handle_ptr =
         LLVMBuildStructGEP2(builder, item_ty, item_ptr, 3, "item.new.ptr");
     LLVMValueRef step_fn_ptr =
@@ -2069,7 +2080,8 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
 
   for (int i = 0; i < len; i++) {
     Ast *binding = &bindings[i];
-    if (binding->tag != AST_LET || binding->data.AST_LET.binding->tag != AST_IDENTIFIER) {
+    if (binding->tag != AST_LET ||
+        binding->data.AST_LET.binding->tag != AST_IDENTIFIER) {
       fprintf(stderr, "play_pattern: expected identifier binding\n");
       return NULL;
     }
@@ -2092,8 +2104,8 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
     LLVMValueRef old_pattern =
         LLVMBuildLoad2(builder, live_pattern_struct_type(), pattern_global,
                        "live_pattern.old");
-    LLVMValueRef old_handle = LLVMBuildExtractValue(builder, old_pattern, 1,
-                                                    "live_pattern.old.coro");
+    LLVMValueRef old_handle =
+        LLVMBuildExtractValue(builder, old_pattern, 1, "live_pattern.old.coro");
 
     Type *cor_type = sym && (int)sym->type == STYPE_AUDIO_JIT_LIVE_PATTERN &&
                              sym->symbol_type
@@ -2108,17 +2120,14 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
       sym->val = pattern_global;
       sym->symbol_type = cor_type;
     } else {
-      JITSymbol *pat_sym = new_symbol(STYPE_AUDIO_JIT_LIVE_PATTERN, cor_type,
-                                      pattern_global,
-                                      LLVMPointerType(live_pattern_struct_type(),
-                                                      0));
+      JITSymbol *pat_sym =
+          new_symbol(STYPE_AUDIO_JIT_LIVE_PATTERN, cor_type, pattern_global,
+                     LLVMPointerType(live_pattern_struct_type(), 0));
       pat_sym->symbol_data._USER_DEFINED_SYMBOL = pattern_state;
-      ht_set_hash(
-          ctx->frame->table, pattern_name,
-          hash_string(
-              pattern_name,
-              binding->data.AST_LET.binding->data.AST_IDENTIFIER.length),
-          pat_sym);
+      ht_set_hash(ctx->frame->table, pattern_name,
+                  hash_string(pattern_name, binding->data.AST_LET.binding->data
+                                                .AST_IDENTIFIER.length),
+                  pat_sym);
     }
 
     items[i] = (play_pattern_codegen_item_t){
@@ -2151,13 +2160,13 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
       LLVMBuildStructGEP2(builder, batch_ty, batch_ptr, 0, "batch.items");
 
   for (int i = 0; i < len; i++) {
-    LLVMValueRef item_ptr = LLVMBuildGEP2(
-        builder, items_arr_ty, batch_items_ptr,
-        (LLVMValueRef[]){
-            LLVMConstInt(LLVMInt32Type(), 0, 0),
-            LLVMConstInt(LLVMInt32Type(), i, 0),
-        },
-        2, "batch.item.ptr");
+    LLVMValueRef item_ptr =
+        LLVMBuildGEP2(builder, items_arr_ty, batch_items_ptr,
+                      (LLVMValueRef[]){
+                          LLVMConstInt(LLVMInt32Type(), 0, 0),
+                          LLVMConstInt(LLVMInt32Type(), i, 0),
+                      },
+                      2, "batch.item.ptr");
     LLVMBuildStore(builder, items[i].state_ptr,
                    LLVMBuildStructGEP2(builder, item_ty, item_ptr, 0,
                                        "batch.item.state.ptr"));
@@ -2208,8 +2217,8 @@ LLVMValueRef play_pattern_handler(Ast *ast, JITLangCtx *ctx,
   if (pattern_record->tag == AST_TUPLE &&
       (pattern_record->data.AST_LIST.items[0].tag == AST_LET)) {
     return play_pattern_block(pattern_record->data.AST_LIST.items,
-                              pattern_record->data.AST_LIST.len, quant_arg,
-                              ctx, module, builder);
+                              pattern_record->data.AST_LIST.len, quant_arg, ctx,
+                              module, builder);
   }
 
   if (pattern_record->tag == AST_LET) {
