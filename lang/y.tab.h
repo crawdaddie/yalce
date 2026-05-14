@@ -177,7 +177,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 29 "../lang/parser.y"
+#line 33 "lang/parser.y"
 
     Ast *ast_node_ptr;          /* node pointer */
     ObjString vident;           /* identifier */
@@ -187,7 +187,7 @@ union YYSTYPE
     float vfloat;
     char vchar;
 
-#line 191 "../lang/y.tab.h"
+#line 191 "lang/y.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

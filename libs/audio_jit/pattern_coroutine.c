@@ -62,7 +62,89 @@ typedef struct {
   PatternStep *steps; // malloced
   int num_steps;
   int num_alt_groups;
+  bool should_loop;
 } ParsedPattern;
+
+static void free_pattern_step(PatternStep *step) {
+  if (step->kind != STEP_SEQ && step->slots) {
+    for (int j = 0; j < step->num_slots; j++) {
+      free(step->slots[j].vals);
+    }
+    free(step->slots);
+  }
+}
+
+static bool clone_pattern_step(PatternStep *dst, const PatternStep *src) {
+  memset(dst, 0, sizeof(*dst));
+  dst->kind = src->kind;
+  dst->fixed_val = src->fixed_val;
+  dst->num_slots = src->num_slots;
+  dst->counter_idx = src->counter_idx;
+  if (src->kind == STEP_SEQ) {
+    return true;
+  }
+
+  dst->slots = malloc(sizeof(Slot) * (size_t)src->num_slots);
+  if (!dst->slots) {
+    return false;
+  }
+
+  for (int i = 0; i < src->num_slots; i++) {
+    dst->slots[i].kind = src->slots[i].kind;
+    dst->slots[i].count = src->slots[i].count;
+    dst->slots[i].vals = malloc(sizeof(double) * (size_t)src->slots[i].count);
+    if (!dst->slots[i].vals) {
+      for (int j = 0; j < i; j++) {
+        free(dst->slots[j].vals);
+      }
+      free(dst->slots);
+      dst->slots = NULL;
+      return false;
+    }
+    memcpy(dst->slots[i].vals, src->slots[i].vals,
+           sizeof(double) * (size_t)src->slots[i].count);
+  }
+  return true;
+}
+
+static bool append_pattern_step(ParsedPattern *out, const PatternStep *src) {
+  if (out->num_steps >= MAX_STEPS) {
+    return false;
+  }
+  PatternStep *dst = &out->steps[out->num_steps];
+  if (!clone_pattern_step(dst, src)) {
+    return false;
+  }
+  if (dst->kind == STEP_ALT) {
+    dst->counter_idx = out->num_alt_groups++;
+  } else if (dst->kind == STEP_RAND) {
+    dst->counter_idx = -1;
+  }
+  out->num_steps++;
+  return true;
+}
+
+static void skip_ws(const char **pp);
+
+static bool parse_repeat_count(const char **pp, int *repeat_count) {
+  const char *saved = *pp;
+  skip_ws(pp);
+  if (**pp != '*') {
+    *repeat_count = 1;
+    *pp = saved;
+    return true;
+  }
+  (*pp)++;
+  skip_ws(pp);
+  char *end = NULL;
+  long count = strtol(*pp, &end, 10);
+  if (end == *pp || count <= 0 || count > MAX_STEPS) {
+    return false;
+  }
+  *repeat_count = (int)count;
+  *pp = end;
+  return true;
+}
 
 static void free_parsed(ParsedPattern *p) {
   for (int i = 0; i < p->num_steps; i++) {
@@ -132,12 +214,18 @@ static bool parse_pattern(const char *src, ParsedPattern *out) {
   out->steps = calloc(MAX_STEPS, sizeof(PatternStep));
   out->num_steps = 0;
   out->num_alt_groups = 0;
+  out->should_loop = true;
 
   const char *p = src;
   while (*p) {
     skip_ws(&p);
     if (!*p)
       break;
+    if (*p == '!') {
+      out->should_loop = false;
+      p++;
+      break;
+    }
     if (out->num_steps >= MAX_STEPS)
       return false;
 
@@ -159,13 +247,24 @@ static bool parse_pattern(const char *src, ParsedPattern *out) {
       if (num_slots == 0)
         return false;
 
-      PatternStep *step = &out->steps[out->num_steps++];
-      step->kind = STEP_ALT;
-      step->fixed_val = 0.0;
-      step->num_slots = num_slots;
-      step->slots = malloc(sizeof(Slot) * num_slots);
-      memcpy(step->slots, tmp_slots, sizeof(Slot) * num_slots);
-      step->counter_idx = out->num_alt_groups++;
+      PatternStep step = {.kind = STEP_ALT,
+                          .fixed_val = 0.0,
+                          .slots = malloc(sizeof(Slot) * num_slots),
+                          .num_slots = num_slots,
+                          .counter_idx = 0};
+      memcpy(step.slots, tmp_slots, sizeof(Slot) * (size_t)num_slots);
+      int repeat_count = 1;
+      if (!parse_repeat_count(&p, &repeat_count)) {
+        free_pattern_step(&step);
+        return false;
+      }
+      for (int rep = 0; rep < repeat_count; rep++) {
+        if (!append_pattern_step(out, &step)) {
+          free_pattern_step(&step);
+          return false;
+        }
+      }
+      free_pattern_step(&step);
     } else if (*p == '{') {
       p++;
       Slot tmp_slots[MAX_SLOTS];
@@ -184,25 +283,70 @@ static bool parse_pattern(const char *src, ParsedPattern *out) {
       if (num_slots == 0)
         return false;
 
-      PatternStep *step = &out->steps[out->num_steps++];
-      step->kind = STEP_RAND;
-      step->fixed_val = 0.0;
-      step->num_slots = num_slots;
-      step->slots = malloc(sizeof(Slot) * num_slots);
-      memcpy(step->slots, tmp_slots, sizeof(Slot) * num_slots);
-      step->counter_idx = -1;
+      PatternStep step = {.kind = STEP_RAND,
+                          .fixed_val = 0.0,
+                          .slots = malloc(sizeof(Slot) * num_slots),
+                          .num_slots = num_slots,
+                          .counter_idx = -1};
+      memcpy(step.slots, tmp_slots, sizeof(Slot) * (size_t)num_slots);
+      int repeat_count = 1;
+      if (!parse_repeat_count(&p, &repeat_count)) {
+        free_pattern_step(&step);
+        return false;
+      }
+      for (int rep = 0; rep < repeat_count; rep++) {
+        if (!append_pattern_step(out, &step)) {
+          free_pattern_step(&step);
+          return false;
+        }
+      }
+      free_pattern_step(&step);
+    } else if (*p == '[') {
+      p++;
+      double tmp[MAX_SEQ_VALS];
+      int n = 0;
+      if (!parse_num_list(&p, ']', tmp, &n))
+        return false;
+      int repeat_count = 1;
+      if (!parse_repeat_count(&p, &repeat_count))
+        return false;
+      for (int rep = 0; rep < repeat_count; rep++) {
+        for (int i = 0; i < n; i++) {
+          PatternStep step = {.kind = STEP_SEQ,
+                              .fixed_val = tmp[i],
+                              .slots = NULL,
+                              .num_slots = 0,
+                              .counter_idx = -1};
+          if (!append_pattern_step(out, &step)) {
+            return false;
+          }
+        }
+      }
     } else {
       char *end;
       double v = strtod(p, &end);
       if (end == p)
         return false;
       p = end;
-      PatternStep *step = &out->steps[out->num_steps++];
-      step->kind = STEP_SEQ;
-      step->fixed_val = v;
-      step->slots = NULL;
-      step->num_slots = 0;
-      step->counter_idx = -1;
+      PatternStep step = {.kind = STEP_SEQ,
+                          .fixed_val = v,
+                          .slots = NULL,
+                          .num_slots = 0,
+                          .counter_idx = -1};
+      int repeat_count = 1;
+      if (!parse_repeat_count(&p, &repeat_count))
+        return false;
+      for (int rep = 0; rep < repeat_count; rep++) {
+        if (!append_pattern_step(out, &step))
+          return false;
+      }
+    }
+
+    skip_ws(&p);
+    if (*p == '!') {
+      out->should_loop = false;
+      p++;
+      break;
     }
   }
   return out->num_steps > 0;
@@ -245,7 +389,96 @@ typedef struct {
   KeyPatternStep *steps; // malloced
   int num_steps;
   int num_alt_groups;
+  bool should_loop;
 } ParsedKeyPattern;
+
+static void free_key_pattern_step(KeyPatternStep *step) {
+  if (step->kind != STEP_SEQ && step->slots) {
+    for (int j = 0; j < step->num_slots; j++) {
+      for (int k = 0; k < step->slots[j].count; k++) {
+        free(step->slots[j].vals[k].text);
+      }
+      free(step->slots[j].vals);
+    }
+    free(step->slots);
+  } else if (step->kind == STEP_SEQ) {
+    free(step->fixed_key.text);
+  }
+}
+
+static bool clone_key_token(KeyToken *dst, const KeyToken *src) {
+  dst->len = src->len;
+  dst->text = strdup(src->text);
+  return dst->text != NULL;
+}
+
+static bool clone_key_pattern_step(KeyPatternStep *dst,
+                                   const KeyPatternStep *src) {
+  memset(dst, 0, sizeof(*dst));
+  dst->kind = src->kind;
+  dst->num_slots = src->num_slots;
+  dst->counter_idx = src->counter_idx;
+  if (src->kind == STEP_SEQ) {
+    return clone_key_token(&dst->fixed_key, &src->fixed_key);
+  }
+
+  dst->slots = malloc(sizeof(KeySlot) * (size_t)src->num_slots);
+  if (!dst->slots) {
+    return false;
+  }
+  for (int i = 0; i < src->num_slots; i++) {
+    dst->slots[i].kind = src->slots[i].kind;
+    dst->slots[i].count = src->slots[i].count;
+    dst->slots[i].vals = malloc(sizeof(KeyToken) * (size_t)src->slots[i].count);
+    if (!dst->slots[i].vals) {
+      for (int j = 0; j < i; j++) {
+        for (int k = 0; k < dst->slots[j].count; k++) {
+          free(dst->slots[j].vals[k].text);
+        }
+        free(dst->slots[j].vals);
+      }
+      free(dst->slots);
+      dst->slots = NULL;
+      return false;
+    }
+    for (int k = 0; k < src->slots[i].count; k++) {
+      if (!clone_key_token(&dst->slots[i].vals[k], &src->slots[i].vals[k])) {
+        for (int kk = 0; kk < k; kk++) {
+          free(dst->slots[i].vals[kk].text);
+        }
+        free(dst->slots[i].vals);
+        for (int j = 0; j < i; j++) {
+          for (int kk = 0; kk < dst->slots[j].count; kk++) {
+            free(dst->slots[j].vals[kk].text);
+          }
+          free(dst->slots[j].vals);
+        }
+        free(dst->slots);
+        dst->slots = NULL;
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+static bool append_key_pattern_step(ParsedKeyPattern *out,
+                                    const KeyPatternStep *src) {
+  if (out->num_steps >= MAX_STEPS) {
+    return false;
+  }
+  KeyPatternStep *dst = &out->steps[out->num_steps];
+  if (!clone_key_pattern_step(dst, src)) {
+    return false;
+  }
+  if (dst->kind == STEP_ALT) {
+    dst->counter_idx = out->num_alt_groups++;
+  } else if (dst->kind == STEP_RAND) {
+    dst->counter_idx = -1;
+  }
+  out->num_steps++;
+  return true;
+}
 
 static void free_parsed_key(ParsedKeyPattern *p) {
   for (int i = 0; i < p->num_steps; i++) {
@@ -274,6 +507,8 @@ static bool parse_key_token(const char **pp, KeyToken *out) {
   const char *start = *pp;
   if (!*start || is_key_delim(*start))
     return false;
+  if (*start == '!')
+    return false;
 
   if (*start == '-' || *start == '.') {
     char *tok = malloc(2);
@@ -286,7 +521,8 @@ static bool parse_key_token(const char **pp, KeyToken *out) {
   }
 
   while (**pp && **pp != ' ' && **pp != '\t' && **pp != '\n' && **pp != '\r' &&
-         **pp != '-' && **pp != '.' && !is_key_delim(**pp))
+         **pp != '-' && **pp != '.' && **pp != '!' && **pp != '*' &&
+         !is_key_delim(**pp))
     (*pp)++;
 
   int len = (int)(*pp - start);
@@ -311,6 +547,8 @@ static bool parse_key_char_token(const char **pp, char **out) {
   skip_ws(pp);
   const char c = **pp;
   if (!c || is_key_delim(c))
+    return false;
+  if (c == '!')
     return false;
 
   char *tok = malloc(2);
@@ -391,12 +629,18 @@ static bool parse_key_pattern(const char *src, ParsedKeyPattern *out) {
   out->steps = calloc(MAX_STEPS, sizeof(KeyPatternStep));
   out->num_steps = 0;
   out->num_alt_groups = 0;
+  out->should_loop = true;
 
   const char *p = src;
   while (*p) {
     skip_ws(&p);
     if (!*p)
       break;
+    if (*p == '!') {
+      out->should_loop = false;
+      p++;
+      break;
+    }
     if (out->num_steps >= MAX_STEPS)
       return false;
 
@@ -418,13 +662,25 @@ static bool parse_key_pattern(const char *src, ParsedKeyPattern *out) {
       if (num_slots == 0)
         return false;
 
-      KeyPatternStep *step = &out->steps[out->num_steps++];
-      step->kind = STEP_ALT;
-      step->fixed_key = (KeyToken){0};
-      step->num_slots = num_slots;
-      step->slots = malloc(sizeof(KeySlot) * (size_t)num_slots);
-      memcpy(step->slots, tmp_slots, sizeof(KeySlot) * (size_t)num_slots);
-      step->counter_idx = out->num_alt_groups++;
+      KeyPatternStep step = {.kind = STEP_ALT,
+                             .fixed_key = (KeyToken){0},
+                             .slots =
+                                 malloc(sizeof(KeySlot) * (size_t)num_slots),
+                             .num_slots = num_slots,
+                             .counter_idx = 0};
+      memcpy(step.slots, tmp_slots, sizeof(KeySlot) * (size_t)num_slots);
+      int repeat_count = 1;
+      if (!parse_repeat_count(&p, &repeat_count)) {
+        free_key_pattern_step(&step);
+        return false;
+      }
+      for (int rep = 0; rep < repeat_count; rep++) {
+        if (!append_key_pattern_step(out, &step)) {
+          free_key_pattern_step(&step);
+          return false;
+        }
+      }
+      free_key_pattern_step(&step);
     } else if (*p == '{') {
       p++;
       KeySlot tmp_slots[MAX_SLOTS];
@@ -443,24 +699,81 @@ static bool parse_key_pattern(const char *src, ParsedKeyPattern *out) {
       if (num_slots == 0)
         return false;
 
-      KeyPatternStep *step = &out->steps[out->num_steps++];
-      step->kind = STEP_RAND;
-      step->fixed_key = (KeyToken){0};
-      step->num_slots = num_slots;
-      step->slots = malloc(sizeof(KeySlot) * (size_t)num_slots);
-      memcpy(step->slots, tmp_slots, sizeof(KeySlot) * (size_t)num_slots);
-      step->counter_idx = -1;
+      KeyPatternStep step = {.kind = STEP_RAND,
+                             .fixed_key = (KeyToken){0},
+                             .slots =
+                                 malloc(sizeof(KeySlot) * (size_t)num_slots),
+                             .num_slots = num_slots,
+                             .counter_idx = -1};
+      memcpy(step.slots, tmp_slots, sizeof(KeySlot) * (size_t)num_slots);
+      int repeat_count = 1;
+      if (!parse_repeat_count(&p, &repeat_count)) {
+        free_key_pattern_step(&step);
+        return false;
+      }
+      for (int rep = 0; rep < repeat_count; rep++) {
+        if (!append_key_pattern_step(out, &step)) {
+          free_key_pattern_step(&step);
+          return false;
+        }
+      }
+      free_key_pattern_step(&step);
+    } else if (*p == '[') {
+      p++;
+      KeyToken tmp[MAX_SEQ_VALS];
+      int n = 0;
+      if (!parse_key_token_list(&p, ']', tmp, &n))
+        return false;
+      int repeat_count = 1;
+      if (!parse_repeat_count(&p, &repeat_count)) {
+        for (int i = 0; i < n; i++)
+          free(tmp[i].text);
+        return false;
+      }
+      for (int rep = 0; rep < repeat_count; rep++) {
+        for (int i = 0; i < n; i++) {
+          KeyPatternStep step = {.kind = STEP_SEQ,
+                                 .fixed_key = tmp[i],
+                                 .slots = NULL,
+                                 .num_slots = 0,
+                                 .counter_idx = -1};
+          if (!append_key_pattern_step(out, &step)) {
+            for (int j = i; j < n; j++)
+              free(tmp[j].text);
+            return false;
+          }
+        }
+      }
+      for (int i = 0; i < n; i++)
+        free(tmp[i].text);
     } else {
       KeyToken tok;
       if (!parse_key_token(&p, &tok))
         return false;
+      KeyPatternStep step = {.kind = STEP_SEQ,
+                             .fixed_key = tok,
+                             .slots = NULL,
+                             .num_slots = 0,
+                             .counter_idx = -1};
+      int repeat_count = 1;
+      if (!parse_repeat_count(&p, &repeat_count)) {
+        free(tok.text);
+        return false;
+      }
+      for (int rep = 0; rep < repeat_count; rep++) {
+        if (!append_key_pattern_step(out, &step)) {
+          free(tok.text);
+          return false;
+        }
+      }
+      free(tok.text);
+    }
 
-      KeyPatternStep *step = &out->steps[out->num_steps++];
-      step->kind = STEP_SEQ;
-      step->fixed_key = tok;
-      step->slots = NULL;
-      step->num_slots = 0;
-      step->counter_idx = -1;
+    skip_ws(&p);
+    if (*p == '!') {
+      out->should_loop = false;
+      p++;
+      break;
     }
   }
   return out->num_steps > 0;
@@ -498,12 +811,18 @@ static bool parse_key_char_pattern(const char *src, ParsedKeyPattern *out) {
   out->steps = calloc(MAX_STEPS, sizeof(KeyPatternStep));
   out->num_steps = 0;
   out->num_alt_groups = 0;
+  out->should_loop = true;
 
   const char *p = src;
   while (*p) {
     skip_ws(&p);
     if (!*p)
       break;
+    if (*p == '!') {
+      out->should_loop = false;
+      p++;
+      break;
+    }
     if (out->num_steps >= MAX_STEPS)
       return false;
 
@@ -568,6 +887,13 @@ static bool parse_key_char_pattern(const char *src, ParsedKeyPattern *out) {
       step->slots = NULL;
       step->num_slots = 0;
       step->counter_idx = -1;
+    }
+
+    skip_ws(&p);
+    if (*p == '!') {
+      out->should_loop = false;
+      p++;
+      break;
     }
   }
   return out->num_steps > 0;
@@ -671,6 +997,8 @@ LLVMValueRef emit_pattern_coroutine(const char *pattern_str, JITLangCtx *ctx,
   LLVMSetLinkage(wrapper_fn, LLVMExternalLinkage);
   COROUTINE_ATTR_MARKING(wrapper_fn)
   COROUTINE_BASIC_BLOCKS(wrapper_fn)
+  LLVMBasicBlockRef terminal_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "terminal_done");
 
   LLVMBasicBlockRef prev_bb = LLVMGetInsertBlock(builder);
 
@@ -852,8 +1180,16 @@ LLVMValueRef emit_pattern_coroutine(const char *pattern_str, JITLangCtx *ctx,
     }
   }
 
-  // After all steps: loop back — alt counters persist in the coro frame.
-  LLVMBuildBr(builder, start_bb);
+  // After all steps: loop back by default, or mark done and end if the pattern
+  // was terminated with a top-level '!'.
+  LLVMBuildBr(builder, pat.should_loop ? start_bb : terminal_bb);
+
+  LLVMPositionBuilderAtEnd(builder, terminal_bb);
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 1, 0),
+                 LLVMBuildStructGEP2(builder, promise_type, promise_alloca, 1,
+                                     "terminal.is_done_ptr"));
+  LLVMBuildStore(builder, LLVMConstNull(GENERIC_PTR), handle);
+  LLVMBuildBr(builder, suspend_bb);
 
   // === CLEANUP BLOCK ===
   LLVMPositionBuilderAtEnd(builder, cleanup_bb);
@@ -956,6 +1292,8 @@ LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str,
   LLVMSetLinkage(wrapper_fn, LLVMExternalLinkage);
   COROUTINE_ATTR_MARKING(wrapper_fn)
   COROUTINE_BASIC_BLOCKS(wrapper_fn)
+  LLVMBasicBlockRef terminal_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "terminal_done");
 
   LLVMBasicBlockRef prev_bb = LLVMGetInsertBlock(builder);
 
@@ -1127,7 +1465,14 @@ LLVMValueRef emit_key_pattern_coroutine(const char *pattern_str,
     }
   }
 
-  LLVMBuildBr(builder, start_bb);
+  LLVMBuildBr(builder, pat.should_loop ? start_bb : terminal_bb);
+
+  LLVMPositionBuilderAtEnd(builder, terminal_bb);
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 1, 0),
+                 LLVMBuildStructGEP2(builder, promise_type, promise_alloca, 1,
+                                     "terminal.is_done_ptr"));
+  LLVMBuildStore(builder, LLVMConstNull(GENERIC_PTR), handle);
+  LLVMBuildBr(builder, suspend_bb);
 
   LLVMPositionBuilderAtEnd(builder, cleanup_bb);
   LLVMValueRef mem = LLVMBuildCall2(
@@ -1195,6 +1540,8 @@ LLVMValueRef emit_key_char_pattern_coroutine(const char *pattern_str,
   LLVMSetLinkage(wrapper_fn, LLVMExternalLinkage);
   COROUTINE_ATTR_MARKING(wrapper_fn)
   COROUTINE_BASIC_BLOCKS(wrapper_fn)
+  LLVMBasicBlockRef terminal_bb =
+      LLVMAppendBasicBlock(wrapper_fn, "terminal_done");
 
   LLVMBasicBlockRef prev_bb = LLVMGetInsertBlock(builder);
 
@@ -1367,7 +1714,14 @@ LLVMValueRef emit_key_char_pattern_coroutine(const char *pattern_str,
     }
   }
 
-  LLVMBuildBr(builder, start_bb);
+  LLVMBuildBr(builder, pat.should_loop ? start_bb : terminal_bb);
+
+  LLVMPositionBuilderAtEnd(builder, terminal_bb);
+  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 1, 0),
+                 LLVMBuildStructGEP2(builder, promise_type, promise_alloca, 1,
+                                     "terminal.is_done_ptr"));
+  LLVMBuildStore(builder, LLVMConstNull(GENERIC_PTR), handle);
+  LLVMBuildBr(builder, suspend_bb);
 
   LLVMPositionBuilderAtEnd(builder, cleanup_bb);
   LLVMValueRef mem = LLVMBuildCall2(
@@ -2213,6 +2567,15 @@ LLVMValueRef play_pattern_handler(Ast *ast, JITLangCtx *ctx,
                                   LLVMBuilderRef builder) {
   Ast *quant_arg = ast->data.AST_APPLICATION.args;
   Ast *pattern_record = ast->data.AST_APPLICATION.args + 1;
+
+  if (pattern_record->tag == AST_BODY) {
+    int len = pattern_record->data.AST_BODY.len;
+    Ast items[len];
+    AST_LIST_ITER(pattern_record->data.AST_BODY.stmts,
+                  { items[i] = *(l->ast); });
+
+    return play_pattern_block(items, len, quant_arg, ctx, module, builder);
+  }
 
   if (pattern_record->tag == AST_TUPLE &&
       (pattern_record->data.AST_LIST.items[0].tag == AST_LET)) {

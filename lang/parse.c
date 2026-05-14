@@ -25,6 +25,50 @@ AllocatorFnType palloc = __palloc;
 ReAllocatorFnType prealloc = __prealloc;
 custom_binops_t *__custom_binops = NULL;
 
+static long long offset_for_line_col(const char *src, int target_line,
+                                     int target_col) {
+  long long offset = 0;
+  int line = 1;
+  int col = 1;
+
+  if (!src) {
+    return 0;
+  }
+
+  while (src[offset] != '\0') {
+    if (line == target_line && col == target_col) {
+      return offset;
+    }
+
+    if (src[offset] == '\n') {
+      line++;
+      col = 1;
+    } else {
+      col++;
+    }
+    offset++;
+  }
+
+  return offset;
+}
+
+static void ast_copy_loc(Ast *dst, Ast *src) {
+  loc_info *src_loc;
+
+  if (!dst || !dst->loc_info || !src || !src->loc_info) {
+    return;
+  }
+
+  src_loc = src->loc_info;
+  dst->loc_info->line = src_loc->line;
+  dst->loc_info->col = src_loc->col;
+  dst->loc_info->col_end = src_loc->col_end;
+  dst->loc_info->src_file = src_loc->src_file;
+  dst->loc_info->src_content = src_loc->src_content;
+  dst->loc_info->src_ptr = src_loc->src_ptr;
+  dst->loc_info->absolute_offset = src_loc->absolute_offset;
+}
+
 void add_custom_binop(const char *binop_name) {
   if (!binop_name || binop_name[0] == '\0') {
     return;
@@ -49,6 +93,25 @@ Ast *Ast_new(enum ast_tag tag) {
   node->tag = tag;
   node->loc_info = loc;
   return node;
+}
+
+void ast_set_loc(Ast *node, int first_line, int first_col, int last_line,
+                 int last_col) {
+  long long offset;
+
+  if (!node || !node->loc_info) {
+    return;
+  }
+
+  offset = offset_for_line_col(pctx.cur_script_content, first_line, first_col);
+  node->loc_info->line = first_line;
+  node->loc_info->col = first_col;
+  node->loc_info->col_end = last_col;
+  node->loc_info->src_file = pctx.cur_script;
+  node->loc_info->src_content = pctx.cur_script_content;
+  node->loc_info->src_ptr = pctx.cur_script_content + offset;
+  node->loc_info->absolute_offset = offset;
+  (void)last_line;
 }
 
 void ast_body_push(Ast *body, Ast *stmt) {
@@ -85,6 +148,7 @@ Ast *ast_binop(token_type op, Ast *left, Ast *right) {
     Ast *range = Ast_new(AST_RANGE_EXPRESSION);
     range->data.AST_RANGE_EXPRESSION.from = left;
     range->data.AST_RANGE_EXPRESSION.to = right;
+    ast_copy_loc(range, left);
     return range;
   }
   Ast *node = Ast_new(AST_APPLICATION);
@@ -111,6 +175,7 @@ Ast *ast_binop(token_type op, Ast *left, Ast *right) {
     b->data.AST_BINOP.left = left;
     b->data.AST_BINOP.right = right;
     b->data.AST_BINOP.op = op;
+    ast_copy_loc(b, left);
     return b;
   }
   case TOKEN_PLUS: {
@@ -189,6 +254,7 @@ Ast *ast_binop(token_type op, Ast *left, Ast *right) {
   node->data.AST_APPLICATION.args[0] = *left;
   node->data.AST_APPLICATION.args[1] = *right;
   node->data.AST_APPLICATION.len = 2;
+  ast_copy_loc(node, left);
   return node;
 }
 
@@ -201,6 +267,7 @@ Ast *ast_unop(token_type op, Ast *right) {
     node->data.AST_APPLICATION.args = malloc(sizeof(Ast));
     node->data.AST_APPLICATION.args[0] = *right;
     node->data.AST_APPLICATION.len = 1;
+    ast_copy_loc(node, right);
     return node;
   }
   case TOKEN_AMPERSAND: {
@@ -210,12 +277,14 @@ Ast *ast_unop(token_type op, Ast *right) {
     node->data.AST_APPLICATION.args = malloc(sizeof(Ast) * 1);
     node->data.AST_APPLICATION.args[0] = *right;
     node->data.AST_APPLICATION.len = 1;
+    ast_copy_loc(node, right);
     return node;
   }
   default: {
     Ast *node = Ast_new(AST_UNOP);
     node->data.AST_BINOP.op = op;
     node->data.AST_BINOP.right = right;
+    ast_copy_loc(node, right);
     return node;
   }
   }
@@ -234,6 +303,7 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
 
   Ast *node = Ast_new(AST_LET);
   node->data.AST_LET.binding = name;
+  ast_copy_loc(node, name);
   if (expr == NULL) {
     return node;
   }
@@ -269,6 +339,7 @@ Ast *ast_test_module(Ast *expr) {
   Ast *id = ast_identifier((ObjString){"test", 4});
   node->data.AST_LET.binding = id;
   node->data.AST_LET.expr = expr;
+  ast_copy_loc(node, expr);
   return node;
 }
 
@@ -344,6 +415,7 @@ Ast *parse_input_buffer(const char *filename, const char *input) {
       .cur_script_content = input,
       .ast_root = ast_root,
       .custom_binops = NULL,
+      .process_imports = true,
   };
 
   YY_BUFFER_STATE new_buffer = yy_scan_string((char *)input);
@@ -380,6 +452,7 @@ Ast *ast_application(Ast *func, Ast *arg) {
       app->data.AST_APPLICATION.function = arg;
       app->data.AST_APPLICATION.args = func;
       app->data.AST_APPLICATION.len = 1;
+      ast_copy_loc(app, func);
       return app;
     }
 
@@ -401,6 +474,7 @@ Ast *ast_application(Ast *func, Ast *arg) {
     app->data.AST_APPLICATION.args = palloc(sizeof(Ast));
     app->data.AST_APPLICATION.args[0] = *func;
     app->data.AST_APPLICATION.len = 1;
+    ast_copy_loc(app, func);
 
     return app;
   }
@@ -410,6 +484,7 @@ Ast *ast_application(Ast *func, Ast *arg) {
   app->data.AST_APPLICATION.args = palloc(sizeof(Ast));
   app->data.AST_APPLICATION.args[0] = *arg;
   app->data.AST_APPLICATION.len = 1;
+  ast_copy_loc(app, func);
 
   return app;
 }
@@ -443,6 +518,11 @@ Ast *ast_lambda(Ast *lambda, Ast *body) {
   }
 
   lambda->data.AST_LAMBDA.body = body;
+  if (lambda->data.AST_LAMBDA.params && lambda->data.AST_LAMBDA.params->ast) {
+    ast_copy_loc(lambda, lambda->data.AST_LAMBDA.params->ast);
+  } else {
+    ast_copy_loc(lambda, body);
+  }
 
   // if (lambda->data.AST_LAMBDA.body->tag == AST_BODY) {
   //   body_tail(lambda->data.AST_LAMBDA.body)->is_body_tail = true;
@@ -485,6 +565,7 @@ Ast *ast_void_lambda(Ast *body) {
   lambda->data.AST_LAMBDA.len = 1;
   lambda->data.AST_LAMBDA.type_annotations = NULL;
   lambda->data.AST_LAMBDA.body = body;
+  ast_copy_loc(lambda, body);
   return lambda;
 }
 
@@ -902,6 +983,7 @@ Ast *ast_record_access(Ast *record, Ast *member) {
   rec_access->data.AST_RECORD_ACCESS.record = record;
   rec_access->data.AST_RECORD_ACCESS.member = member;
   rec_access->data.AST_RECORD_ACCESS.index = -1;
+  ast_copy_loc(rec_access, record);
   return rec_access;
 }
 
@@ -1291,8 +1373,8 @@ static long long offset_for_line(const char *src, int target_line) {
   return offset;
 }
 
-static void line_col_for_offset(const char *src, long long offset, int *line_out,
-                                int *col_out) {
+static void line_col_for_offset(const char *src, long long offset,
+                                int *line_out, int *col_out) {
   int line = 1;
   int col = 1;
   for (long long i = 0; i < offset && src[i] != '\0'; i++) {
@@ -1363,14 +1445,9 @@ Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
   fully_qualified_name = check_path(fully_qualified_name, rel_path);
 
   if (!fully_qualified_name) {
-    // fprintf(stderr, "Error module %s not found in path\n", mod_name);
-    // return NULL;
-    //
     Ast *import_ast = Ast_new(AST_IMPORT);
     import_ast->data.AST_IMPORT.identifier = mod_id_chars;
-    // import_ast->data.AST_IMPORT.fully_qualified_name = fully_qualified_name;
     import_ast->data.AST_IMPORT.import_all = import_all;
-
     return import_ast;
   }
 

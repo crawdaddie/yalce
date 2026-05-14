@@ -447,6 +447,92 @@ local function get_text_for_range(bufnr, start_row, start_col, end_row, end_col)
 	return table.concat(lines, "\n")
 end
 
+local function get_selection_range_from_lsp(bufnr)
+	local clients = vim.lsp.get_clients({ bufnr = bufnr })
+	if not clients or vim.tbl_isempty(clients) then
+		return nil, "no lsp client attached"
+	end
+
+	local supports_selection_range = false
+	for _, client in ipairs(clients) do
+		if client:supports_method("textDocument/selectionRange") then
+			supports_selection_range = true
+			break
+		end
+	end
+
+	if not supports_selection_range then
+		return nil, "no attached lsp client supports selectionRange"
+	end
+
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local params = {
+		textDocument = vim.lsp.util.make_text_document_params(bufnr),
+		positions = {
+			{
+				line = cursor[1] - 1,
+				character = cursor[2],
+			},
+		},
+	}
+
+	local responses = vim.lsp.buf_request_sync(bufnr, "textDocument/selectionRange", params, 1000)
+	if not responses then
+		return nil, "selectionRange request timed out"
+	end
+
+	for _, response in pairs(responses) do
+		local result = response.result
+		if result and result[1] and result[1].range then
+			return result[1].range
+		end
+	end
+
+	return nil, "selectionRange returned no range"
+end
+
+local function get_text_from_lsp_selection_range(bufnr)
+	local range = get_selection_range_from_lsp(bufnr)
+	if not range then
+		return nil
+	end
+
+	return get_text_for_range(
+		bufnr,
+		range.start.line,
+		range.start.character,
+		range["end"].line,
+		range["end"].character
+	)
+end
+
+local function range_end_to_visual_pos(bufnr, range)
+	local end_line = range["end"].line
+	local end_char = range["end"].character
+
+	if end_char > 0 then
+		return end_line + 1, end_char
+	end
+
+	if end_line > range.start.line then
+		local prev_line = vim.api.nvim_buf_get_lines(bufnr, end_line - 1, end_line, false)[1] or ""
+		return end_line, math.max(#prev_line, 1)
+	end
+
+	return end_line + 1, 1
+end
+
+local function select_range(bufnr, range)
+	local start_line = range.start.line + 1
+	local start_col = range.start.character + 1
+	local end_line, end_col = range_end_to_visual_pos(bufnr, range)
+
+	vim.fn.setpos("'<", { 0, start_line, start_col, 0 })
+	vim.fn.setpos("'>", { 0, end_line, end_col, 0 })
+	vim.api.nvim_win_set_cursor(0, { start_line, range.start.character })
+	vim.cmd("normal! gv")
+end
+
 local function get_form_text_from_node_start(node, bufnr)
 	if not node then
 		return nil
@@ -779,24 +865,55 @@ function M.send_current_node()
 		return
 	end
 
-	local server_text = get_text_from_range_server(bufnr)
-	if server_text and server_text ~= "" then
-		M.send(server_text)
-		return
-	end
-
-	local ts_ok = treesitter_status(bufnr)
-	local node = find_runnable_treesitter_node(bufnr)
-	if not node then
-		if not ts_ok then
-			notify("YLC Tree-sitter unavailable, falling back to current line", vim.log.levels.WARN)
-		end
+	local text, err = get_text_from_lsp_selection_range(bufnr)
+	if not text or text == "" then
+		notify((err or "No LSP selection range available") .. ", sending current line", vim.log.levels.WARN)
 		M.send_current_line()
 		return
 	end
 
-	local text = get_form_text_from_node_start(node, bufnr)
+	M.send(text)
+end
+
+function M.select_current_node()
+	local bufnr = vim.api.nvim_get_current_buf()
+	if current_line_is_blank() then
+		return
+	end
+
+	local range, err = get_selection_range_from_lsp(bufnr)
+	if not range then
+		notify((err or "No LSP selection range available") .. ", sending current line", vim.log.levels.WARN)
+		M.send_current_line()
+		return
+	end
+
+	select_range(bufnr, range)
+end
+
+function M.select_and_send_current_node()
+	local bufnr = vim.api.nvim_get_current_buf()
+	if current_line_is_blank() then
+		return
+	end
+
+	local range, err = get_selection_range_from_lsp(bufnr)
+	if not range then
+		notify(err or "No LSP selection range available", vim.log.levels.WARN)
+		return
+	end
+
+	select_range(bufnr, range)
+
+	local text = get_text_for_range(
+		bufnr,
+		range.start.line,
+		range.start.character,
+		range["end"].line,
+		range["end"].character
+	)
 	if not text or text == "" then
+		notify("LSP selection range returned empty text, sending current line", vim.log.levels.WARN)
 		M.send_current_line()
 		return
 	end

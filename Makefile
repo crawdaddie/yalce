@@ -74,8 +74,13 @@ RANGE_SERVER_LANG_OBJS := $(filter-out $(BUILD_DIR)/main.o,$(LANG_OBJS))
 RANGE_SERVER_SRC := tools/ylc_range_server.c
 RANGE_SERVER_OBJ := $(BUILD_DIR)/tools/ylc_range_server.o
 RANGE_SERVER_TARGET := $(BUILD_DIR)/tools/ylc_range_server
+LSP_SERVER_SRC := tools/ylc_lsp_server.c
+LSP_SERVER_OBJ := $(BUILD_DIR)/tools/ylc_lsp_server.o
+LSP_SERVER_TARGET := $(BUILD_DIR)/tools/ylc_lsp_server
+JSON_C_CFLAGS := $(shell pkg-config --cflags json-c 2>/dev/null)
+JSON_C_LIBS := $(shell pkg-config --libs json-c 2>/dev/null)
 
-.PHONY: all clean engine audio_jit gui test wasm serve_docs engine_bindings cor range_server
+.PHONY: all clean engine audio_jit gui test wasm serve_docs engine_bindings cor range_server lsp_server test_range_server test_range_server_tool test_lsp_server
 
 all: $(BUILD_DIR)/ylc
 
@@ -126,6 +131,9 @@ $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.cpp | $(BUILD_DIR)
 $(RANGE_SERVER_OBJ): $(RANGE_SERVER_SRC) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
 	$(LANG_CC) -c -o $@ $<
 
+$(LSP_SERVER_OBJ): $(LSP_SERVER_SRC) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
+	$(LANG_CC) $(JSON_C_CFLAGS) -c -o $@ $<
+
 # Build the final executable (use C++ linker since we have C++ objects)
 $(BUILD_DIR)/ylc: $(LANG_OBJS) | audio_jit gui
 	$(LANG_CXX) -o $@ $(LANG_OBJS) $(LANG_LD_FLAGS)
@@ -139,6 +147,11 @@ $(RANGE_SERVER_TARGET): $(RANGE_SERVER_OBJ) $(RANGE_SERVER_LANG_OBJS) | $(BUILD_
 	$(LANG_CXX) -o $@ $(RANGE_SERVER_OBJ) $(RANGE_SERVER_LANG_OBJS) $(LANG_LD_FLAGS)
 
 range_server: $(RANGE_SERVER_TARGET)
+
+$(LSP_SERVER_TARGET): $(LSP_SERVER_OBJ) $(RANGE_SERVER_LANG_OBJS) | $(BUILD_DIR)
+	$(LANG_CXX) -o $@ $(LSP_SERVER_OBJ) $(RANGE_SERVER_LANG_OBJS) $(LANG_LD_FLAGS) $(JSON_C_LIBS)
+
+lsp_server: $(LSP_SERVER_TARGET)
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -155,6 +168,15 @@ test_parse:
 
 test_typecheck:
 	$(MAKE) -C test test_typecheck
+
+test_range_server:
+	$(MAKE) -C test test_range_server
+
+test_range_server_tool: range_server
+	$(MAKE) -C test test_range_server_tool
+
+test_lsp_server: lsp_server
+	$(MAKE) -C test test_lsp_server_tool
 
 test_scripts:
 	$(MAKE) -C test test_scripts

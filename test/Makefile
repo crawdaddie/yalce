@@ -30,11 +30,14 @@ LANG_SRCS := $(LANG_SRC_DIR)/parse.c \
              $(YACC_OUTPUT)
 
 # Phony targets
-.PHONY: all clean test_parse test_typecheck test_scripts test_unification
+.PHONY: all clean test_parse test_typecheck test_scripts test_unification test_range_server test_range_server_tool test_lsp_server_tool
 
 all:
 	-$(MAKE) test_parse
 	-$(MAKE) test_typecheck
+	-$(MAKE) test_range_server
+	-$(MAKE) test_range_server_tool
+	-$(MAKE) test_lsp_server_tool
 	-$(MAKE) test_scripts
 	-$(MAKE) test_unification
 
@@ -62,6 +65,22 @@ test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 		-o $(BUILD_DIR)/test_typecheck \
 		$(LDFLAGS)
 	$(BUILD_DIR)/test_typecheck
+
+test_range_server: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
+	$(CC) $(CFLAGS) test_range_server.c \
+		$(LANG_SRCS) \
+		$(LANG_SRC_DIR)/types/*.c \
+		-o $(BUILD_DIR)/test_range_server \
+		$(LDFLAGS)
+	$(BUILD_DIR)/test_range_server
+
+test_range_server_tool:
+	../build/tools/ylc_range_server >/dev/null 2>&1 </dev/null || true
+	./test_range_server_tool.sh
+
+test_lsp_server_tool:
+	../build/tools/ylc_lsp_server >/dev/null 2>&1 </dev/null || true
+	bash ./test_lsp_server_tool.sh
 
 
 test_scripts: 

@@ -38,6 +38,10 @@ vim.api.nvim_create_user_command("YlcSendNode", function()
 	ylc.send_current_node()
 end, {})
 
+vim.api.nvim_create_user_command("YlcSelectNode", function()
+	ylc.select_current_node()
+end, {})
+
 vim.api.nvim_create_user_command("YlcDebugTreesitter", function()
 	ylc.debug_treesitter()
 end, {})

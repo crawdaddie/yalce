@@ -16,6 +16,10 @@ extern int yylineno;
 extern int yycolumn;
 extern char *yytext;
 
+#define SET_AST_LOC(ast, loc)                                                \
+  ast_set_loc((ast), (loc).first_line, (loc).first_column, (loc).last_line,  \
+              (loc).last_column)
+
 #define AST_CONST(type, val)                                            \
     ({                                                                  \
       Ast *prefix = Ast_new(type);                                      \
@@ -223,27 +227,29 @@ expr_sequence:
   ;
 
 let_binding:
-    LET TEST_ID '=' expr            { $$ = ast_test_module($4);}
-  | LET IDENTIFIER '=' expr         { $$ = ast_let(ast_identifier($2), $4, NULL); }
+    LET TEST_ID '=' expr            { $$ = ast_test_module($4); SET_AST_LOC($$, @$); }
+  | LET IDENTIFIER '=' expr         { $$ = ast_let(ast_identifier($2), $4, NULL); SET_AST_LOC($$, @$); }
   | LET IDENTIFIER '=' EXTERN FN fn_signature  
-                                    { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $6), NULL); }
+                                    { $$ = ast_let(ast_identifier($2), ast_extern_fn($2, $6), NULL); SET_AST_LOC($$, @$); }
 
-  | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); }
+  | LET lambda_arg '=' expr         { $$ = ast_let($2, $4, NULL); SET_AST_LOC($$, @$); }
 
-  | LET expr_list '=' expr          { $$ = ast_let(ast_tuple($2), $4, NULL);}
+  | LET expr_list '=' expr          { $$ = ast_let(ast_tuple($2), $4, NULL); SET_AST_LOC($$, @$);}
 
   | LET MUT expr_list '=' expr      { Ast *let = ast_let(ast_tuple($3), $5, NULL);
                                       let->data.AST_LET.is_mut = true;
+                                      SET_AST_LOC(let, @$);
                                       $$ = let;
                                     }
 
 
 
 
-  | LET TOK_VOID '=' expr           { $$ = $4; }
+  | LET TOK_VOID '=' expr           { $$ = $4; SET_AST_LOC($$, @$); }
   | let_binding IN expr             {
                                       Ast *let = $1;
                                       let->data.AST_LET.in_expr = $3;
+                                      SET_AST_LOC(let, @$);
                                       $$ = let;
                                     }
   | lambda_expr                     { $$ = $1; }
@@ -253,6 +259,7 @@ let_binding:
                                       Ast *id = ast_identifier($3);
                                       add_custom_binop(id->data.AST_IDENTIFIER.value);
                                       $$ = ast_let(id, $6, NULL);
+                                      SET_AST_LOC($$, @$);
                                     }
 
   | LET '(' IDENTIFIER ')' '=' expr
@@ -260,25 +267,26 @@ let_binding:
                                       Ast *id = ast_identifier($3);
                                       add_custom_binop(id->data.AST_IDENTIFIER.value);
                                       $$ = ast_let(id, $6, NULL);
+                                      SET_AST_LOC($$, @$);
                                     }
 /*
   | IMPORT PATH_IDENTIFIER IN expr  { $$ = ast_let(NULL, ast_import_stmt($2, false), $4); }
   | OPEN PATH_IDENTIFIER IN expr    { $$ = ast_let(NULL, ast_import_stmt($2, true), $4); }
   */
-  | IMPORT PATH_IDENTIFIER            { $$ = ast_import_stmt($2, false); }
-  | OPEN PATH_IDENTIFIER              { $$ = ast_import_stmt($2, true); }
-  | IMPORT IDENTIFIER                 { $$ = ast_import_stmt($2, false); }
-  | OPEN IDENTIFIER                   { $$ = ast_import_stmt($2, true); }
-  | LET IDENTIFIER ':' IDENTIFIER '=' lambda_expr { $$ = ast_trait_impl($4, $2, $6); }
+  | IMPORT PATH_IDENTIFIER            { $$ = ast_import_stmt($2, false); SET_AST_LOC($$, @$); }
+  | OPEN PATH_IDENTIFIER              { $$ = ast_import_stmt($2, true); SET_AST_LOC($$, @$); }
+  | IMPORT IDENTIFIER                 { $$ = ast_import_stmt($2, false); SET_AST_LOC($$, @$); }
+  | OPEN IDENTIFIER                   { $$ = ast_import_stmt($2, true); SET_AST_LOC($$, @$); }
+  | LET IDENTIFIER ':' IDENTIFIER '=' lambda_expr { $$ = ast_trait_impl($4, $2, $6); SET_AST_LOC($$, @$); }
   ;
 
 
 
 lambda_expr:
-    FN lambda_args ARROW expr_sequence ';'      { $$ = ast_lambda($2, $4); }
-  | FN TOK_VOID ARROW expr_sequence ';'         { $$ = ast_void_lambda($4); }
-  | MODULE lambda_args ARROW expr_sequence ';'{ $$ = ast_module(ast_lambda($2, $4)); }
-  | MODULE TOK_VOID ARROW expr_sequence ';'   { $$ = ast_module(ast_lambda(NULL, $4)); }
+    FN lambda_args ARROW expr_sequence ';'      { $$ = ast_lambda($2, $4); SET_AST_LOC($$, @$); }
+  | FN TOK_VOID ARROW expr_sequence ';'         { $$ = ast_void_lambda($4); SET_AST_LOC($$, @$); }
+  | MODULE lambda_args ARROW expr_sequence ';'{ $$ = ast_module(ast_lambda($2, $4)); SET_AST_LOC($$, @$); }
+  | MODULE TOK_VOID ARROW expr_sequence ';'   { $$ = ast_module(ast_lambda(NULL, $4)); SET_AST_LOC($$, @$); }
   ;
 
 
@@ -326,9 +334,9 @@ expr_list:
   ;
 
 match_expr:
-    MATCH expr WITH match_branches { $$ = ast_match($2, $4); }
-  | IF expr THEN expr ELSE expr  { $$ = ast_if_else($2, $4 ,$6);}
-  | IF expr THEN expr            { $$ = ast_if_else($2, $4, NULL);}
+    MATCH expr WITH match_branches { $$ = ast_match($2, $4); SET_AST_LOC($$, @$); }
+  | IF expr THEN expr ELSE expr  { $$ = ast_if_else($2, $4 ,$6); SET_AST_LOC($$, @$);}
+  | IF expr THEN expr            { $$ = ast_if_else($2, $4, NULL); SET_AST_LOC($$, @$);}
   ;
 
 match_test_clause:
@@ -358,12 +366,14 @@ type_decl:
     TYPE IDENTIFIER '=' type_expr {
                                     Ast *type_decl = ast_let(ast_identifier($2), $4, NULL);
                                     type_decl->tag = AST_TYPE_DECL;
+                                    SET_AST_LOC(type_decl, @$);
                                     $$ = type_decl;
                                   }
 
   | TYPE IDENTIFIER              {
                                       Ast *type_decl = ast_let(ast_identifier($2), NULL, NULL);
                                       type_decl->tag = AST_TYPE_DECL;
+                                      SET_AST_LOC(type_decl, @$);
                                       $$ = type_decl;
                                    }
 
@@ -380,6 +390,7 @@ type_decl:
                                     args->data.AST_LAMBDA.body = $4;
                                     Ast *type_decl = ast_let(name, args, NULL);
                                     type_decl->tag = AST_TYPE_DECL;
+                                    SET_AST_LOC(type_decl, @$);
                                     $$ = type_decl;
                                   }
   ;

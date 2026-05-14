@@ -23,6 +23,7 @@ typedef struct {
   void *lexer_buffer;
   int saved_yylineno;
   long long int saved_yyabsoluteoffset;
+  bool process_imports;
 } ParsingContext;
 
 extern ParsingContext pctx;
@@ -355,6 +356,8 @@ struct Ast {
 };
 
 Ast *Ast_new(enum ast_tag tag);
+void ast_set_loc(Ast *node, int first_line, int first_col, int last_line,
+                 int last_col);
 
 void ast_body_push(Ast *body, Ast *stmt);
 

@@ -6,10 +6,10 @@ Neovim plugin for running `ylc <current-file> -i` in a side terminal and sending
 
 - `:YlcOpen` starts a YLC REPL for the current file in a vertical split
 - `:YlcOpenDebug` starts `ylc` under `lldb` and runs it automatically
-- `<C-c><C-c>` in normal mode sends the enclosing Tree-sitter node when available, otherwise the current line
+- `<C-c><C-c>` in normal mode expands to the attached LSP `selectionRange` and sends it, with no fallback path
 - `<C-c><C-c>` in visual mode sends the current selection
 - blank lines are ignored in normal mode
-- `:YlcRestart`, `:YlcStop`, `:YlcSendNode`, `:YlcSendParagraph`, `:YlcSendLine`, and `:YlcSendBuffer`
+- `:YlcRestart`, `:YlcStop`, `:YlcSelectNode`, `:YlcSendNode`, `:YlcSendParagraph`, `:YlcSendLine`, and `:YlcSendBuffer`
 
 ## Install
 
