@@ -1,14 +1,26 @@
 #include "../lang/modules.h"
 #include "../lang/parse.h"
+#include "../lang/config.h"
+#include "../lang/ht.h"
+#include "../lang/types/builtins.h"
+#include "../lang/types/inference.h"
+#include "../lang/types/type_ser.h"
 #include <ctype.h>
 #include <json-c/json.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define LSP_SYMBOL_KIND_MODULE 2
 #define LSP_SYMBOL_KIND_CLASS 5
+#define LSP_COMPLETION_KIND_TEXT 1
+#define LSP_COMPLETION_KIND_FUNCTION 3
+#define LSP_COMPLETION_KIND_VARIABLE 6
+#define LSP_COMPLETION_KIND_MODULE 9
+#define LSP_COMPLETION_KIND_KEYWORD 14
 #define LSP_SYMBOL_KIND_FUNCTION 12
 #define LSP_SYMBOL_KIND_VARIABLE 13
 #define LSP_SYMBOL_KIND_NAMESPACE 3
@@ -24,6 +36,9 @@ typedef struct document {
   char *path;
   char *text;
   Ast *root;
+  TypeEnv *type_env;
+  bool typecheck_ok;
+  bool analysis_dirty;
   struct document *next;
 } document;
 
@@ -32,6 +47,21 @@ typedef struct {
   bool initialized;
   bool shutdown_requested;
 } lsp_server;
+
+typedef struct {
+  Ast *node;
+  long long start_offset;
+  long long end_offset;
+} node_match;
+
+static const char *completion_keywords[] = {
+    "fn",   "let",  "in",     "and",   "extern", "true",  "false",
+    "match","with", "import", "open",  "yield",  "loop",
+};
+
+static const char *completion_trigger_chars[] = {
+    ".",
+};
 
 static char *xstrdup(const char *s) {
   size_t len = strlen(s);
@@ -132,6 +162,25 @@ static document *upsert_doc(lsp_server *server, const char *uri) {
   return doc;
 }
 
+static void configure_analysis_environment(void) {
+  static char cwd[PATH_MAX];
+  const char *base_dir = ylc_config.base_libs_dir;
+
+  if (base_dir && base_dir[0] != '\0') {
+    return;
+  }
+
+  base_dir = getenv("YLC_BASE_DIR");
+  if (base_dir && base_dir[0] != '\0') {
+    ylc_config.base_libs_dir = base_dir;
+    return;
+  }
+
+  if (getcwd(cwd, sizeof(cwd)) != NULL) {
+    ylc_config.base_libs_dir = cwd;
+  }
+}
+
 static void remove_doc(lsp_server *server, const char *uri) {
   document **link = &server->docs;
   while (*link) {
@@ -168,6 +217,21 @@ static void line_col_for_offset(const char *src, long long offset,
 
 static bool stmt_range(Ast *stmt, Ast *next_stmt, const char *src,
                        source_range *out_range);
+
+static bool range_for_node_offsets(const char *src, Ast *node,
+                                   long long end_offset,
+                                   source_range *out_range) {
+  if (!src || !node || !node->loc_info || !out_range) {
+    return false;
+  }
+
+  out_range->start_offset = node->loc_info->absolute_offset;
+  out_range->end_offset = end_offset;
+  out_range->start_line = node->loc_info->line;
+  out_range->start_col = node->loc_info->col;
+  line_col_for_offset(src, end_offset, &out_range->end_line, &out_range->end_col);
+  return true;
+}
 
 static long long top_level_stmt_end_offset(const char *src,
                                            long long start_offset) {
@@ -310,6 +374,449 @@ static Ast *find_stmt_at_line(document *doc, int line, Ast **next_stmt_out) {
   return NULL;
 }
 
+static Ast *find_selection_target_in_sequence(Ast *node, long long cursor_offset,
+                                              long long end_offset,
+                                              long long *target_end_offset_out) {
+  AstList *stmt;
+
+  if (!node || !node->loc_info) {
+    return NULL;
+  }
+
+  if (node->tag != AST_BODY) {
+    if (target_end_offset_out) {
+      *target_end_offset_out = end_offset;
+    }
+    return node;
+  }
+
+  stmt = node->data.AST_BODY.stmts;
+  while (stmt != NULL) {
+    Ast *current = stmt->ast;
+    Ast *next = stmt->next ? stmt->next->ast : NULL;
+    long long child_end = end_offset;
+    Ast *candidate;
+
+    if (!current || !current->loc_info) {
+      stmt = stmt->next;
+      continue;
+    }
+
+    if (next && next->loc_info && next->loc_info->absolute_offset < child_end) {
+      child_end = next->loc_info->absolute_offset;
+    }
+
+    if (cursor_offset < current->loc_info->absolute_offset ||
+        cursor_offset >= child_end) {
+      stmt = stmt->next;
+      continue;
+    }
+
+    candidate = find_selection_target_in_sequence(current, cursor_offset,
+                                                  child_end,
+                                                  target_end_offset_out);
+    if (candidate) {
+      return candidate;
+    }
+
+    if (target_end_offset_out) {
+      *target_end_offset_out = child_end;
+    }
+    return current;
+  }
+
+  if (target_end_offset_out) {
+    *target_end_offset_out = end_offset;
+  }
+  return node;
+}
+
+static bool should_clamp_selection_end_with_scan(Ast *node) {
+  if (!node) {
+    return false;
+  }
+
+  switch (node->tag) {
+  case AST_IMPORT:
+  case AST_LET:
+  case AST_TYPE_DECL:
+  case AST_TRAIT_IMPL:
+  case AST_LOOP:
+    return false;
+  default:
+    return true;
+  }
+}
+
+static long long offset_for_position(const char *src, int target_line,
+                                     int target_char) {
+  long long offset = 0;
+  int line = 0;
+  int character = 0;
+
+  if (!src) {
+    return 0;
+  }
+
+  while (src[offset] != '\0') {
+    if (line == target_line && character == target_char) {
+      return offset;
+    }
+
+    if (src[offset] == '\n') {
+      line++;
+      character = 0;
+    } else {
+      character++;
+    }
+    offset++;
+  }
+
+  return offset;
+}
+
+static bool is_identifier_char(char ch) {
+  return isalnum((unsigned char)ch) || ch == '_';
+}
+
+static char *completion_prefix_at_position(const char *src, int line,
+                                           int character) {
+  long long end_offset = offset_for_position(src, line, character);
+  long long start_offset = end_offset;
+  size_t len;
+  char *prefix;
+
+  while (start_offset > 0 && is_identifier_char(src[start_offset - 1])) {
+    start_offset--;
+  }
+
+  len = (size_t)(end_offset - start_offset);
+  prefix = malloc(len + 1);
+  if (!prefix) {
+    return NULL;
+  }
+
+  memcpy(prefix, src + start_offset, len);
+  prefix[len] = '\0';
+  return prefix;
+}
+
+static Type *completion_item_type(Type *type) {
+  if (!type) {
+    return NULL;
+  }
+
+  if (type->kind == T_SCHEME) {
+    return type->data.T_SCHEME.type;
+  }
+
+  return type;
+}
+
+static int completion_kind_for_type(Type *type) {
+  type = completion_item_type(type);
+
+  if (!type) {
+    return LSP_COMPLETION_KIND_TEXT;
+  }
+
+  if (type->kind == T_FN) {
+    return LSP_COMPLETION_KIND_FUNCTION;
+  }
+
+  if (is_module(type)) {
+    return LSP_COMPLETION_KIND_MODULE;
+  }
+
+  return LSP_COMPLETION_KIND_VARIABLE;
+}
+
+static void add_completion_item(struct json_object *items, ht *seen,
+                                const char *label, int kind, Type *type) {
+  struct json_object *item;
+  char *sort_text;
+
+  if (!items || !seen || !label || ht_get(seen, label)) {
+    return;
+  }
+
+  if (!ht_set(seen, label, (void *)label)) {
+    return;
+  }
+
+  item = json_object_new_object();
+  json_object_object_add(item, "label", json_object_new_string(label));
+  json_object_object_add(item, "kind", json_object_new_int(kind));
+  json_object_object_add(item, "insertText", json_object_new_string(label));
+  json_object_object_add(item, "filterText", json_object_new_string(label));
+  sort_text = xstrdup(label);
+  if (sort_text) {
+    for (size_t i = 0; sort_text[i] != '\0'; i++) {
+      sort_text[i] = (char)tolower((unsigned char)sort_text[i]);
+    }
+    json_object_object_add(item, "sortText", json_object_new_string(sort_text));
+    free(sort_text);
+  }
+
+  json_object_array_add(items, item);
+}
+
+static void add_completion_item_if_matches(struct json_object *items, ht *seen,
+                                           const char *label, int kind,
+                                           Type *type, const char *prefix) {
+  if (!label || !prefix) {
+    return;
+  }
+
+  if (strncmp(label, prefix, strlen(prefix)) != 0) {
+    return;
+  }
+
+  add_completion_item(items, seen, label, kind, type);
+}
+
+static node_match choose_better_match(node_match current, node_match candidate) {
+  if (!candidate.node) {
+    return current;
+  }
+
+  if (!current.node) {
+    return candidate;
+  }
+
+  if (candidate.start_offset > current.start_offset) {
+    return candidate;
+  }
+
+  if (candidate.start_offset < current.start_offset) {
+    return current;
+  }
+
+  if ((candidate.end_offset - candidate.start_offset) <
+      (current.end_offset - current.start_offset)) {
+    return candidate;
+  }
+
+  return current;
+}
+
+static node_match find_smallest_node_in_subtree(Ast *node, long long cursor_offset,
+                                                long long end_offset);
+
+static node_match visit_ast_list(AstList *list, long long cursor_offset,
+                                 long long end_offset) {
+  node_match best = {0};
+
+  for (AstList *item = list; item; item = item->next) {
+    Ast *current = item->ast;
+    Ast *next = item->next ? item->next->ast : NULL;
+    long long child_end = end_offset;
+    node_match candidate;
+
+    if (!current || !current->loc_info) {
+      continue;
+    }
+
+    if (next && next->loc_info && next->loc_info->absolute_offset < child_end) {
+      child_end = next->loc_info->absolute_offset;
+    }
+
+    candidate =
+        find_smallest_node_in_subtree(current, cursor_offset, child_end);
+    best = choose_better_match(best, candidate);
+  }
+
+  return best;
+}
+
+static node_match visit_ast_array(Ast *items, size_t len, long long cursor_offset,
+                                  long long end_offset) {
+  node_match best = {0};
+
+  for (size_t i = 0; i < len; i++) {
+    Ast *current = items + i;
+    Ast *next = (i + 1 < len) ? items + i + 1 : NULL;
+    long long child_end = end_offset;
+    node_match candidate;
+
+    if (!current || !current->loc_info) {
+      continue;
+    }
+
+    if (next && next->loc_info && next->loc_info->absolute_offset < child_end) {
+      child_end = next->loc_info->absolute_offset;
+    }
+
+    candidate =
+        find_smallest_node_in_subtree(current, cursor_offset, child_end);
+    best = choose_better_match(best, candidate);
+  }
+
+  return best;
+}
+
+static node_match find_smallest_node_in_subtree(Ast *node, long long cursor_offset,
+                                                long long end_offset) {
+  node_match best = {0};
+  long long start_offset;
+  node_match candidate = {0};
+  Ast *children[4] = {0};
+  size_t child_count = 0;
+
+  if (!node) {
+    return best;
+  }
+
+  if (!node->loc_info) {
+    if (node->tag == AST_BODY) {
+      return visit_ast_list(node->data.AST_BODY.stmts, cursor_offset, end_offset);
+    }
+    return best;
+  }
+
+  start_offset = node->loc_info->absolute_offset;
+  if (start_offset > cursor_offset || cursor_offset >= end_offset ||
+      start_offset >= end_offset) {
+    return best;
+  }
+
+  best = (node_match){
+      .node = node,
+      .start_offset = start_offset,
+      .end_offset = end_offset,
+  };
+
+  switch (node->tag) {
+  case AST_BODY:
+    return choose_better_match(
+        best,
+        visit_ast_list(node->data.AST_BODY.stmts, cursor_offset, end_offset));
+  case AST_APPLICATION:
+    candidate = find_smallest_node_in_subtree(
+        node->data.AST_APPLICATION.function, cursor_offset,
+        node->data.AST_APPLICATION.len > 0 &&
+                node->data.AST_APPLICATION.args[0].loc_info
+            ? node->data.AST_APPLICATION.args[0].loc_info->absolute_offset
+            : end_offset);
+    best = choose_better_match(best, candidate);
+    candidate = visit_ast_array(node->data.AST_APPLICATION.args,
+                                node->data.AST_APPLICATION.len, cursor_offset,
+                                end_offset);
+    return choose_better_match(best, candidate);
+  case AST_LET:
+  case AST_TYPE_DECL:
+  case AST_LOOP:
+    children[child_count++] = node->data.AST_LET.binding;
+    children[child_count++] = node->data.AST_LET.expr;
+    if (node->data.AST_LET.in_expr) {
+      children[child_count++] = node->data.AST_LET.in_expr;
+    }
+    break;
+  case AST_BINOP:
+  case AST_ASSOC:
+    children[child_count++] = node->data.AST_BINOP.left;
+    children[child_count++] = node->data.AST_BINOP.right;
+    break;
+  case AST_UNOP:
+    children[child_count++] = node->data.AST_UNOP.expr;
+    break;
+  case AST_LAMBDA:
+  case AST_MODULE:
+    candidate = visit_ast_list(node->data.AST_LAMBDA.params, cursor_offset,
+                               node->data.AST_LAMBDA.body &&
+                                       node->data.AST_LAMBDA.body->loc_info
+                                   ? node->data.AST_LAMBDA.body->loc_info
+                                         ->absolute_offset
+                                   : end_offset);
+    best = choose_better_match(best, candidate);
+    candidate = visit_ast_list(node->data.AST_LAMBDA.type_annotations,
+                               cursor_offset,
+                               node->data.AST_LAMBDA.body &&
+                                       node->data.AST_LAMBDA.body->loc_info
+                                   ? node->data.AST_LAMBDA.body->loc_info
+                                         ->absolute_offset
+                                   : end_offset);
+    best = choose_better_match(best, candidate);
+    if (node->data.AST_LAMBDA.body) {
+      candidate = find_smallest_node_in_subtree(node->data.AST_LAMBDA.body,
+                                                cursor_offset, end_offset);
+      best = choose_better_match(best, candidate);
+    }
+    return best;
+  case AST_TRAIT_IMPL:
+    children[child_count++] = node->data.AST_TRAIT_IMPL.impl;
+    break;
+  case AST_EXTERN_FN:
+    children[child_count++] = node->data.AST_EXTERN_FN.signature_types;
+    break;
+  case AST_LIST:
+  case AST_ARRAY:
+  case AST_TUPLE:
+  case AST_FMT_STRING:
+    candidate = visit_ast_array(node->data.AST_LIST.items, node->data.AST_LIST.len,
+                                cursor_offset, end_offset);
+    return choose_better_match(best, candidate);
+  case AST_MATCH:
+    if (node->data.AST_MATCH.expr) {
+      candidate = find_smallest_node_in_subtree(
+          node->data.AST_MATCH.expr, cursor_offset,
+          node->data.AST_MATCH.len > 0 && node->data.AST_MATCH.branches[0].loc_info
+              ? node->data.AST_MATCH.branches[0].loc_info->absolute_offset
+              : end_offset);
+      best = choose_better_match(best, candidate);
+    }
+    candidate = visit_ast_array(node->data.AST_MATCH.branches,
+                                node->data.AST_MATCH.len * 2, cursor_offset,
+                                end_offset);
+    return choose_better_match(best, candidate);
+  case AST_RECORD_ACCESS:
+    children[child_count++] = node->data.AST_RECORD_ACCESS.record;
+    children[child_count++] = node->data.AST_RECORD_ACCESS.member;
+    break;
+  case AST_MATCH_GUARD_CLAUSE:
+    children[child_count++] = node->data.AST_MATCH_GUARD_CLAUSE.test_expr;
+    children[child_count++] = node->data.AST_MATCH_GUARD_CLAUSE.guard_expr;
+    break;
+  case AST_YIELD:
+  case AST_SPREAD_OP:
+    children[child_count++] = node->data.AST_YIELD.expr;
+    break;
+  case AST_RANGE_EXPRESSION:
+    children[child_count++] = node->data.AST_RANGE_EXPRESSION.from;
+    children[child_count++] = node->data.AST_RANGE_EXPRESSION.to;
+    break;
+  default:
+    return best;
+  }
+
+  for (size_t i = 0; i < child_count; i++) {
+    Ast *current = children[i];
+    Ast *next = NULL;
+    long long child_end = end_offset;
+
+    if (!current || !current->loc_info) {
+      continue;
+    }
+
+    for (size_t j = i + 1; j < child_count; j++) {
+      if (children[j] && children[j]->loc_info) {
+        next = children[j];
+        break;
+      }
+    }
+
+    if (next && next->loc_info && next->loc_info->absolute_offset < child_end) {
+      child_end = next->loc_info->absolute_offset;
+    }
+
+    candidate =
+        find_smallest_node_in_subtree(current, cursor_offset, child_end);
+    best = choose_better_match(best, candidate);
+  }
+
+  return best;
+}
+
 static bool stmt_range(Ast *stmt, Ast *next_stmt, const char *src,
                        source_range *out_range) {
   long long end_offset = 0;
@@ -415,6 +922,48 @@ static void parse_doc(document *doc) {
   }
 
   doc->root = parse_input_buffer(doc->path, doc->text);
+}
+
+static void analyze_doc(document *doc) {
+  TICtx ctx = {0};
+
+  if (!doc) {
+    return;
+  }
+
+  configure_analysis_environment();
+  ht_reinit(&module_registry);
+  initialize_builtin_types();
+  reset_type_var_counter();
+  parse_doc(doc);
+  doc->analysis_dirty = false;
+
+  if (!doc->root) {
+    doc->type_env = NULL;
+    doc->typecheck_ok = false;
+    return;
+  }
+
+  ctx.err_stream = stderr;
+  if (!infer(doc->root, &ctx)) {
+    doc->typecheck_ok = false;
+    return;
+  }
+
+  doc->type_env = ctx.env;
+  doc->typecheck_ok = true;
+}
+
+static bool ensure_doc_analysis(document *doc) {
+  if (!doc) {
+    return false;
+  }
+
+  if (doc->analysis_dirty) {
+    analyze_doc(doc);
+  }
+
+  return doc->root != NULL;
 }
 
 static int read_message(char **out_content) {
@@ -534,7 +1083,9 @@ static int json_get_int_default(struct json_object *obj, const char *key,
 static void handle_initialize(lsp_server *server, int id) {
   struct json_object *result = json_object_new_object();
   struct json_object *capabilities = json_object_new_object();
+  struct json_object *completion_provider = json_object_new_object();
   struct json_object *sync = json_object_new_object();
+  struct json_object *trigger_characters = json_object_new_array();
 
   (void)server;
 
@@ -546,6 +1097,20 @@ static void handle_initialize(lsp_server *server, int id) {
                          json_object_new_boolean(1));
   json_object_object_add(capabilities, "selectionRangeProvider",
                          json_object_new_boolean(1));
+  json_object_object_add(capabilities, "hoverProvider",
+                         json_object_new_boolean(1));
+  for (size_t i = 0;
+       i < sizeof(completion_trigger_chars) / sizeof(completion_trigger_chars[0]);
+       i++) {
+    json_object_array_add(trigger_characters,
+                          json_object_new_string(completion_trigger_chars[i]));
+  }
+  json_object_object_add(completion_provider, "resolveProvider",
+                         json_object_new_boolean(0));
+  json_object_object_add(completion_provider, "triggerCharacters",
+                         trigger_characters);
+  json_object_object_add(capabilities, "completionProvider",
+                         completion_provider);
   json_object_object_add(result, "capabilities", capabilities);
 
   send_response_int(id, result);
@@ -575,7 +1140,7 @@ static void handle_did_open(lsp_server *server, struct json_object *params) {
 
   free(doc->text);
   doc->text = xstrdup(text);
-  parse_doc(doc);
+  analyze_doc(doc);
   publish_empty_diagnostics(doc);
 }
 
@@ -607,7 +1172,7 @@ static void handle_did_change(lsp_server *server, struct json_object *params) {
 
   free(doc->text);
   doc->text = xstrdup(text);
-  parse_doc(doc);
+  doc->analysis_dirty = true;
   publish_empty_diagnostics(doc);
 }
 
@@ -642,7 +1207,8 @@ static void handle_document_symbol(lsp_server *server, int id,
 
   uri = json_get_string(text_document, "uri");
   doc = uri ? find_doc(server, uri) : NULL;
-  if (!doc || !doc->root || doc->root->tag != AST_BODY) {
+  if (!doc || !ensure_doc_analysis(doc) || !doc->root ||
+      doc->root->tag != AST_BODY) {
     send_response_int(id, symbols);
     return;
   }
@@ -692,7 +1258,7 @@ static void handle_selection_range(lsp_server *server, int id,
 
   uri = json_get_string(text_document, "uri");
   doc = uri ? find_doc(server, uri) : NULL;
-  if (!doc || !doc->root || !doc->text) {
+  if (!doc || !doc->text || !ensure_doc_analysis(doc) || !doc->root) {
     send_response_int(id, ranges);
     return;
   }
@@ -703,11 +1269,34 @@ static void handle_selection_range(lsp_server *server, int id,
     source_range range;
     struct json_object *selection = json_object_new_object();
     int line = json_get_int_default(position, "line", 0) + 1;
+    int character = json_get_int_default(position, "character", 0);
+    long long cursor_offset;
+    long long target_end_offset = 0;
     Ast *next_stmt = NULL;
     Ast *stmt = find_stmt_at_line(doc, line, &next_stmt);
 
     if (stmt && stmt_range_for_doc(doc, stmt, next_stmt, &range)) {
-      json_object_object_add(selection, "range", range_to_json(&range));
+      Ast *target;
+
+      cursor_offset = offset_for_position(doc->text, line - 1, character);
+      target = find_selection_target_in_sequence(stmt, cursor_offset,
+                                                 range.end_offset,
+                                                 &target_end_offset);
+      if (target && target->loc_info &&
+          should_clamp_selection_end_with_scan(target)) {
+        long long scanned_end = top_level_stmt_end_offset(
+            doc->text, target->loc_info->absolute_offset);
+        if (scanned_end > target->loc_info->absolute_offset &&
+            scanned_end < target_end_offset) {
+          target_end_offset = scanned_end;
+        }
+      }
+      if (target &&
+          range_for_node_offsets(doc->text, target, target_end_offset, &range)) {
+        json_object_object_add(selection, "range", range_to_json(&range));
+      } else {
+        json_object_object_add(selection, "range", range_to_json(&range));
+      }
     } else {
       source_range empty_range = {
           .start_offset = 0,
@@ -724,6 +1313,178 @@ static void handle_selection_range(lsp_server *server, int id,
   }
 
   send_response_int(id, ranges);
+}
+
+static void handle_hover(lsp_server *server, int id, struct json_object *params) {
+  struct json_object *text_document = NULL;
+  struct json_object *position = NULL;
+  struct json_object *result = json_object_new_object();
+  struct json_object *contents = json_object_new_object();
+  const char *uri;
+  document *doc;
+  int line;
+  int character;
+  long long cursor_offset;
+  Ast *stmt;
+  Ast *hover_node;
+  Ast *next_stmt = NULL;
+  source_range range;
+  char *type_str;
+  char *value;
+  const char *name = NULL;
+  ObjString binding_name = {0};
+
+  if (!json_object_object_get_ex(params, "textDocument", &text_document) ||
+      !json_object_object_get_ex(params, "position", &position)) {
+    send_error_int(id, -32602, "missing hover params");
+    json_object_put(result);
+    return;
+  }
+
+  uri = json_get_string(text_document, "uri");
+  doc = uri ? find_doc(server, uri) : NULL;
+  if (!doc || !ensure_doc_analysis(doc) || !doc->root || !doc->typecheck_ok) {
+    json_object_put(result);
+    send_response_int(id, json_object_new_null());
+    return;
+  }
+
+  line = json_get_int_default(position, "line", 0) + 1;
+  character = json_get_int_default(position, "character", 0);
+  stmt = find_stmt_at_line(doc, line, &next_stmt);
+  if (!stmt || !stmt->type || !stmt_range_for_doc(doc, stmt, next_stmt, &range)) {
+    json_object_put(result);
+    send_response_int(id, json_object_new_null());
+    return;
+  }
+
+  cursor_offset = offset_for_position(doc->text, line - 1, character);
+  hover_node =
+      find_smallest_node_in_subtree(stmt, cursor_offset, range.end_offset).node;
+  if (!hover_node || !hover_node->type) {
+    hover_node = stmt;
+  }
+
+  type_str = type_to_string_dynamic(hover_node->type);
+  if (!type_str) {
+    json_object_put(result);
+    send_response_int(id, json_object_new_null());
+    return;
+  }
+
+  if ((hover_node->tag == AST_LET || hover_node->tag == AST_TYPE_DECL) &&
+      get_let_binding_name(hover_node, &binding_name) == 0) {
+    name = binding_name.chars;
+  } else if (hover_node->tag == AST_IDENTIFIER) {
+    name = hover_node->data.AST_IDENTIFIER.value;
+  } else if (hover_node->tag == AST_IMPORT) {
+    name = hover_node->data.AST_IMPORT.identifier;
+  }
+
+  if (name) {
+    size_t len = strlen(name) + strlen(type_str) + 16;
+    value = malloc(len);
+    snprintf(value, len, "`%s : %s`", name, type_str);
+  } else {
+    size_t len = strlen(type_str) + 8;
+    value = malloc(len);
+    snprintf(value, len, "`%s`", type_str);
+  }
+
+  json_object_object_add(contents, "kind", json_object_new_string("markdown"));
+  json_object_object_add(contents, "value", json_object_new_string(value));
+  json_object_object_add(result, "contents", contents);
+  if (hover_node->loc_info) {
+    source_range hover_range = {
+        .start_offset = hover_node->loc_info->absolute_offset,
+        .end_offset = hover_node->loc_info->absolute_offset,
+        .start_line = hover_node->loc_info->line,
+        .start_col = hover_node->loc_info->col,
+        .end_line = hover_node->loc_info->line,
+        .end_col = hover_node->loc_info->col_end > 0
+                       ? hover_node->loc_info->col_end + 1
+                       : hover_node->loc_info->col + 1,
+    };
+    line_col_for_offset(doc->text, hover_range.start_offset, &hover_range.start_line,
+                        &hover_range.start_col);
+    json_object_object_add(result, "range", range_to_json(&hover_range));
+  } else {
+    json_object_object_add(result, "range", range_to_json(&range));
+  }
+  send_response_int(id, result);
+
+  free(value);
+  free(type_str);
+}
+
+static void handle_completion(lsp_server *server, int id,
+                              struct json_object *params) {
+  struct json_object *result = json_object_new_object();
+  struct json_object *text_document = NULL;
+  struct json_object *position = NULL;
+  struct json_object *items = json_object_new_array();
+  const char *uri;
+  document *doc;
+  int line;
+  int character;
+  char *prefix;
+  ht seen;
+  hti it;
+
+  if (!json_object_object_get_ex(params, "textDocument", &text_document) ||
+      !json_object_object_get_ex(params, "position", &position)) {
+    send_error_int(id, -32602, "missing completion params");
+    json_object_put(result);
+    json_object_put(items);
+    return;
+  }
+
+  uri = json_get_string(text_document, "uri");
+  doc = uri ? find_doc(server, uri) : NULL;
+  if (!doc || !doc->text) {
+    json_object_object_add(result, "isIncomplete", json_object_new_boolean(0));
+    json_object_object_add(result, "items", items);
+    send_response_int(id, result);
+    return;
+  }
+
+  line = json_get_int_default(position, "line", 0);
+  character = json_get_int_default(position, "character", 0);
+  prefix = completion_prefix_at_position(doc->text, line, character);
+  if (!prefix) {
+    json_object_object_add(result, "isIncomplete", json_object_new_boolean(0));
+    json_object_object_add(result, "items", items);
+    send_response_int(id, result);
+    return;
+  }
+
+  ht_init(&seen);
+
+  if (doc->typecheck_ok && doc->type_env) {
+    for (TypeEnv *env = doc->type_env; env; env = env->next) {
+      add_completion_item_if_matches(items, &seen, env->name,
+                                     completion_kind_for_type(env->type),
+                                     env->type, prefix);
+    }
+  }
+
+  it = ht_iterator(&builtin_types);
+  while (ht_next(&it)) {
+    add_completion_item_if_matches(items, &seen, it.key,
+                                   completion_kind_for_type((Type *)it.value),
+                                   (Type *)it.value, prefix);
+  }
+
+  for (size_t i = 0;
+       i < sizeof(completion_keywords) / sizeof(completion_keywords[0]); i++) {
+    add_completion_item_if_matches(items, &seen, completion_keywords[i],
+                                   LSP_COMPLETION_KIND_KEYWORD, NULL, prefix);
+  }
+
+  free(prefix);
+  json_object_object_add(result, "isIncomplete", json_object_new_boolean(0));
+  json_object_object_add(result, "items", items);
+  send_response_int(id, result);
 }
 
 static int handle_request(lsp_server *server, struct json_object *message) {
@@ -779,6 +1540,16 @@ static int handle_request(lsp_server *server, struct json_object *message) {
 
   if (strcmp(method, "textDocument/selectionRange") == 0 && id >= 0) {
     handle_selection_range(server, id, params);
+    return 0;
+  }
+
+  if (strcmp(method, "textDocument/hover") == 0 && id >= 0) {
+    handle_hover(server, id, params);
+    return 0;
+  }
+
+  if (strcmp(method, "textDocument/completion") == 0 && id >= 0) {
+    handle_completion(server, id, params);
     return 0;
   }
 

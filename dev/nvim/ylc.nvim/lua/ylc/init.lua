@@ -676,10 +676,21 @@ local function focus_terminal_end()
 end
 
 local function open_window()
-	vim.cmd(config.open_cmd)
-	state.term_win = vim.api.nvim_get_current_win()
+	local old_term_buf = state.term_buf
+
+	if state.term_win and vim.api.nvim_win_is_valid(state.term_win) then
+		vim.api.nvim_set_current_win(state.term_win)
+	else
+		vim.cmd(config.open_cmd)
+		state.term_win = vim.api.nvim_get_current_win()
+	end
+
 	state.term_buf = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_win_set_buf(state.term_win, state.term_buf)
+	if old_term_buf and vim.api.nvim_buf_is_valid(old_term_buf) then
+		pcall(vim.api.nvim_buf_delete, old_term_buf, { force = true })
+	end
+
 	vim.bo[state.term_buf].bufhidden = "hide"
 	vim.wo[state.term_win].number = false
 	vim.wo[state.term_win].relativenumber = false
@@ -809,6 +820,15 @@ function M.open_debug()
 end
 
 function M.restart()
+	M.open()
+end
+
+function M.reload_or_open()
+	if is_job_running() and state.script_path then
+		M.restart()
+		return
+	end
+
 	M.open()
 end
 

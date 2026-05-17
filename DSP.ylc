@@ -94,6 +94,8 @@ let pitchshift = extern fn Double -> Double -> Double -> Double -> Double -> Dou
 
 #                      max_grains   buf                rate      pos       width     trig
 let grains = extern fn Int ->       Array of Double -> Double -> Double -> Double -> Double;
+#                          max_grains   src_buf          env_buf          rate      pos       width     trig
+let grains_env = extern fn Int ->       Array of Double -> Array of Double -> Double -> Double -> Double -> Double;
 
 type Complex = (Double, Double);
 type FreqSignal = Array of Complex;

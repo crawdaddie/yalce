@@ -124,6 +124,7 @@ void ast_body_push(Ast *body, Ast *stmt) {
     new_node->next = NULL;
 
     if (body->data.AST_BODY.stmts == NULL) {
+      ast_copy_loc(body, stmt);
       body->data.AST_BODY.stmts = new_node;
       body->data.AST_BODY.tail = new_node;
     } else {

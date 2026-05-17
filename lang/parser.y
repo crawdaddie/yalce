@@ -181,43 +181,43 @@ atom_expr:
   ;
 
 simple_expr:
-    INTEGER               { $$ = AST_CONST(AST_INT, $1); }
-  | DOUBLE                { $$ = AST_CONST(AST_DOUBLE, $1); }
-  | FLOAT                 { $$ = AST_CONST(AST_FLOAT, $1); }
-  | TOK_STRING            { $$ = ast_string($1); }
-  | TRUE                  { $$ = AST_CONST(AST_BOOL, true); }
-  | FALSE                 { $$ = AST_CONST(AST_BOOL, false); }
-  | IDENTIFIER            { $$ = ast_identifier($1); }
-  | TOK_VOID              { $$ = ast_void(); }
+    INTEGER               { $$ = AST_CONST(AST_INT, $1); SET_AST_LOC($$, @$); }
+  | DOUBLE                { $$ = AST_CONST(AST_DOUBLE, $1); SET_AST_LOC($$, @$); }
+  | FLOAT                 { $$ = AST_CONST(AST_FLOAT, $1); SET_AST_LOC($$, @$); }
+  | TOK_STRING            { $$ = ast_string($1); SET_AST_LOC($$, @$); }
+  | TRUE                  { $$ = AST_CONST(AST_BOOL, true); SET_AST_LOC($$, @$); }
+  | FALSE                 { $$ = AST_CONST(AST_BOOL, false); SET_AST_LOC($$, @$); }
+  | IDENTIFIER            { $$ = ast_identifier($1); SET_AST_LOC($$, @$); }
+  | TOK_VOID              { $$ = ast_void(); SET_AST_LOC($$, @$); }
   | list                  { $$ = $1; }
   | array                 { $$ = $1; }
   | tuple                 { $$ = $1; }
   | fstring               { $$ = parse_fstring_expr($1); }
-  | TOK_CHAR              { $$ = ast_char($1); }
+  | TOK_CHAR              { $$ = ast_char($1); SET_AST_LOC($$, @$); }
   | '(' expr_sequence ')' { $$ = $2; }
-  | '(' FN lambda_args ARROW expr_sequence ')' { $$ = ast_lambda($3, $5); }
-  | '(' FN TOK_VOID ARROW expr_sequence ')'    { $$ = ast_void_lambda($5); }
+  | '(' FN lambda_args ARROW expr_sequence ')' { $$ = ast_lambda($3, $5); SET_AST_LOC($$, @$); }
+  | '(' FN TOK_VOID ARROW expr_sequence ')'    { $$ = ast_void_lambda($5); SET_AST_LOC($$, @$); }
   | '(' LET IDENTIFIER '=' FN lambda_args ARROW expr_sequence ')'
-                                    { $$ = ast_let(ast_identifier($3), ast_lambda($6, $8), NULL); }
+                                    { $$ = ast_let(ast_identifier($3), ast_lambda($6, $8), NULL); SET_AST_LOC($$, @$); }
   | '(' LET IDENTIFIER '=' FN TOK_VOID ARROW expr_sequence ')'
-                                    { $$ = ast_let(ast_identifier($3), ast_void_lambda($8), NULL); }
-  | '(' '+' ')'           { $$ = ast_identifier((ObjString){"+", 1}); }
-  | '(' '-' ')'           { $$ = ast_identifier((ObjString){"-", 1}); }
-  | '(' '*' ')'           { $$ = ast_identifier((ObjString){"*", 1}); }
-  | '(' '/' ')'           { $$ = ast_identifier((ObjString){"/", 1}); }
-  | '(' MODULO ')'        { $$ = ast_identifier((ObjString){"%", 1}); }
-  | '(' '<' ')'           { $$ = ast_identifier((ObjString){"<", 1}); }
-  | '(' '>' ')'           { $$ = ast_identifier((ObjString){">", 1}); }
-  | '(' DOUBLE_AMP ')'    { $$ = ast_identifier((ObjString){"&&", 2}); }
-  | '(' DOUBLE_PIPE ')'   { $$ = ast_identifier((ObjString){"||", 2}); }
-  | '(' GE ')'            { $$ = ast_identifier((ObjString){">=", 2}); }
-  | '(' LE ')'            { $$ = ast_identifier((ObjString){"<=", 2}); }
-  | '(' NE ')'            { $$ = ast_identifier((ObjString){"!=", 2}); }
-  | '(' EQ ')'            { $$ = ast_identifier((ObjString){"==", 2}); }
-  | '(' PIPE ')'          { $$ = ast_identifier((ObjString){"|", 1}); }
-  | '(' ':' ')'           { $$ = ast_identifier((ObjString){":", 1}); }
-  | '(' DOUBLE_COLON ')'  { $$ = ast_identifier((ObjString){"::", 2}); }
-  | '(' IDENTIFIER ')'            { $$ = ast_identifier($2); }
+                                    { $$ = ast_let(ast_identifier($3), ast_void_lambda($8), NULL); SET_AST_LOC($$, @$); }
+  | '(' '+' ')'           { $$ = ast_identifier((ObjString){"+", 1}); SET_AST_LOC($$, @$); }
+  | '(' '-' ')'           { $$ = ast_identifier((ObjString){"-", 1}); SET_AST_LOC($$, @$); }
+  | '(' '*' ')'           { $$ = ast_identifier((ObjString){"*", 1}); SET_AST_LOC($$, @$); }
+  | '(' '/' ')'           { $$ = ast_identifier((ObjString){"/", 1}); SET_AST_LOC($$, @$); }
+  | '(' MODULO ')'        { $$ = ast_identifier((ObjString){"%", 1}); SET_AST_LOC($$, @$); }
+  | '(' '<' ')'           { $$ = ast_identifier((ObjString){"<", 1}); SET_AST_LOC($$, @$); }
+  | '(' '>' ')'           { $$ = ast_identifier((ObjString){">", 1}); SET_AST_LOC($$, @$); }
+  | '(' DOUBLE_AMP ')'    { $$ = ast_identifier((ObjString){"&&", 2}); SET_AST_LOC($$, @$); }
+  | '(' DOUBLE_PIPE ')'   { $$ = ast_identifier((ObjString){"||", 2}); SET_AST_LOC($$, @$); }
+  | '(' GE ')'            { $$ = ast_identifier((ObjString){">=", 2}); SET_AST_LOC($$, @$); }
+  | '(' LE ')'            { $$ = ast_identifier((ObjString){"<=", 2}); SET_AST_LOC($$, @$); }
+  | '(' NE ')'            { $$ = ast_identifier((ObjString){"!=", 2}); SET_AST_LOC($$, @$); }
+  | '(' EQ ')'            { $$ = ast_identifier((ObjString){"==", 2}); SET_AST_LOC($$, @$); }
+  | '(' PIPE ')'          { $$ = ast_identifier((ObjString){"|", 1}); SET_AST_LOC($$, @$); }
+  | '(' ':' ')'           { $$ = ast_identifier((ObjString){":", 1}); SET_AST_LOC($$, @$); }
+  | '(' DOUBLE_COLON ')'  { $$ = ast_identifier((ObjString){"::", 2}); SET_AST_LOC($$, @$); }
+  | '(' IDENTIFIER ')'            { $$ = ast_identifier($2); SET_AST_LOC($$, @$); }
   ;
 
 

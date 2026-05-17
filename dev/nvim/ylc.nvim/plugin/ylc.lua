@@ -22,6 +22,10 @@ vim.api.nvim_create_user_command("YlcRestart", function()
   ylc.restart()
 end, {})
 
+vim.api.nvim_create_user_command("YlcReload", function()
+  ylc.reload_or_open()
+end, {})
+
 vim.api.nvim_create_user_command("YlcStop", function()
   ylc.stop()
 end, {})
