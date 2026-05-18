@@ -259,9 +259,16 @@ Type *array_type(Ast *expr) {
   }
   return NULL;
 }
-
+LLVMValueRef __handle_yield_boundary_crossing_binding(Ast *binding, Ast *expr,
+                                                      JITLangCtx *ctx,
+                                                      LLVMModuleRef module,
+                                                      LLVMBuilderRef builder);
 LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
+  if (ctx->coro_ctx) {
+    __handle_yield_boundary_crossing_binding(binding, expr, ctx, module,
+                                             builder);
+  }
 
   LLVMValueRef expr_val;
   Type *expr_type = expr->type;

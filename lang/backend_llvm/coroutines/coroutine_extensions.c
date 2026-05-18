@@ -374,10 +374,17 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   //
   // LLVMValueRef map_fn = codegen(map_fn_ast, ctx, module, builder);
   LLVMValueRef map_fn;
+
   if (map_fn_ast->type->kind == T_FN && !is_compose_fn(map_fn_ast)) {
     map_fn = codegen_fn(map_fn_ast, ctx, module, builder);
   } else {
     map_fn = codegen(map_fn_ast, ctx, module, builder);
+  }
+  if (!map_fn) {
+    print_type(map_fn_type);
+    fprintf(stderr, "Could not compile map fn\n");
+    print_ast_err(map_fn_ast);
+    return NULL;
   }
 
   LLVMValueRef inner_handle = codegen(coro_ast, ctx, module, builder);

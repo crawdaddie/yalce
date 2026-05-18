@@ -25,6 +25,7 @@ typedef struct {
   LLVMValueRef coro_id;         // Result of coro.id
   LLVMValueRef coro_handle;     // Result of coro.begin
   LLVMValueRef promise_alloca;  // Alloca for promise storage
+  LLVMValueRef frame_alloca_anchor; // Insert lazy frame allocas before this
   LLVMBasicBlockRef cleanup_bb; // Basic block for cleanup
   LLVMBasicBlockRef suspend_bb; // Basic block for final suspend
   LLVMBasicBlockRef start_bb;   // Basic block for start
@@ -57,6 +58,9 @@ LLVMValueRef coro_symbol_resume(JITSymbol *sym, JITLangCtx *ctx,
 
 LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder);
+
+LLVMBuilderRef coro_create_frame_builder(JITLangCtx *ctx,
+                                         LLVMModuleRef module);
 
 #define PTR_ID_FUNC_TYPE(obj)                                                  \
   LLVMFunctionType(LLVMPointerType(obj, 0),                                    \

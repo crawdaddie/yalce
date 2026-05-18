@@ -827,6 +827,95 @@ LLVMTypeRef codegen_coro_fn_type(LLVMTypeRef opt_ret_type, Type *fn_type,
   return llvm_fn_type;
 }
 
+LLVMBuilderRef coro_create_frame_builder(JITLangCtx *ctx,
+                                         LLVMModuleRef module) {
+  CoroutineCtx *coro_ctx = ctx->coro_ctx;
+  if (!coro_ctx || !coro_ctx->frame_alloca_anchor) {
+    return NULL;
+  }
+
+  LLVMBuilderRef frame_builder =
+      LLVMCreateBuilderInContext(LLVMGetModuleContext(module));
+  LLVMPositionBuilderBefore(frame_builder, coro_ctx->frame_alloca_anchor);
+  return frame_builder;
+}
+
+LLVMValueRef __allocate_coroutine_array(JITLangCtx *ctx, LLVMBuilderRef builder,
+                                        LLVMTypeRef element_type,
+                                        LLVMValueRef size_const) {
+  unsigned long long array_size = LLVMConstIntGetZExtValue(size_const);
+  LLVMTypeRef backing_type = LLVMArrayType(element_type, (unsigned)array_size);
+  LLVMModuleRef current_module =
+      LLVMGetGlobalParent(LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)));
+  LLVMBuilderRef frame_builder = coro_create_frame_builder(ctx, current_module);
+  if (!frame_builder) {
+    return NULL;
+  }
+
+  LLVMValueRef backing_alloca =
+      LLVMBuildAlloca(frame_builder, backing_type, "coro.array.alloca");
+  LLVMValueRef zero = LLVMConstInt(LLVMInt32Type(), 0, 0);
+  LLVMValueRef data_ptr =
+      LLVMBuildGEP2(frame_builder, backing_type, backing_alloca,
+                    (LLVMValueRef[]){zero, zero}, 2, "coro.array.data");
+
+  LLVMDisposeBuilder(frame_builder);
+  return data_ptr;
+}
+
+LLVMValueRef __handle_yield_boundary_crossing_binding(Ast *binding, Ast *expr,
+                                                      JITLangCtx *ctx,
+                                                      LLVMModuleRef module,
+                                                      LLVMBuilderRef builder) {
+
+  CoroutineCtx *coro_ctx = ctx->coro_ctx;
+  if (!coro_ctx || binding->tag != AST_IDENTIFIER) {
+    return NULL;
+  }
+
+  bool is_boundary_xer = false;
+  AST_LIST_ITER(coro_ctx->yield_boundary_xs, ({
+                  if (CHARS_EQ(binding->data.AST_IDENTIFIER.value,
+                               l->ast->data.AST_IDENTIFIER.value)) {
+                    is_boundary_xer = true;
+                    break;
+                  }
+                }));
+  if (!is_boundary_xer) {
+    return NULL;
+  }
+
+  const char *chars = binding->data.AST_IDENTIFIER.value;
+  uint64_t id_hash = hash_string(chars, binding->data.AST_IDENTIFIER.length);
+  JITSymbol *existing = ht_get_hash(ctx->frame->table, chars, id_hash);
+  if (existing && existing->storage) {
+    return existing->storage;
+  }
+
+  Type *storage_type = expr->type;
+  if (is_generic(storage_type)) {
+    storage_type = resolve_type_in_env(storage_type, ctx->env);
+  }
+
+  LLVMTypeRef llvm_storage_type = type_to_llvm_type(storage_type, ctx, module);
+  if (!llvm_storage_type) {
+    return NULL;
+  }
+
+  LLVMBuilderRef frame_builder = coro_create_frame_builder(ctx, module);
+  if (!frame_builder) {
+    return NULL;
+  }
+
+  LLVMValueRef storage =
+      LLVMBuildAlloca(frame_builder, llvm_storage_type, "coro.boundary.spill");
+  LLVMDisposeBuilder(frame_builder);
+
+  bind_local_value_with_storage(binding, NULL, storage, storage_type, ctx,
+                                module, builder);
+  return storage;
+}
+
 // ============================================================================
 // Coroutine Function Compilation
 // ============================================================================
@@ -981,33 +1070,6 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
                   }));
   }
 
-  if (expr->data.AST_LAMBDA.num_yield_boundary_crossers > 0) {
-    AST_LIST_ITER(expr->data.AST_LAMBDA.yield_boundary_crossers, ({
-                    Ast *bx = l->ast;
-
-                    Type *bxt = bx->type;
-
-                    if (is_generic(bxt)) {
-                      bxt = resolve_type_in_env(bxt, ctx->env);
-                    }
-
-                    LLVMTypeRef item_type = type_to_llvm_type(bxt, ctx, module);
-                    LLVMValueRef state_storage =
-                        LLVMBuildAlloca(builder, item_type, "");
-
-                    // LLVMBuildStore(builder, LLVMConstNull(item_type),
-                    // state_storage);
-
-                    JITSymbol *sym =
-                        new_symbol(STYPE_LOCAL_VAR, bxt, NULL, item_type);
-                    sym->storage = state_storage;
-                    const char *chars = bx->data.AST_IDENTIFIER.value;
-                    int chars_len = bx->data.AST_IDENTIFIER.length;
-                    ht_set_hash(coro_lang_ctx.frame->table, chars,
-                                hash_string(chars, chars_len), sym);
-                  }));
-  }
-
   LLVMValueRef coro_begin = get_coro_begin_intrinsic(module);
   LLVMValueRef handle =
       LLVMBuildCall2(builder, LLVMGlobalGetValueType(coro_begin), coro_begin,
@@ -1016,6 +1078,7 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
   CoroutineCtx coro_ctx = {0}; // Zero-initialize all fields
   coro_ctx.coro_id = id;
   coro_ctx.promise_alloca = promise_alloca; // Allocated above
+  coro_ctx.frame_alloca_anchor = id;
   coro_ctx.promise_type = prom_struct_type; // Raw T type
   coro_ctx.yield_type = yield_type;
   coro_ctx.llvm_yield_type = llvm_yield_type; // Raw T type
@@ -1028,6 +1091,9 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
   coro_ctx.param_allocas = num_param_allocas == 0 ? NULL : param_allocas;
   coro_ctx.num_param_allocas = num_param_allocas;
   coro_lang_ctx.coro_ctx = &coro_ctx;
+  coro_ctx.yield_boundary_xs = expr->data.AST_LAMBDA.yield_boundary_crossers;
+  coro_ctx.num_yield_boundary_xs =
+      expr->data.AST_LAMBDA.num_yield_boundary_crossers;
 
   LLVMPositionBuilderAtEnd(builder, entry_bb);
 

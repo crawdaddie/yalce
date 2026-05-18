@@ -1,4 +1,5 @@
 #include "backend_llvm/array.h"
+#include "coroutines/coroutines.h"
 #include "escape_analysis.h"
 #include "types.h"
 #include "types/type_ser.h"
@@ -86,16 +87,18 @@ LLVMValueRef set_array_element(LLVMBuilderRef builder, LLVMValueRef array,
   return array;
 }
 
+// forward-decl
+LLVMValueRef __allocate_coroutine_array(JITLangCtx *ctx, LLVMBuilderRef builder,
+                                        LLVMTypeRef element_type,
+                                        LLVMValueRef size_const);
+
 LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
                                   LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
 
   int array_size = ast->data.AST_LIST.len;
 
-  LLVMValueRef first_element = NULL;
-
   if (array_size > 0) {
-    first_element = codegen(ast->data.AST_LIST.items, ctx, module, builder);
   } else {
     LLVMTypeRef empty_type = type_to_llvm_type(ast->type, ctx, module);
 
@@ -107,7 +110,15 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
     return array_struct;
   }
 
-  LLVMTypeRef element_type = LLVMTypeOf(first_element);
+  Type *array_type_ref = ast->type;
+  Type *element_type_ref = array_type_ref->data.T_CONS.args[0];
+  if (is_generic(element_type_ref)) {
+    element_type_ref = resolve_type_in_env(element_type_ref, ctx->env);
+  }
+  LLVMTypeRef element_type =
+      element_type_ref->kind == T_FN
+          ? GENERIC_PTR
+          : type_to_llvm_type(element_type_ref, ctx, module);
   LLVMTypeRef array_type = codegen_array_type(element_type);
   LLVMValueRef size_const = LLVMConstInt(LLVMInt32Type(), array_size, 0);
   LLVMValueRef array_struct = LLVMGetUndef(array_type);
@@ -119,7 +130,10 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
   // } else
   // printf("create array %d \n", find_allocation_strategy(ast, ctx));
   // print_ast(ast);
-  if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
+  if (ctx->coro_ctx) {
+    data_ptr =
+        __allocate_coroutine_array(ctx, builder, element_type, size_const);
+  } else if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
     data_ptr = LLVMBuildArrayAlloca(builder, element_type, size_const,
                                     "array_data_alloc");
   } else {
@@ -127,21 +141,40 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
                                     "array_data_alloc");
   }
 
-  // data_ptr = LLVMBuildArrayMalloc(builder, element_type, size_const,
-  //                                 "array_data_alloc");
-
   array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 0,
                                       "insert_array_size");
 
-  for (int i = 0; i < array_size; i++) {
-    LLVMValueRef element =
-        codegen(ast->data.AST_LIST.items + i, ctx, module, builder);
+  TICtx ti_ctx = {.env = ctx->env};
+  if (is_constant_expr(ast, &ti_ctx) && ctx->coro_ctx) {
+    LLVMBuilderRef init_builder = coro_create_frame_builder(ctx, module);
 
-    LLVMValueRef element_ptr =
-        LLVMBuildGEP2(builder, element_type, data_ptr,
-                      (LLVMValueRef[]){LLVMConstInt(LLVMInt32Type(), i, 0)}, 1,
-                      "element_ptr");
-    LLVMBuildStore(builder, element, element_ptr);
+    if (!init_builder) {
+      return NULL;
+    }
+
+    for (int i = 0; i < array_size; i++) {
+      LLVMValueRef element =
+          codegen(ast->data.AST_LIST.items + i, ctx, module, init_builder);
+
+      LLVMValueRef element_ptr =
+          LLVMBuildGEP2(init_builder, element_type, data_ptr,
+                        (LLVMValueRef[]){LLVMConstInt(LLVMInt32Type(), i, 0)},
+                        1, "element_ptr");
+      LLVMBuildStore(init_builder, element, element_ptr);
+    }
+
+    LLVMDisposeBuilder(init_builder);
+  } else {
+    for (int i = 0; i < array_size; i++) {
+      LLVMValueRef element =
+          codegen(ast->data.AST_LIST.items + i, ctx, module, builder);
+
+      LLVMValueRef element_ptr =
+          LLVMBuildGEP2(builder, element_type, data_ptr,
+                        (LLVMValueRef[]){LLVMConstInt(LLVMInt32Type(), i, 0)},
+                        1, "element_ptr");
+      LLVMBuildStore(builder, element, element_ptr);
+    }
   }
 
   array_struct = LLVMBuildInsertValue(builder, array_struct, data_ptr, 1,
