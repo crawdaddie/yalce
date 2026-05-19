@@ -730,3 +730,14 @@ let parse_note = fn s ->
 let midi_freq = fn n ->
   440. * (Math.pow 2. ((n - 69.)/12.))
 ;;
+
+
+let __elapsed_secs = fn st ->
+  let t = get_tl_tick () in
+  (t - st) * (ctx_spf ())
+;;
+
+let time_coro = fn st ->
+  yield Double (__elapsed_secs st);
+  yield time_coro st
+;;

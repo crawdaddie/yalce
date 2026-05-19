@@ -14,6 +14,10 @@ vim.api.nvim_create_user_command("YlcOpen", function()
   ylc.open()
 end, {})
 
+vim.api.nvim_create_user_command("YlcOpenNb", function()
+  ylc.open_notebook()
+end, {})
+
 vim.api.nvim_create_user_command("YlcOpenDebug", function()
   ylc.open_debug()
 end, {})

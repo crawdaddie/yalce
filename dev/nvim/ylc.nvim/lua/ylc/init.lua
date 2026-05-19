@@ -81,6 +81,15 @@ local function is_blank(line)
 	return line == nil or line:match("^%s*$") ~= nil
 end
 
+local function is_cell_marker(line)
+	if not line then
+		return false
+	end
+
+	local trimmed = vim.trim(line)
+	return trimmed == "#%%" or trimmed == "# %%"
+end
+
 local function set_from_list(items)
 	local result = {}
 	for _, item in ipairs(items) do
@@ -281,6 +290,126 @@ end
 
 local function current_buffer_text(bufnr)
 	return table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+end
+
+local function current_buffer_lines(bufnr)
+	return vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+end
+
+local function buffer_has_notebook_markers(bufnr)
+	for _, line in ipairs(current_buffer_lines(bufnr)) do
+		if is_cell_marker(line) then
+			return true
+		end
+	end
+	return false
+end
+
+local function get_notebook_prelude_text(bufnr)
+	local lines = current_buffer_lines(bufnr)
+	local end_idx = #lines
+
+	for i, line in ipairs(lines) do
+		if is_cell_marker(line) then
+			end_idx = i - 1
+			break
+		end
+	end
+
+	while end_idx > 0 and is_blank(lines[end_idx]) do
+		end_idx = end_idx - 1
+	end
+
+	if end_idx <= 0 then
+		return ""
+	end
+
+	local selected = {}
+	for i = 1, end_idx do
+		selected[#selected + 1] = lines[i]
+	end
+	return table.concat(selected, "\n")
+end
+
+local function find_current_notebook_cell_range(bufnr)
+	local lines = current_buffer_lines(bufnr)
+	if #lines == 0 then
+		return nil
+	end
+
+	local cursor_row = vim.api.nvim_win_get_cursor(0)[1]
+	if not buffer_has_notebook_markers(bufnr) then
+		return nil
+	end
+
+	local marker_row = nil
+	if is_cell_marker(lines[cursor_row]) then
+		marker_row = cursor_row
+	end
+
+	local start_line = 1
+	if marker_row then
+		start_line = marker_row + 1
+	else
+		for row = cursor_row, 1, -1 do
+			if is_cell_marker(lines[row]) then
+				start_line = row + 1
+				break
+			end
+		end
+	end
+
+	local search_from = marker_row and (marker_row + 1) or (cursor_row + 1)
+	local end_line = #lines
+	for row = search_from, #lines do
+		if is_cell_marker(lines[row]) then
+			end_line = row - 1
+			break
+		end
+	end
+
+	while start_line <= end_line and is_blank(lines[start_line]) do
+		start_line = start_line + 1
+	end
+
+	while end_line >= start_line and is_blank(lines[end_line]) do
+		end_line = end_line - 1
+	end
+
+	if start_line > end_line then
+		return nil
+	end
+
+	return {
+		start_row = start_line - 1,
+		end_row = end_line,
+	}
+end
+
+local function get_text_for_notebook_cell(bufnr)
+	local range = find_current_notebook_cell_range(bufnr)
+	if not range then
+		return nil
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(bufnr, range.start_row, range.end_row, false)
+	if not lines or #lines == 0 then
+		return nil
+	end
+
+	return table.concat(lines, "\n"), range
+end
+
+local function select_notebook_cell_range(range)
+	local start_line = range.start_row + 1
+	local end_line = range.end_row
+	local end_text = vim.api.nvim_buf_get_lines(0, end_line - 1, end_line, false)[1] or ""
+	local end_col = math.max(#end_text, 1)
+
+	vim.fn.setpos("'<", { 0, start_line, 1, 0 })
+	vim.fn.setpos("'>", { 0, end_line, end_col, 0 })
+	vim.api.nvim_win_set_cursor(0, { start_line, 0 })
+	vim.cmd("normal! gv")
 end
 
 local function get_text_from_offsets(bufnr, start_offset, end_offset)
@@ -703,6 +832,10 @@ local function build_cmd(script_path)
 	return cmd
 end
 
+local function build_notebook_cmd()
+	return tbl_copy(config.cmd)
+end
+
 local function build_debug_cmd(script_path)
 	local cmd = tbl_copy(config.debugger_cmd)
 	local target = build_cmd(script_path)
@@ -779,7 +912,12 @@ function M.open(opts)
 	open_window()
 
 	state.script_path = script_path
-	local term_cmd = opts.debug and build_debug_cmd(script_path) or build_cmd(script_path)
+	local term_cmd
+	if opts.raw_cmd then
+		term_cmd = tbl_copy(opts.raw_cmd)
+	else
+		term_cmd = opts.debug and build_debug_cmd(script_path) or build_cmd(script_path)
+	end
 	state.job_id = vim.fn.termopen(term_cmd, {
 		env = current_env(),
 		on_stdout = function()
@@ -812,6 +950,30 @@ function M.open(opts)
 		notify("Started YLC under lldb for " .. script_path)
 	else
 		notify("Started YLC for " .. script_path)
+	end
+end
+
+function M.open_notebook()
+	local bufnr = vim.api.nvim_get_current_buf()
+	local script_path = current_file_path()
+	if not script_path then
+		notify("Current buffer has no file on disk", vim.log.levels.ERROR)
+		return
+	end
+
+	local prelude = get_notebook_prelude_text(bufnr)
+
+	M.open({
+		script_path = script_path,
+		raw_cmd = build_notebook_cmd(),
+	})
+
+	if prelude ~= "" then
+		vim.defer_fn(function()
+			if is_job_running() then
+				vim.fn.chansend(state.job_id, escape_text(prelude))
+			end
+		end, 50)
 	end
 end
 
@@ -895,6 +1057,21 @@ function M.send_current_node()
 	M.send(text)
 end
 
+function M.send_current_notebook_cell()
+	local bufnr = vim.api.nvim_get_current_buf()
+	if current_line_is_blank() then
+		return
+	end
+
+	local text = get_text_for_notebook_cell(bufnr)
+	if not text or text == "" then
+		notify("No notebook cell found at cursor", vim.log.levels.WARN)
+		return
+	end
+
+	M.send(text)
+end
+
 function M.select_current_node()
 	local bufnr = vim.api.nvim_get_current_buf()
 	if current_line_is_blank() then
@@ -939,6 +1116,22 @@ function M.select_and_send_current_node()
 	end
 
 	M.send(text)
+end
+
+function M.select_and_send_current_chunk()
+	local bufnr = vim.api.nvim_get_current_buf()
+	if current_line_is_blank() then
+		return
+	end
+
+	local text, range = get_text_for_notebook_cell(bufnr)
+	if text and range then
+		select_notebook_cell_range(range)
+		M.send(text)
+		return
+	end
+
+	M.select_and_send_current_node()
 end
 
 function M.send_current_paragraph()
