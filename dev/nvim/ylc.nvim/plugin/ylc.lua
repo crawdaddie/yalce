@@ -4,7 +4,7 @@ local ylc_augroup = vim.api.nvim_create_augroup("ylc.nvim", { clear = true })
 
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
   group = ylc_augroup,
-  pattern = "*.ylc",
+  pattern = { "*.ylc", "*.ylcnb" },
   callback = function(args)
     vim.bo[args.buf].filetype = "ylc"
   end,
@@ -12,10 +12,6 @@ vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
 
 vim.api.nvim_create_user_command("YlcOpen", function()
   ylc.open()
-end, {})
-
-vim.api.nvim_create_user_command("YlcOpenNb", function()
-  ylc.open_notebook()
 end, {})
 
 vim.api.nvim_create_user_command("YlcOpenDebug", function()

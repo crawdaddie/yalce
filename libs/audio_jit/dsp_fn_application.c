@@ -3191,6 +3191,31 @@ static DspValue dsp_lift_variadic(DspBuildCtx *dsp_ctx, DspValueList *l,
   }
   return DSP_MULTI(lanes, vals);
 }
+
+typedef struct {
+  LLVMValueRef callable;
+  Type *fn_type;
+  Ast *arg_asts;
+  LLVMBuilderRef builder;
+} DspCallOp;
+
+static LLVMValueRef dsp_apply_call_kernel(LLVMValueRef *args, int argc,
+                                          void *userdata) {
+  DspCallOp *op = userdata;
+  Type *f = op->fn_type;
+
+  for (int i = 0; i < argc; i++) {
+    Type *param_type = f->data.T_FN.from;
+    if (types_equal(param_type, &t_num)) {
+      args[i] = ensure_float((op->arg_asts + i)->type, args[i], op->builder);
+    }
+    f = f->data.T_FN.to;
+  }
+
+  return LLVMBuildCall2(op->builder, LLVMGlobalGetValueType(op->callable),
+                        op->callable, args, argc, "call.ylc-function");
+}
+
 typedef struct {
   Type *ltype;
   Type *rtype;
@@ -3381,6 +3406,76 @@ static LLVMValueRef dsp_apply_decay_kernel(LLVMValueRef t, LLVMValueRef trig,
   trig = ensure_float(op->trig_type, trig, op->builder);
   return build_exp_decay(t, trig, op->dsp_ctx, op->ctx, op->module,
                          op->builder);
+}
+
+typedef struct {
+  Type *lo_type;
+  Type *hi_type;
+  Type *v_type;
+  LLVMBuilderRef builder;
+} DspScaleOp;
+
+static LLVMValueRef dsp_apply_scale_kernel(LLVMValueRef lo, LLVMValueRef hi,
+                                           LLVMValueRef v, void *userdata) {
+  DspScaleOp *op = userdata;
+  lo = ensure_float(op->lo_type, lo, op->builder);
+  hi = ensure_float(op->hi_type, hi, op->builder);
+  v = ensure_float(op->v_type, v, op->builder);
+
+  LLVMValueRef span = LLVMBuildFSub(op->builder, hi, lo, "scale.span");
+  LLVMValueRef scaled = LLVMBuildFMul(op->builder, v, span, "scale.scaled");
+  return LLVMBuildFAdd(op->builder, lo, scaled, "scale.out");
+}
+
+static LLVMValueRef dsp_apply_scale_bp_kernel(LLVMValueRef lo, LLVMValueRef hi,
+                                              LLVMValueRef v, void *userdata) {
+  DspScaleOp *op = userdata;
+  lo = ensure_float(op->lo_type, lo, op->builder);
+  hi = ensure_float(op->hi_type, hi, op->builder);
+  v = ensure_float(op->v_type, v, op->builder);
+
+  LLVMValueRef span = LLVMBuildFSub(op->builder, hi, lo, "scale.span");
+  v = LLVMBuildFMul(op->builder, v, LLVMConstReal(LLVMDoubleType(), 0.5),
+                    "input.half");
+  v = LLVMBuildFAdd(op->builder, v, LLVMConstReal(LLVMDoubleType(), 0.5),
+                    "input.add_half");
+  LLVMValueRef scaled =
+      LLVMBuildFMul(op->builder, v, span, "scale.scaled");
+  return LLVMBuildFAdd(op->builder, lo, scaled, "scale.out");
+}
+
+typedef struct {
+  Type *freq_type;
+  Type *lo_type;
+  Type *hi_type;
+  DspBuildCtx *dsp_ctx;
+  JITLangCtx *ctx;
+  LLVMModuleRef module;
+  LLVMBuilderRef builder;
+} DspLfNoiseOp;
+
+static LLVMValueRef dsp_apply_lfnoise_lin_kernel(LLVMValueRef freq,
+                                                 LLVMValueRef lo,
+                                                 LLVMValueRef hi,
+                                                 void *userdata) {
+  DspLfNoiseOp *op = userdata;
+  freq = ensure_float(op->freq_type, freq, op->builder);
+  lo = ensure_float(op->lo_type, lo, op->builder);
+  hi = ensure_float(op->hi_type, hi, op->builder);
+  return build_lfnoise_lin(freq, lo, hi, op->dsp_ctx, op->ctx, op->module,
+                           op->builder);
+}
+
+static LLVMValueRef dsp_apply_lfnoise_step_kernel(LLVMValueRef freq,
+                                                  LLVMValueRef lo,
+                                                  LLVMValueRef hi,
+                                                  void *userdata) {
+  DspLfNoiseOp *op = userdata;
+  freq = ensure_float(op->freq_type, freq, op->builder);
+  lo = ensure_float(op->lo_type, lo, op->builder);
+  hi = ensure_float(op->hi_type, hi, op->builder);
+  return build_lfnoise_step(freq, lo, hi, op->dsp_ctx, op->ctx, op->module,
+                            op->builder);
 }
 
 static DspValue build_lag_op(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
@@ -4012,107 +4107,64 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   }
   if (is_ident(f, "scale")) {
     // unipolar scale - ie [0,1] -> [a, b]
-    LLVMValueRef lo =
-        ensure_float(ast->data.AST_APPLICATION.args->type,
-                     dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder)
-                         .scalar,
-                     builder);
-
-    LLVMValueRef hi =
-        ensure_float(ast->data.AST_APPLICATION.args[1].type,
-                     dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder)
-                         .scalar,
-                     builder);
-
-    LLVMValueRef v =
-        ensure_float(ast->data.AST_APPLICATION.args[2].type,
-                     dsp_build_expr(ast->data.AST_APPLICATION.args + 2, dsp_ctx,
-                                    ctx, module, builder)
-                         .scalar,
-                     builder);
-    LLVMValueRef span = LLVMBuildFSub(builder, hi, lo, "scale.span");
-    LLVMValueRef scaled = LLVMBuildFMul(builder, v, span, "scale.scaled");
-    return DSP_SCALAR(LLVMBuildFAdd(builder, lo, scaled, "scale.out"));
+    Ast *args = ast->data.AST_APPLICATION.args;
+    DspValue lo = dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder);
+    DspValue hi = dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+    DspValue v = dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
+    DspScaleOp op = {.lo_type = args[0].type,
+                     .hi_type = args[1].type,
+                     .v_type = args[2].type,
+                     .builder = builder};
+    return dsp_lift_ternary(dsp_ctx, lo, hi, v, dsp_apply_scale_kernel, &op);
   }
 
   if (is_ident(f, "scale_bp")) {
     // bipolar scale - ie [-1,1] -> [a, b]
-
-    LLVMValueRef lo =
-        ensure_float(ast->data.AST_APPLICATION.args->type,
-                     dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                    ctx, module, builder)
-                         .scalar,
-                     builder);
-
-    LLVMValueRef hi =
-        ensure_float(ast->data.AST_APPLICATION.args[1].type,
-                     dsp_build_expr(ast->data.AST_APPLICATION.args + 1, dsp_ctx,
-                                    ctx, module, builder)
-                         .scalar,
-                     builder);
-
-    LLVMValueRef v =
-        ensure_float(ast->data.AST_APPLICATION.args[2].type,
-                     dsp_build_expr(ast->data.AST_APPLICATION.args + 2, dsp_ctx,
-                                    ctx, module, builder)
-                         .scalar,
-                     builder);
-    LLVMValueRef span = LLVMBuildFSub(builder, hi, lo, "scale.span");
-
-    v = LLVMBuildFMul(builder, v, LLVMConstReal(LLVMDoubleType(), 0.5),
-                      "input.half");
-
-    v = LLVMBuildFAdd(builder, v, LLVMConstReal(LLVMDoubleType(), 0.5),
-                      "input.add_half");
-    LLVMValueRef scaled = LLVMBuildFMul(builder, v, span, "scale.scaled");
-    return DSP_SCALAR(LLVMBuildFAdd(builder, lo, scaled, "scale.out"));
+    Ast *args = ast->data.AST_APPLICATION.args;
+    DspValue lo = dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder);
+    DspValue hi = dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+    DspValue v = dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
+    DspScaleOp op = {.lo_type = args[0].type,
+                     .hi_type = args[1].type,
+                     .v_type = args[2].type,
+                     .builder = builder};
+    return dsp_lift_ternary(dsp_ctx, lo, hi, v, dsp_apply_scale_bp_kernel,
+                            &op);
   }
 
   if (is_ident(f, "lfnoise")) {
     // linearly interpolated noise [0, 1)
-    LLVMValueRef freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                       ctx, module, builder)
-                            .scalar;
-
-    LLVMValueRef lo = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                     dsp_ctx, ctx, module, builder)
-                          .scalar;
-
-    LLVMValueRef hi = dsp_build_expr(ast->data.AST_APPLICATION.args + 2,
-                                     dsp_ctx, ctx, module, builder)
-                          .scalar;
-    freq = ensure_float(ast->data.AST_APPLICATION.args->type, freq, builder);
-    lo = ensure_float((ast->data.AST_APPLICATION.args + 1)->type, lo, builder);
-    hi = ensure_float((ast->data.AST_APPLICATION.args + 2)->type, hi, builder);
-
-    return DSP_SCALAR(
-        build_lfnoise_lin(freq, lo, hi, dsp_ctx, ctx, module, builder));
+    Ast *args = ast->data.AST_APPLICATION.args;
+    DspValue freq = dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder);
+    DspValue lo = dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+    DspValue hi = dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
+    DspLfNoiseOp op = {.freq_type = args[0].type,
+                       .lo_type = args[1].type,
+                       .hi_type = args[2].type,
+                       .dsp_ctx = dsp_ctx,
+                       .ctx = ctx,
+                       .module = module,
+                       .builder = builder};
+    return dsp_lift_ternary(dsp_ctx, freq, lo, hi,
+                            dsp_apply_lfnoise_lin_kernel, &op);
   }
 
   if (is_ident(f, "lfnoise0")) {
 
     // step noise [0, 1)
-
-    LLVMValueRef freq = dsp_build_expr(ast->data.AST_APPLICATION.args, dsp_ctx,
-                                       ctx, module, builder)
-                            .scalar;
-
-    LLVMValueRef lo = dsp_build_expr(ast->data.AST_APPLICATION.args + 1,
-                                     dsp_ctx, ctx, module, builder)
-                          .scalar;
-
-    LLVMValueRef hi = dsp_build_expr(ast->data.AST_APPLICATION.args + 2,
-                                     dsp_ctx, ctx, module, builder)
-                          .scalar;
-    freq = ensure_float(ast->data.AST_APPLICATION.args->type, freq, builder);
-    lo = ensure_float((ast->data.AST_APPLICATION.args + 1)->type, lo, builder);
-    hi = ensure_float((ast->data.AST_APPLICATION.args + 2)->type, hi, builder);
-
-    return DSP_SCALAR(
-        build_lfnoise_step(freq, lo, hi, dsp_ctx, ctx, module, builder));
+    Ast *args = ast->data.AST_APPLICATION.args;
+    DspValue freq = dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder);
+    DspValue lo = dsp_build_expr(args + 1, dsp_ctx, ctx, module, builder);
+    DspValue hi = dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
+    DspLfNoiseOp op = {.freq_type = args[0].type,
+                       .lo_type = args[1].type,
+                       .hi_type = args[2].type,
+                       .dsp_ctx = dsp_ctx,
+                       .ctx = ctx,
+                       .module = module,
+                       .builder = builder};
+    return dsp_lift_ternary(dsp_ctx, freq, lo, hi,
+                            dsp_apply_lfnoise_step_kernel, &op);
   }
 
   JITSymbol *callable_sym =
@@ -4949,10 +5001,13 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
 
     int args_len = ast->data.AST_APPLICATION.len;
     LLVMValueRef args[args_len];
+    DspValue arg_vals[args_len];
+    DspValueList arg_nodes[args_len];
+    DspValueList *arg_list = NULL;
     for (int i = 0; i < args_len; i++) {
-      args[i] = dsp_build_expr(ast->data.AST_APPLICATION.args + i, dsp_ctx, ctx,
-                               module, builder)
-                    .scalar;
+      arg_vals[i] = dsp_build_expr(ast->data.AST_APPLICATION.args + i, dsp_ctx,
+                                   ctx, module, builder);
+      args[i] = arg_vals[i].scalar;
       if (args[i] == NULL) {
         fprintf(stderr, "Application Error: null operand to function %d\n",
                 fn_ast->tag);
@@ -4960,6 +5015,16 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         print_ast_err(fn_ast);
         return DSP_NULL;
       }
+
+      arg_nodes[i].val = arg_vals[i];
+      arg_nodes[i].in_type = (ast->data.AST_APPLICATION.args + i)->type;
+      arg_nodes[i].next = NULL;
+      if (i > 0) {
+        arg_nodes[i - 1].next = &arg_nodes[i];
+      } else {
+        arg_list = &arg_nodes[i];
+      }
+
       Type *t = f->data.T_FN.from;
 
       if (types_equal(t, &t_num)) {
@@ -4967,6 +5032,17 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                                args[i], builder);
       }
       f = f->data.T_FN.to;
+    }
+
+    Type *ret_type = fn_return_type(callable_sym->symbol_type);
+    bool can_lift_call = args_len > 0 && ret_type && ret_type->kind != T_VOID &&
+                         ret_type->kind != T_FN && !is_array_type(ret_type);
+    if (can_lift_call) {
+      DspCallOp op = {.callable = callable,
+                      .fn_type = callable_sym->symbol_type,
+                      .arg_asts = ast->data.AST_APPLICATION.args,
+                      .builder = builder};
+      return dsp_lift_variadic(dsp_ctx, arg_list, dsp_apply_call_kernel, &op);
     }
 
     return DSP_SCALAR(LLVMBuildCall2(builder, LLVMGlobalGetValueType(callable),

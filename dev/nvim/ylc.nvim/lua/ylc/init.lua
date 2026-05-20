@@ -153,6 +153,14 @@ local function current_file_path()
 	return path
 end
 
+local function is_notebook_path(path)
+	return type(path) == "string" and path:sub(-6) == ".ylcnb"
+end
+
+local function current_buffer_is_notebook()
+	return is_notebook_path(current_file_path())
+end
+
 local function current_env()
 	if vim.tbl_isempty(config.env) then
 		return nil
@@ -894,6 +902,11 @@ function M.open(opts)
 		return
 	end
 
+	if not opts.debug and not opts.raw_cmd and not opts.notebook and is_notebook_path(script_path) then
+		M.open_notebook()
+		return
+	end
+
 	if is_job_running() then
 		M.stop()
 	end
@@ -915,6 +928,8 @@ function M.open(opts)
 	local term_cmd
 	if opts.raw_cmd then
 		term_cmd = tbl_copy(opts.raw_cmd)
+	elseif opts.notebook then
+		term_cmd = build_notebook_cmd()
 	else
 		term_cmd = opts.debug and build_debug_cmd(script_path) or build_cmd(script_path)
 	end
@@ -948,6 +963,8 @@ function M.open(opts)
 	vim.api.nvim_set_current_win(origin_win)
 	if opts.debug then
 		notify("Started YLC under lldb for " .. script_path)
+	elseif opts.notebook then
+		notify("Started YLC notebook for " .. script_path)
 	else
 		notify("Started YLC for " .. script_path)
 	end
@@ -965,7 +982,7 @@ function M.open_notebook()
 
 	M.open({
 		script_path = script_path,
-		raw_cmd = build_notebook_cmd(),
+		notebook = true,
 	})
 
 	if prelude ~= "" then
@@ -982,6 +999,11 @@ function M.open_debug()
 end
 
 function M.restart()
+	if current_buffer_is_notebook() then
+		M.open_notebook()
+		return
+	end
+
 	M.open()
 end
 
@@ -1003,6 +1025,11 @@ function M.ensure_open()
 
 	if is_job_running() and state.script_path == script_path then
 		return true
+	end
+
+	if current_buffer_is_notebook() then
+		M.open_notebook()
+		return is_job_running()
 	end
 
 	M.open({ script_path = script_path })
@@ -1134,6 +1161,16 @@ function M.select_and_send_current_chunk()
 	M.select_and_send_current_node()
 end
 
+function M.send_selection_or_current_chunk()
+	local mode = vim.fn.mode()
+	if mode == "v" or mode == "V" or mode == "\22" then
+		M.send_visual_selection()
+		return
+	end
+
+	M.select_and_send_current_chunk()
+end
+
 function M.send_current_paragraph()
 	local bufnr = vim.api.nvim_get_current_buf()
 	local line_count = vim.api.nvim_buf_line_count(bufnr)
@@ -1201,7 +1238,7 @@ function M.setup(opts)
 
 	vim.api.nvim_create_autocmd({ "BufWritePost" }, {
 		group = autocmd_group,
-		pattern = "*.ylc",
+		pattern = { "*.ylc", "*.ylcnb" },
 		callback = function(args)
 			if vim.bo[args.buf].filetype ~= "ylc" then
 				return

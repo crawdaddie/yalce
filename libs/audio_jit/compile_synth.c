@@ -734,6 +734,16 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   dsp_tmp_allocator_free(&tmp_alloc);
   destroy_ctx(&fn_ctx);
 
+  // printf("Synth: %s\n", name);
+  // LLVMDumpValue(cons_fn);
+  // printf("\n");
+  // LLVMDumpValue(init_fn);
+  // printf("\n");
+  // LLVMDumpValue(frame_fn);
+  // printf("\n");
+  // LLVMDumpValue(perf_fn);
+  // printf("\n");
+
   return (SynthRecord){.name = name,
                        .ctor = cons_fn,
                        .init_fn = init_fn,

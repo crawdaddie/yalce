@@ -5,7 +5,7 @@ end
 local opts = { buffer = true, silent = true }
 
 vim.keymap.set("n", "<C-c><C-c>", function()
-  require("ylc").select_and_send_current_chunk()
+  require("ylc").send_selection_or_current_chunk()
 end, opts)
 
 vim.keymap.set("n", "<leader>yo", function()
@@ -13,5 +13,5 @@ vim.keymap.set("n", "<leader>yo", function()
 end, vim.tbl_extend("force", opts, { desc = "YLC reload/open" }))
 
 vim.keymap.set("x", "<C-c><C-c>", function()
-  require("ylc").send_visual_selection()
+  require("ylc").send_selection_or_current_chunk()
 end, opts)

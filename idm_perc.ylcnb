@@ -19,12 +19,14 @@ kick (midi_to_freq 30) 0.5 |> play_node;
 compile_audio_fn (
   let snare = fn () ->
     let t = trig 0;
-
-    let f = 180;
+    let f = ~[180, 400];
     t |> decay 0.1 |> scale f (1.5 * f) |> sin_osc  
+    |> (*) (~[1., 0.6])
     |> (+) (t |> rect 0.01 |> (*) (white ()))
     |> (*) 1.2 |> Math.tanh  
+
     |> (*) (t |> rect 0.2 |> adsr 0. 0.1 0.1 0.5 |> kill_on_end)
+    |> mix 1
 
 
 );
@@ -47,40 +49,34 @@ compile_audio_fn (
   let hihat2 = fn () ->
     let t = trig 0;
     white ()
-    |> Filter.hpf 1000 3 
+    |> Filter.hpf 1000 1 
     |> (*) (t |> adsr 0.01 0.02 0.3 0.1 |> kill_on_end)
 
 
 );
 
-# hihat () |> play_node;
+hihat () |> play_node;
 
 # hihat2 () |> play_node;
 
 # %%
 let q = 60. / 150.;
 play_pattern (4 * q) (
-  # let x = `
-  # k---    . . k2. s . . k k . s s
-  # k . . . . . . . s . . s . . . s
-  # k . . . . . k . s . . s k . s s
-  # k . k . . . k . s k . s k . k .
-  # `
 
   let x = `
-  k . h . s . h h2 h h2 k h2 s h2 h h2
-  k2---   s . h h2 h h  k h2 s h2 h h2
-  k . h . s . h h2 h h  k h2 s h2 h h2
-  k . h . s . h h2 h h  k h2 s h2 h h2
-  `
+    k . h . s . h s h i k i s i h i
+    k---    s . h s h i k i s i h i 
+    k . h . s . h s h i k i s i h i
+    k . h . s . h s h i k i s i h i
+    `
   |> pat_key
   |> cor_map (fn (k, l) ->
     match k with
-    | "k" -> kick (midi_to_freq 24) ((Double l )* 0.25 * q) |> play_node
-    | "k2" -> kick (midi_to_freq 31) ((Double l )* 0.25 * q) |> play_node
-    | "s" ->  snare () |> play_node
-    | "h" ->  hihat () |> play_node
-    | "h2" ->  hihat2 () |> play_node
+    | "k"   -> kick (midi_to_freq 24) (Double l * 0.25 * q) |> play_node
+    | "k2"  -> kick (midi_to_freq 31) (Double l * 0.25 * q) |> play_node
+    | "s"   -> snare () |> play_node
+    | "h"   -> hihat () |> play_node
+    | "i"  -> hihat2 () |> play_node
     | _ -> ()
     ;
     0.25 * q

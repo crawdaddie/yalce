@@ -27,14 +27,13 @@ DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
   switch (ast->tag) {
 
   case AST_BODY: {
-    LLVMValueRef val;
+    DspValue val = DSP_NULL;
     AST_LIST_ITER(
         ast->data.AST_BODY.stmts, ({
           Ast *stmt = l->ast;
-          val = dsp_build_expr(stmt, dsp_ctx, ctx, module, builder).scalar;
+          val = dsp_build_expr(stmt, dsp_ctx, ctx, module, builder);
         }));
-    // return val;
-    return DSP_SCALAR(val);
+    return val;
   }
   case AST_LET: {
     Ast *binding = ast->data.AST_LET.binding;
@@ -73,12 +72,12 @@ DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                                                    ctx, module, builder);
       SynthRecord s = synth_registry_get(_synth_id);
       if (in_expr) {
-        LLVMValueRef e_val =
-            dsp_build_expr(in_expr, dsp_ctx, work_ctx, module, builder).scalar;
+        DspValue e_val = dsp_build_expr(in_expr, dsp_ctx, work_ctx, module,
+                                        builder);
         if (pushed_ctx) {
           destroy_ctx(work_ctx);
         }
-        return DSP_SCALAR(e_val);
+        return e_val;
       }
 
       return DSP_NULL;
@@ -157,16 +156,16 @@ DspValue dsp_build_expr(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     }
 
     if (in_expr) {
-      LLVMValueRef e_val =
-          dsp_build_expr(in_expr, dsp_ctx, work_ctx, module, builder).scalar;
+      DspValue e_val = dsp_build_expr(in_expr, dsp_ctx, work_ctx, module,
+                                      builder);
 
       if (pushed_ctx) {
         destroy_ctx(work_ctx);
       }
-      return DSP_SCALAR(e_val);
+      return e_val;
     }
 
-    return DSP_SCALAR(val);
+    return bound_val;
   }
   case AST_BOOL: {
     return DSP_SCALAR(
