@@ -1163,6 +1163,11 @@ end
 
 function M.send_selection_or_current_chunk()
 	local mode = vim.fn.mode()
+	if current_buffer_is_notebook() and (mode == "v" or mode == "V" or mode == "\22") then
+		M.send_visual_selection()
+		return
+	end
+
 	if mode == "v" or mode == "V" or mode == "\22" then
 		M.send_visual_selection()
 		return

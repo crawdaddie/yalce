@@ -321,6 +321,24 @@ void defer_quant(double quant, DeferQuantCallback callback) {
   push_event((SchedulerCallback)callback, NULL, remainder, now);
 }
 
+void defer_quant_offset(double quant, double offset,
+                        DeferQuantCallback callback) {
+  int sr = ctx_sample_rate();
+  if (sr == 0) {
+    sr = 48000;
+  }
+
+  uint64_t quant_samps = quant * sr;
+  uint64_t now = get_current_sample();
+
+  uint64_t offset_in_cycle = now % quant_samps;
+  uint64_t remainder =
+      (offset_in_cycle == 0) ? quant_samps : quant_samps - offset_in_cycle;
+
+  // userdata=NULL signals fire_events to cast as DeferQuantCallback
+  push_event((SchedulerCallback)callback, NULL, remainder, now);
+}
+
 int scheduler_event_loop() {
   init_heap(&scheduler_queue);
   scheduler_init_fds();

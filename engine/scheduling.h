@@ -21,4 +21,6 @@ uint64_t get_tl_tick();
 uint64_t get_sched_tick();
 
 void defer_quant(double quant, DeferQuantCallback callback);
+void defer_quant_offset(double quant, double offset,
+                        DeferQuantCallback callback);
 #endif

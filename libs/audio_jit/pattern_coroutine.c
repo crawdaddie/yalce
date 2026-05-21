@@ -2028,8 +2028,7 @@ get_or_create_live_pattern_state(const char *name) {
   return entry->state;
 }
 
-static uint64_t
-advance_live_pattern_generation(live_pattern_state_t *state) {
+static uint64_t advance_live_pattern_generation(live_pattern_state_t *state) {
   return ++state->generation;
 }
 
@@ -2062,8 +2061,8 @@ static LLVMValueRef emit_pattern_schedule_ctx_alloc(LLVMValueRef state_ptr,
                                                     LLVMBuilderRef builder) {
   LLVMTypeRef schedule_ctx_ty = pattern_schedule_ctx_type();
   LLVMTargetDataRef dl = LLVMGetModuleDataLayout(module);
-  LLVMValueRef ctx_size = LLVMConstInt(
-      LLVMInt64Type(), LLVMABISizeOfType(dl, schedule_ctx_ty), 0);
+  LLVMValueRef ctx_size =
+      LLVMConstInt(LLVMInt64Type(), LLVMABISizeOfType(dl, schedule_ctx_ty), 0);
   LLVMValueRef malloc_fn = ensure_malloc_fn(module);
   LLVMValueRef ctx_mem = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(malloc_fn), malloc_fn,
@@ -2190,18 +2189,16 @@ ensure_play_pattern_step_wrapper(const char *name, LLVMValueRef pattern_global,
       state_ptr_ptr, "ctx.state");
   LLVMValueRef scheduled_generation_ptr = LLVMBuildStructGEP2(
       builder, schedule_ctx_ty, schedule_ctx, 2, "ctx.generation.ptr");
-  LLVMValueRef scheduled_generation =
-      LLVMBuildLoad2(builder, LLVMInt64Type(), scheduled_generation_ptr,
-                     "ctx.generation");
+  LLVMValueRef scheduled_generation = LLVMBuildLoad2(
+      builder, LLVMInt64Type(), scheduled_generation_ptr, "ctx.generation");
   LLVMValueRef current_generation_ptr =
-      LLVMBuildStructGEP2(builder, live_pattern_runtime_struct_type(), state_ptr,
-                          2, "state.generation.ptr");
-  LLVMValueRef current_generation =
-      LLVMBuildLoad2(builder, LLVMInt64Type(), current_generation_ptr,
-                     "state.generation");
-  LLVMValueRef generation_mismatch = LLVMBuildICmp(
-      builder, LLVMIntNE, current_generation, scheduled_generation,
-      "pattern.generation_mismatch");
+      LLVMBuildStructGEP2(builder, live_pattern_runtime_struct_type(),
+                          state_ptr, 2, "state.generation.ptr");
+  LLVMValueRef current_generation = LLVMBuildLoad2(
+      builder, LLVMInt64Type(), current_generation_ptr, "state.generation");
+  LLVMValueRef generation_mismatch =
+      LLVMBuildICmp(builder, LLVMIntNE, current_generation,
+                    scheduled_generation, "pattern.generation_mismatch");
   LLVMBuildCondBr(builder, generation_mismatch, stale_generation,
                   generation_matches);
 
@@ -2316,8 +2313,8 @@ ensure_play_pattern_defer_wrapper(const char *name, LLVMValueRef pattern_global,
   LLVMValueRef old_handle =
       LLVMBuildLoad2(builder, GENERIC_PTR, handle_ptr, "ctx.handle");
   LLVMTypeRef state_ty = live_pattern_runtime_struct_type();
-  LLVMValueRef state_ptr = LLVMBuildLoad2(
-      builder, LLVMPointerType(state_ty, 0), state_ptr_ptr, "ctx.state");
+  LLVMValueRef state_ptr = LLVMBuildLoad2(builder, LLVMPointerType(state_ty, 0),
+                                          state_ptr_ptr, "ctx.state");
   _cor_stop(cor_type, old_handle, ctx, module, builder);
 
   LLVMValueRef coro_gep =
@@ -2497,35 +2494,32 @@ static LLVMValueRef ensure_play_pattern_batch_wrapper(int batch_id,
         LLVMBuildStructGEP2(builder, item_ty, item_ptr, 4, "item.new.ptr");
     LLVMValueRef step_fn_ptr =
         LLVMBuildStructGEP2(builder, item_ty, item_ptr, 5, "item.step_fn.ptr");
-    LLVMValueRef state_ptr =
-        LLVMBuildLoad2(builder,
-                       LLVMPointerType(live_pattern_runtime_struct_type(), 0),
-                       state_ptr_ptr, "item.state");
+    LLVMValueRef state_ptr = LLVMBuildLoad2(
+        builder, LLVMPointerType(live_pattern_runtime_struct_type(), 0),
+        state_ptr_ptr, "item.state");
     LLVMValueRef quant =
         LLVMBuildLoad2(builder, LLVMDoubleType(), quant_ptr, "item.quant");
-    LLVMValueRef generation =
-        LLVMBuildLoad2(builder, LLVMInt64Type(), generation_ptr,
-                       "item.generation");
+    LLVMValueRef generation = LLVMBuildLoad2(builder, LLVMInt64Type(),
+                                             generation_ptr, "item.generation");
     LLVMValueRef new_handle =
         LLVMBuildLoad2(builder, GENERIC_PTR, new_handle_ptr, "item.new");
     LLVMValueRef step_fn =
         LLVMBuildLoad2(builder, GENERIC_PTR, step_fn_ptr, "item.step_fn");
-    LLVMValueRef state_quant_ptr = LLVMBuildStructGEP2(
-        builder, live_pattern_runtime_struct_type(), state_ptr, 0,
-        "state.quant");
-    LLVMValueRef state_coro_ptr = LLVMBuildStructGEP2(
-        builder, live_pattern_runtime_struct_type(), state_ptr, 1,
-        "state.coro");
-    LLVMValueRef state_generation_ptr = LLVMBuildStructGEP2(
-        builder, live_pattern_runtime_struct_type(), state_ptr, 2,
-        "state.generation");
+    LLVMValueRef state_quant_ptr =
+        LLVMBuildStructGEP2(builder, live_pattern_runtime_struct_type(),
+                            state_ptr, 0, "state.quant");
+    LLVMValueRef state_coro_ptr =
+        LLVMBuildStructGEP2(builder, live_pattern_runtime_struct_type(),
+                            state_ptr, 1, "state.coro");
+    LLVMValueRef state_generation_ptr =
+        LLVMBuildStructGEP2(builder, live_pattern_runtime_struct_type(),
+                            state_ptr, 2, "state.generation");
     LLVMBuildStore(builder, quant, state_quant_ptr);
     LLVMBuildStore(builder, new_handle, state_coro_ptr);
     LLVMBuildStore(builder, generation, state_generation_ptr);
 
-    LLVMValueRef schedule_ctx_raw =
-        emit_pattern_schedule_ctx_alloc(state_ptr, new_handle, generation,
-                                        module, builder);
+    LLVMValueRef schedule_ctx_raw = emit_pattern_schedule_ctx_alloc(
+        state_ptr, new_handle, generation, module, builder);
     LLVMBuildCall2(builder, schedule_event_type(), schedule_event_fn,
                    (LLVMValueRef[]){
                        tick,
@@ -2579,10 +2573,10 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
     uint64_t next_generation = pattern_state->generation + 1;
     LLVMValueRef pattern_global =
         codegen_live_pattern_state_ptr(pattern_state, module);
-    LLVMValueRef pattern_global_runtime = LLVMBuildBitCast(
-        builder, pattern_global,
-        LLVMPointerType(live_pattern_runtime_struct_type(), 0),
-        "live_pattern.runtime");
+    LLVMValueRef pattern_global_runtime =
+        LLVMBuildBitCast(builder, pattern_global,
+                         LLVMPointerType(live_pattern_runtime_struct_type(), 0),
+                         "live_pattern.runtime");
     LLVMValueRef old_pattern =
         LLVMBuildLoad2(builder, live_pattern_struct_type(), pattern_global,
                        "live_pattern.old");
@@ -2697,6 +2691,7 @@ LLVMValueRef play_pattern(Ast *binding, Ast *quant, JITLangCtx *ctx,
 LLVMValueRef play_pattern_handler(Ast *ast, JITLangCtx *ctx,
                                   LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
+  print_ast(ast);
   Ast *quant_arg = ast->data.AST_APPLICATION.args;
   Ast *pattern_record = ast->data.AST_APPLICATION.args + 1;
 

@@ -1,0 +1,85 @@
+open DSP;
+
+
+
+let vox_buf = load_soundfile "~/Sounds/Vroom Vroom (Stems)[19 files, 24-bit]/Vroom Vroom-namx6.Lead Vox.wav";
+let vox_buf2 = load_soundfile "~/Sounds/Vroom Vroom (Stems)[19 files, 24-bit]/Vroom Vroom-namx6.Add Vocal.wav";
+let vox_buf3 = load_soundfile "~/Sounds/Vroom Vroom (Stems)[19 files, 24-bit]/Vroom Vroom-namx6.Lead Vox (Extra).wav";
+
+compile_audio_fn (
+  let vox = fn gate start_pos ->
+    let t = gate; 
+    let r = (44100. / 48000.);
+    mbufplay 2
+    (array_of_buf vox_buf )
+    r
+    start_pos
+    gate 
+    |> mix 1
+);
+
+
+compile_audio_fn (
+  let kick = fn freq dur ->
+    let t = trig 0;
+    t
+    |> decay 0.1
+    |> scale freq 600.
+    |> sin_osc
+    |> (+) (t |> rect 0.01 |> (*) (white ()))
+    |> (*) 2. |> Math.tanh  
+    |> (*) (t |> rect dur |> adsr 0. 0.1 1. 0.5 |> kill_on_end)
+
+);
+# kick (midi_to_freq 30) 0.5 |> play_node;
+
+#%%
+
+
+let bpm = 151.;
+let q = 60. / bpm;
+
+
+
+
+let kp =
+  `
+  3 3 2
+  3 3 2
+  3 3 .5   1.5
+  3 3 .5 1. .5
+  ` 
+  |> pat
+  |> cor_map (fn d ->
+    kick (midi_to_freq 35) (0.5 * d * q) |> play_node;
+    d * q
+  )
+  ;
+
+
+let marker = (1.6 * 44100) / array_size (array_of_buf vox_buf);
+
+# let v = vox 0. 0. |> play_node;
+
+play_pattern (8 * q) (
+  let k = kp ;
+  let 
+    set_input_trig v 0;
+    set_input_scalar v 1 marker;
+# let x = fn () ->
+#   set_input_trig v 0;
+#   yield 1.6;
+#
+#   let p = fn () ->
+#     print "ride\n";
+#     yield (8. * q);
+#     yield p ()
+#   ;;
+#
+#   yield p ()
+# ;;
+#
+#
+# play_pattern 0. (
+#   let vocals = x ()
+# )

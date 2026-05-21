@@ -732,7 +732,7 @@ NodeRef load_soundfile(_String path) {
 NodeRef set_input_scalar(NodeRef node, int input, double value) {
   push_msg(&ctx.msg_queue,
            (audio_instruction){NODE_SET_SCALAR,
-                               get_frame_offset(),
+                               get_tl_tick(),
                                {.NODE_SET_SCALAR = {node, input, value}}});
   return node;
 }
@@ -740,7 +740,7 @@ NodeRef set_input_scalar(NodeRef node, int input, double value) {
 NodeRef set_input_buf(int input, NodeRef buf, NodeRef node) {
   push_msg(&ctx.msg_queue,
            (audio_instruction){NODE_SET_INPUT,
-                               get_frame_offset(),
+                               get_tl_tick(),
                                {.NODE_SET_INPUT = {node, input, buf}}});
   return node;
 }

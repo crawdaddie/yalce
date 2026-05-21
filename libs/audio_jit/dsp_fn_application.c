@@ -3439,8 +3439,7 @@ static LLVMValueRef dsp_apply_scale_bp_kernel(LLVMValueRef lo, LLVMValueRef hi,
                     "input.half");
   v = LLVMBuildFAdd(op->builder, v, LLVMConstReal(LLVMDoubleType(), 0.5),
                     "input.add_half");
-  LLVMValueRef scaled =
-      LLVMBuildFMul(op->builder, v, span, "scale.scaled");
+  LLVMValueRef scaled = LLVMBuildFMul(op->builder, v, span, "scale.scaled");
   return LLVMBuildFAdd(op->builder, lo, scaled, "scale.out");
 }
 
@@ -4128,8 +4127,7 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                      .hi_type = args[1].type,
                      .v_type = args[2].type,
                      .builder = builder};
-    return dsp_lift_ternary(dsp_ctx, lo, hi, v, dsp_apply_scale_bp_kernel,
-                            &op);
+    return dsp_lift_ternary(dsp_ctx, lo, hi, v, dsp_apply_scale_bp_kernel, &op);
   }
 
   if (is_ident(f, "lfnoise")) {
@@ -4145,8 +4143,8 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                        .ctx = ctx,
                        .module = module,
                        .builder = builder};
-    return dsp_lift_ternary(dsp_ctx, freq, lo, hi,
-                            dsp_apply_lfnoise_lin_kernel, &op);
+    return dsp_lift_ternary(dsp_ctx, freq, lo, hi, dsp_apply_lfnoise_lin_kernel,
+                            &op);
   }
 
   if (is_ident(f, "lfnoise0")) {

@@ -52,6 +52,7 @@ let play_node_dur = extern fn Uint64 -> Double -> Int -> Synth -> Synth;
 let set_input_scalar_offset = extern fn Synth -> Int -> Uint64 -> Double -> Synth;
 let set_input_scalar = extern fn Synth -> Int -> Double -> Synth;
 let set_input_trig_offset = extern fn Synth -> Int -> Uint64 -> Synth;
+let set_input_trig = extern fn Synth -> Int -> Synth;
 let set_input_buf = extern fn Int -> Synth -> Synth -> Synth;
 let play_node_offset = extern fn Uint64 -> Synth -> Synth;
 let set_input_buf_immediate = extern fn Int -> Synth -> Synth -> Synth;
