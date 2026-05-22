@@ -7,43 +7,11 @@ local config = {
 	close_term_on_successful_exit = true,
 	env = {},
 	debugger_cmd = { "lldb" },
-	range_server = {
+	lsp = {
 		enabled = true,
+		name = "ylc_lsp",
 		cmd = nil,
-		timeout_ms = 1000,
-	},
-	treesitter = {
-		enabled = true,
-		auto_register = true,
-		language = "ylc",
-		filetype = "ylc",
-		parser_dir = nil,
-		parser_library = nil,
-		parser_files = { "src/parser.c" },
-		runnable_node_types = {
-			"let_binding",
-			"match_expression",
-			"if_expression",
-			"for_expression",
-			"type_declaration",
-			"lambda_expression",
-			"parenthesized_lambda",
-			"parenthesized_let_lambda",
-			"application_expression",
-			"assignment_expression",
-			"binary_expression",
-			"yield_expression",
-			"await_expression",
-			"thunk_expression",
-			"field_expression",
-			"subscript_expression",
-			"slice_expression",
-			"list",
-			"array",
-			"tuple",
-			"parenthesized_expression",
-			"statement_sequence",
-		},
+		root_markers = { ".git" },
 	},
 }
 
@@ -52,12 +20,6 @@ local state = {
 	term_buf = nil,
 	term_win = nil,
 	script_path = nil,
-	treesitter_loaded = false,
-	treesitter_load_error = nil,
-	range_server_job_id = nil,
-	range_server_stdout = "",
-	range_server_next_id = 1,
-	range_server_pending = {},
 	debug_active = false,
 	debug_fifo_path = nil,
 	debug_fifo_handle = nil,
@@ -77,6 +39,10 @@ local function module_dir()
 	return vim.fs.dirname(source)
 end
 
+local function repo_root_dir()
+	return vim.fs.normalize(vim.fs.joinpath(module_dir(), "..", "..", "..", "..", ".."))
+end
+
 local function is_blank(line)
 	return line == nil or line:match("^%s*$") ~= nil
 end
@@ -88,14 +54,6 @@ local function is_cell_marker(line)
 
 	local trimmed = vim.trim(line)
 	return trimmed == "#%%" or trimmed == "# %%"
-end
-
-local function set_from_list(items)
-	local result = {}
-	for _, item in ipairs(items) do
-		result[item] = true
-	end
-	return result
 end
 
 local function notify(msg, level)
@@ -173,127 +131,50 @@ local function current_env()
 	return env
 end
 
-local function default_range_server_cmd()
-	return { vim.fs.normalize(vim.fs.joinpath(module_dir(), "..", "..", "..", "..", "build", "tools", "ylc_range_server")) }
-end
-
-local function split_complete_lines(chunk)
-	local lines = {}
-	local start = 1
-
-	while true do
-		local nl = chunk:find("\n", start, true)
-		if not nl then
-			break
-		end
-		lines[#lines + 1] = chunk:sub(start, nl - 1)
-		start = nl + 1
+local function default_lsp_cmd()
+	local local_server = vim.fs.normalize(vim.fs.joinpath(repo_root_dir(), "build", "tools", "ylc_lsp_server"))
+	local stat = (vim.uv or vim.loop).fs_stat(local_server)
+	if stat then
+		return { local_server }
 	end
 
-	return lines, chunk:sub(start)
+	return { "ylc_lsp_server" }
 end
 
-local function handle_range_server_line(line)
-	if line == "" then
+local function lsp_root_dir(bufnr)
+	local path = vim.api.nvim_buf_get_name(bufnr)
+	if not path or path == "" then
+		return vim.loop.cwd()
+	end
+
+	local root = vim.fs.root(path, config.lsp.root_markers or {})
+	if root then
+		return root
+	end
+
+	return vim.fs.dirname(path)
+end
+
+local function ensure_lsp(bufnr)
+	if not config.lsp.enabled or vim.bo[bufnr].filetype ~= "ylc" then
 		return
 	end
 
-	local ok, decoded = pcall(vim.json.decode, line)
-	if not ok or type(decoded) ~= "table" then
-		return
-	end
-
-	local pending = state.range_server_pending[decoded.id]
-	if pending then
-		pending.response = decoded
-		pending.done = true
-	end
-end
-
-local function ensure_range_server()
-	if not config.range_server.enabled then
-		return false, "disabled"
-	end
-
-	if state.range_server_job_id and vim.fn.jobwait({ state.range_server_job_id }, 0)[1] == -1 then
-		return true
-	end
-
-	local cmd = config.range_server.cmd or default_range_server_cmd()
+	local cmd = config.lsp.cmd or default_lsp_cmd()
 	if type(cmd) == "string" then
 		cmd = { cmd }
 	end
 
-	local exe = cmd[1]
-	local stat = exe and (vim.uv or vim.loop).fs_stat(exe)
-	if not stat then
-		return false, "missing range server: " .. tostring(exe)
-	end
-
-	state.range_server_stdout = ""
-	state.range_server_pending = {}
-	state.range_server_job_id = vim.fn.jobstart(cmd, {
-		stdout_buffered = false,
-		on_stdout = function(_, data)
-			if not data then
-				return
-			end
-
-			local chunk = table.concat(data, "\n")
-			if chunk == "" then
-				return
-			end
-
-			state.range_server_stdout = state.range_server_stdout .. chunk
-			local lines
-			lines, state.range_server_stdout = split_complete_lines(state.range_server_stdout)
-			for _, line in ipairs(lines) do
-				handle_range_server_line(line)
-			end
-		end,
-		on_exit = function()
-			state.range_server_job_id = nil
+	vim.lsp.start({
+		name = config.lsp.name,
+		cmd = cmd,
+		root_dir = lsp_root_dir(bufnr),
+	}, {
+		bufnr = bufnr,
+		reuse_client = function(client, conf)
+			return client.name == conf.name and client.config.root_dir == conf.root_dir
 		end,
 	})
-
-	return state.range_server_job_id > 0, "failed to start range server"
-end
-
-local function range_server_request(method, payload)
-	local ok, reason = ensure_range_server()
-	if not ok then
-		return nil, reason
-	end
-
-	local id = state.range_server_next_id
-	state.range_server_next_id = state.range_server_next_id + 1
-
-	local request = vim.tbl_extend("force", payload or {}, {
-		id = id,
-		method = method,
-	})
-
-	state.range_server_pending[id] = { done = false, response = nil }
-	vim.fn.chansend(state.range_server_job_id, vim.json.encode(request) .. "\n")
-
-	local timeout_ms = config.range_server.timeout_ms
-	local completed = vim.wait(timeout_ms, function()
-		local pending = state.range_server_pending[id]
-		return pending and pending.done
-	end, 10)
-
-	local pending = state.range_server_pending[id]
-	state.range_server_pending[id] = nil
-
-	if not completed or not pending or not pending.response then
-		return nil, "range server timeout"
-	end
-
-	if pending.response.ok == false then
-		return nil, pending.response.error or "range server error"
-	end
-
-	return pending.response
 end
 
 local function current_buffer_text(bufnr)
@@ -420,162 +301,6 @@ local function select_notebook_cell_range(range)
 	vim.cmd("normal! gv")
 end
 
-local function get_text_from_offsets(bufnr, start_offset, end_offset)
-	local text = current_buffer_text(bufnr)
-	return text:sub(start_offset + 1, end_offset)
-end
-
-local function get_text_from_range_server(bufnr)
-	local path = current_file_path()
-	if not path then
-		return nil
-	end
-
-	local text = current_buffer_text(bufnr)
-	local cursor = vim.api.nvim_win_get_cursor(0)
-	local _, update_err = range_server_request("update", {
-		path = path,
-		text = text,
-	})
-	if update_err then
-		return nil
-	end
-
-	local response, range_err = range_server_request("top_level_at", {
-		path = path,
-		line = cursor[1],
-		column = cursor[2],
-	})
-	if range_err or not response then
-		return nil
-	end
-
-	if not response.start_offset or not response.end_offset then
-		return nil
-	end
-
-	return get_text_from_offsets(bufnr, response.start_offset, response.end_offset)
-end
-
-function M.sync_current_buffer_to_range_server()
-	local bufnr = vim.api.nvim_get_current_buf()
-	local path = current_file_path()
-	if not path or not config.range_server.enabled then
-		return false
-	end
-
-	local text = current_buffer_text(bufnr)
-	local _, err = range_server_request("update", {
-		path = path,
-		text = text,
-	})
-
-	return err == nil
-end
-
-local function default_treesitter_parser_dir()
-	return vim.fs.normalize(vim.fs.joinpath(module_dir(), "..", "..", "..", "..", "tree-sitter-ylc"))
-end
-
-local function default_treesitter_parser_library()
-	return vim.fs.normalize(vim.fs.joinpath(default_treesitter_parser_dir(), "parser", "ylc.so"))
-end
-
-local function register_treesitter_parser()
-	if not config.treesitter.enabled or not config.treesitter.auto_register then
-		return
-	end
-
-	local ok, parsers = pcall(require, "nvim-treesitter.parsers")
-	if not ok then
-		return
-	end
-
-	local parser_configs = parsers.get_parser_configs()
-	local language = config.treesitter.language
-	local filetype = config.treesitter.filetype
-	local parser_dir = config.treesitter.parser_dir or default_treesitter_parser_dir()
-	local parser_files = config.treesitter.parser_files
-
-	parser_configs[language] = vim.tbl_deep_extend("force", parser_configs[language] or {}, {
-		install_info = {
-			url = parser_dir,
-			files = parser_files,
-		},
-		filetype = filetype,
-	})
-
-	if vim.treesitter and vim.treesitter.language and vim.treesitter.language.register then
-		pcall(vim.treesitter.language.register, language, filetype)
-	end
-end
-
-local function load_treesitter_parser()
-	state.treesitter_loaded = false
-	state.treesitter_load_error = nil
-
-	if not config.treesitter.enabled then
-		state.treesitter_load_error = "disabled"
-		return
-	end
-
-	if not (vim.treesitter and vim.treesitter.language) then
-		state.treesitter_load_error = "vim.treesitter.language unavailable"
-		return
-	end
-
-	local language = config.treesitter.language
-	local filetype = config.treesitter.filetype
-	local parser_library = config.treesitter.parser_library or default_treesitter_parser_library()
-	local stat = (vim.uv or vim.loop).fs_stat(parser_library)
-
-	if not stat then
-		state.treesitter_load_error = "missing parser library: " .. parser_library
-		return
-	end
-
-	if not vim.treesitter.language.add then
-		state.treesitter_load_error = "vim.treesitter.language.add unavailable"
-		return
-	end
-
-	local ok, err = pcall(vim.treesitter.language.add, language, { path = parser_library })
-	if not ok then
-		state.treesitter_load_error = err
-		return
-	end
-
-	state.treesitter_loaded = true
-	if vim.treesitter.language.register then
-		pcall(vim.treesitter.language.register, language, filetype)
-	end
-end
-
-local function treesitter_status(bufnr)
-	if not config.treesitter.enabled then
-		return false, "disabled"
-	end
-
-	if not state.treesitter_loaded then
-		return false, state.treesitter_load_error or "parser not loaded"
-	end
-
-	local ok = pcall(vim.treesitter.get_parser, bufnr, config.treesitter.language)
-	if not ok then
-		return false, "parser not active in current buffer"
-	end
-
-	return true, "ok"
-end
-
-local function get_node_text(node, bufnr)
-	if not node then
-		return nil
-	end
-
-	return vim.treesitter.get_node_text(node, bufnr)
-end
-
 local function get_text_for_range(bufnr, start_row, start_col, end_row, end_col)
 	local lines = vim.api.nvim_buf_get_text(bufnr, start_row, start_col, end_row, end_col, {})
 	if not lines or #lines == 0 then
@@ -670,130 +395,8 @@ local function select_range(bufnr, range)
 	vim.cmd("normal! gv")
 end
 
-local function get_form_text_from_node_start(node, bufnr)
-	if not node then
-		return nil
-	end
-
-	local start_row, start_col = node:start()
-	local line_count = vim.api.nvim_buf_line_count(bufnr)
-	local depth = 0
-	local in_string = false
-	local string_delim = nil
-	local escaping = false
-	local end_row = nil
-	local end_col = nil
-
-	for row = start_row, line_count - 1 do
-		local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
-		local col_start = 1
-		if row == start_row then
-			col_start = start_col + 1
-		end
-
-		local col = col_start
-		while col <= #line do
-			local ch = line:sub(col, col)
-
-			if not in_string and ch == "#" then
-				break
-			end
-
-			if in_string then
-				if escaping then
-					escaping = false
-				elseif ch == "\\" then
-					escaping = true
-				elseif ch == string_delim then
-					in_string = false
-					string_delim = nil
-				end
-			else
-				if ch == '"' or ch == "'" or ch == "`" then
-					in_string = true
-					string_delim = ch
-				elseif ch == "(" or ch == "[" or ch == "{" then
-					depth = depth + 1
-				elseif ch == ")" or ch == "]" or ch == "}" then
-					depth = math.max(depth - 1, 0)
-				elseif ch == ";" and depth == 0 then
-					end_row = row
-					end_col = col
-					break
-				end
-			end
-
-			col = col + 1
-		end
-
-		if end_row ~= nil then
-			break
-		end
-	end
-
-	if end_row == nil then
-		local last_line = vim.api.nvim_buf_get_lines(bufnr, line_count - 1, line_count, false)[1] or ""
-		return get_text_for_range(bufnr, start_row, start_col, line_count - 1, #last_line)
-	end
-
-	return get_text_for_range(bufnr, start_row, start_col, end_row, end_col)
-end
-
 local function current_line_is_blank()
 	return is_blank(vim.api.nvim_get_current_line())
-end
-
-local function find_runnable_treesitter_node(bufnr)
-	if not config.treesitter.enabled then
-		return nil
-	end
-
-	local ok, parser = pcall(vim.treesitter.get_parser, bufnr, config.treesitter.language)
-	if not ok or not parser then
-		return nil
-	end
-
-	local trees = parser:parse()
-	if not trees or not trees[1] then
-		return nil
-	end
-
-	local root = trees[1]:root()
-	if not root then
-		return nil
-	end
-
-	local cursor = vim.api.nvim_win_get_cursor(0)
-	local row = cursor[1] - 1
-	local col = cursor[2]
-	local node = root:named_descendant_for_range(row, col, row, col)
-	if not node then
-		return nil
-	end
-
-	local runnable_types = set_from_list(config.treesitter.runnable_node_types)
-	local candidate = nil
-
-	while node do
-		local node_type = node:type()
-		local parent = node:parent()
-
-		if node_type == "statement_sequence" and parent and parent:type() == "source_file" then
-			return candidate
-		end
-
-		if runnable_types[node_type] and node_type ~= "statement_sequence" then
-			candidate = node
-		end
-
-		if parent and parent:type() == "source_file" then
-			return candidate
-		end
-
-		node = parent
-	end
-
-	return candidate
 end
 
 local function focus_terminal_end()
@@ -1238,37 +841,19 @@ end
 
 function M.setup(opts)
 	config = vim.tbl_deep_extend("force", config, opts or {})
-	register_treesitter_parser()
-	load_treesitter_parser()
 
-	vim.api.nvim_create_autocmd({ "BufWritePost" }, {
+	vim.api.nvim_create_autocmd({ "FileType" }, {
 		group = autocmd_group,
-		pattern = { "*.ylc", "*.ylcnb" },
+		pattern = "ylc",
 		callback = function(args)
-			if vim.bo[args.buf].filetype ~= "ylc" then
-				return
-			end
-
-			local prev_buf = vim.api.nvim_get_current_buf()
-			if prev_buf ~= args.buf then
-				vim.api.nvim_buf_call(args.buf, function()
-					M.sync_current_buffer_to_range_server()
-				end)
-				return
-			end
-
-			M.sync_current_buffer_to_range_server()
+			ensure_lsp(args.buf)
 		end,
 	})
-end
 
-function M.debug_treesitter()
-	local bufnr = vim.api.nvim_get_current_buf()
-	local ok, reason = treesitter_status(bufnr)
-	if ok then
-		notify("YLC Tree-sitter active", vim.log.levels.INFO)
-	else
-		notify("YLC Tree-sitter inactive: " .. reason, vim.log.levels.WARN)
+	for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_is_loaded(bufnr) and vim.bo[bufnr].filetype == "ylc" then
+			ensure_lsp(bufnr)
+		end
 	end
 end
 

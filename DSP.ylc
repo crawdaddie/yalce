@@ -13,40 +13,103 @@ let pat = extern fn String -> Coroutine of Double;
 let pat_key = extern fn String -> Coroutine of (String, Int);
 let pat_key_chars = extern fn String -> Coroutine of String;
 
+# Table-lookup sine oscillator. Arg: frequency in Hz.
 let sin_osc = extern fn Double -> Double;
+# Table-lookup square oscillator. Arg: frequency in Hz.
 let sq_osc = extern fn Double -> Double;
+# Table-lookup saw oscillator. Arg: frequency in Hz.
 let saw_osc = extern fn Double -> Double;
+# Phase-modulation oscillator. Args: modulation index, modulation ratio, carrier frequency.
 let pm_osc = extern fn Double -> Double -> Double -> Double;
+
+# Additive oscillator bank. Args: amplitude array, phase array, base frequency.
 let bank_osc = extern fn Array of Double -> Array of Double -> Double -> Double;
 
+# Oscillator with external phase input. Args: phase input, frequency.
 let phase_osc = extern fn Double -> Double -> Double;
 
+# White noise in the range [-1, 1].
 let white = extern fn () -> Double;
+# Ramp oscillator / phase accumulator. Arg: frequency.
 let phasor = extern fn Double -> Double;
+# Resettable phasor. Args: frequency, trigger/reset signal.
 let phasor_sinc = extern fn Double -> Double -> Double;
+# Impulse generator. Arg: trigger frequency; `0` is commonly used for a one-shot trigger.
 let trig = extern fn Double -> Double;
+# Emits a trigger when the input value changes.
 let changed = extern fn Double -> Double;
+# Read a table by normalized phase.
 let tabread = extern fn Array of Double -> Double -> Double;
+# Read a table by sample index.
 let tabread_samp = extern fn Array of Double -> Double -> Double;
+# Exponential decay envelope. Args: decay time, trigger.
 let decay = extern fn Double -> Double -> Double;
+# Unipolar scale from `[0, 1]` into `[lo, hi]`. Args: lo, hi, value.
 let scale = extern fn Double -> Double -> Double -> Double;
+# Bipolar scale from `[-1, 1]` into `[lo, hi]`. Args: lo, hi, value.
 let scale_bp = extern fn Double -> Double -> Double -> Double;
 let array_of_buf = extern fn Ptr -> Array of Double;
 let bufsize = extern fn Ptr -> Int;
+# Linearly interpolated low-frequency noise. Args: update frequency, low bound, high bound.
 let lfnoise = extern fn Double -> Double -> Double -> Double;
+# Stepped low-frequency noise. Args: update frequency, low bound, high bound.
 let lfnoise0 = extern fn Double -> Double -> Double -> Double;
+# Marks a signal as done when it reaches its natural end.
 let kill_on_end = extern fn Double -> Double;
+# ADSR envelope. Args: attack, decay, sustain, release, trigger.
 let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
+# Rectangular gate envelope. Args: duration, trigger.
 let rect = extern fn Double -> Double -> Double;
 
+# Delay line read/write kernel. Args: delay seconds, max delay, feedback, input.
+# Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
 let delay =   extern fn Double -> Double -> Double -> Double -> Double;
+# Comb filter kernel. Args: delay seconds, max delay, feedback, input.
+# Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
 let comb =    extern fn Double -> Double -> Double -> Double -> Double;
+# Allpass filter kernel. Args: delay seconds, max delay, feedback, input.
+# Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
 let allpass = extern fn Double -> Double -> Double -> Double -> Double;
 
+# Slew / lag processor. Args: lag time in seconds, input.
 let lag = extern fn Double -> Double -> Double;
+# On each trigger, choose a random element from the array.
 let arr_choose = extern fn Array of Double -> Double -> Double;
+# On each trigger, advance to the next element in the array.
 let arr_seq = extern fn Array of Double -> Double -> Double;
 let pan2 = extern fn Double -> Double;
+let fftw_plan_free = extern fn Ptr -> ();
+
+# Allocate a delay buffer sized from a maximum delay time.
+# Compile-time constant: arg 1 (`max delay`) must be a constant > 0.
+let delay_line = extern fn Double -> Array of Double;
+# Matrix-vector multiply into a caller-provided output array. Args: matrix, input vector, output vector.
+let dsp_mmul_op = extern fn Array of Double -> Array of Double -> Array of Double -> Array of Double;
+# Dot product of two vectors.
+let vec_dot = extern fn Array of Double -> Array of Double -> Double;
+
+# Per-sample delay-buffer processor. Args: callback, delay buffer, input.
+# The callback receives `(write_index, delay_buffer, input)` and must return a scalar sample.
+let delay_proc = extern fn (Int -> Array of Double -> Double -> Double) -> Array of Double -> Double -> Double;
+
+let ~ = extern fn Array of T -> T;
+let mix = extern fn Int -> Double -> Double;
+
+# Buffer playback. Args: buffer, rate, start position, trigger.
+let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;
+# Multichannel buffer playback. Args: channel count, buffer, rate, start position, trigger.
+# Compile-time constant: arg 1 (`channel count`) must be a constant integer > 0.
+let mbufplay = extern fn Int -> Array of Double -> Double -> Double -> Double -> Double;
+
+# Granular playback. Args: max grains, source buffer, rate, position, width, trigger.
+# Compile-time constant: arg 1 (`max grains`) must be a constant integer > 0.
+let grains = extern fn Int ->       Array of Double -> Double -> Double -> Double -> Double;
+# Granular playback with a separate envelope buffer.
+# Args: max grains, source buffer, envelope buffer, rate, position, width, trigger.
+# Compile-time constant: arg 1 (`max grains`) must be a constant integer > 0.
+let grains_env = extern fn Int ->       Array of Double -> Array of Double -> Double -> Double -> Double -> Double;
+
+
 let fftw_plan_forward_new = extern fn Int -> Ptr;
 let fftw_forward_execute_raw = extern fn Ptr -> Int -> Ptr -> Int -> Ptr -> Int -> Ptr -> ();
 let fftw_forward_execute = fn plan out_re out_im input ->
@@ -59,21 +122,6 @@ let fftw_forward_execute = fn plan out_re out_im input ->
     (array_size input)
     (cstr input)
 ;;
-let fftw_plan_free = extern fn Ptr -> ();
-
-let delay_line = extern fn Double -> Array of Double;
-let dsp_mmul_op = extern fn Array of Double -> Array of Double -> Array of Double -> Array of Double;
-let vec_dot = extern fn Array of Double -> Array of Double -> Double;
-
-let delay_proc = extern fn (Int -> Array of Double -> Double -> Double) -> Array of Double -> Double -> Double;
-
-let ~ = extern fn Array of T -> T;
-let mix = extern fn Int -> Double -> Double;
-
-#                       buf                rate      start_pos trig
-let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;
-let mbufplay = extern fn Int -> Array of Double -> Double -> Double -> Double -> Double;
-
 type SpectralAnalysis = (
   fft_size: Int,
   hop_size: Int,
@@ -93,10 +141,6 @@ let rbufplay_finer = extern fn Int -> Array of Double -> Double -> Double -> Dou
 # pitchshift windowSize pitchRatio pitchDispersion timeDispersion input
 let pitchshift = extern fn Double -> Double -> Double -> Double -> Double -> Double;
 
-#                      max_grains   buf                rate      pos       width     trig
-let grains = extern fn Int ->       Array of Double -> Double -> Double -> Double -> Double;
-#                          max_grains   src_buf          env_buf          rate      pos       width     trig
-let grains_env = extern fn Int ->       Array of Double -> Array of Double -> Double -> Double -> Double -> Double;
 
 type Complex = (Double, Double);
 type FreqSignal = Array of Complex;

@@ -16,8 +16,6 @@ CFLAGS += -Wno-unused-parameter -Wno-unused-function
 
 CXXFLAGS  = $(CFLAGS)
 CXXFLAGS += -std=c++17
-CXXFLAGS += -I../rubberband
-CXXFLAGS += -I../rubberband/rubberband
 
 LDFLAGS   = -shared
 LDFLAGS  += `$(LLVM_CONFIG) --libs core linker passes` -lLLVM-21
@@ -35,7 +33,6 @@ C_SOURCES = audio_jit.c compile_synth.c dsp_fn_application.c dsp_build_expr.c pa
 CPP_SOURCES =
 OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
 OBJECTS += $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(CPP_SOURCES))
-OBJECTS += $(BUILD_DIR)/RubberBandSingle.o
 LOCAL_HEADERS = $(wildcard *.h)
 ENGINE_HEADERS = $(wildcard ../../engine/*.h)
 ENGINE_LIB = ../../engine/build/libyalce_synth.so
@@ -52,9 +49,6 @@ $(BUILD_DIR)/%.o: %.c $(LOCAL_HEADERS) $(ENGINE_HEADERS) $(ENGINE_LIB) | $(BUILD
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/%.o: %.cpp $(LOCAL_HEADERS) $(ENGINE_HEADERS) $(ENGINE_LIB) | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/RubberBandSingle.o: ../rubberband/single/RubberBandSingle.cpp $(ENGINE_LIB) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
