@@ -2085,11 +2085,12 @@ static LLVMValueRef emit_pattern_schedule_ctx_alloc(LLVMValueRef state_ptr,
   return ctx_mem;
 }
 
-static LLVMValueRef emit_defer_quant_ir(LLVMValueRef quant,
-                                        LLVMValueRef callback_fn,
-                                        LLVMValueRef callback_userdata,
-                                        LLVMModuleRef module,
-                                        LLVMBuilderRef builder) {
+static LLVMValueRef emit_defer_quant_offset_ir(LLVMValueRef quant,
+                                               LLVMValueRef offset,
+                                               LLVMValueRef callback_fn,
+                                               LLVMValueRef callback_userdata,
+                                               LLVMModuleRef module,
+                                               LLVMBuilderRef builder) {
   LLVMValueRef get_current_sample_fn = ensure_get_current_sample_fn(module);
   LLVMValueRef ctx_sample_rate_fn = ensure_ctx_sample_rate_fn(module);
   LLVMValueRef push_event_fn = ensure_push_event_fn(module);
@@ -2111,18 +2112,44 @@ static LLVMValueRef emit_defer_quant_ir(LLVMValueRef quant,
       LLVMBuildSIToFP(builder, sr, LLVMDoubleType(), "defer_quant.sr.f64");
   LLVMValueRef quant_samps_f =
       LLVMBuildFMul(builder, quant, sr_f, "defer_quant.samps.f64");
-  LLVMValueRef quant_samps = LLVMBuildFPToUI(
-      builder, quant_samps_f, LLVMInt64Type(), "defer_quant.samps");
-  LLVMValueRef offset_in_cycle =
-      LLVMBuildURem(builder, now, quant_samps, "defer_quant.offset");
-  LLVMValueRef offset_is_zero = LLVMBuildICmp(
-      builder, LLVMIntEQ, offset_in_cycle, LLVMConstInt(LLVMInt64Type(), 0, 0),
-      "defer_quant.offset_is_zero");
-  LLVMValueRef remainder =
-      LLVMBuildSelect(builder, offset_is_zero, quant_samps,
-                      LLVMBuildSub(builder, quant_samps, offset_in_cycle,
-                                   "defer_quant.remainder.sub"),
-                      "defer_quant.remainder");
+  LLVMValueRef quant_samps_raw = LLVMBuildFPToUI(
+      builder, quant_samps_f, LLVMInt64Type(), "defer_quant.samps.raw");
+  LLVMValueRef quant_is_zero = LLVMBuildICmp(
+      builder, LLVMIntEQ, quant_samps_raw, LLVMConstInt(LLVMInt64Type(), 0, 0),
+      "defer_quant.samps.is_zero");
+  LLVMValueRef quant_samps = LLVMBuildSelect(
+      builder, quant_is_zero, LLVMConstInt(LLVMInt64Type(), 1, 0),
+      quant_samps_raw, "defer_quant.samps");
+
+  LLVMValueRef offset_samps_f =
+      LLVMBuildFMul(builder, offset, sr_f, "defer_quant.offset.samps.f64");
+  LLVMValueRef offset_samps_i = LLVMBuildFPToSI(
+      builder, offset_samps_f, LLVMInt64Type(), "defer_quant.offset.samps");
+  LLVMValueRef phase_raw = LLVMBuildSRem(builder, offset_samps_i, quant_samps,
+                                         "defer_quant.phase.raw");
+  LLVMValueRef phase_is_neg = LLVMBuildICmp(builder, LLVMIntSLT, phase_raw,
+                                            LLVMConstInt(LLVMInt64Type(), 0, 1),
+                                            "defer_quant.phase.is_neg");
+  LLVMValueRef phase_norm =
+      LLVMBuildSelect(builder, phase_is_neg,
+                      LLVMBuildAdd(builder, phase_raw, quant_samps,
+                                   "defer_quant.phase.add_quant"),
+                      phase_raw, "defer_quant.phase.norm");
+
+  LLVMValueRef cur_phase =
+      LLVMBuildURem(builder, now, quant_samps, "defer_quant.cur_phase");
+  LLVMValueRef delta_pre =
+      LLVMBuildURem(builder,
+                    LLVMBuildAdd(builder,
+                                 LLVMBuildSub(builder, phase_norm, cur_phase,
+                                              "defer_quant.delta.sub"),
+                                 quant_samps, "defer_quant.delta.add"),
+                    quant_samps, "defer_quant.delta.pre");
+  LLVMValueRef delta_is_zero = LLVMBuildICmp(
+      builder, LLVMIntEQ, delta_pre, LLVMConstInt(LLVMInt64Type(), 0, 0),
+      "defer_quant.delta.is_zero");
+  LLVMValueRef remainder = LLVMBuildSelect(builder, delta_is_zero, quant_samps,
+                                           delta_pre, "defer_quant.remainder");
 
   LLVMValueRef callback_ptr =
       LLVMBuildBitCast(builder, callback_fn, GENERIC_PTR, "defer_quant.cb");
@@ -2134,6 +2161,16 @@ static LLVMValueRef emit_defer_quant_ir(LLVMValueRef quant,
                             now,
                         },
                         4, "defer_quant.push_event");
+}
+
+static LLVMValueRef emit_defer_quant_ir(LLVMValueRef quant,
+                                        LLVMValueRef callback_fn,
+                                        LLVMValueRef callback_userdata,
+                                        LLVMModuleRef module,
+                                        LLVMBuilderRef builder) {
+  return emit_defer_quant_offset_ir(quant, LLVMConstReal(LLVMDoubleType(), 0.0),
+                                    callback_fn, callback_userdata, module,
+                                    builder);
 }
 
 static LLVMValueRef
@@ -2539,28 +2576,55 @@ static LLVMValueRef ensure_play_pattern_batch_wrapper(int batch_id,
 }
 
 static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
-                                       JITLangCtx *ctx, LLVMModuleRef module,
+                                       Ast *offset, JITLangCtx *ctx,
+                                       LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
   LLVMValueRef quantization = codegen(quant, ctx, module, builder);
   if (!quantization) {
     return NULL;
   }
+  LLVMValueRef offset_value = offset ? codegen(offset, ctx, module, builder)
+                                     : LLVMConstReal(LLVMDoubleType(), 0.0);
+  if (!offset_value) {
+    return NULL;
+  }
 
   play_pattern_codegen_item_t items[len];
   LLVMTypeRef results_ty[len];
+  LLVMValueRef last_value = LLVMGetUndef(LLVMVoidType());
+  int ilen = 0;
 
-  for (int i = 0; i < len; i++) {
-    Ast *binding = &bindings[i];
-    if (binding->tag != AST_LET ||
-        binding->data.AST_LET.binding->tag != AST_IDENTIFIER) {
-      fprintf(stderr, "play_pattern: expected identifier binding\n");
+  for (int _i = 0; _i < len; _i++) {
+    Ast *binding = &bindings[_i];
+
+    if (binding->tag != AST_LET) {
+      last_value = codegen(binding, ctx, module, builder);
+      if (!last_value) {
+        return NULL;
+      }
+      continue;
+    }
+
+    if (!is_coroutine_type(binding->data.AST_LET.expr->type)) {
+      last_value = codegen(binding, ctx, module, builder);
+      if (!last_value) {
+        return NULL;
+      }
+      continue;
+    }
+
+    if (binding->data.AST_LET.binding->tag != AST_IDENTIFIER) {
+      fprintf(stderr,
+              "play_pattern: coroutine bindings must use identifiers\n");
       return NULL;
     }
 
     const char *pattern_name =
         binding->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+
     LLVMValueRef coroutine =
         codegen(binding->data.AST_LET.expr, ctx, module, builder);
+
     if (!coroutine) {
       return NULL;
     }
@@ -2606,7 +2670,7 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
                   pat_sym);
     }
 
-    items[i] = (play_pattern_codegen_item_t){
+    items[ilen] = (play_pattern_codegen_item_t){
         .result = coroutine,
         .state_ptr = pattern_global_runtime,
         .generation = LLVMConstInt(LLVMInt64Type(), next_generation, 0),
@@ -2617,11 +2681,17 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
         .stop_wrapper = LLVMBuildBitCast(builder, stop_wrapper, GENERIC_PTR,
                                          "stop.wrapper.ptr"),
     };
-    results_ty[i] = LLVMTypeOf(coroutine);
+    results_ty[ilen] = LLVMTypeOf(coroutine);
+    last_value = coroutine;
+    ilen++;
+  }
+
+  if (ilen == 0) {
+    return last_value;
   }
 
   LLVMTypeRef item_ty = play_pattern_batch_item_type();
-  LLVMTypeRef items_arr_ty = LLVMArrayType(item_ty, (unsigned)len);
+  LLVMTypeRef items_arr_ty = LLVMArrayType(item_ty, (unsigned)ilen);
   LLVMTypeRef batch_ty = LLVMStructType((LLVMTypeRef[]){items_arr_ty}, 1, 0);
   LLVMTargetDataRef dl = LLVMGetModuleDataLayout(module);
   LLVMValueRef batch_size =
@@ -2636,7 +2706,7 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
   LLVMValueRef batch_items_ptr =
       LLVMBuildStructGEP2(builder, batch_ty, batch_ptr, 0, "batch.items");
 
-  for (int i = 0; i < len; i++) {
+  for (int i = 0; i < ilen; i++) {
     LLVMValueRef item_ptr =
         LLVMBuildGEP2(builder, items_arr_ty, batch_items_ptr,
                       (LLVMValueRef[]){
@@ -2668,15 +2738,16 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
   }
 
   LLVMValueRef batch_wrapper = ensure_play_pattern_batch_wrapper(
-      play_pattern_batch_counter++, batch_ty, (size_t)len, module, builder);
-  emit_defer_quant_ir(quantization, batch_wrapper, batch_mem, module, builder);
+      play_pattern_batch_counter++, batch_ty, (size_t)ilen, module, builder);
+  emit_defer_quant_offset_ir(quantization, offset_value, batch_wrapper,
+                             batch_mem, module, builder);
 
-  if (len == 1) {
+  if (ilen == 1) {
     return items[0].result;
   }
 
-  LLVMValueRef ret_struct = LLVMGetUndef(LLVMStructType(results_ty, len, 0));
-  for (int i = 0; i < len; i++) {
+  LLVMValueRef ret_struct = LLVMGetUndef(LLVMStructType(results_ty, ilen, 0));
+  for (int i = 0; i < ilen; i++) {
     ret_struct =
         LLVMBuildInsertValue(builder, ret_struct, items[i].result, i, "");
   }
@@ -2685,14 +2756,27 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
 
 LLVMValueRef play_pattern(Ast *binding, Ast *quant, JITLangCtx *ctx,
                           LLVMModuleRef module, LLVMBuilderRef builder) {
-  return play_pattern_block(binding, 1, quant, ctx, module, builder);
+  return play_pattern_block(binding, 1, quant, NULL, ctx, module, builder);
 }
 
 LLVMValueRef play_pattern_handler(Ast *ast, JITLangCtx *ctx,
                                   LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
-  print_ast(ast);
+
   Ast *quant_arg = ast->data.AST_APPLICATION.args;
+  Ast *offset_arg = NULL;
+
+  Type *quant_type = quant_arg->type;
+  if (is_tuple_type(quant_type)) {
+    if (quant_arg->tag != AST_TUPLE || quant_arg->data.AST_LIST.len < 2) {
+      fprintf(stderr,
+              "play_pattern: quant tuple must be a 2-tuple (quant, offset)\n");
+      return NULL;
+    }
+    offset_arg = &quant_arg->data.AST_LIST.items[1];
+    quant_arg = &quant_arg->data.AST_LIST.items[0];
+  }
+
   Ast *pattern_record = ast->data.AST_APPLICATION.args + 1;
 
   if (pattern_record->tag == AST_BODY) {
@@ -2701,18 +2785,20 @@ LLVMValueRef play_pattern_handler(Ast *ast, JITLangCtx *ctx,
     AST_LIST_ITER(pattern_record->data.AST_BODY.stmts,
                   { items[i] = *(l->ast); });
 
-    return play_pattern_block(items, len, quant_arg, ctx, module, builder);
+    return play_pattern_block(items, len, quant_arg, offset_arg, ctx, module,
+                              builder);
   }
 
   if (pattern_record->tag == AST_TUPLE &&
       (pattern_record->data.AST_LIST.items[0].tag == AST_LET)) {
     return play_pattern_block(pattern_record->data.AST_LIST.items,
-                              pattern_record->data.AST_LIST.len, quant_arg, ctx,
-                              module, builder);
+                              pattern_record->data.AST_LIST.len, quant_arg,
+                              offset_arg, ctx, module, builder);
   }
 
   if (pattern_record->tag == AST_LET) {
-    return play_pattern(pattern_record, quant_arg, ctx, module, builder);
+    return play_pattern_block(pattern_record, 1, quant_arg, offset_arg, ctx,
+                              module, builder);
   }
 
   fprintf(stderr, "Error: pattern binding type not implemented %d\n",

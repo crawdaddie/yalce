@@ -359,6 +359,19 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Type analysis: (T -> U) -> Coroutine<T> -> Coroutine<U>
   Type *map_fn_type = map_fn_ast->type;
+  if (is_coroutine_constructor_type(map_fn_type)) {
+    fprintf(stderr, "Error: cor_map expected a plain function callback, got a "
+                    "coroutine constructor\n");
+    print_type(map_fn_type);
+    print_ast_err(map_fn_ast);
+    return NULL;
+  }
+  if (map_fn_type->kind != T_FN) {
+    fprintf(stderr, "Error: cor_map callback is not a function\n");
+    print_type(map_fn_type);
+    print_ast_err(map_fn_ast);
+    return NULL;
+  }
 
   Type *input_type = map_fn_type->data.T_FN.from;  // T
   Type *output_type = fn_return_type(map_fn_type); // U
@@ -380,6 +393,7 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   } else {
     map_fn = codegen(map_fn_ast, ctx, module, builder);
   }
+
   if (!map_fn) {
     print_type(map_fn_type);
     fprintf(stderr, "Could not compile map fn\n");

@@ -478,6 +478,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   lctx.current_fn_ast = ast;
   lctx.scope = ctx->scope + 1;
   lctx.current_fn_base_scope = lctx.scope;
+  lctx.yielded_type = NULL;
 
   LambdaScope current_scope = {
       .fn_ast = ast,

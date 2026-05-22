@@ -1,6 +1,7 @@
 open DSP;
 
 
+import std/Math;
 
 let vox_buf = load_soundfile "~/Sounds/Vroom Vroom (Stems)[19 files, 24-bit]/Vroom Vroom-namx6.Lead Vox.wav";
 let vox_buf2 = load_soundfile "~/Sounds/Vroom Vroom (Stems)[19 files, 24-bit]/Vroom Vroom-namx6.Add Vocal.wav";
@@ -8,9 +9,9 @@ let vox_buf3 = load_soundfile "~/Sounds/Vroom Vroom (Stems)[19 files, 24-bit]/Vr
 
 compile_audio_fn (
   let vox = fn gate start_pos ->
-    let t = gate; 
     let r = (44100. / 48000.);
-    mbufplay 2
+    mbufplay
+    2
     (array_of_buf vox_buf )
     r
     start_pos
@@ -18,11 +19,9 @@ compile_audio_fn (
     |> mix 1
 );
 
-
 compile_audio_fn (
   let kick = fn freq dur ->
-    let t = trig 0;
-    t
+    let t = trig 0; t
     |> decay 0.1
     |> scale freq 600.
     |> sin_osc
@@ -31,17 +30,38 @@ compile_audio_fn (
     |> (*) (t |> rect dur |> adsr 0. 0.1 1. 0.5 |> kill_on_end)
 
 );
-# kick (midi_to_freq 30) 0.5 |> play_node;
+compile_audio_fn (
+  let snare = fn () ->
+    let t = trig 0;
+    let f = ~[180., 400.];
+    t |> decay 0.1 |> scale f (1.5 * f) |> sin_osc  
+    |> (*) (~[1., 0.6])
+    |> (+) (t |> rect 0.01 |> (*) (white ()))
+    |> (*) 1.2 |> Math.tanh  
+    |> comb (lfnoise 4. 0.005 0.02) 0.1 0.8
+    |> comb (lfnoise 4. 0.005 0.02) 0.1 0.99
 
+    |> (*) (t |> rect 0.2 |> adsr 0. 0.1 0.1 0.5 |> kill_on_end)
+    |> mix 1
+
+
+);
 #%%
 
+compile_audio_fn (
+  let pm = fn f ->
+    let t = trig 0;
+    f |> pm_osc (t |> decay 0.5 |> scale 1. 4.) 3.5
+    |> (*) (t |> rect 0.2 |> adsr 0. 0.1 0.1 0.5 |> kill_on_end)
 
+
+);
+pm 300. |> play_node;
+
+
+#%%
 let bpm = 151.;
 let q = 60. / bpm;
-
-
-
-
 let kp =
   `
   3 3 2
@@ -56,30 +76,70 @@ let kp =
   )
   ;
 
+let v = vox 0. 0. |> play_node;
 
-let marker = (1.6 * 44100) / array_size (array_of_buf vox_buf);
 
-# let v = vox 0. 0. |> play_node;
 
-play_pattern (8 * q) (
-  let k = kp ;
-  let 
+play_pattern (8 * q, -1.) (
+
+  let z2 = fn () ->
+    yield (2. * q);
+    snare () |> play_node;
+    yield (2. * q);
+    yield z2 ()
+  ;;
+
+  let z = fn () -> 
+    yield (4. * q);
+    yield z2 ()
+  ;;
+
+  let s = z ();
+  let x = fn () ->
+    set_input_scalar v 1 0.;
     set_input_trig v 0;
-    set_input_scalar v 1 marker;
-# let x = fn () ->
-#   set_input_trig v 0;
-#   yield 1.6;
-#
-#   let p = fn () ->
-#     print "ride\n";
-#     yield (8. * q);
-#     yield p ()
-#   ;;
-#
-#   yield p ()
-# ;;
-#
-#
-# play_pattern 0. (
-#   let vocals = x ()
-# )
+    yield (q * 8.);
+    yield x ()
+  ;;
+  let vp = x ();
+
+  let k = let kx = (fn () ->
+    yield 4. * q;
+    yield pat "3 3.5 1 .5"
+      |> cor_map (fn d ->
+      kick (midi_to_freq 35) (0.5 * d * q) |> play_node;
+      d * q
+    )
+  ) in kx ()
+);
+#%%
+
+play_pattern (4 * q) (
+  let z2 = fn () ->
+    yield (2. * q);
+    snare () |> play_node;
+    yield (2. * q);
+    yield z2 ()
+  ;;
+
+  let z = fn () -> 
+    yield (4. * q);
+    yield z2 ()
+  ;;
+
+  let s = z ();
+  let x = fn () ->
+    set_input_scalar v 1 0.;
+    set_input_trig v 0;
+    yield (q * 8.);
+    yield x ()
+  ;;
+  let vp = x ();
+
+  let k = let kx = (fn () ->
+    yield 4. * q;
+    yield pat "3 3.5 1 .5" |> cor_map (fn d ->
+      kick (midi_to_freq 35) (0.5 * d * q) |> play_node;
+      d * q)
+    ) in kx ()
+);

@@ -259,3 +259,15 @@ let test_zip = fn () ->
     | _ -> false
 
 ;;
+
+let test_sequenced_cors = fn () ->
+  let a = fn () ->
+    yield 4;
+    yield [1, 2, 3] |> iter_of_list |> cor_map (fn d -> print "hi\n"; d)
+  ;;
+  let x = a ();
+  x () == Some 4
+  && x () == Some 1
+  && x () == Some 2 
+  && x () == Some 3 
+;;

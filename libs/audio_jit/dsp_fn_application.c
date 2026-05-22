@@ -1029,9 +1029,11 @@ static DspValue build_bufplay(LLVMValueRef buf, LLVMValueRef rate,
                               JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
   int off = dsp_ctx->state_offset;
-  dsp_ctx->state_offset += 8;
+  dsp_ctx->state_offset += 24;
 
   LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef i64_ty = LLVMInt64Type();
   LLVMTypeRef f64_ty = LLVMDoubleType();
   LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
   LLVMTypeRef arr_ty =
@@ -1047,24 +1049,70 @@ static DspValue build_bufplay(LLVMValueRef buf, LLVMValueRef rate,
       LLVMBuildSIToFP(builder, len_i32, f64_ty, "bufplay.len.f64");
 
   if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
-    dsp_consume_init_state(dsp_ctx, dsp_ctx->init_builder, 8, 8,
-                           "bufplay.init.phase_base");
+    LLVMValueRef init_base = dsp_consume_init_state(
+        dsp_ctx, dsp_ctx->init_builder, 24, 8, "bufplay.init.base");
+    LLVMValueRef prev_init_ptr_i8 = LLVMBuildGEP2(
+        dsp_ctx->init_builder, i8_ty, init_base,
+        (LLVMValueRef[]){LLVMConstInt(i64_ty, 8, 0)}, 1,
+        "bufplay.prev_trig_init_ptr_i8");
+    LLVMValueRef prev_init_ptr = LLVMBuildBitCast(
+        dsp_ctx->init_builder, prev_init_ptr_i8, f64_ptr_ty,
+        "bufplay.prev_trig_init_ptr");
+    LLVMValueRef active_init_ptr_i8 = LLVMBuildGEP2(
+        dsp_ctx->init_builder, i8_ty, init_base,
+        (LLVMValueRef[]){LLVMConstInt(i64_ty, 16, 0)}, 1,
+        "bufplay.active_init_ptr_i8");
+    LLVMValueRef active_init_ptr = LLVMBuildBitCast(
+        dsp_ctx->init_builder, active_init_ptr_i8, f64_ptr_ty,
+        "bufplay.active_init_ptr");
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, 0.0),
+                   prev_init_ptr);
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, 0.0),
+                   active_init_ptr);
   }
-  LLVMValueRef phase_base =
-      dsp_consume_frame_state(dsp_ctx, builder, 8, 8, "bufplay.phase_base");
+  (void)off;
+  LLVMValueRef base =
+      dsp_consume_frame_state(dsp_ctx, builder, 24, 8, "bufplay.base");
   LLVMValueRef phase_ptr =
-      LLVMBuildBitCast(builder, phase_base, f64_ptr_ty, "bufplay.phase_ptr");
-  BUILD_ON_TRIG(builder, trig, "bufplay",
-                LLVMBuildStore(builder, start_pos, phase_ptr););
+      LLVMBuildBitCast(builder, base, f64_ptr_ty, "bufplay.phase_ptr");
+  LLVMValueRef prev_trig_ptr_i8 = LLVMBuildGEP2(
+      builder, i8_ty, base, (LLVMValueRef[]){LLVMConstInt(i64_ty, 8, 0)}, 1,
+      "bufplay.prev_trig_ptr_i8");
+  LLVMValueRef prev_trig_ptr = LLVMBuildBitCast(
+      builder, prev_trig_ptr_i8, f64_ptr_ty, "bufplay.prev_trig_ptr");
+  LLVMValueRef active_ptr_i8 = LLVMBuildGEP2(
+      builder, i8_ty, base, (LLVMValueRef[]){LLVMConstInt(i64_ty, 16, 0)}, 1,
+      "bufplay.active_ptr_i8");
+  LLVMValueRef active_ptr =
+      LLVMBuildBitCast(builder, active_ptr_i8, f64_ptr_ty, "bufplay.active_ptr");
 
-  LLVMValueRef cur_phase =
+  LLVMValueRef phase =
       LLVMBuildLoad2(builder, f64_ty, phase_ptr, "bufplay.phase");
+  LLVMValueRef prev_trig =
+      LLVMBuildLoad2(builder, f64_ty, prev_trig_ptr, "bufplay.prev_trig");
+  LLVMValueRef active =
+      LLVMBuildLoad2(builder, f64_ty, active_ptr, "bufplay.active");
+
+  LLVMValueRef half = LLVMConstReal(f64_ty, 0.5);
+  LLVMValueRef zero = LLVMConstReal(f64_ty, 0.0);
+  LLVMValueRef one = LLVMConstReal(f64_ty, 1.0);
+  LLVMValueRef trig_hi =
+      LLVMBuildFCmp(builder, LLVMRealOGE, trig, half, "bufplay.trig_hi");
+  LLVMValueRef prev_lo =
+      LLVMBuildFCmp(builder, LLVMRealOLT, prev_trig, half, "bufplay.prev_lo");
+  LLVMValueRef rising =
+      LLVMBuildAnd(builder, trig_hi, prev_lo, "bufplay.trig_rising");
+  LLVMValueRef cur_phase = LLVMBuildSelect(
+      builder, rising, start_pos, phase, "bufplay.cur_phase");
+  LLVMValueRef active_hi =
+      LLVMBuildFCmp(builder, LLVMRealOGE, active, half, "bufplay.active_hi");
+  LLVMValueRef should_play =
+      LLVMBuildOr(builder, active_hi, rising, "bufplay.should_play");
+
   LLVMValueRef step = LLVMBuildFDiv(builder, rate, len_f, "bufplay.step");
   LLVMValueRef advanced =
       LLVMBuildFAdd(builder, cur_phase, step, "bufplay.advanced");
 
-  LLVMValueRef zero = LLVMConstReal(f64_ty, 0.0);
-  LLVMValueRef one = LLVMConstReal(f64_ty, 1.0);
   LLVMValueRef ovf =
       LLVMBuildFCmp(builder, LLVMRealOGE, advanced, one, "bufplay.ovf");
   LLVMValueRef udf =
@@ -1073,11 +1121,20 @@ static DspValue build_bufplay(LLVMValueRef buf, LLVMValueRef rate,
       LLVMBuildSelect(builder, ovf, zero, advanced, "bufplay.wrap_ovf");
   next = LLVMBuildSelect(builder, udf, one, next, "bufplay.wrap_udf");
 
-  LLVMBuildStore(builder, next, phase_ptr);
+  LLVMValueRef stored_phase =
+      LLVMBuildSelect(builder, should_play, next, phase, "bufplay.stored_phase");
+  LLVMBuildStore(builder, stored_phase, phase_ptr);
+  LLVMBuildStore(builder, trig, prev_trig_ptr);
+  LLVMBuildStore(
+      builder,
+      LLVMBuildSelect(builder, should_play, one, zero, "bufplay.active_next"),
+      active_ptr);
 
   if (num_channels <= 1) {
+    LLVMValueRef sample = build_tabread(buf, cur_phase, dsp_ctx, ctx, module,
+                                        builder);
     return DSP_SCALAR(
-        build_tabread(buf, cur_phase, dsp_ctx, ctx, module, builder));
+        LLVMBuildSelect(builder, should_play, sample, zero, "bufplay.sample"));
   }
 
   LLVMValueRef *vals =
@@ -1086,8 +1143,10 @@ static DspValue build_bufplay(LLVMValueRef buf, LLVMValueRef rate,
     return DSP_NULL;
   }
   for (int ch = 0; ch < num_channels; ch++) {
-    vals[ch] = build_interleaved_tabread_channel(
+    LLVMValueRef sample = build_interleaved_tabread_channel(
         buf_struct, cur_phase, num_channels, ch, module, builder);
+    vals[ch] =
+        LLVMBuildSelect(builder, should_play, sample, zero, "bufplay.sample");
   }
   return DSP_MULTI(num_channels, vals);
 }
