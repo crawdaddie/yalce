@@ -4836,37 +4836,55 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         Ast *param_ast = p->ast;
         Type *param_type = ltype->data.T_FN.from;
 
-        DspValue arg_val = dsp_build_expr(ast->data.AST_APPLICATION.args + idx,
-                                          dsp_ctx, &lctx, module, builder);
-        LLVMValueRef scalar_arg = arg_val.scalar;
-        if (types_equal(param_type, &t_num)) {
-          if (arg_val.lanes > 1) {
-            for (int lane = 0; lane < arg_val.lanes; lane++) {
-              arg_val.vec[lane] =
+        const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
+        int id_len = param_ast->data.AST_IDENTIFIER.length;
+        JITSymbol *sym = NULL;
+
+        if (is_array_type(param_type)) {
+          DspBuildCtx arg_ctx = *dsp_ctx;
+          arg_ctx.array_attrs = (DspArrayAttributes){0};
+          DspValue arg_val =
+              dsp_build_expr(ast->data.AST_APPLICATION.args + idx, &arg_ctx,
+                             &lctx, module, builder);
+          sym = new_symbol((symbol_type)STYPE_AUDIO_JIT_LOCAL_ARRAY, param_type,
+                           arg_val.scalar,
+                           type_to_llvm_type(param_type, &lctx, module));
+          DspArrayAttributes *attrs = malloc(sizeof(DspArrayAttributes));
+          *attrs = arg_ctx.array_attrs;
+          sym->symbol_data._USER_DEFINED_SYMBOL = attrs;
+          dsp_ctx->state_offset = arg_ctx.state_offset;
+        } else {
+          DspValue arg_val = dsp_build_expr(ast->data.AST_APPLICATION.args + idx,
+                                            dsp_ctx, &lctx, module, builder);
+          LLVMValueRef scalar_arg = arg_val.scalar;
+          if (types_equal(param_type, &t_num)) {
+            if (arg_val.lanes > 1) {
+              for (int lane = 0; lane < arg_val.lanes; lane++) {
+                arg_val.vec[lane] =
+                    ensure_float(ast->data.AST_APPLICATION.args[idx].type,
+                                 arg_val.vec[lane], builder);
+              }
+              arg_val.scalar = arg_val.vec[0];
+              scalar_arg = arg_val.scalar;
+            } else {
+              scalar_arg =
                   ensure_float(ast->data.AST_APPLICATION.args[idx].type,
-                               arg_val.vec[lane], builder);
+                               scalar_arg, builder);
+              arg_val.scalar = scalar_arg;
             }
-            arg_val.scalar = arg_val.vec[0];
-            scalar_arg = arg_val.scalar;
-          } else {
-            scalar_arg = ensure_float(ast->data.AST_APPLICATION.args[idx].type,
-                                      scalar_arg, builder);
-            arg_val.scalar = scalar_arg;
+          }
+
+          sym = new_symbol((symbol_type)STYPE_AUDIO_JIT_DSP_VALUE, param_type,
+                           scalar_arg,
+                           type_to_llvm_type(param_type, &lctx, module));
+          DspValue *stored =
+              dsp_ctx ? dsp_tmp_alloc(dsp_ctx, sizeof(DspValue), 8) : NULL;
+          if (stored) {
+            *stored = arg_val;
+            sym->symbol_data._USER_DEFINED_SYMBOL = stored;
           }
         }
 
-        JITSymbol *sym = new_symbol(
-            (symbol_type)STYPE_AUDIO_JIT_DSP_VALUE, param_type, scalar_arg,
-            type_to_llvm_type(param_type, &lctx, module));
-        DspValue *stored =
-            dsp_ctx ? dsp_tmp_alloc(dsp_ctx, sizeof(DspValue), 8) : NULL;
-        if (stored) {
-          *stored = arg_val;
-          sym->symbol_data._USER_DEFINED_SYMBOL = stored;
-        }
-
-        const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
-        int id_len = param_ast->data.AST_IDENTIFIER.length;
         ht_set_hash(lctx.frame->table, id_chars, hash_string(id_chars, id_len),
                     sym);
 

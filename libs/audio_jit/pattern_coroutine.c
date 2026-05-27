@@ -2011,6 +2011,27 @@ static LLVMValueRef ensure_free_fn(LLVMModuleRef module) {
   return fn;
 }
 
+static uint64_t play_pattern_type_hash(Type *cor_type) {
+  if (!cor_type) {
+    return 0;
+  }
+  char *type_str = type_to_string_dynamic(cor_type);
+  if (!type_str) {
+    return 0;
+  }
+  uint64_t hash = hash_string(type_str, (int)strlen(type_str));
+  free(type_str);
+  return hash;
+}
+
+static void format_play_pattern_wrapper_name(char *buffer, size_t buffer_size,
+                                             const char *prefix,
+                                             const char *name, Type *cor_type) {
+  uint64_t type_hash = play_pattern_type_hash(cor_type);
+  snprintf(buffer, buffer_size, "%s_%s_%016llx", prefix, name,
+           (unsigned long long)type_hash);
+}
+
 static live_pattern_state_t *
 get_or_create_live_pattern_state(const char *name) {
   for (live_pattern_state_entry_t *entry = live_pattern_states; entry != NULL;
@@ -2178,8 +2199,8 @@ ensure_play_pattern_step_wrapper(const char *name, LLVMValueRef pattern_global,
                                  Type *cor_type, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   char wrapper_name[256];
-  snprintf(wrapper_name, sizeof(wrapper_name), "__ylc_play_pattern_step_%s",
-           name);
+  format_play_pattern_wrapper_name(wrapper_name, sizeof(wrapper_name),
+                                   "__ylc_play_pattern_step", name, cor_type);
 
   LLVMValueRef func = LLVMGetNamedFunction(module, wrapper_name);
   if (func) {
@@ -2321,8 +2342,8 @@ ensure_play_pattern_defer_wrapper(const char *name, LLVMValueRef pattern_global,
                                   JITLangCtx *ctx, LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
   char wrapper_name[256];
-  snprintf(wrapper_name, sizeof(wrapper_name), "__ylc_play_pattern_defer_%s",
-           name);
+  format_play_pattern_wrapper_name(wrapper_name, sizeof(wrapper_name),
+                                   "__ylc_play_pattern_defer", name, cor_type);
 
   LLVMValueRef func = LLVMGetNamedFunction(module, wrapper_name);
   if (func) {
@@ -2383,8 +2404,8 @@ static LLVMValueRef ensure_play_pattern_stop_wrapper(const char *name,
                                                      LLVMModuleRef module,
                                                      LLVMBuilderRef builder) {
   char wrapper_name[256];
-  snprintf(wrapper_name, sizeof(wrapper_name), "__ylc_play_pattern_stop_%s",
-           name);
+  format_play_pattern_wrapper_name(wrapper_name, sizeof(wrapper_name),
+                                   "__ylc_play_pattern_stop", name, cor_type);
 
   LLVMValueRef func = LLVMGetNamedFunction(module, wrapper_name);
   if (func) {
@@ -2408,10 +2429,10 @@ static LLVMValueRef ensure_play_pattern_stop_wrapper(const char *name,
 
 static LLVMValueRef ensure_play_pattern_start_wrapper(
     const char *name, LLVMValueRef pattern_global, LLVMValueRef step_wrapper,
-    LLVMModuleRef module, LLVMBuilderRef builder) {
+    Type *cor_type, LLVMModuleRef module, LLVMBuilderRef builder) {
   char wrapper_name[256];
-  snprintf(wrapper_name, sizeof(wrapper_name), "__ylc_play_pattern_start_%s",
-           name);
+  format_play_pattern_wrapper_name(wrapper_name, sizeof(wrapper_name),
+                                   "__ylc_play_pattern_start", name, cor_type);
 
   LLVMValueRef func = LLVMGetNamedFunction(module, wrapper_name);
   if (func) {
@@ -2600,6 +2621,7 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
     if (binding->tag != AST_LET) {
       last_value = codegen(binding, ctx, module, builder);
       if (!last_value) {
+
         return NULL;
       }
       continue;
@@ -2608,6 +2630,7 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
     if (!is_coroutine_type(binding->data.AST_LET.expr->type)) {
       last_value = codegen(binding, ctx, module, builder);
       if (!last_value) {
+
         return NULL;
       }
       continue;
@@ -2626,6 +2649,8 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
         codegen(binding->data.AST_LET.expr, ctx, module, builder);
 
     if (!coroutine) {
+      fprintf(stderr, "No coroutine found\n");
+      print_ast_err(binding);
       return NULL;
     }
 
@@ -2647,14 +2672,14 @@ static LLVMValueRef play_pattern_block(Ast *bindings, int len, Ast *quant,
     LLVMValueRef old_handle =
         LLVMBuildExtractValue(builder, old_pattern, 1, "live_pattern.old.coro");
 
-    Type *cor_type = sym && (int)sym->type == STYPE_AUDIO_JIT_LIVE_PATTERN &&
-                             sym->symbol_type
-                         ? sym->symbol_type
-                         : binding->data.AST_LET.expr->type;
+    Type *old_cor_type = (sym && (int)sym->type == STYPE_AUDIO_JIT_LIVE_PATTERN)
+                             ? sym->symbol_type
+                             : binding->data.AST_LET.expr->type;
+    Type *cor_type = binding->data.AST_LET.expr->type;
     LLVMValueRef step_wrapper = ensure_play_pattern_step_wrapper(
         pattern_name, pattern_global, cor_type, ctx, module, builder);
     LLVMValueRef stop_wrapper = ensure_play_pattern_stop_wrapper(
-        pattern_name, cor_type, ctx, module, builder);
+        pattern_name, old_cor_type, ctx, module, builder);
 
     if (sym && (int)sym->type == STYPE_AUDIO_JIT_LIVE_PATTERN) {
       sym->val = pattern_global;

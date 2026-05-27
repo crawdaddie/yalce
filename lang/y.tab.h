@@ -79,36 +79,37 @@ extern int yydebug;
     AND = 280,                     /* AND  */
     ASYNC = 281,                   /* ASYNC  */
     DOUBLE_AT = 282,               /* DOUBLE_AT  */
-    THUNK = 283,                   /* THUNK  */
-    IMPORT = 284,                  /* IMPORT  */
-    OPEN = 285,                    /* OPEN  */
-    IMPLEMENTS = 286,              /* IMPLEMENTS  */
-    AMPERSAND = 287,               /* AMPERSAND  */
-    TYPE = 288,                    /* TYPE  */
-    TEST_ID = 289,                 /* TEST_ID  */
-    MUT = 290,                     /* MUT  */
-    THEN = 291,                    /* THEN  */
-    ELSE = 292,                    /* ELSE  */
-    YIELD = 293,                   /* YIELD  */
-    AWAIT = 294,                   /* AWAIT  */
-    FOR = 295,                     /* FOR  */
-    IF = 296,                      /* IF  */
-    OF = 297,                      /* OF  */
-    FSTRING_START = 298,           /* FSTRING_START  */
-    FSTRING_END = 299,             /* FSTRING_END  */
-    FSTRING_INTERP_START = 300,    /* FSTRING_INTERP_START  */
-    FSTRING_INTERP_END = 301,      /* FSTRING_INTERP_END  */
-    FSTRING_TEXT = 302,            /* FSTRING_TEXT  */
-    MATCH_BODY_PREC = 303,         /* MATCH_BODY_PREC  */
-    DOUBLE_AMP = 304,              /* DOUBLE_AMP  */
-    DOUBLE_PIPE = 305,             /* DOUBLE_PIPE  */
-    GE = 306,                      /* GE  */
-    LE = 307,                      /* LE  */
-    EQ = 308,                      /* EQ  */
-    NE = 309,                      /* NE  */
-    MODULO = 310,                  /* MODULO  */
-    APPLICATION = 311,             /* APPLICATION  */
-    UMINUS = 312                   /* UMINUS  */
+    AT = 283,                      /* AT  */
+    THUNK = 284,                   /* THUNK  */
+    IMPORT = 285,                  /* IMPORT  */
+    OPEN = 286,                    /* OPEN  */
+    IMPLEMENTS = 287,              /* IMPLEMENTS  */
+    AMPERSAND = 288,               /* AMPERSAND  */
+    TYPE = 289,                    /* TYPE  */
+    TEST_ID = 290,                 /* TEST_ID  */
+    MUT = 291,                     /* MUT  */
+    THEN = 292,                    /* THEN  */
+    ELSE = 293,                    /* ELSE  */
+    YIELD = 294,                   /* YIELD  */
+    AWAIT = 295,                   /* AWAIT  */
+    FOR = 296,                     /* FOR  */
+    IF = 297,                      /* IF  */
+    OF = 298,                      /* OF  */
+    FSTRING_START = 299,           /* FSTRING_START  */
+    FSTRING_END = 300,             /* FSTRING_END  */
+    FSTRING_INTERP_START = 301,    /* FSTRING_INTERP_START  */
+    FSTRING_INTERP_END = 302,      /* FSTRING_INTERP_END  */
+    FSTRING_TEXT = 303,            /* FSTRING_TEXT  */
+    MATCH_BODY_PREC = 304,         /* MATCH_BODY_PREC  */
+    DOUBLE_AMP = 305,              /* DOUBLE_AMP  */
+    DOUBLE_PIPE = 306,             /* DOUBLE_PIPE  */
+    GE = 307,                      /* GE  */
+    LE = 308,                      /* LE  */
+    EQ = 309,                      /* EQ  */
+    NE = 310,                      /* NE  */
+    MODULO = 311,                  /* MODULO  */
+    APPLICATION = 312,             /* APPLICATION  */
+    UMINUS = 313                   /* UMINUS  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -142,36 +143,37 @@ extern int yydebug;
 #define AND 280
 #define ASYNC 281
 #define DOUBLE_AT 282
-#define THUNK 283
-#define IMPORT 284
-#define OPEN 285
-#define IMPLEMENTS 286
-#define AMPERSAND 287
-#define TYPE 288
-#define TEST_ID 289
-#define MUT 290
-#define THEN 291
-#define ELSE 292
-#define YIELD 293
-#define AWAIT 294
-#define FOR 295
-#define IF 296
-#define OF 297
-#define FSTRING_START 298
-#define FSTRING_END 299
-#define FSTRING_INTERP_START 300
-#define FSTRING_INTERP_END 301
-#define FSTRING_TEXT 302
-#define MATCH_BODY_PREC 303
-#define DOUBLE_AMP 304
-#define DOUBLE_PIPE 305
-#define GE 306
-#define LE 307
-#define EQ 308
-#define NE 309
-#define MODULO 310
-#define APPLICATION 311
-#define UMINUS 312
+#define AT 283
+#define THUNK 284
+#define IMPORT 285
+#define OPEN 286
+#define IMPLEMENTS 287
+#define AMPERSAND 288
+#define TYPE 289
+#define TEST_ID 290
+#define MUT 291
+#define THEN 292
+#define ELSE 293
+#define YIELD 294
+#define AWAIT 295
+#define FOR 296
+#define IF 297
+#define OF 298
+#define FSTRING_START 299
+#define FSTRING_END 300
+#define FSTRING_INTERP_START 301
+#define FSTRING_INTERP_END 302
+#define FSTRING_TEXT 303
+#define MATCH_BODY_PREC 304
+#define DOUBLE_AMP 305
+#define DOUBLE_PIPE 306
+#define GE 307
+#define LE 308
+#define EQ 309
+#define NE 310
+#define MODULO 311
+#define APPLICATION 312
+#define UMINUS 313
 
 /* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
@@ -187,7 +189,7 @@ union YYSTYPE
     float vfloat;
     char vchar;
 
-#line 191 "lang/y.tab.h"
+#line 193 "lang/y.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

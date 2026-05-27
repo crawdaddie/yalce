@@ -492,5 +492,8 @@ Ast *array_index_expression(Ast *array, Ast *index_expr);
 Ast *array_offset_expression(Ast *array, Ast *index_expr);
 bool find_top_level_range_at_line(Ast *root, const char *src, int line,
                                   source_range *out_range);
+
+Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
+                          Ast *lambda_expr);
 // Ast *array_offset_expression(Ast *array, Ast *index_expr);
 #endif

@@ -63,6 +63,7 @@ extern char *yytext;
 %token IN AND
 %token ASYNC
 %token DOUBLE_AT
+%token AT 
 %token THUNK
 %token IMPORT
 %token OPEN 
@@ -278,6 +279,7 @@ let_binding:
   | IMPORT IDENTIFIER                 { $$ = ast_import_stmt($2, false); SET_AST_LOC($$, @$); }
   | OPEN IDENTIFIER                   { $$ = ast_import_stmt($2, true); SET_AST_LOC($$, @$); }
   | LET IDENTIFIER ':' IDENTIFIER '=' lambda_expr { $$ = ast_trait_impl($4, $2, $6); SET_AST_LOC($$, @$); }
+  | LET IDENTIFIER '=' AT IDENTIFIER lambda_expr  { $$ = ast_decorated_lambda($5, $2, $6); }
   ;
 
 

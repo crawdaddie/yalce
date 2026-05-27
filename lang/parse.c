@@ -1490,6 +1490,19 @@ Ast *array_offset_expression(Ast *array, Ast *index_expr) {
       array);
 }
 
+Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
+                          Ast *lambda_expr) {
+  printf("%s = @ %s --\n", binding.chars, decorator.chars);
+  print_ast(lambda_expr);
+  if (lambda_expr->tag == AST_LAMBDA) {
+    lambda_expr->data.AST_LAMBDA.fn_name = binding;
+    Ast *dec_id = ast_identifier(decorator);
+    Ast *bind = ast_identifier(binding);
+    Ast *let = ast_let(bind, lambda_expr, NULL);
+    return ast_application(dec_id, let);
+  }
+  return NULL;
+}
 // Ast *array_offset_expression(Ast *array, Ast *index_expr) {
 //   printf("Array offset expr\n");
 //   return ast_application(

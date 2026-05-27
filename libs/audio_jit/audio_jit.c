@@ -756,6 +756,7 @@ __attribute__((constructor)) static void ylc_audio_jit_init(void) {
   STYPE_AUDIO_JIT_LIVE_PATTERN = REGISTERED_JIT_SYMBOL_TYPE++;
 
   ht *stack = ylc_jit_ctx->frame->table;
+  register_builtin(stack, "Audio", CompileAudioFnHandler);
   register_builtin(stack, "compile_audio_fn", CompileAudioFnHandler);
   register_builtin(stack, "compile_spectral_fn", CompileSpectralFnHandler);
   fprintf(stderr, "libaudio_jit: registered compile_audio_fn\n");
