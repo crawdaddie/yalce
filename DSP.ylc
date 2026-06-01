@@ -8,6 +8,8 @@ type Signal = Double;
 type Scalar = Double;
 
 let compile_audio_fn = extern fn T -> T;
+let Audio = extern fn T -> T;
+
 let play = extern fn T -> T;
 let pat = extern fn String -> Coroutine of Double;
 let pat_key = extern fn String -> Coroutine of (String, Int);
@@ -715,26 +717,26 @@ compile_audio_fn (
 #   cathedral: ×6.28  4517 5701 7243 9239 11689 14797 18839 23879
 
 compile_audio_fn (
+  # Studio room (~0.5s rt60) — delays 15–79ms
   let room = fn inp ->
-    # Studio room (~0.5s rt60) — delays 15–79ms
     fdn8 0.0150 0.0189 0.0240 0.0307 0.0388 0.0491 0.0625 0.0792 0.5 inp
 );
 
 compile_audio_fn (
+  # Concert hall (~2.0s rt60) — delays 40–210ms
   let concert = fn inp ->
-    # Concert hall (~2.0s rt60) — delays 40–210ms
     fdn8 0.0397 0.0500 0.0638 0.0814 0.1027 0.1301 0.1656 0.2100 2.0 inp
 );
 
 compile_audio_fn (
+  # Cathedral (~5.0s rt60) — delays 94–497ms
   let cathedral = fn inp ->
-    # Cathedral (~5.0s rt60) — delays 94–497ms
     fdn8 0.0941 0.1188 0.1509 0.1925 0.2435 0.3083 0.3925 0.4975 5.0 inp
 );
 
 compile_audio_fn (
+  # Mega Cathedral (~10.0s rt60) — delays 94–497ms
   let mega_cathedral = fn inp ->
-    # Cathedral (~5.0s rt60) — delays 94–497ms
     fdn8 0.0941 0.1188 0.1509 0.1925 0.2435 0.3083 0.3925 0.4975 10.0 inp
 );
 ;

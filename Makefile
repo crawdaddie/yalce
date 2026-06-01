@@ -80,7 +80,7 @@ LSP_SERVER_TARGET := $(BUILD_DIR)/tools/ylc_lsp_server
 JSON_C_CFLAGS := $(shell pkg-config --cflags json-c 2>/dev/null)
 JSON_C_LIBS := $(shell pkg-config --libs json-c 2>/dev/null)
 
-.PHONY: all clean engine audio_jit gui test wasm serve_docs engine_bindings cor range_server lsp_server test_range_server test_range_server_tool test_lsp_server
+.PHONY: all clean engine audio_jit gui gfx test wasm serve_docs engine_bindings cor range_server lsp_server test_range_server test_range_server_tool test_lsp_server
 
 all: $(BUILD_DIR)/ylc
 
@@ -97,6 +97,10 @@ audio_jit: engine
 gui: 
 	@echo "######### MAKE GUI------------"
 	$(MAKE) -C libs/gui
+
+gfx:
+	@echo "######### MAKE GFX------------"
+	$(MAKE) -C libs/gfx
 
 
 $(BUILD_DIR):
@@ -158,6 +162,7 @@ clean:
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(MAKE) -C engine clean
 	$(MAKE) -C libs/gui clean
+	$(MAKE) -C libs/gfx clean
 	$(MAKE) -C libs/audio_jit clean
 
 test:

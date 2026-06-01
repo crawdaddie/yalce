@@ -401,6 +401,10 @@ int jit(int argc, char **argv) {
     ylc_config.interactive_mode = true;
   }
 
+  if (__BREAK_REPL_FOR_GUI_LOOP && break_repl_for_gui_loop_cb != NULL) {
+    ylc_config.interactive_mode = true;
+  }
+
   if (ylc_config.interactive_mode) {
 
     char dirname[100];

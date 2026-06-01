@@ -35,6 +35,7 @@ void ylc_window_open(int type_id, const char *title, int w, int h, void *state);
 #define YLC_WINDOW_SCOPE 0
 #define YLC_WINDOW_ARRAY_EDITOR 1
 #define YLC_WINDOW_SPECTROGRAM 2
+#define YLC_WINDOW_KB_INPUT 3
 
 // Open an oscilloscope window for `node`. Creates a tap node internally.
 void ylc_scope_open(Node *node);

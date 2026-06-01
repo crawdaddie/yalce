@@ -1492,8 +1492,8 @@ Ast *array_offset_expression(Ast *array, Ast *index_expr) {
 
 Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
                           Ast *lambda_expr) {
-  printf("%s = @ %s --\n", binding.chars, decorator.chars);
-  print_ast(lambda_expr);
+  // printf("%s = @ %s --\n", binding.chars, decorator.chars);
+  // print_ast(lambda_expr);
   if (lambda_expr->tag == AST_LAMBDA) {
     lambda_expr->data.AST_LAMBDA.fn_name = binding;
     Ast *dec_id = ast_identifier(decorator);

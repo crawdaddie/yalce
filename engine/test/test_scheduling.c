@@ -167,7 +167,6 @@ static uint64_t recorded_ticks[64];
 static int recorded_count;
 
 static void record_tick_cb(void *ud, uint64_t tick) {
-  (void)ud;
   recorded_ticks[recorded_count++] = tick;
 }
 
@@ -693,12 +692,12 @@ typedef struct close_payload {
 } close_payload;
 
 static void close_gate(close_payload *p, uint64_t tick) {
-  push_msg(
-      &ctx.msg_queue,
-      (audio_instruction){
-          NODE_SET_SCALAR,
-          tick,
-          {.NODE_SET_SCALAR = {.target = p->target, .input = p->gate_input, .value = 0.}}});
+  push_msg(&ctx.msg_queue,
+           (audio_instruction){NODE_SET_SCALAR,
+                               tick,
+                               {.NODE_SET_SCALAR = {.target = p->target,
+                                                    .input = p->gate_input,
+                                                    .value = 0.}}});
   free(p);
 }
 

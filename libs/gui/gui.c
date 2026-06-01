@@ -703,6 +703,46 @@ void ylc_spectrogram_open(_DoubleArray mag, _DoubleArray transient,
   ylc_window_open(YLC_WINDOW_SPECTROGRAM, "spectrogram", win_w, win_h, s);
 }
 
+static void kb_input_draw(SDL_Window *win, SDL_Renderer *ren, void *state) {
+
+  SDL_RenderPresent(ren);
+}
+
+static void kb_input_handler(SDL_Event *e, SDL_Window *win, SDL_Renderer *ren,
+                             void *state) {
+  (void)ren;
+  SDL_WindowID wid = 0;
+
+  switch (e->type) {
+  case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    wid = e->button.windowID;
+    break;
+  case SDL_EVENT_MOUSE_BUTTON_UP:
+    wid = e->button.windowID;
+    break;
+  case SDL_EVENT_MOUSE_MOTION:
+    wid = e->motion.windowID;
+    break;
+  case SDL_EVENT_KEY_DOWN:
+    wid = e->key.windowID;
+    break;
+
+  case SDL_EVENT_KEY_UP:
+    wid = e->key.windowID;
+    break;
+  default:
+    return;
+  }
+}
+
+static void kb_input_destroy(void *state) { free(state); }
+
+void ylc_kb_input_open() {
+
+  ylc_window_open(YLC_WINDOW_KB_INPUT, "array editor", 800, 320, NULL);
+  return;
+}
+
 // ============================================================================
 // Main SDL event loop — runs on the main thread
 // ============================================================================
@@ -787,6 +827,13 @@ __attribute__((constructor)) static void ylc_gui_init(void) {
       .draw = spectrogram_draw,
       .on_event = NULL,
       .destroy = spectrogram_destroy,
+  });
+
+  ylc_window_type_register((YLCWindowType){
+      .id = YLC_WINDOW_KB_INPUT,
+      .draw = kb_input_draw,
+      .on_event = kb_input_handler,
+      .destroy = kb_input_destroy,
   });
 
   __set_break_repl_flag(true);

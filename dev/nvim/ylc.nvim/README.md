@@ -6,7 +6,7 @@ Neovim plugin for running `ylc <current-file> -i` in a side terminal and sending
 
 - `:YlcOpen` starts a YLC REPL for the current file in a vertical split
 - `:YlcOpen` starts notebook mode automatically when the current buffer ends in `.ylcnb`
-- `:YlcOpenDebug` starts `ylc` under `lldb` and runs it automatically
+- `:YlcOpenDebug` starts `ylc` under `lldb`, runs it automatically, and uses the same input send path as normal mode
 - `:YlcReload` restarts the plugin-managed YLC job if one is open, otherwise starts one
 - `<C-c><C-c>` in normal mode expands to the attached LSP `selectionRange` and sends it, with no fallback path
 - `<C-c><C-c>` in visual mode sends the current selection
@@ -35,5 +35,5 @@ Example with `lazy.nvim`:
 - Set `vim.g.ylc_disable_default_keymaps = 1` before loading the plugin if you want to define your own mappings
 - The plugin does not ship a syntax file; it assumes your existing YLC syntax/filetype setup
 - Configure a custom command or process environment with `require("ylc").setup({ cmd = {...}, env = {...} })`
-- Configure debugger launch with `require("ylc").setup({ debugger_cmd = { "lldb", "-o", "run", "--" } })`
+- Configure debugger launch with `require("ylc").setup({ debugger_cmd = { "lldb" } })`
 - Set `close_term_on_successful_exit = false` if you never want the terminal to close automatically

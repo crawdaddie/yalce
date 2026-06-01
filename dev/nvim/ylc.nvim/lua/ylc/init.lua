@@ -21,8 +21,6 @@ local state = {
 	term_win = nil,
 	script_path = nil,
 	debug_active = false,
-	debug_fifo_path = nil,
-	debug_fifo_handle = nil,
 }
 
 local autocmd_group = vim.api.nvim_create_augroup("ylc.nvim", { clear = true })
@@ -89,14 +87,6 @@ local function reset_state()
 	state.term_win = nil
 	state.script_path = nil
 	state.debug_active = false
-	if state.debug_fifo_handle then
-		state.debug_fifo_handle:close()
-		state.debug_fifo_handle = nil
-	end
-	if state.debug_fifo_path then
-		pcall(vim.fn.delete, state.debug_fifo_path)
-		state.debug_fifo_path = nil
-	end
 end
 
 local function is_job_running()
@@ -415,6 +405,14 @@ local function focus_terminal_end()
 	end)
 end
 
+local function send_to_job(text)
+	if not is_job_running() then
+		return false
+	end
+	vim.fn.chansend(state.job_id, escape_text(text))
+	return true
+end
+
 local function open_window()
 	local old_term_buf = state.term_buf
 
@@ -447,43 +445,16 @@ local function build_notebook_cmd()
 	return tbl_copy(config.cmd)
 end
 
-local function build_debug_cmd(script_path)
+local function build_debug_cmd(script_path, notebook)
 	local cmd = tbl_copy(config.debugger_cmd)
-	local target = build_cmd(script_path)
+	local target = notebook and build_notebook_cmd() or build_cmd(script_path)
 	cmd[#cmd + 1] = "-o"
-	cmd[#cmd + 1] = "process launch -i " .. state.debug_fifo_path
+	cmd[#cmd + 1] = "run"
 	cmd[#cmd + 1] = "--"
 	for _, arg in ipairs(target) do
 		cmd[#cmd + 1] = arg
 	end
 	return cmd
-end
-
-local function make_debug_fifo()
-	local fifo_path = string.format("/tmp/ylc-debug-%d-%d.fifo", vim.fn.getpid(), vim.loop.hrtime())
-	vim.fn.system({ "mkfifo", fifo_path })
-	if vim.v.shell_error ~= 0 then
-		return nil, "failed to create debug fifo"
-	end
-	return fifo_path
-end
-
-local function ensure_debug_fifo_writer()
-	if not state.debug_fifo_path then
-		return false
-	end
-
-	if state.debug_fifo_handle then
-		return true
-	end
-
-	local handle = io.open(state.debug_fifo_path, "w")
-	if not handle then
-		return false
-	end
-
-	state.debug_fifo_handle = handle
-	return true
 end
 
 function M.stop()
@@ -505,22 +476,16 @@ function M.open(opts)
 		return
 	end
 
-	if not opts.debug and not opts.raw_cmd and not opts.notebook and is_notebook_path(script_path) then
-		M.open_notebook()
-		return
-	end
+		if not opts.debug and not opts.raw_cmd and not opts.notebook and is_notebook_path(script_path) then
+			M.open_notebook()
+			return
+		end
 
 	if is_job_running() then
 		M.stop()
 	end
 
 	if opts.debug then
-		local fifo_path, fifo_err = make_debug_fifo()
-		if not fifo_path then
-			notify(fifo_err or "Failed to prepare debug fifo", vim.log.levels.ERROR)
-			return
-		end
-		state.debug_fifo_path = fifo_path
 		state.debug_active = true
 	end
 
@@ -529,13 +494,13 @@ function M.open(opts)
 
 	state.script_path = script_path
 	local term_cmd
-	if opts.raw_cmd then
-		term_cmd = tbl_copy(opts.raw_cmd)
-	elseif opts.notebook then
-		term_cmd = build_notebook_cmd()
-	else
-		term_cmd = opts.debug and build_debug_cmd(script_path) or build_cmd(script_path)
-	end
+		if opts.raw_cmd then
+			term_cmd = tbl_copy(opts.raw_cmd)
+		elseif opts.notebook then
+			term_cmd = opts.debug and build_debug_cmd(script_path, true) or build_notebook_cmd()
+		else
+			term_cmd = opts.debug and build_debug_cmd(script_path, false) or build_cmd(script_path)
+		end
 	state.job_id = vim.fn.termopen(term_cmd, {
 		env = current_env(),
 		on_stdout = function()
@@ -559,10 +524,6 @@ function M.open(opts)
 		end,
 	})
 
-	if opts.debug and not ensure_debug_fifo_writer() then
-		notify("Failed to open debug fifo writer", vim.log.levels.ERROR)
-	end
-
 	vim.api.nvim_set_current_win(origin_win)
 	if opts.debug then
 		notify("Started YLC under lldb for " .. script_path)
@@ -573,7 +534,8 @@ function M.open(opts)
 	end
 end
 
-function M.open_notebook()
+function M.open_notebook(opts)
+	opts = opts or {}
 	local bufnr = vim.api.nvim_get_current_buf()
 	local script_path = current_file_path()
 	if not script_path then
@@ -586,18 +548,22 @@ function M.open_notebook()
 	M.open({
 		script_path = script_path,
 		notebook = true,
+		debug = opts.debug,
 	})
 
 	if prelude ~= "" then
 		vim.defer_fn(function()
-			if is_job_running() then
-				vim.fn.chansend(state.job_id, escape_text(prelude))
-			end
+			send_to_job(prelude)
 		end, 50)
 	end
 end
 
 function M.open_debug()
+	if current_buffer_is_notebook() then
+		M.open_notebook({ debug = true })
+		return
+	end
+
 	M.open({ debug = true })
 end
 
@@ -650,17 +616,7 @@ function M.send(text)
 		return
 	end
 
-	if state.debug_active then
-		if not ensure_debug_fifo_writer() then
-			notify("Debug fifo is not available", vim.log.levels.ERROR)
-			return
-		end
-		state.debug_fifo_handle:write(escape_text(text))
-		state.debug_fifo_handle:flush()
-		return
-	end
-
-	vim.fn.chansend(state.job_id, escape_text(text))
+	send_to_job(text)
 end
 
 function M.send_buffer()
