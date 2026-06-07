@@ -1,0 +1,92 @@
+#! /usr/bin/env ylc -i
+open engine/bindings/Synth;
+open engine/bindings/Sched;
+import std/Math;
+
+
+
+let ampenv = [|
+  0.000000, 0.000000, 0.,
+  1.000000, 1., 0.000000,
+  1.000000, 0., 0.00000,
+  0.000000
+|]
+|> array_to_buf;
+
+let original_tempo = 170.;
+let tempo = 160.;
+let q = 60./tempo;
+
+
+
+
+let stutter_rates = [|
+  q * 4 * 0.125,
+  q * 4 * 0.5, 
+  q * 4 * 0.5, 
+  q * 4 * , 
+  q * 4 * 0.33333,
+  q * 4 * 0.25,
+  q * 4 * 0.0625,
+  # q * 4 * 0.75
+|]
+|> array_to_buf;
+
+let amen = load_soundfile "fat_amen_mono_48000.wav";
+
+let synth = (fn () ->
+  let trig = inlet 0.; # 0
+  bufplayer_trig_node (buf_ref amen) (tempo * (inlet 1.) / original_tempo) (inlet 0.) trig # 3 
+  |> stutter_node (60. * 4. / tempo) (trig_sel_node trig (buf_ref stutter_rates)) (rand_trig_node trig -1. 1.)
+)
+|> play_tpl
+;
+let trig = fn d s p -> let fo = get_tl_tick ();
+  set_input_scalar_offset synth 2 fo s; 
+  set_input_scalar_offset synth 1 fo p; 
+  # trigger_gate fo d 1 synth; 
+  set_input_trig_offset synth 0 fo
+  # set_input_scalar_offset synth 1 fo (Math.rand_double_range 0. 20.)
+;;
+
+
+let pattern_ref = [| cstr "" |] ;
+let set_pattern = fn t cor ->
+  cor_stop (pattern_ref[0]);
+  cor
+  |> play_routine t schedule_event
+  |> array_set pattern_ref 0;
+  ()
+
+;;
+
+
+defer_quant q (fn t ->
+  let rout = fn () ->
+    yield (0.5,  0.0    ,1.);
+    yield (0.5,  0.125  ,1.);
+    yield (0.75, 0.25   ,1.);
+    yield (0.75, 0.25   ,1.);
+    yield (0.75, 0.25   ,1.);
+    yield (0.75, 0.25   ,1.);
+
+    yield (0.5,  0.375  ,1.);
+    yield (0.5,  0.5    ,1.);
+    yield (0.5,  0.625  ,1.);
+    yield (0.5,  0.75   ,1.);
+    yield (0.75, 0.625  ,1.);
+    yield (0.25, 0.75   ,1.);
+    yield (1.,   0.875  ,1.);
+
+    yield rout ()
+  ;;
+
+  rout ()
+  |> cor_map (fn (d, s, p) ->
+    trig (d * q) s p;
+    d * q
+  )
+  |> play_routine t schedule_event
+ 
+);
+

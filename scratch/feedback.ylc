@@ -1,0 +1,90 @@
+open libs/gfx/Gfx;
+let quad = gfx_fullscreen_quad ();
+
+let blit_vs = `#version 330 core
+layout(location = 0) in vec2 aPos;
+out vec2 uv;
+
+void main() \{
+  uv = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+\}`;
+
+let feedback_fs = `#version 330 core
+in vec2 uv;
+uniform sampler2D uPrev;
+uniform float uTime;
+uniform vec2 uResolution;
+out vec4 fragColor;
+
+void main() \{
+  vec2 p = uv * 2.0 - 1.0;
+  vec2 q = uv + 0.0025 * vec2(sin(uTime * 0.7 + p.y * 4.0),
+                               cos(uTime * 0.5 + p.x * 3.0));
+  vec3 prev = texture(uPrev, q).rgb;
+
+  float d = length(p - 0.45 * vec2(cos(uTime * 0.9), sin(uTime * 1.3)));
+  float orb = exp(-10.0 * d * d);
+  vec3 inject = vec3(orb, orb * 0.5, orb * 0.9);
+
+  vec3 col = prev * 0.985 + inject * 0.08;
+  fragColor = vec4(col, 1.0);
+\}`;
+
+let display_fs = `#version 330 core
+in vec2 uv;
+uniform sampler2D uTex;
+out vec4 fragColor;
+
+void main() \{
+  vec3 col = texture(uTex, uv).rgb;
+  fragColor = vec4(col, 1.0);
+\}`;
+
+let feedback_shader = gfx_shader blit_vs feedback_fs;
+let display_shader = gfx_shader blit_vs display_fs;
+
+let TargetPair = module () ->
+  let buf_a = gfx_target 1024 1024;
+  let buf_b = gfx_target 1024 1024;
+
+  let ping = [|buf_a|];
+  let pong = [|buf_b|];
+
+  let src = fn () -> ping[0];;
+  let dst = fn () -> pong[0];;
+
+  let swap = fn () ->
+    let a = ping[0];
+    ping[0] := pong[0];
+    pong[0] := a
+  ;;
+;
+
+let frame = fn () ->
+  let t = gfx_time ();
+  let w, h = gfx_resolution ();
+  let src = TargetPair.src ();
+  let dst = TargetPair.dst ();
+
+  gfx_begin_frame ();
+
+  gfx_bind_target dst;
+  gfx_clear 0.0 0.0 0.0 1.0;
+  gfx_use_shader feedback_shader;
+  gfx_uniform1f feedback_shader "uTime" t;
+  gfx_uniform2f feedback_shader "uResolution" (Double w) (Double h);
+  gfx_uniform_tex feedback_shader "uPrev" src 0;
+  gfx_draw_mesh quad;
+
+  gfx_bind_target (gfx_screen ());
+  gfx_clear 0.0 0.0 0.0 1.0;
+  gfx_use_shader display_shader;
+  gfx_uniform_tex display_shader "uTex" dst 0;
+  gfx_draw_mesh quad;
+
+  TargetPair.swap ();
+  gfx_end_frame ()
+;;
+
+gfx_run frame;

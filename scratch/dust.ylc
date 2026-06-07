@@ -1,0 +1,11 @@
+
+open DSP;
+import std/Math;
+compile_audio_fn (
+  let dust = fn density ->  
+    let thresh = density * spf in   # density (events/sec) * (1/sample_rate) = prob per sample
+    let z = Math.rand_double () in
+    if (z < thresh) then 1. else 0.
+    
+);
+dust () |> play_node

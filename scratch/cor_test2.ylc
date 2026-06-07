@@ -1,0 +1,26 @@
+open DSP;
+
+#%%
+
+play_pattern 1. (
+  let kk = fn idx: (Int) ->
+    print `hit{idx}\n`;
+    yield 3.;
+    print `hit{idx}\n`;
+    yield 2.;
+    print `hit{idx}\n`;
+    yield 3.;
+    yield kk ((idx + 1) % 4)
+  ;;
+
+  let kp = (let x = (fn () ->
+    print `hit\n`;
+    yield 1.;
+    print `hit\n`;
+    yield 1.;
+    print `hit\n`;
+    yield 2.;
+    yield kk 0
+    ) in x ())
+)
+

@@ -1,0 +1,39 @@
+open DSP;
+
+compile_audio_fn ( 
+  let grain_delay = fn dt fb inp ->
+    let dl = delay_line 1;
+    inp
+    |> delay_proc (fn w dl inp -> 
+      let pos = (w - sample_rate * dt) / sample_rate;
+      let t = trig 20;
+      let y = t
+      |> grains 30 dl
+        (arr_choose [| 1., 2., 0.5|] t)
+        (pos - lfnoise0 20 0 0.1)
+        # (pos - sin_osc 0.2 |> scale_bp 0. 1.)
+        0.1
+      |> Filter.lpf1p 8000
+      |> Filter.hpf1p 100
+      ;
+
+      inp + y * fb;
+    ) dl
+);
+
+
+compile_audio_fn ( 
+  let imp = fn () -> 
+    let t = trig 1;
+    t 
+    |> adsr 0.001 0.01 0.5 0.2
+    # |> decay 0.5
+    |> (*) (sin_osc (
+      trig 0.5 |> arr_choose [|600., 300., 450., 900., 950., 675. |])
+    )
+    |> grain_delay 0.1 @@ ~[0.8, 0.8]
+    |> Reverb.cathedral
+);
+
+imp () |> play_node
+

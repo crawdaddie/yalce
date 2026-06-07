@@ -1,0 +1,20 @@
+open DSP;
+open engine/bindings/Synth; 
+open engine/bindings/Sched; 
+
+let amps = array_fill_const 32 1.;
+let phases = array_fill_const 32 0.;
+
+compile_audio_fn (
+let a = fn f ->
+  bank_osc amps phases f
+);
+
+a 60 |> play_node;
+
+let ylc_array_editor_open = extern fn Array of Double -> Double -> Double -> Int; 
+let _ = dlopen "libs/gui/libgui.so";
+ylc_array_editor_open amps 0. 1.;
+ylc_array_editor_open phases -1. 1.;
+#
+

@@ -1,0 +1,794 @@
+open engine/bindings/Synth;
+open engine/bindings/Sched;
+let sample_rate = 48000;
+import std/Math;
+
+let null_synth_ptr = extern fn () -> Synth;
+type Signal = Double;
+type Scalar = Double;
+
+let compile_audio_fn = extern fn T -> T;
+let Audio = extern fn T -> T;
+
+# let play = play_node;
+let play = extern fn T -> T;
+let pat = extern fn String -> Coroutine of Double;
+let pat_key = extern fn String -> Coroutine of (String, Int);
+let pat_key_chars = extern fn String -> Coroutine of String;
+
+# Table-lookup sine oscillator. Arg: frequency in Hz.
+let sin_osc = extern fn Double -> Double;
+# Table-lookup square oscillator. Arg: frequency in Hz.
+let sq_osc = extern fn Double -> Double;
+# Table-lookup saw oscillator. Arg: frequency in Hz.
+let saw_osc = extern fn Double -> Double;
+# Phase-modulation oscillator. Args: modulation index, modulation ratio, carrier frequency.
+let pm_osc = extern fn Double -> Double -> Double -> Double;
+
+# Additive oscillator bank. Args: amplitude array, phase array, base frequency.
+let bank_osc = extern fn Array of Double -> Array of Double -> Double -> Double;
+
+# Oscillator with external phase input. Args: phase input, frequency.
+let phase_osc = extern fn Double -> Double -> Double;
+
+# White noise in the range [-1, 1].
+let white = extern fn () -> Double;
+# Ramp oscillator / phase accumulator. Arg: frequency.
+let phasor = extern fn Double -> Double;
+# Resettable phasor. Args: frequency, trigger/reset signal.
+let phasor_sinc = extern fn Double -> Double -> Double;
+# Impulse generator. Arg: trigger frequency; `0` is commonly used for a one-shot trigger.
+let trig = extern fn Double -> Double;
+# Emits a trigger when the input value changes.
+let changed = extern fn Double -> Double;
+# Read a table by normalized phase.
+let tabread = extern fn Array of Double -> Double -> Double;
+# Read a table by sample index.
+let tabread_samp = extern fn Array of Double -> Double -> Double;
+# Exponential decay envelope. Args: decay time, trigger.
+let decay = extern fn Double -> Double -> Double;
+# Unipolar scale from `[0, 1]` into `[lo, hi]`. Args: lo, hi, value.
+let scale = extern fn Double -> Double -> Double -> Double;
+# Bipolar scale from `[-1, 1]` into `[lo, hi]`. Args: lo, hi, value.
+let scale_bp = extern fn Double -> Double -> Double -> Double;
+let array_of_buf = extern fn Ptr -> Array of Double;
+let bufsize = extern fn Ptr -> Int;
+# Linearly interpolated low-frequency noise. Args: update frequency, low bound, high bound.
+let lfnoise = extern fn Double -> Double -> Double -> Double;
+# Stepped low-frequency noise. Args: update frequency, low bound, high bound.
+let lfnoise0 = extern fn Double -> Double -> Double -> Double;
+# Marks a signal as done when it reaches its natural end.
+let kill_on_end = extern fn Double -> Double;
+# ADSR envelope. Args: attack, decay, sustain, release, trigger.
+let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
+# Rectangular gate envelope. Args: duration, trigger.
+let rect = extern fn Double -> Double -> Double;
+
+# Delay line read/write kernel. Args: delay seconds, max delay, feedback, input.
+# Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
+let delay =   extern fn Double -> Double -> Double -> Double -> Double;
+# Wet-only delay tap. Args: delay seconds, max delay, input.
+# Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
+let delay_wo = extern fn Double -> Double -> Double -> Double;
+# Comb filter kernel. Args: delay seconds, max delay, feedback, input.
+# Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
+let comb =    extern fn Double -> Double -> Double -> Double -> Double;
+# Allpass filter kernel. Args: delay seconds, max delay, feedback, input.
+# Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
+let allpass = extern fn Double -> Double -> Double -> Double -> Double;
+
+# Slew / lag processor. Args: lag time in seconds, input.
+let lag = extern fn Double -> Double -> Double;
+# On each trigger, choose a random element from the array.
+let arr_choose = extern fn Array of Double -> Double -> Double;
+# On each trigger, advance to the next element in the array.
+let arr_seq = extern fn Array of Double -> Double -> Double;
+let pan2 = extern fn Double -> Double;
+let fftw_plan_free = extern fn Ptr -> ();
+
+# Allocate a delay buffer sized from a maximum delay time.
+# Compile-time constant: arg 1 (`max delay`) must be a constant > 0.
+let delay_line = extern fn Double -> Array of Double;
+# Matrix-vector multiply into a caller-provided output array. Args: matrix, input vector, output vector.
+let dsp_mmul_op = extern fn Array of Double -> Array of Double -> Array of Double -> Array of Double;
+# Dot product of two vectors.
+let vec_dot = extern fn Array of Double -> Array of Double -> Double;
+
+# Per-sample delay-buffer processor. Args: callback, delay buffer, input.
+# The callback receives `(write_index, delay_buffer, input)` and must return a scalar sample.
+let delay_proc = extern fn (Int -> Array of Double -> Double -> Double) -> Array of Double -> Double -> Double;
+
+let ~ = extern fn Array of T -> T;
+let mix = extern fn Int -> Double -> Double;
+
+# Buffer playback. Args: buffer, rate, start position, trigger.
+let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;
+# Multichannel buffer playback. Args: channel count, buffer, rate, start position, trigger.
+# Compile-time constant: arg 1 (`channel count`) must be a constant integer > 0.
+let mbufplay = extern fn Int -> Array of Double -> Double -> Double -> Double -> Double;
+
+# Granular playback. Args: max grains, source buffer, rate, position, width, trigger.
+# Compile-time constant: arg 1 (`max grains`) must be a constant integer > 0.
+let grains = extern fn Int ->       Array of Double -> Double -> Double -> Double -> Double;
+# Granular playback with a separate envelope buffer.
+# Args: max grains, source buffer, envelope buffer, rate, position, width, trigger.
+# Compile-time constant: arg 1 (`max grains`) must be a constant integer > 0.
+let grains_env = extern fn Int ->       Array of Double -> Array of Double -> Double -> Double -> Double -> Double;
+
+
+let fftw_plan_forward_new = extern fn Int -> Ptr;
+let fftw_forward_execute_raw = extern fn Ptr -> Int -> Ptr -> Int -> Ptr -> Int -> Ptr -> ();
+let fftw_forward_execute = fn plan out_re out_im input ->
+  fftw_forward_execute_raw
+    plan
+    (array_size out_re)
+    (cstr out_re)
+    (array_size out_im)
+    (cstr out_im)
+    (array_size input)
+    (cstr input)
+;;
+type SpectralAnalysis = (
+  fft_size: Int,
+  hop_size: Int,
+  sample_rate: Int,
+  num_frames: Int,
+  num_bins: Int,
+  mags: Array of Double,
+  phases: Array of Double,
+  phase_incs: Array of Double,
+  transients: Array of Double, 
+);
+let pv_bufplay = extern fn Ptr -> Double -> Double -> Double -> Double; 
+
+let rbufplay = extern fn Int -> Array of Double -> Double -> Double -> Double -> Double -> Double;
+let rbufplay_finer = extern fn Int -> Array of Double -> Double -> Double -> Double -> Double -> Double;
+
+# pitchshift windowSize pitchRatio pitchDispersion timeDispersion input
+let pitchshift = extern fn Double -> Double -> Double -> Double -> Double -> Double;
+
+
+type Complex = (Double, Double);
+type FreqSignal = Array of Complex;
+
+let cmag   = fn (re, im): (Double, Double) -> Math.sqrt ((re * re) + (im * im)) ;;
+let cphase = fn (re, im): (Double, Double) -> Math.atan2 im re;;
+
+let cpolar = fn mag: (Double) theta: (Double) -> (mag * Math.cos theta, mag * Math.sin theta) ;;
+
+let normalize_phase = fn x: (Double) ->
+  let twopi = 2. * Math.PI;
+  let y = x + Math.PI;
+  let z = y - twopi * Math.floor (y / twopi);
+  z - Math.PI
+;;
+
+let Spectral = module () ->
+  let fft = extern fn Int -> Int
+                  -> (FreqSignal -> FreqSignal)
+                  -> Array of Signal
+                  -> Signal;
+
+
+
+  # let polar = fn re im -> 
+  # let polar = extern fn Double -> Double -> Complex;
+;
+
+let play_pattern = extern fn Double -> T -> T;
+
+let _ = dlopen "./libaudio_jit.so";
+
+
+let Filter = module () ->
+compile_audio_fn (
+  let biquad = fn b0 b1 b2 a1 a2 x ->
+    let X = [| 0., 0. |];
+    let Y = [| 0., 0. |];
+    let y = b0 * x + b1 * X[0] + b2 * X[1] - a1 * Y[0] - a2 * Y[1];
+    X[1] := X[0];
+    X[0] := x;
+    Y[1] := Y[0];
+    Y[0] := y;
+    y
+);
+
+let _min = fn a: (Double) b: (Double) -> Math.min a b;;
+compile_audio_fn (
+  let lpf = fn freq q x ->
+    let w0   = 2.0 * Math.PI * freq * spf in
+    let cosw = Math.cos w0 in
+    let sinw = Math.sin w0 in
+    let alpha = sinw / (2.0 * q) in
+
+    let b0 = (1.0 - cosw) / 2.0 in
+    let b1 = 1.0 - cosw in
+    let b2 = (1.0 - cosw) / 2.0 in
+    let a0 = 1.0 + alpha in
+    let a1 = -2.0 * cosw in
+    let a2 = 1.0 - alpha in
+
+    let b0n = b0 / a0 in
+    let b1n = b1 / a0 in
+    let b2n = b2 / a0 in
+    let a1n = a1 / a0 in
+    let a2n = a2 / a0 in
+
+    biquad b0n b1n b2n a1n a2n x
+);
+
+compile_audio_fn (
+  let hpf = fn freq q x ->
+    let w0   = 2.0 * Math.PI * freq * spf in
+    let cosw = Math.cos w0 in
+    let sinw = Math.sin w0 in
+    let alpha = sinw / (2.0 * q) in
+
+    let b0 = (1.0 + cosw) / 2.0 in
+    let b1 = -1 * (1.0 + cosw) in
+    let b2 = (1.0 + cosw) / 2.0 in
+    let a0 = 1.0 + alpha in
+    let a1 = -2.0 * cosw in
+    let a2 = 1.0 - alpha in
+
+    let b0n = b0 / a0 in
+    let b1n = b1 / a0 in
+    let b2n = b2 / a0 in
+    let a1n = a1 / a0 in
+    let a2n = a2 / a0 in
+
+    biquad b0n b1n b2n a1n a2n x
+);
+
+compile_audio_fn (
+  let bpf = fn freq q x ->
+    let w0   = 2.0 * Math.PI * freq * spf in
+    let cosw = Math.cos w0 in
+    let sinw = Math.sin w0 in
+    let alpha = sinw / (2.0 * q) in
+
+    let b0 =  alpha in
+    let b1 =  0.0 in
+    let b2 = -1 * alpha in
+    let a0 =  1.0 + alpha in
+    let a1 = -2.0 * cosw in
+    let a2 =  1.0 - alpha in
+
+    let b0n = b0 / a0 in
+    let b1n = b1 / a0 in
+    let b2n = b2 / a0 in
+    let a1n = a1 / a0 in
+    let a2n = a2 / a0 in
+
+    biquad b0n b1n b2n a1n a2n x
+);
+
+compile_audio_fn (
+  let notch = fn freq q x ->
+    let w0   = 2.0 * Math.PI * freq * spf in
+    let cosw = Math.cos w0 in
+    let sinw = Math.sin w0 in
+    let alpha = sinw / (2.0 * q) in
+
+    let b0 =  1.0 in
+    let b1 = -2.0 * cosw in
+    let b2 =  1.0 in
+    let a0 =  1.0 + alpha in
+    let a1 = -2.0 * cosw in
+    let a2 =  1.0 - alpha in
+
+    let b0n = b0 / a0 in
+    let b1n = b1 / a0 in
+    let b2n = b2 / a0 in
+    let a1n = a1 / a0 in
+    let a2n = a2 / a0 in
+
+    biquad b0n b1n b2n a1n a2n x
+);
+
+compile_audio_fn (
+  let lowshelf = fn freq q gain_db x ->
+    let w0   = 2.0 * Math.PI * freq * spf in
+    let cosw = Math.cos w0 in
+    let sinw = Math.sin w0 in
+    let A = Math.pow 10.0 (gain_db / 40.0) in
+    let alpha = sinw / (2.0 * q) in
+    let sqrtA = Math.sqrt A in
+
+    let b0 =    A * ( (A + 1.0) - (A - 1.0) * cosw + 2.0 * sqrtA * alpha ) in
+    let b1 =  2.0 * A * ( (A - 1.0) - (A + 1.0) * cosw ) in
+    let b2 =    A * ( (A + 1.0) - (A - 1.0) * cosw - 2.0 * sqrtA * alpha ) in
+    let a0 =        (A + 1.0) + (A - 1.0) * cosw + 2.0 * sqrtA * alpha in
+    let a1 =   -2.0 * ( (A - 1.0) + (A + 1.0) * cosw ) in
+    let a2 =        (A + 1.0) + (A - 1.0) * cosw - 2.0 * sqrtA * alpha in
+
+    let b0n = b0 / a0 in
+    let b1n = b1 / a0 in
+    let b2n = b2 / a0 in
+    let a1n = a1 / a0 in
+    let a2n = a2 / a0 in
+
+    biquad b0n b1n b2n a1n a2n x
+);
+
+compile_audio_fn (
+  let highshelf = fn freq q gain_db x ->
+    let w0   = 2.0 * Math.PI * freq * spf in
+    let cosw = Math.cos w0 in
+    let sinw = Math.sin w0 in
+    let A = Math.pow 10.0 (gain_db / 40.0) in
+    let alpha = sinw / (2.0 * q) in
+    let sqrtA = Math.sqrt A in
+
+    let b0 =    A * ( (A + 1.0) + (A - 1.0) * cosw + 2.0 * sqrtA * alpha ) in
+    let b1 = -2.0 * A * ( (A - 1.0) + (A + 1.0) * cosw ) in
+    let b2 =    A * ( (A + 1.0) + (A - 1.0) * cosw - 2.0 * sqrtA * alpha ) in
+    let a0 =        (A + 1.0) - (A - 1.0) * cosw + 2.0 * sqrtA * alpha in
+    let a1 =    2.0 * ( (A - 1.0) - (A + 1.0) * cosw ) in
+    let a2 =        (A + 1.0) - (A - 1.0) * cosw - 2.0 * sqrtA * alpha in
+
+    let b0n = b0 / a0 in
+    let b1n = b1 / a0 in
+    let b2n = b2 / a0 in
+    let a1n = a1 / a0 in
+    let a2n = a2 / a0 in
+
+    biquad b0n b1n b2n a1n a2n x
+);
+
+compile_audio_fn (
+  let peak = fn freq q gain_db x ->
+    let w0   = 2.0 * Math.PI * freq * spf in
+    let cosw = Math.cos w0 in
+    let sinw = Math.sin w0 in
+    let alpha = sinw / (2.0 * q) in
+    let A = Math.pow 10.0 (gain_db / 40.0) in
+
+    let b0 = 1.0 + alpha * A in
+    let b1 = -2.0 * cosw in
+    let b2 = 1.0 - alpha * A in
+    let a0 = 1.0 + alpha / A in
+    let a1 = -2.0 * cosw in
+    let a2 = 1.0 - alpha / A in
+
+    let b0n = b0 / a0 in
+    let b1n = b1 / a0 in
+    let b2n = b2 / a0 in
+    let a1n = a1 / a0 in
+    let a2n = a2 / a0 in
+
+    biquad b0n b1n b2n a1n a2n x
+);
+compile_audio_fn (
+  # one‑pole with softclip
+  let pole = fn g x z ->
+    let y = z + g * (x - z) in
+    y
+);
+
+compile_audio_fn (
+  # one-pole lowpass: frequency in Hz
+  let lpf1p = fn freq x ->
+    let Z = [| 0. |];
+    let g = _min 0.999 (2.0 * Math.PI * freq * spf );
+    let y = Z[0] |> pole g x;
+    Z[0] := y;
+    y
+);
+
+compile_audio_fn (
+  # one-pole highpass: HP = input - LP(input)
+  let hpf1p = fn freq x ->
+    let Z = [| 0. |];
+    let g = _min 0.999 (2.0 * Math.PI * freq * spf);
+    let lp = Z[0] |> pole g x;
+    Z[0] := lp;
+    x - lp
+);
+
+compile_audio_fn (
+  # 4‑pole ladder with feedback + tanh drive
+  let ladder = fn cutoff res drive x ->
+    let Z = [| 0., 0., 0., 0. |];  # z1..z4
+    let g = 2.0 * Math.PI * cutoff * spf in
+    let g1 = _min 0.99 g in
+
+    # input drive + feedback
+    let u = Math.tanh (drive * x - (res * (Z[3]))) in
+
+    let y1 = Z[0] |> pole g1 u in
+    let y2 = Z[1] |> pole g1 y1 in
+    let y3 = Z[2] |> pole g1 y2 in
+    let y4 = Z[3] |> pole g1 y3 in
+
+    Z[0] := y1 in
+    Z[1] := y2 in
+    Z[2] := y3 in
+    Z[3] := y4 in
+
+    y4
+);
+;
+
+
+let dsp_list = module () ->
+  let fold = extern fn (R -> T -> T) -> R -> List of T -> R;
+  let foldi = extern fn (Int -> R -> T -> T) -> R -> List of T -> R;
+;
+
+let dsp_array = module () ->
+  let fold = extern fn (R -> T -> T) -> R -> Array of T -> R;
+  let foldi = extern fn (Int -> R -> T -> R) -> R -> Array of T -> R;
+  let map = extern fn (T -> R) -> Array of T -> Array of R;
+  let mapi = extern fn (Int -> T -> R) -> Array of T -> Array of R;
+  let iter = extern fn (T -> ()) -> Array of T -> ();
+  let sum = extern fn Array of T -> T;
+;
+
+let Reverb = module () ->
+# 1. Schroeder (parallel combs → allpass chain)
+compile_audio_fn (
+  let schroeder = fn room damp x ->
+    # 4 parallel comb filters for the reverb body
+    let body =
+      [0.0297, 0.0371, 0.0411, 0.0437]
+      |> dsp_list.foldi (fn i acc t -> acc + comb (t * room) 4. damp x) 0.
+      |> (*) 0.25
+    in
+    # 2 allpass in series for echo density / diffusion
+    body |> allpass 0.005  0.05 0.5
+         |> allpass 0.0017 0.05 0.5
+);
+
+# 2. Early reflections + diffuse tail
+compile_audio_fn (
+  let early_refl = fn x ->
+    # Sparse parallel delays, no feedback → the "room click" character
+    [0.0073, 0.0119, 0.0169, 0.0223, 0.0281, 0.0341]
+    |> dsp_list.fold (fn acc t -> acc + delay t 0.1 0. x) 0.
+    |> (*) 0.167
+);
+
+compile_audio_fn (
+  let reverb = fn room damp x ->
+    let early = early_refl (x * 0.4) in
+    let late  = schroeder room damp (x * 0.6) in
+    early + late
+);
+
+# 3. Allpass chain ("plate"-style diffuse sound)
+# Pure allpass chains don't color the spectrum, giving a smoother, plate-like texture:
+compile_audio_fn (
+  let plate = fn decay x ->
+    # Pre-diffusion: smear the input before the tank
+    let pre = x |> allpass 0.0048 0.05 0.75
+                |> allpass 0.0036 0.05 0.625
+                |> allpass 0.0127 0.05 0.7
+    in
+    # Tank: two allpass loops in series approximate a reverb tail
+    [0.0672, 0.0100, 0.0442, 0.0908, 0.0100, 0.0400]
+    |> dsp_list.fold (fn acc t -> acc |> allpass t 0.15 decay) pre
+);
+
+# 4. Adding tone shaping — absorptive reverb by LP-filtering the comb feedback:
+compile_audio_fn (
+  let absorb_comb = fn t damp input ->
+    # High frequencies decay faster by LP-ing the recirculating signal
+    let Z = [| 0. |];
+    let fed = Z[0] |> Filter.lpf1p (8000. * (1. - damp));
+    let y = input + fed;
+    Z[0] := comb t 0.1 0.8 y;
+    y
+);
+
+# compile_audio_fn ( 
+#   let fdn4 = fn d1 d2 d3 d4 rt60 inp -> 
+#
+#     let dls = [|
+#       (delay_line 1, d1),
+#       (delay_line 1, d2),
+#       (delay_line 1, d3),
+#       (delay_line 1, d4),
+#     |];
+#
+#     let dl0, _ = dls[0];
+#     let max_size = array_size dl0;
+#
+#     let counter = [| 0 |];
+#     let w = counter[0];
+#
+#     let y = dsp_array.map (fn (dl, dt) -> 
+#       tabread_samp dl (w - sample_rate * dt)
+#     ) dls;
+#
+#     let M = [|
+#       -0.5,  0.5,  0.5,  0.5,
+#        0.5, -0.5,  0.5,  0.5,
+#        0.5,  0.5, -0.5,  0.5,
+#        0.5,  0.5,  0.5, -0.5
+#     |];
+#
+#     [|0., 0., 0., 0.|]
+#     |> dsp_mmul_op M y
+#     |> dsp_array.mapi (fn i d -> 
+#       let (dl, dt) = dls[i];
+#       dl[w] := inp + (
+#         d
+#         |> (*) (Math.pow 10.0 ((-3.0 * dt) / rt60)) # per-delay-line gamma output gain
+#         |> Filter.lpf1p 8000
+#         |> Filter.hpf1p 200
+#       )
+#     )
+#     ;
+#
+#     counter[0]    := (w + 1) % max_size;
+#     # inp + 0.25 * (y[0] + y[1] + y[2] + y[3])
+#     inp + 0.25 * (y |> dsp_array.sum)
+# );
+compile_audio_fn ( 
+  let fdn4 = fn d1 d2 d3 d4 rt60 inp -> 
+    let M = [|
+      -0.5,  0.5,  0.5,  0.5,
+       0.5, -0.5,  0.5,  0.5,
+       0.5,  0.5, -0.5,  0.5,
+       0.5,  0.5,  0.5, -0.5
+    |];
+    let b = array_fill_const 4 1.;
+    let c = array_fill_const 4 0.25;
+
+
+    let dls = [|
+      (delay_line 1, d1),
+      (delay_line 1, d2),
+      (delay_line 1, d3),
+      (delay_line 1, d4),
+    |];
+
+    let dl0, _ = dls[0];
+    let max_size = array_size dl0;
+
+    let counter = [| 0 |];
+    let w = counter[0];
+
+    let y = dsp_array.map (fn (dl, dt) -> 
+      tabread_samp dl (w - sample_rate * dt)
+    ) dls;
+
+
+    array_fill_const 4 0.
+    |> dsp_mmul_op M y
+    |> dsp_array.mapi (fn i d -> 
+      let (dl, dt) = dls[i];
+      dl[w] := inp * b[i] + (
+        d
+        |> (*) (Math.pow 10.0 ((-3.0 * dt) / rt60)) # per-delay-line gamma output gain
+        |> Filter.lpf1p 8000
+        |> Filter.hpf1p 200
+      )
+    )
+    ;
+
+    counter[0] := (w + 1) % max_size;
+    inp + (vec_dot c y)
+);
+
+# def fdn4_delays(min_ms, max_ms, fs=48000):
+#     ratio = (max_ms / min_ms) ** (1/3)
+#     targets = [round(min_ms/1000 * fs * ratio**i) for i in range(4)]
+#     primes = [nextprime(t - 1) for t in targets]
+#     times_s = [p / fs for p in primes]
+#     print(f"samples: {primes}  sum={sum(primes)}")
+#     print(f"seconds: {[round(t,4) for t in times_s]}")
+#     return times_s
+# let reverb_delay_times 
+
+compile_audio_fn (
+  let room_fdn4 = fn inp ->
+    # Studio room (~0.5s rt60)
+    fdn4 0.0199 0.0291 0.0440 0.0653 0.5 inp
+);
+
+compile_audio_fn (
+  let concert_fdn4 = fn inp ->
+  # Concert hall (~2s rt60)
+  fdn4 0.0527 0.0787 0.1171 0.1733 2.0 inp
+);
+
+compile_audio_fn (
+  let cathedral_fdn4 = fn inp ->
+  # Cathedral (~5s rt60)
+  fdn4 0.1249 0.1873 0.2797 0.4177 5.0 inp
+);
+
+
+compile_audio_fn (
+  let fdn8 = fn d1 d2 d3 d4 d5 d6 d7 d8 rt60 inp ->
+
+    # 8x8 generalised conference matrix: M = (2/8)*J - I
+    # diagonal = -3/4, off-diagonal = 1/4 — orthogonal, lossless
+    let M = [|
+      -0.75,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25,
+       0.25, -0.75,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25,
+       0.25,  0.25, -0.75,  0.25,  0.25,  0.25,  0.25,  0.25,
+       0.25,  0.25,  0.25, -0.75,  0.25,  0.25,  0.25,  0.25,
+       0.25,  0.25,  0.25,  0.25, -0.75,  0.25,  0.25,  0.25,
+       0.25,  0.25,  0.25,  0.25,  0.25, -0.75,  0.25,  0.25,
+       0.25,  0.25,  0.25,  0.25,  0.25,  0.25, -0.75,  0.25,
+       0.25,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25, -0.75,
+    |];
+    let b = array_fill_const 8 1.;
+    let c = array_fill_const 8 0.125;
+
+    let dls = [|
+      (delay_line 1, d1),
+      (delay_line 1, d2),
+      (delay_line 1, d3),
+      (delay_line 1, d4),
+      (delay_line 1, d5),
+      (delay_line 1, d6),
+      (delay_line 1, d7),
+      (delay_line 1, d8),
+    |];
+
+    let dl0, _ = dls[0];
+    let max_size = array_size dl0;
+
+    let counter = [| 0 |];
+    let w = counter[0];
+
+    let y = dsp_array.map (fn (dl, dt) ->
+      tabread_samp dl (w - sample_rate * dt)
+    ) dls;
+
+    array_fill_const 8 0.
+    |> dsp_mmul_op M y
+    |> dsp_array.mapi (fn i d ->
+      let (dl, dt) = dls[i];
+      dl[w] := inp * b[i] + (
+        d
+        |> (*) (Math.pow 10.0 ((-3.0 * dt) / rt60))
+        |> Filter.lpf1p 8000
+        |> Filter.hpf1p 200
+      )
+    )
+    ;
+
+    counter[0] := (w + 1) % max_size;
+    inp + (vec_dot c y)
+);
+
+compile_audio_fn (
+  let fdn8rs = fn rs rt60 inp ->
+
+    # 8x8 generalised conference matrix: M = (2/8)*J - I
+    # diagonal = -3/4, off-diagonal = 1/4 — orthogonal, lossless
+    let M = [|
+      -0.75,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25,
+       0.25, -0.75,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25,
+       0.25,  0.25, -0.75,  0.25,  0.25,  0.25,  0.25,  0.25,
+       0.25,  0.25,  0.25, -0.75,  0.25,  0.25,  0.25,  0.25,
+       0.25,  0.25,  0.25,  0.25, -0.75,  0.25,  0.25,  0.25,
+       0.25,  0.25,  0.25,  0.25,  0.25, -0.75,  0.25,  0.25,
+       0.25,  0.25,  0.25,  0.25,  0.25,  0.25, -0.75,  0.25,
+       0.25,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25, -0.75,
+    |];
+    let b = array_fill_const 8 1.;
+    let c = array_fill_const 8 0.125;
+
+    # let 0.0199  0.0260  0.0341  0.0440  0.0581  0.0759  0.0990  0.1291
+
+    let dls = [|
+      (delay_line 1, 0.0199),
+      (delay_line 1, 0.0260),
+      (delay_line 1, 0.0341),
+      (delay_line 1, 0.0440),
+      (delay_line 1, 0.0581),
+      (delay_line 1, 0.0759),
+      (delay_line 1, 0.0990),
+      (delay_line 1, 0.1291),
+    |];
+
+    let dl0, _ = dls[0];
+    let max_size = array_size dl0;
+
+    let counter = [| 0 |];
+    let w = counter[0];
+
+    let y = dsp_array.map (fn (dl, dt) ->
+      tabread_samp dl (w - sample_rate * dt * rs )
+    ) dls;
+
+    array_fill_const 8 0.
+    |> dsp_mmul_op M y
+    |> dsp_array.mapi (fn i d ->
+      let (dl, dt) = dls[i];
+      dl[w] := inp * b[i] + (
+        d
+        |> (*) (Math.pow 10.0 ((-3.0 * dt * rs) / rt60))
+        |> Filter.lpf1p 8000
+        |> Filter.hpf1p 200
+      )
+    )
+    ;
+
+    counter[0] := (w + 1) % max_size;
+    inp + (vec_dot c y)
+);
+
+# fdn8 presets — 8 log-spaced near-prime delays (samples at 48kHz):
+#   room:       719  907 1153 1471 1861 2357 2999 3803   sum=15270
+#   concert:  ×2.65  1907 2399 3061 3907 4931 6247 7949 10079
+#   cathedral: ×6.28  4517 5701 7243 9239 11689 14797 18839 23879
+
+compile_audio_fn (
+  # Studio room (~0.5s rt60) — delays 15–79ms
+  let room = fn inp ->
+    fdn8 0.0150 0.0189 0.0240 0.0307 0.0388 0.0491 0.0625 0.0792 0.5 inp
+);
+
+compile_audio_fn (
+  # Concert hall (~2.0s rt60) — delays 40–210ms
+  let concert = fn inp ->
+    fdn8 0.0397 0.0500 0.0638 0.0814 0.1027 0.1301 0.1656 0.2100 2.0 inp
+);
+
+compile_audio_fn (
+  # Cathedral (~5.0s rt60) — delays 94–497ms
+  let cathedral = fn inp ->
+    fdn8 0.0941 0.1188 0.1509 0.1925 0.2435 0.3083 0.3925 0.4975 5.0 inp
+);
+
+compile_audio_fn (
+  # Mega Cathedral (~10.0s rt60) — delays 94–497ms
+  let mega_cathedral = fn inp ->
+    fdn8 0.0941 0.1188 0.1509 0.1925 0.2435 0.3083 0.3925 0.4975 10.0 inp
+);
+;
+
+compile_audio_fn (
+  let dust = fn density ->  
+    let thresh = density * spf ;   # density (events/sec) * (1/sample_rate) = prob per sample
+    let z = Math.rand_double ()  ;            # uniform [0, 1)
+    match (z < thresh) with
+    | true -> 1.
+    | _ -> 0.
+);
+
+let int32_parse = extern fn String -> Int;
+let parse_note = fn s ->
+  let n = match (s[0]) with
+  | 'c' -> 0
+  | 'd' -> 2
+  | 'e' -> 4
+  | 'f' -> 5
+  | 'g' -> 7
+  | 'a' -> 9
+  | 'b' -> 11
+  | _ -> -1
+  ;
+
+  let (acc, oct) = match s[1] with
+  | '#' -> (1, int32_parse (s[2 ..]))
+  | '_' -> (-1, int32_parse (s[2 ..]))
+  | _ -> (0, int32_parse (s[1 ..]))
+  ;
+
+  match n with
+  | -1 -> None
+  | _ -> Some @@ ((oct + 1) * 12) + n + acc
+;;
+
+let midi_freq = fn n ->
+  440. * (Math.pow 2. ((n - 69.)/12.))
+;;
+
+
+let __elapsed_secs = fn st ->
+  let t = get_tl_tick () in
+  (t - st) * (ctx_spf ())
+;;
+
+let time_coro = fn st ->
+  yield Double (__elapsed_secs st);
+  yield time_coro st
+;;

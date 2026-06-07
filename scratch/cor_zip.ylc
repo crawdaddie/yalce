@@ -1,0 +1,18 @@
+open engine/bindings/Synth; 
+open engine/bindings/Sched; 
+
+defer_quant 1 (fn t ->
+  let c =
+  cor_zip (iter_of_list [1., 2., 3.]) (iter_of_list [1., 2., 3.] |> cor_map (fn d -> print `inside a zip {d}\n`; d))
+  ;
+
+  play_routine t schedule_event c
+);
+#
+# print `
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# {c ()}
+# `

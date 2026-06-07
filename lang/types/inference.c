@@ -1574,6 +1574,7 @@ Type *infer_yield_expr(Ast *ast, TICtx *ctx) {
   Ast *expr = ast->data.AST_YIELD.expr;
 
   Type *expr_type = infer(expr, ctx);
+
   if (!expr_type) {
     return NULL;
   }
@@ -1583,15 +1584,25 @@ Type *infer_yield_expr(Ast *ast, TICtx *ctx) {
   }
 
   if (ctx->yielded_type != NULL) {
+    // printf("unify yields??\n");
+    // print_type(expr_type);
+    // print_type(ctx->yielded_type);
+
     if (unify(expr_type, ctx->yielded_type, ctx)) {
+
       fprintf(stderr, "Error: could not unify yield expressions in function - "
                       "all yields must be of the same type\n");
       return NULL;
     }
+  } else {
+    // print_ast(ast);
+    // print_type(ctx->yielded_type);
+    // print_type(expr_type);
+    ctx->yielded_type = expr_type;
   }
-  ctx->yielded_type = expr_type;
   ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
-  return expr_type;
+  // return expr_type;
+  return ctx->yielded_type;
 }
 
 bool is_constant_closure(Ast *ast, TICtx *ctx);

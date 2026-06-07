@@ -1,0 +1,5 @@
+import std/Arrays;
+
+print `type of fold: {typeof Arrays.fold}`
+# let x = Arrays.fold (fn acc s -> (acc * 4) + s) 0 [|0, 1, 2|];
+# print `x: {x}\n`;

@@ -1,0 +1,4 @@
+import std/Lists;
+
+
+[1, 2, 3] |> Lists.map (fn x -> x * 3.) |> Lists.print_list 

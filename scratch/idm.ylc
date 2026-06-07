@@ -1,0 +1,7 @@
+open libs/audio_jit/DSP;
+import perc_mod;
+import std/Math;
+
+#%%
+perc_mod.kick 45. 0.2 |> play_node
+#%%

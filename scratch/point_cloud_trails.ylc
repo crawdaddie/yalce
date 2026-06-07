@@ -1,0 +1,194 @@
+open libs/gfx/Gfx;
+
+let GL_WRITE_ONLY = 35001;
+let GL_RGBA32F = 34836;
+
+let N = 128;
+let vertex_count = N * N;
+let verts = array_fill_const (vertex_count * 6) 0.0;
+
+for i = 0 .. vertex_count in (
+  let ix = i % N;
+  let iy = i / N;
+  let u = ((Double ix) + 0.5) / (Double N);
+  let v = ((Double iy) + 0.5) / (Double N);
+  let off = i * 6;
+  verts[off] := u;
+  verts[off + 1] := v;
+  verts[off + 2] := 0.0;
+  verts[off + 3] := 1.0;
+  verts[off + 4] := 1.0;
+  verts[off + 5] := 1.0
+);
+
+let points = gfx_points verts 6;
+let quad = gfx_fullscreen_quad ();
+
+let trail_vs = `#version 430 core
+layout(location = 0) in vec2 aPos;
+out vec2 uv;
+
+void main() \{
+  uv = aPos * 0.5 + 0.5;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+\}`;
+
+let trail_fs = `#version 430 core
+in vec2 uv;
+uniform sampler2D uPrevTrail;
+uniform float uTime;
+out vec4 fragColor;
+
+void main() \{
+  vec2 p = uv * 2.0 - 1.0;
+  vec2 drift = 0.0022 * vec2(
+    sin(uTime * 0.23 + p.y * 5.0),
+    cos(uTime * 0.19 + p.x * 4.0)
+  );
+
+  vec3 a = texture(uPrevTrail, uv + drift).rgb;
+  vec3 b = texture(uPrevTrail, uv + drift + vec2(0.0015, 0.0)).rgb;
+  vec3 c = texture(uPrevTrail, uv + drift + vec2(-0.0015, 0.0)).rgb;
+  vec3 d = texture(uPrevTrail, uv + drift + vec2(0.0, 0.0015)).rgb;
+  vec3 e = texture(uPrevTrail, uv + drift + vec2(0.0, -0.0015)).rgb;
+
+  vec3 col = (a * 0.5 + b * 0.125 + c * 0.125 + d * 0.125 + e * 0.125) * 0.985;
+  fragColor = vec4(col, 1.0);
+\}`;
+
+let display_fs = `#version 430 core
+in vec2 uv;
+uniform sampler2D uTex;
+out vec4 fragColor;
+
+void main() \{
+  vec3 col = texture(uTex, uv).rgb;
+  fragColor = vec4(col, 1.0);
+\}`;
+
+let point_vs = `#version 430 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aColor;
+
+uniform sampler2D uPositions;
+out vec3 vColor;
+
+void main() \{
+  vec4 pos = texture(uPositions, aPos.xy);
+  float glow = 0.35 + 0.65 * pos.w;
+  vColor = vec3(0.6, 0.85, 1.0) * glow;
+  gl_Position = vec4(pos.xyz, 1.0);
+  gl_PointSize = 2.5 + 2.0 * pos.w;
+\}`;
+
+let point_fs = `#version 430 core
+in vec3 vColor;
+out vec4 fragColor;
+
+void main() \{
+  vec2 p = gl_PointCoord * 2.0 - 1.0;
+  float d = dot(p, p);
+  if (d > 1.0) discard;
+  float falloff = exp(-3.5 * d);
+  fragColor = vec4(vColor * falloff, 1.0);
+\}`;
+
+let points_cs = `#version 430 core
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(rgba32f, binding = 0) uniform writeonly image2D uDst;
+uniform sampler2D uPrev;
+uniform float uTime;
+
+void main() \{
+  ivec2 sz = imageSize(uDst);
+  ivec2 id = ivec2(gl_GlobalInvocationID.xy);
+  if (id.x >= sz.x || id.y >= sz.y) return;
+
+  vec2 uv = (vec2(id) + 0.5) / vec2(sz);
+  vec4 prev = texture(uPrev, uv);
+  vec2 seed = uv * 2.0 - 1.0;
+
+  vec3 pos;
+  float glow;
+
+  if (prev.w < 0.01) \{
+    pos = vec3(seed * 0.55, 0.0);
+    glow = fract(uv.x * 17.0 + uv.y * 31.0);
+  \} else \{
+    pos = prev.xyz;
+    glow = prev.w;
+  \}
+
+  float a = uTime * 0.35 + seed.x * 6.0 + seed.y * 4.0;
+  vec3 vel = vec3(
+    0.0025 * sin(a + pos.y * 8.0),
+    0.0025 * cos(a * 1.3 + pos.x * 7.0),
+    0.0015 * sin(a * 0.7 + pos.x * 5.0 + pos.y * 3.0)
+  );
+
+  vec2 attract = 0.32 * vec2(cos(uTime * 0.7), sin(uTime * 0.9));
+  pos.xy += vel.xy + 0.002 * (attract - pos.xy);
+  pos.z = 0.28 * sin(uTime + seed.x * 10.0 + seed.y * 9.0);
+  glow = 0.7 + 0.3 * sin(uTime * 2.0 + seed.x * 11.0);
+
+  imageStore(uDst, id, vec4(pos, glow));
+\}`;
+
+let trail_shader = gfx_shader trail_vs trail_fs;
+let display_shader = gfx_shader trail_vs display_fs;
+let render_shader = gfx_shader point_vs point_fs;
+let compute_shader = gfx_compute_shader points_cs;
+
+let pos_a = gfx_target N N;
+let pos_b = gfx_target N N;
+let trail_a = gfx_target 1024 1024;
+let trail_b = gfx_target 1024 1024;
+
+let pos_ping = array_fill_const 1 pos_a;
+let pos_pong = array_fill_const 1 pos_b;
+let trail_ping = array_fill_const 1 trail_a;
+let trail_pong = array_fill_const 1 trail_b;
+
+let frame = fn () ->
+  let pos_src = pos_ping[0];
+  let pos_dst = pos_pong[0];
+  let trail_src = trail_ping[0];
+  let trail_dst = trail_pong[0];
+  let t = gfx_time ();
+
+  gfx_begin_frame ();
+
+  gfx_use_compute_shader compute_shader;
+  gfx_uniform1f compute_shader "uTime" t;
+  gfx_uniform_tex compute_shader "uPrev" pos_src 0;
+  gfx_bind_image_texture pos_dst 0 GL_WRITE_ONLY GL_RGBA32F;
+  gfx_dispatch_compute (N / 8) (N / 8) 1;
+  gfx_memory_barrier ();
+
+  gfx_bind_target trail_dst;
+  gfx_clear 0.0 0.0 0.0 1.0;
+  gfx_use_shader trail_shader;
+  gfx_uniform1f trail_shader "uTime" t;
+  gfx_uniform_tex trail_shader "uPrevTrail" trail_src 0;
+  gfx_draw_mesh quad;
+
+  gfx_use_shader render_shader;
+  gfx_uniform_tex render_shader "uPositions" pos_dst 0;
+  gfx_draw_mesh points;
+
+  gfx_bind_target (gfx_screen ());
+  gfx_clear 0.0 0.0 0.0 1.0;
+  gfx_use_shader display_shader;
+  gfx_uniform_tex display_shader "uTex" trail_dst 0;
+  gfx_draw_mesh quad;
+
+  pos_ping[0] := pos_dst;
+  pos_pong[0] := pos_src;
+  trail_ping[0] := trail_dst;
+  trail_pong[0] := trail_src;
+
+  gfx_end_frame ()
+;;
+
+gfx_run frame;

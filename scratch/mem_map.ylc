@@ -1,0 +1,41 @@
+open engine/bindings/Synth;
+
+let print_arr = fn arr -> 
+  print "[| ";
+  for i = 0 to (array_size arr) in (
+    print `{arr[i]}, `
+  );
+  print "|]\n"
+  
+;;
+
+let mmap_double_array = extern fn Int -> Ptr -> Ptr -> Ptr;
+let double_array_from_raw = extern fn Int -> Ptr -> Array of Double;
+
+let mmap_array = fn path arr ->
+  let size = array_size arr;
+  mmap_double_array size (cstr arr) (cstr path)
+  |> double_array_from_raw size
+;;
+
+let mmap_sync_array = extern fn Int -> Ptr -> ();
+
+let env_vals =
+[|
+  0.000000, 0.000000, 2.400000,
+  1.000000, 0.2, -2.300000,
+  0.971429, 0.1, -1.200000,
+  0.000000
+|]
+|> mmap_array "./mem_map.env_vals"
+|> array_to_buf;
+
+(
+  import gui/bindings/Gui;
+  let sig = node_out env_vals;
+  Gui.create_envelope_edit_view_cb
+    (sig_size sig)
+    (sig_raw sig)
+    mmap_sync_array
+
+)

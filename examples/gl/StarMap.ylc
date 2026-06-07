@@ -1,13 +1,12 @@
-open engine/bindings/Sched; 
-open engine/bindings/Synth; 
-open gui/bindings/Gui;
 import std/Math;
+import libs/gfx/Gfx;
 
 
 let open_file = extern fn String -> String -> Option of Ptr;
 let fclose = extern fn Ptr -> ();
 let read_bytes = extern fn Ptr -> String;
-let skip_csv_header = fn arr -> 
+
+let skip_csv_header = fn arr ->
   let aux = fn arr: (String) idx ->
     match arr[idx] with
     | '\n' -> idx
@@ -24,33 +23,30 @@ let parse_double_simple = extern fn Ptr -> Ptr -> Ptr -> (Double, Int);
 let parse_double = fn bytes ->
   let x = [|0.|];
   let n = [|0|];
-  
+
   parse_double_simple (cstr bytes) (cstr x) (cstr n);
   (x[0], n[0])
 ;;
 
-let parse = fn bytes: (String) lines cols cur_star: (Star) list: (List of Star) -> 
+let parse = fn bytes: (String) lines cols cur_star: (Star) list: (List of Star) ->
   if (array_size bytes == 0) then (
     (lines, cols, list)
-  ) else ( 
+  ) else (
     match (bytes[0], cols) with
-    | (',', cols)  -> parse (array_succ bytes) lines (cols + 1) cur_star list
+    | (',', cols) -> parse (array_succ bytes) lines (cols + 1) cur_star list
     | ('\n', cols) -> parse (array_succ bytes) (lines + 1) 0 (Star 0. 0. 0. 0.) (cur_star::list)
     | (_, 14) -> (
       let val, n = parse_double bytes;
       parse (array_offset n bytes) lines cols (Star cur_star.x cur_star.y cur_star.z val) list
     )
-
     | (_, 17) -> (
       let val, n = parse_double bytes;
       parse (array_offset n bytes) lines cols (Star val cur_star.y cur_star.z cur_star.mag) list
     )
-
     | (_, 18) -> (
       let val, n = parse_double bytes;
       parse (array_offset n bytes) lines cols (Star cur_star.x val cur_star.z cur_star.mag) list
     )
-
     | (_, 19) -> (
       let val, n = parse_double bytes;
       parse (array_offset n bytes) lines cols (Star cur_star.x cur_star.y val cur_star.mag) list
@@ -59,32 +55,29 @@ let parse = fn bytes: (String) lines cols cur_star: (Star) list: (List of Star) 
   )
 ;;
 
-let MAX_BRIGHTNESS = Math.pow 10.0 ((-0.4) * (-2.0));  # mag -2
-let MIN_BRIGHTNESS = Math.pow 10.0 ((-0.4) * 12.0);    # mag 12
+let MAX_BRIGHTNESS = Math.pow 10.0 ((-0.4) * (-2.0));
+let MIN_BRIGHTNESS = Math.pow 10.0 ((-0.4) * 12.0);
 
 let magnitude_to_brightness = fn mag ->
-
   let clamped_mag = mag |> Math.clamp -2.0 12.0 in
   let brightness = Math.pow 10.0 (-0.4 * clamped_mag) in
   brightness
   |> Math.normalize MIN_BRIGHTNESS MAX_BRIGHTNESS
-  |> Math.clamp 0.1 1.
-
+  |> Math.clamp 0.1 1.0
 ;;
 
 let get_stars_array = fn list: (List of Star) idx arr ->
   match list with
   | [] -> arr
-  | (x,y,z,mag)::rest -> (
-
+  | (x, y, z, mag)::rest -> (
     let brightness = magnitude_to_brightness mag;
     arr[idx * 6] := x;
     arr[idx * 6 + 1] := y;
     arr[idx * 6 + 2] := z;
     arr[idx * 6 + 3] := brightness * 0.5;
     arr[idx * 6 + 4] := brightness * 0.75;
-    arr[idx * 6 + 5] := brightness * 1.; 
-    get_stars_array rest (idx+1) arr
+    arr[idx * 6 + 5] := brightness * 1.0;
+    get_stars_array rest (idx + 1) arr
   )
 ;;
 
@@ -92,63 +85,180 @@ let stars = match (open_file "/Users/adam/Desktop/hygdata_v41.csv" "rb") with
   | Some fd -> (
     let bytes = (read_bytes fd) |> skip_csv_header;
     let lines, cols, star_list = parse bytes 0 0 (Star 0. 0. 0. 0.) [];
-    # let star1::rest = star_list;
-    # print `star0: {star1}\n`;
-    let arr = array_fill_const (lines * 6) 0.;
+    fclose fd;
+    let arr = array_fill_const (lines * 6) 0.0;
     get_stars_array star_list 0 arr
   )
-  | None -> [|0.|]
+  | None -> [|0.0, 0.0, 0.0, 1.0, 1.0, 1.0|]
 ;
 
-let w = create_decl_window (fn () ->
-  let vs = VShader `#version 330 core
-layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec3 aColor;
+let points = gfx_points stars 6;
+
+let rotate_y = fn m a ->
+  let c = Math.cos a;
+  let s = Math.sin a;
+  m[0] := c;
+  m[1] := 0.0;
+  m[2] := -1.0 * s;
+  m[3] := 0.0;
+  m[4] := 0.0;
+  m[5] := 1.0;
+  m[6] := 0.0;
+  m[7] := 0.0;
+  m[8] := s;
+  m[9] := 0.0;
+  m[10] := c;
+  m[11] := 0.0;
+  m[12] := 0.0;
+  m[13] := 0.0;
+  m[14] := 0.0;
+  m[15] := 1.0
+;;
+
+let rotate_x = fn m a ->
+  let c = Math.cos a;
+  let s = Math.sin a;
+  m[0] := 1.0;
+  m[1] := 0.0;
+  m[2] := 0.0;
+  m[3] := 0.0;
+  m[4] := 0.0;
+  m[5] := c;
+  m[6] := s;
+  m[7] := 0.0;
+  m[8] := 0.0;
+  m[9] := -1.0 * s;
+  m[10] := c;
+  m[11] := 0.0;
+  m[12] := 0.0;
+  m[13] := 0.0;
+  m[14] := 0.0;
+  m[15] := 1.0
+;;
+
+let translate = fn m x y z ->
+  m[0] := 1.0;
+  m[1] := 0.0;
+  m[2] := 0.0;
+  m[3] := 0.0;
+  m[4] := 0.0;
+  m[5] := 1.0;
+  m[6] := 0.0;
+  m[7] := 0.0;
+  m[8] := 0.0;
+  m[9] := 0.0;
+  m[10] := 1.0;
+  m[11] := 0.0;
+  m[12] := x;
+  m[13] := y;
+  m[14] := z;
+  m[15] := 1.0
+;;
+
+let perspective = fn m fov aspect near far ->
+  let f = 1.0 / Math.tan (fov * 0.5);
+  m[0] := f / aspect;
+  m[1] := 0.0;
+  m[2] := 0.0;
+  m[3] := 0.0;
+  m[4] := 0.0;
+  m[5] := f;
+  m[6] := 0.0;
+  m[7] := 0.0;
+  m[8] := 0.0;
+  m[9] := 0.0;
+  m[10] := (far + near) / (near - far);
+  m[11] := -1.0;
+  m[12] := 0.0;
+  m[13] := 0.0;
+  m[14] := (2.0 * far * near) / (near - far);
+  m[15] := 0.0
+;;
+
+let mat4_mul = fn out a b ->
+  out[0] := a[0] * b[0] + a[4] * b[1] + a[8] * b[2] + a[12] * b[3];
+  out[1] := a[1] * b[0] + a[5] * b[1] + a[9] * b[2] + a[13] * b[3];
+  out[2] := a[2] * b[0] + a[6] * b[1] + a[10] * b[2] + a[14] * b[3];
+  out[3] := a[3] * b[0] + a[7] * b[1] + a[11] * b[2] + a[15] * b[3];
+
+  out[4] := a[0] * b[4] + a[4] * b[5] + a[8] * b[6] + a[12] * b[7];
+  out[5] := a[1] * b[4] + a[5] * b[5] + a[9] * b[6] + a[13] * b[7];
+  out[6] := a[2] * b[4] + a[6] * b[5] + a[10] * b[6] + a[14] * b[7];
+  out[7] := a[3] * b[4] + a[7] * b[5] + a[11] * b[6] + a[15] * b[7];
+
+  out[8] := a[0] * b[8] + a[4] * b[9] + a[8] * b[10] + a[12] * b[11];
+  out[9] := a[1] * b[8] + a[5] * b[9] + a[9] * b[10] + a[13] * b[11];
+  out[10] := a[2] * b[8] + a[6] * b[9] + a[10] * b[10] + a[14] * b[11];
+  out[11] := a[3] * b[8] + a[7] * b[9] + a[11] * b[10] + a[15] * b[11];
+
+  out[12] := a[0] * b[12] + a[4] * b[13] + a[8] * b[14] + a[12] * b[15];
+  out[13] := a[1] * b[12] + a[5] * b[13] + a[9] * b[14] + a[13] * b[15];
+  out[14] := a[2] * b[12] + a[6] * b[13] + a[10] * b[14] + a[14] * b[15];
+  out[15] := a[3] * b[12] + a[7] * b[13] + a[11] * b[14] + a[15] * b[15]
+;;
+
+let vs = `#version 430 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aColor;
+
 uniform mat4 uModel;
 uniform mat4 uView;
 uniform mat4 uProjection;
-out vec3 vertexColor;
-out vec3 worldPos;
-void main() \{
-  vec4 worldPosition = uModel * vec4(aPos, 1.0);
-  worldPos = worldPosition.xyz;
-  
-  // Transform to view space to get distance from camera
-  vec4 viewPosition = uView * worldPosition;
-  
-  gl_Position = uProjection * viewPosition;
-  vertexColor = aColor;
-}`;
-
-
-  let fs = FShader `#version 330 core
-in vec3 vertexColor;
-in vec3 worldPos;
-uniform vec3 uCameraPos;
 uniform float uTime;
-out vec4 FragColor;
+
+out vec3 vColor;
 
 void main() \{
-  FragColor = vec4(vertexColor, 1.);
+  vec3 scaled = aPos * 0.0005;
+  vec4 world = uModel * vec4(scaled, 1.0);
+  gl_Position = uProjection * uView * world;
+
+  float lum = max(max(aColor.r, aColor.g), aColor.b);
+  gl_PointSize = 1.5 + 4.0 * lum;
+  vColor = aColor * (0.8 + 0.2 * sin(uTime + scaled.x * 10.0));
 \}`;
 
+let fs = `#version 430 core
+in vec3 vColor;
+out vec4 fragColor;
 
-  let pos = Uniform3f "pos" 2. 3. 8.; 
-  let target  = Uniform3f "target" 0. 0. 0.;
-  let view = CamView (pos |> LagUniform "uPosLag" 0.3) target;
+void main() \{
+  vec2 p = gl_PointCoord * 2.0 - 1.0;
+  float d = dot(p, p);
+  if (d > 1.0) discard;
+  float falloff = exp(-4.0 * d);
+  fragColor = vec4(vColor * falloff, 1.0);
+\}`;
 
-  let points = Points stars 1.;
+let shader = gfx_shader vs fs;
 
+let frame = fn () ->
+  let t = gfx_time ();
+  let w, h = gfx_resolution ();
 
-  let rout = fn p ->
-    set_uniform p (cstr [|
-      Math.rand_double_range -2000. 2000.,
-      Math.rand_double_range -2000. 2000.,
-      Math.rand_double_range -1000. 1000.
-    |]);
-    yield 0.75;
-    yield rout p
-  ;;
+  let model = [|1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0|];
+  let tilt = [|1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0|];
+  let spin = [|1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0|];
+  let view = [|1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0|];
+  let proj = [|1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0|];
 
-  play_routine 0 schedule_event (rout pos)
-);
+  rotate_x tilt (-0.35);
+  rotate_y spin (t * 0.1);
+  mat4_mul model spin tilt;
+  translate view 0.0 0.0 (-3.0);
+  perspective proj 1.1 ((Double w) / (Double h)) 0.01 100.0;
+
+  gfx_begin_frame ();
+  gfx_clear 0.0 0.0 0.0 1.0;
+
+  gfx_use_shader shader;
+  gfx_uniform1f shader "uTime" t;
+  gfx_uniform_mat4 shader "uModel" model;
+  gfx_uniform_mat4 shader "uView" view;
+  gfx_uniform_mat4 shader "uProjection" proj;
+  gfx_draw_mesh points;
+
+  gfx_end_frame ()
+;;
+
+gfx_run frame;

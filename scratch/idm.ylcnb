@@ -1,0 +1,27 @@
+open libs/audio_jit/DSP;
+import perc_mod;
+import std/Math;
+
+
+# let Synth : Play = module () ->
+# ;
+# # %%
+perc_mod.kick 45. 0.2 |> play;
+# # %%
+#
+#
+#
+#
+# play_pattern (
+# )
+
+let markov = [|
+  1., 0., 0., 0.,
+  0., 1., 0., 0.,
+  0., 0., 1., 0.,
+  0., 0., 0., 1.,
+|];
+
+let next = fn id ->
+  
+;;

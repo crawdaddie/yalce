@@ -93,6 +93,29 @@ void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
   ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
 }
 
+void add_recursive_closure_fn_ref(ObjString fn_name, LLVMValueRef func,
+                                  Type *closure_type, LLVMValueRef closure_env,
+                                  LLVMTypeRef closure_env_type,
+                                  JITLangCtx *fn_ctx, LLVMModuleRef module,
+                                  LLVMBuilderRef builder) {
+  LLVMTypeRef llvm_closure_type =
+      type_to_llvm_type(closure_type, fn_ctx, module);
+
+  LLVMValueRef closure = LLVMGetUndef(llvm_closure_type);
+  closure = LLVMBuildInsertValue(builder, closure, func, 0, "self_closure_fn");
+  closure = LLVMBuildInsertValue(builder, closure, closure_env, 1,
+                                 "self_closure_env");
+
+  JITSymbol *sym =
+      new_symbol(STYPE_FUNCTION, closure_type, closure, llvm_closure_type);
+
+  sym->symbol_data.STYPE_FUNCTION.recursive_ref = true;
+  (void)closure_env_type;
+
+  ht *scope = fn_ctx->frame->table;
+  ht_set_hash(scope, fn_name.chars, fn_name.hash, sym);
+}
+
 void set_tail_call_expressions(Ast *ast) {
   Ast *tail;
   if (ast->tag == AST_BODY) {
@@ -147,6 +170,7 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
                    JITLangCtx *ctx, JITLangCtx *fn_ctx, LLVMModuleRef module,
                    LLVMBuilderRef builder) {
+
   if (param_ast->tag == AST_LET) {
     // TODO: param which is a let binding should be lowered to a default value
     // or closure object member
@@ -244,7 +268,6 @@ LLVMValueRef build_ret(LLVMValueRef val, Type *type, LLVMBuilderRef builder) {
 
 LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
-
   if (ast->tag == AST_EXTERN_FN) {
     return codegen_extern_fn(ast, ctx, module, builder);
   }
@@ -254,8 +277,8 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return codegen_const_curried_fn(ast, ctx, module, builder);
   }
 
-  if (ast->data.AST_LAMBDA.num_closed_vals > 0) {
-    return codegen_lambda_closure(ast->type, ast, ctx, module, builder);
+  if (is_closure(ast->type) || ast->data.AST_LAMBDA.num_closed_vals > 0) {
+    return codegen_create_closure(ast, ctx, module, builder);
   }
 
   Type *fn_type = ast->type;

@@ -1,0 +1,3 @@
+let ylc_kb_input_open = extern fn Synth -> (); 
+let _ = dlopen "libs/gui/libgui.so";
+ylc_kb_input_open ();

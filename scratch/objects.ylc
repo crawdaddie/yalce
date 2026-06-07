@@ -1,0 +1,6 @@
+open libs/audio_jit/DSP;
+type T = (
+  key: String,
+  num: Int
+);
+

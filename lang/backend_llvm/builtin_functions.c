@@ -1668,5 +1668,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("asbytes", &asbytes_scheme, AsBytesHandler);
 
   GENERIC_FN_SYMBOL("typeof", &typeof_scheme, TypeOfHandler);
+
   return ctx->env;
 }

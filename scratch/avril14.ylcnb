@@ -1,0 +1,66 @@
+open libs/audio_jit/DSP;
+
+
+# %%
+let piano = @Audio fn f dur ->
+  let t = trig 0;
+  let ff = 0.5 * f;
+  let strike = t |> decay 0.1 |> (*) (white ()) |> (*) 0.2;
+  strike |> comb ((~[1., 1.01, 0.5, 0.250, 2.]) / ff) 0.1 0.9999
+  |> mix 1
+  # |> (+) (strike |> comb (1.02 / ff) 0.5 0.99)
+  |> Filter.lpf (f * 4) 1.
+  |> (+) (
+    let s = sin_osc (~[f , f * 2., f * 0.5]);
+    s * (~[0.2, 0.1, 0.2])
+    |> mix 1
+    |> (*) (t |> adsr 0.1 0.1 1. dur)
+  )
+  |> (*) (t |> rect dur |> adsr 0.01 0.1 0.8 1. |> kill_on_end)
+  |> (*) 0.5
+  ;;
+
+
+piano (midi_to_freq 48) 2. |> play_node
+# %%
+let rfx = Reverb.concert 0. |> play_node;
+
+let q = 60. / 75.;
+play_pattern 1. (
+  let lh = pat_key `
+  a0_ f1  a1_ c2
+  c1  a1_ c2  e2_
+  d1_ a1_ d2_ e2_
+  b0_ f1  d2_ c2
+  `
+  # c1 a#1 c#2 e2
+  |> cor_map (fn (ff, l) ->
+    match parse_note ff with 
+    | Some n -> (
+      let f = 24. + n |> midi_freq;
+      # print `{f}: {l} {n}\n`;
+      piano f 1. |> play_into rfx;
+      ()
+    )
+    | _ -> ()
+    ;
+    0.5 * q
+  );
+
+  let rh = pat_key `
+    c2--- f1--- a1_----- a1_ f1------ f1- e2_- d2_- c2_- a1_-
+  `
+  # c1 a#1 c#2 e2
+  |> cor_map (fn (ff, l) ->
+    match parse_note ff with 
+    | Some n -> (
+      let f = 48. + n |> midi_freq;
+      # print `{f}: {l} {n}\n`;
+      piano f (0.5 * q) |> play_into rfx;
+      ()
+    )
+    | _ -> ()
+    ;
+    0.25 * q
+  )
+)

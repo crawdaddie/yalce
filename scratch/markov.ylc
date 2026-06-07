@@ -1,0 +1,80 @@
+import std/Math;
+import std/Arrays;
+
+
+let Markov = module () ->
+  import std/Math;
+  import std/Arrays;
+
+  let rand_prob_matrix = fn N -> 
+    let data = array_fill (N * N) (fn i -> Math.rand_double ());
+    for i = 0 .. N in (
+      let row = array_range (i * N) N data;
+      let sum = Arrays.fold (+) 0. row;
+
+      for j = 0 .. N in (
+        let v = row[j];
+        data[i * N + j] := (v / sum)
+     ) 
+    );
+
+    (N, data)
+  ;;
+
+  let next = fn (N, pm) idx ->
+    let row = pm[(idx * N) .. (idx * N + N)];
+    let ran = Math.rand_double (); 
+
+    let aux = fn acc i ->
+      match ran <= acc with
+      | true -> i
+      | _ -> aux (acc + row[i + 1]) (i + 1) 
+    ;;
+
+    aux (row[0]) 0
+  ;;
+
+;
+
+
+let (N, pm) = Markov.rand_prob_matrix 4; 
+
+let mcor = fn id m ->
+  yield id;
+  let next = Markov.next m id;
+  yield mcor next m
+;;
+
+let x = mcor 0 (N, pm);
+
+print `
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+  {x ()}
+`;
+
+
+

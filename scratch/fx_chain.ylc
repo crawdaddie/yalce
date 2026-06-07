@@ -1,0 +1,3 @@
+open libs/audio_jit/DSP;
+
+let chain = Reverb.cathedral 0. |> Reverb.room |> play;

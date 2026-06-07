@@ -1,0 +1,32 @@
+open DSP;
+open engine/bindings/Synth;
+
+compile_audio_fn (
+let fdn4 = fn d1 d2 d3 d4 fb inp ->
+  let dl1 = delay_line 2.;
+  let counter = [|0|];
+  let w = counter[0];
+  let d = tabread_samp dl1 (w - ((d1 + 0.1 * sin_osc 0.5) * sample_rate));
+  counter[0] := (w + 1) % (array_size dl1);
+  dl1[w] := inp + 0.9 * d;
+
+  inp + fb * d
+);
+compile_audio_fn (
+  let ping = fn () ->
+    trig 1 |> decay 0.5 |> (*) (sin_osc 600.)
+);
+
+let rfx = fdn4 0.25 0. 0. 0. 1. 0. |> play_node; 
+ping () |> play_into rfx;
+
+
+#   let ds1 = d1 * sample_rate;
+#   let w = counter[0];
+#   let y0 = tabread_samp dbuf1 (w - ds1);
+#
+#   let v0 = m[0] * y0;
+#
+#   dbuf1[w] := inp + fb * v0;
+#   0.25 * y0
+

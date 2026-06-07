@@ -1,0 +1,2 @@
+import std/Math;
+print `rand: {Math.rand_double ()}\n`;

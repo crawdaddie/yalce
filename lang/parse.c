@@ -1490,6 +1490,19 @@ Ast *array_offset_expression(Ast *array, Ast *index_expr) {
       array);
 }
 
+Ast *array_range_expression(Ast *array, Ast *start_expr, Ast *end_expr) {
+  Ast *len_expr = ast_application(
+      ast_application(ast_identifier((ObjString){.chars = "-", 1}), end_expr),
+      start_expr);
+
+  return ast_application(
+      ast_application(ast_application(ast_identifier((ObjString){
+                                          .chars = "array_range", 11}),
+                                      start_expr),
+                      len_expr),
+      array);
+}
+
 Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
                           Ast *lambda_expr) {
   // printf("%s = @ %s --\n", binding.chars, decorator.chars);

@@ -1,0 +1,31 @@
+let get_head = fn l -> 
+  match l with
+  | [] -> None
+  | x::rest -> Some (x, rest)
+;;
+
+let embed = fn l ->
+  let h, r = cor_try_opt (get_head l);
+  yield h;
+  yield embed r
+;;
+let ex = fn () ->
+  yield 2000;
+  yield 2001
+;;
+let x = embed [
+  iter_of_list [1, 2],
+  ex (),
+  iter_of_list [3, 4],
+] |> cor_loop;
+
+print `
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+`;

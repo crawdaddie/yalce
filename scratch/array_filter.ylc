@@ -1,0 +1,7 @@
+import std/Arrays;
+
+
+let z = Arrays.filter ((<) 0.) [|1., 2., 0., 0., 1., 0., 0.|];
+
+Arrays.print_arr z
+

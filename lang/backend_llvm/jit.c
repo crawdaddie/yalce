@@ -2,7 +2,6 @@
 #include "../modules.h"
 #include "./codegen.h"
 #include "./common.h"
-#include "./coroutine_passes.h"
 #include "./globals.h"
 #include "builtin_functions.h"
 #include "config.h"

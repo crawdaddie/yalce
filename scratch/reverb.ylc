@@ -1,0 +1,318 @@
+open DSP;
+open engine/bindings/Sched; 
+
+import std/Math;
+let f = compile_audio_fn (fn freq -> 
+  sin_osc freq
+  |> (*) (adsr 0.03 0.1 1. 0.15 (trig 0) |> kill_on_end)
+  |> (*) 0.5
+);
+
+# let FDN = module () -> 
+#   let _ = register_audio_op (
+#     let fdn = (fn d1 max_delay inp -> 
+#       let max_buf_size = max_delay * spf ();
+#       let dbuf1 = array_fill_const max_buf_size 0.;
+#       let dbuf2 = array_fill_const max_buf_size 0.;
+#       let dbuf3 = array_fill_const max_buf_size 0.;
+#       let dbuf4 = array_fill_const max_buf_size 0.;
+#
+#       inp
+#     )
+#   );
+#   let fdn4 = compile_audio_fn (fn inp -> 
+#     fdn 0.2 0.4 inp
+#   );
+# ;
+let FDN = module () ->
+  let _ = register_audio_op (
+    let fdn4 = (fn m d1 d2 d3 d4 max_delay fb inp ->
+      let dbuf1 = alloc_delay max_delay;
+      let dbuf2 = alloc_delay max_delay;
+      let dbuf3 = alloc_delay max_delay;
+      let dbuf4 = alloc_delay max_delay;
+      let wpos  = [| 0., |];
+
+      let ds1 = d1 / (spf ());
+      let ds2 = d2 / (spf ());
+      let ds3 = d3 / (spf ());
+      let ds4 = d4 / (spf ());
+
+      let w = tabread wpos 0.;
+
+      let y0 = tabread dbuf1 (w - ds1);
+      let y1 = tabread dbuf2 (w - ds2);
+      let y2 = tabread dbuf3 (w - ds3);
+      let y3 = tabread dbuf4 (w - ds4);
+
+      # row-major 4x4 matmul M.y 
+      let v0 = m[0]         * y0 + m[1]         * y1 + m[2]         *y2 + m[3]         * y3;
+      let v1 = m[1 * 4 + 0] * y0 + m[1 * 4 + 1] * y1 + m[1 * 4 + 2] *y2 + m[1 * 4 + 3] * y3;
+      let v2 = m[2 * 4 + 0] * y0 + m[2 * 4 + 1] * y1 + m[2 * 4 + 2] *y2 + m[2 * 4 + 3] * y3;
+      let v3 = m[3 * 4 + 0] * y0 + m[3 * 4 + 1] * y1 + m[3 * 4 + 2] *y2 + m[3 * 4 + 3] * y3;
+
+      let _ = tabwrite dbuf1 w (inp + fb * v0 |> Filter.lpf1p 4000 |> Filter.hpf1p 100);
+      let _ = tabwrite dbuf2 w (inp + fb * v1 |> Filter.lpf1p 4000 |> Filter.hpf1p 100);
+      let _ = tabwrite dbuf3 w (inp + fb * v2 |> Filter.lpf1p 4000 |> Filter.hpf1p 100);
+      let _ = tabwrite dbuf4 w (inp + fb * v3 |> Filter.lpf1p 4000 |> Filter.hpf1p 100);
+
+      tabwrite wpos 0. (w + 1.);
+
+      0.25 * (y0 + y1 + y2 + y3)
+    )
+  );
+
+
+
+  let wobbly_fdn = compile_audio_fn (fn inp ->
+    let m = [|
+      -0.5,  0.5,  0.5,  0.5,
+       0.5, -0.5,  0.5,  0.5,
+       0.5,  0.5, -0.5,  0.5,
+       0.5,  0.5,  0.5, -0.5
+    |];
+
+    # m[0]      := 0.7 * sin_osc 2;
+    # m[4 + 1]  := 0.7 * sin_osc 3;
+    # m[8 + 2]  := 0.7 * sin_osc 5;
+    # m[12 + 3] := 0.7 * sin_osc 7;
+
+    fdn4 m
+    # (0.23 + 0.01 * sin_osc 0.2)
+    # (0.47 + 0.01 * sin_osc 0.3)
+    # (0.59 + 0.01 * sin_osc 0.5)
+    # (0.61 + 0.01 * sin_osc 0.7)
+    0.23
+    0.47
+    0.59
+    0.61
+    1.
+    0.9
+    inp
+  );
+
+  # Jot-style FDN4:
+  # - per-line decay gains g_i from rt60
+  # - per-line loop damping (1-pole LP + HP)
+  # - Householder feedback matrix
+  let jot = compile_audio_fn (fn inp rt60 damp_hz hp_hz ->
+    let d1 = 0.0297;
+    let d2 = 0.0371;
+    let d3 = 0.0411;
+    let d4 = 0.0437;
+    let max_delay = 0.08;
+
+    let dbuf1 = alloc_delay max_delay;
+    let dbuf2 = alloc_delay max_delay;
+    let dbuf3 = alloc_delay max_delay;
+    let dbuf4 = alloc_delay max_delay;
+    let wpos  = [| 0., |];
+
+    let ds1 = d1 / (spf ());
+    let ds2 = d2 / (spf ());
+    let ds3 = d3 / (spf ());
+    let ds4 = d4 / (spf ());
+    let w = tabread wpos 0.;
+
+    let y0 = tabread1 dbuf1 (w - ds1);
+    let y1 = tabread1 dbuf2 (w - ds2);
+    let y2 = tabread1 dbuf3 (w - ds3);
+    let y3 = tabread1 dbuf4 (w - ds4);
+
+    # Householder for N=4: H = 0.5*1 - I
+    let s = y0 + y1 + y2 + y3;
+    let v0 = 0.5 * s - y0;
+    let v1 = 0.5 * s - y1;
+    let v2 = 0.5 * s - y2;
+    let v3 = 0.5 * s - y3;
+
+    # Per-line decay gain (approx Jot): g_i = 10^(-3 * d_i / rt60)
+    let g0 = Math.pow 10.0 ((-3.0 * d1) / rt60);
+    let g1 = Math.pow 10.0 ((-3.0 * d2) / rt60);
+    let g2 = Math.pow 10.0 ((-3.0 * d3) / rt60);
+    let g3 = Math.pow 10.0 ((-3.0 * d4) / rt60);
+
+    # Input distribution b_i = 0.5, loop filter A_i(z) ~= LP->HP chain
+    let w0 = (0.5 * inp + g0 * v0) |> Filter.lpf1p damp_hz |> Filter.hpf1p hp_hz;
+    let w1 = (0.5 * inp + g1 * v1) |> Filter.lpf1p damp_hz |> Filter.hpf1p hp_hz;
+    let w2 = (0.5 * inp + g2 * v2) |> Filter.lpf1p damp_hz |> Filter.hpf1p hp_hz;
+    let w3 = (0.5 * inp + g3 * v3) |> Filter.lpf1p damp_hz |> Filter.hpf1p hp_hz;
+
+    let _ = tabwrite dbuf1 w w0;
+    let _ = tabwrite dbuf2 w w1;
+    let _ = tabwrite dbuf3 w w2;
+    let _ = tabwrite dbuf4 w w3;
+    let _ = tabwrite wpos 0. (w + 1.);
+
+    0.25 * (y0 + y1 + y2 + y3)
+  );
+
+  let fdn16 = compile_audio_fn (fn inp ->
+    let lp_freq = 11000;
+    let hp_freq = 60.;
+    let y = [| 0., 0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0. |];
+    let v = [| 0., 0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0.,0. |];
+    let dts = [|
+      0.0199, 0.0233, 0.0267, 0.0299,
+      0.0337, 0.0371, 0.0411, 0.0437,
+      0.0479, 0.0533, 0.0587, 0.0617,
+      0.0671, 0.0719, 0.0797, 0.0899
+    |];
+
+    let M = [|
+      -0.875,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,
+       0.125, -0.875,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,
+       0.125,  0.125, -0.875,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,
+       0.125,  0.125,  0.125, -0.875,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,
+       0.125,  0.125,  0.125,  0.125, -0.875,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,
+       0.125,  0.125,  0.125,  0.125,  0.125, -0.875,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,
+       0.125,  0.125,  0.125,  0.125,  0.125,  0.125, -0.875,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,
+       0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125, -0.875,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,
+       0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125, -0.875,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,
+       0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125, -0.875,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,
+       0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125, -0.875,  0.125,  0.125,  0.125,  0.125,  0.125,
+       0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125, -0.875,  0.125,  0.125,  0.125,  0.125,
+       0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125, -0.875,  0.125,  0.125,  0.125,
+       0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125, -0.875,  0.125,  0.125,
+       0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125, -0.875,  0.125,
+       0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125,  0.125, -0.875
+    |];
+
+    let fb = 0.9;
+ 
+    let max_delay = 0.1; # must be compile-time constant for alloc_delay
+
+    let dbuf1  = alloc_delay max_delay;
+    let dbuf2  = alloc_delay max_delay;
+    let dbuf3  = alloc_delay max_delay;
+    let dbuf4  = alloc_delay max_delay;
+    let dbuf5  = alloc_delay max_delay;
+    let dbuf6  = alloc_delay max_delay;
+    let dbuf7  = alloc_delay max_delay;
+    let dbuf8  = alloc_delay max_delay;
+    let dbuf9  = alloc_delay max_delay;
+    let dbuf10 = alloc_delay max_delay;
+    let dbuf11 = alloc_delay max_delay;
+    let dbuf12 = alloc_delay max_delay;
+    let dbuf13 = alloc_delay max_delay;
+    let dbuf14 = alloc_delay max_delay;
+    let dbuf15 = alloc_delay max_delay;
+    let dbuf16 = alloc_delay max_delay;
+
+    let wpos = [| 0., |];
+    let w = tabread wpos 0.;
+
+    y[0]    := tabread1 dbuf1   (w - (dts[0] / (spf())));
+    y[1]    := tabread1 dbuf2   (w - (dts[1] / (spf())));
+    y[2]    := tabread1 dbuf3   (w - (dts[2] / (spf())));
+    y[3]    := tabread1 dbuf4   (w - (dts[3] / (spf())));
+    y[4]    := tabread1 dbuf5   (w - (dts[4] / (spf())));
+    y[5]    := tabread1 dbuf6   (w - (dts[5] / (spf())));
+    y[6]    := tabread1 dbuf7   (w - (dts[6] / (spf())));
+    y[7]    := tabread1 dbuf8   (w - (dts[7] / (spf())));
+    y[8]    := tabread1 dbuf9   (w - (dts[8] / (spf())));
+    y[9]    := tabread1 dbuf10  (w - (dts[9] / (spf())));
+    y[10]   := tabread1 dbuf11  (w - (dts[10] / (spf())));
+    y[11]   := tabread1 dbuf12  (w - (dts[11] / (spf())));
+    y[12]   := tabread1 dbuf13  (w - (dts[12] / (spf())));
+    y[13]   := tabread1 dbuf14  (w - (dts[13] / (spf())));
+    y[14]   := tabread1 dbuf15  (w - (dts[14] / (spf())));
+    y[15]   := tabread1 dbuf16  (w - (dts[15] / (spf())));
+
+    # v = M.y 
+    dsp_mmul_op M y v;
+
+    let _ = tabwrite dbuf1  w (inp + fb * v[0 ] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf2  w (inp + fb * v[1 ] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf3  w (inp + fb * v[2 ] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf4  w (inp + fb * v[3 ] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf5  w (inp + fb * v[4 ] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf6  w (inp + fb * v[5 ] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf7  w (inp + fb * v[6 ] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf8  w (inp + fb * v[7 ] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf9  w (inp + fb * v[8 ] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf10 w (inp + fb * v[9 ] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf11 w (inp + fb * v[10] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf12 w (inp + fb * v[11] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf13 w (inp + fb * v[12] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf14 w (inp + fb * v[13] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf15 w (inp + fb * v[14] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+    let _ = tabwrite dbuf16 w (inp + fb * v[15] |> Filter.lpf1p lp_freq |> Filter.hpf1p hp_freq);
+
+    let _ = tabwrite wpos 0. (w + 1.);
+    (dsp_array_sum y) / 16.
+
+  );
+;
+
+  # let filter_delay = compile_audio_fn (fn inp ff d1 max_delay fb -> 
+  #   let dbuf1 = alloc_delay max_delay;
+  #   let wpos  = [| 0., |];
+  #
+  #   let ds1 = d1 / (spf ());
+  #
+  #   let w = tabread wpos 0.;
+  #
+  #   let y0 = tabread dbuf1 (w - ds1);
+  #   let _ = tabwrite dbuf1 w (inp + fb * (y0 |> Filter.lpf1p ff));
+  #
+  #   tabwrite wpos 0. (w + 1.);
+  #   inp +  y0
+  # );
+  #
+  # let tanh_delay = compile_audio_fn (fn inp ff d1 max_delay fb -> 
+  #   let dbuf1 = alloc_delay max_delay;
+  #   let wpos  = [| 0., |];
+  #
+  #   let ds1 = d1 / (spf ());
+  #
+  #   let w = tabread wpos 0.;
+  #
+  #   let y0 = tabread dbuf1 (w - ds1);
+  #   let _ = tabwrite dbuf1 w (inp + fb * (y0 |> (*) ff |> Math.tanh));
+  #
+  #   tabwrite wpos 0. (w + 1.);
+  #   inp +  y0
+  # );
+
+# let rfx = FDN.filter_delay.cons [| 0., 400., 0.25, 0.5, 0.9 |] |> play_node;
+# let rfx = FDN.jot.cons [| 0., 7., 11000., 45. |] |> play_node;
+# let rfx = FDN.tanh_delay.cons [| 0., 2., 0.25, 0.5, 0.8 |] |> play_node;
+# let rfx = FDN.wobbly_fdn.cons [| 0. |] |> play_node;
+
+
+# let rfx = FDN.jot.cons [| 0., 2.8, 5000., 120. |] |> play_node;
+let rfx = FDN.fdn16.cons [| 0. |] |> play_node;
+
+let q = 60. / 60.;
+
+let pitches = [|100., 300., 600., 1200., 1200., 1300., 800.|];
+let times = [| 0.5, 0.25, 0.25, 0.5, 1. |];
+
+defer_quant 0.1 (fn t -> 
+  (dur: (fn () -> Math.array_choose times), freq: (fn () -> Math.array_choose pitches))
+
+  |> cor_zip_struct
+  |> cor_map (fn (d, freq) -> 
+
+    f.cons [| freq, |] |> play_into rfx;
+    d * q
+  ) 
+  |> play_routine t schedule_event
+);
+
+
+# let rfx = Reverb.mccartney.cons [| 0., 2., |] |> play_node;
+# let rfx = Reverb.fdn4m.cons [| 0., |] |> play_node;
+# let rfx = Reverb.fdn4m.cons [| 0., |] |> play_node;
+
+
+# let b = summed_bus () |> play_node;
+# b |> pipe_into_input rfx 0;
+
+    # print_audio_graph ();
+    # let v = f.cons [| freq, |] |> play_node_before b;
+    # v |> pipe_into_bus b;
+    # d 
+    # let v = f.cons [| freq, |] |> play_node_before b;
+    # v |> pipe_into_bus b;

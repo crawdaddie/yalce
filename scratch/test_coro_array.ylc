@@ -1,0 +1,18 @@
+open DSP;
+import std/Math;
+
+#%%
+defer_quant 1. (fn t ->
+  (
+    dur: 0.125,
+    si: (time_coro t |> cor_map (fn x -> Math.sin (2. * x))),
+  )
+  |> cor_zip_struct
+  |> cor_map (fn (d, s) -> print `::{d}, {s}\n`; (d, s)) 
+  |> play_routine t schedule_event
+)
+#%%
+
+
+let x = 2
+

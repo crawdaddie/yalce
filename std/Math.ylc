@@ -138,5 +138,7 @@ let ilog10 = fn a ->
   aux 0 a
 ;;
 
+let ipow = extern fn Int -> Int -> Int;
+
 # let cyclic_permutation = fn N k i ->
 # ;;

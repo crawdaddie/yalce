@@ -76,6 +76,43 @@ Allocation *ctx_find_allocation(EACtx *ctx, const char *varname) {
   return NULL;
 }
 
+static void mark_allocation_heap(Allocation *alloc) {
+  if (!alloc || !alloc->alloc_site) {
+    return;
+  }
+
+  EscapeMeta *ea_meta = malloc(sizeof(EscapeMeta));
+  *ea_meta = (EscapeMeta){
+      .status = EA_HEAP_ALLOC,
+      .id = alloc->id,
+      .attributes = alloc->is_mutable ? EA_ATTR_MUTABLE : 0,
+  };
+  alloc->alloc_site->ea_md = ea_meta;
+  alloc->escapes = true;
+}
+
+static void mark_returned_closure_captures_heap(Ast *lambda_ast, EACtx *ctx) {
+  if (!lambda_ast || lambda_ast->tag != AST_LAMBDA || !ctx) {
+    return;
+  }
+
+  AST_LIST_ITER(lambda_ast->data.AST_LAMBDA.closed_vals, ({
+                  Ast *closed = l->ast;
+                  if (closed->tag != AST_IDENTIFIER) {
+                    continue;
+                  }
+
+                  Allocation *captured =
+                      ctx_find_allocation(ctx, closed->data.AST_IDENTIFIER.value);
+                  if (!captured) {
+                    continue;
+                  }
+
+                  captured->is_captured = true;
+                  mark_allocation_heap(captured);
+                }));
+}
+
 void ctx_bind_allocations(EACtx *ctx, Ast *binding, Allocation *allocs) {
   if (!allocs) {
     return;
@@ -199,18 +236,23 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
 
     if (ret_alloc) {
       for (Allocation *r = ret_alloc; r; r = r->next) {
-        EscapeMeta *ea_meta = malloc(sizeof(EscapeMeta));
-        *ea_meta = (EscapeMeta){
-            .status = EA_HEAP_ALLOC,
-            .id = r->id,
-            .attributes = r->is_mutable ? EA_ATTR_MUTABLE : 0,
-        };
-        r->alloc_site->ea_md = ea_meta;
+        r->is_returned = true;
+        mark_allocation_heap(r);
+
+        if (r->alloc_site && r->alloc_site->tag == AST_LAMBDA &&
+            is_closure(r->alloc_site->type)) {
+          mark_returned_closure_captures_heap(r->alloc_site, &lambda_ctx);
+        }
       }
     }
 
     if (is_closure(ast->type)) {
       Allocation *closure_alloc = create_alloc(NULL, ast, ctx->scope);
+      if (ctx->is_return_stmt) {
+        closure_alloc->is_returned = true;
+        closure_alloc->escapes = true;
+        mark_returned_closure_captures_heap(ast, ctx);
+      }
       return allocations_extend(allocations, closure_alloc);
     }
 

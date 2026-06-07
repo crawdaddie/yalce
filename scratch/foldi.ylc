@@ -1,0 +1,14 @@
+import std/Lists;
+
+let to_list = fn len l ->
+  let h::rest = l;
+  let arr = array_fill_const len h;
+
+  let (_, res) = Lists.fold (fn (i, r) x -> (print `set {i}: {x}\n`; r[i] := x; (i + 1, r))) (1, arr) rest;
+  res
+;;
+
+let res = to_list 3 [1,2,3];
+print `0: {res[0]}\n`;
+print `1: {res[1]}\n`;
+print `2: {res[2]}\n`;

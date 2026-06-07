@@ -1,0 +1,37 @@
+import Patterns;
+
+# type CorSeq = 
+# | CorInt of Int
+# | CorNum of Double
+# | CorKey of String
+# | CorList of Array of CorSeq
+# | CorChoose of Array of CorSeq
+# | CorAlt of Coroutine of CorSeq
+# ;
+#
+# print @@ typeof CorSeq;
+# print "\n\n";
+
+# let s = Patterns.parse "1 <7 8 9> c2 4 {80 200} 200";
+let s = Patterns.parse "1 c2 4 200";
+let p = fn ot ->
+  match ot with
+  | Some s -> Patterns.print_seq_helper true s
+  | None -> ()
+;;
+
+let x = Patterns.pat_to_coroutine s |> cor_loop;
+
+x () |> p;
+print "\n:\n";
+x () |> p;
+print "\n:\n";
+x () |> p;
+print "\n:\n";
+x () |> p;
+print "\n:\n";
+x () |> p;
+
+
+
+

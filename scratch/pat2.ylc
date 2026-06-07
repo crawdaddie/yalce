@@ -1,0 +1,15 @@
+open DSP;
+
+open engine/bindings/Synth; 
+import std/Math;
+
+compile_audio_fn (
+  let mel = fn () ->
+    let t = trig (lfnoise0 1 1 8);
+    t |> arr_seq [| 200., 400., 600., 800. |] |> sin_osc
+);
+
+let rfx = Reverb.reverb 4. 0.9 0. |> play_node;
+
+
+mel () |> play_into rfx

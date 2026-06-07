@@ -1,0 +1,24 @@
+
+
+open DSP;
+open engine/bindings/Synth; 
+open engine/bindings/Sched; 
+
+compile_audio_fn (
+  let a = fn f ->
+    let t = trig 6;
+    let x = f |>
+      phase_osc
+      (t |> decay 0.8 |> scale 1 20. |> (*) (saw_osc 6))
+      ;
+
+    let y = f |>
+      pm_osc
+      (t |> decay 0.2 |> scale 0.5 20.0) (~[2.1, 2.]) ;
+
+    x + y
+    # |> mix 1
+);
+
+# dust 8 |> play_node;
+a 60 |> play_node;

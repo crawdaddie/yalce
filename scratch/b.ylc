@@ -1,0 +1,27 @@
+open DSP;
+open engine/bindings/Sched; 
+
+import BachWTC;
+import std/Math;
+
+import std/Math;
+let f = compile_audio_fn (fn freq gate -> 
+  sin_osc freq
+  # |> (*) 8
+  # |> Math.sin
+  |> (*) (adsr 0 0.5 0.5 0.5 gate |> kill_on_end )
+);
+
+# f.cons [| midi_to_freq 60, 1. |] |> play_node_dur (get_tl_tick ()) .4 (f.get_idx "gate");
+let x = f.cons [| 400., 1.,|] |> play_node;
+# let q = 60. / 75.;
+# #
+# defer_quant q (fn t -> 
+#   BachWTC.notes ()
+#   |> cor_map (fn n ->
+#     f.cons [| midi_to_freq n, 1. |] |> play_node_dur (get_tl_tick ()) .8 (f.get_idx "gate");
+#     q / 4. 
+#   )
+#   |> play_routine t schedule_event
+# );
+#

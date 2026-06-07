@@ -29,6 +29,15 @@ let f2 = fn () ->
 ;;
 
 
+let new_clos = fn () ->
+  let y = [|1|];
+  (fn () ->
+    let v = y[0];
+    y[0] := v + 1;
+    v
+  )
+;;
+
 let test = module () ->
   # let test_cl_int = (let l = K 3 4 in l () == 9) ;
   # let test_cl_int2 = (let l = K 3 5 in l () == 10) ;
@@ -42,5 +51,9 @@ let test = module () ->
   let test6 = (let K = f 2 in K () == 5);
   let test8 = (let K = f 4 in K () == 7);
   let test9 = (let K = f2 () in K () == 3);
+  let test_heap_closure = (
+    let K = new_clos () in K () == 1 && K () == 2 && K () == 3
+  )
+
 
 ;

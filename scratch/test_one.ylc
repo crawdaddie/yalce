@@ -1,0 +1,18 @@
+let f = fn c ->
+  let a = 1;
+  let b = 2;
+
+  fn () ->
+    a + b + c;
+;;
+
+let f2 = fn () ->
+  let a = 1;
+  let b = 2;
+
+  fn () ->
+    a + b;
+;;
+
+print `{let K = f 2 in K ()}\n`;
+print `{let K = f2 () in K ()}\n`;

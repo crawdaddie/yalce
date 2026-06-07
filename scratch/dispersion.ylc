@@ -1,0 +1,35 @@
+open libs/audio_jit/DSP;
+
+compile_audio_fn (
+  let ice_chirp = fn () ->
+    let spread = lfnoise 0.5 0.01 1.;
+    
+    let t = trig 1.;
+    let exc =
+      (t |> rect 0.003 |> (*) (white ())) +
+      (t |> decay 0.025 |> (*) (white ())) +
+      (t |> decay 0.04 |> (*) (sin_osc 180.))
+    ;
+
+
+    let b1 = exc |> Filter.bpf  280. 10. |> delay (0.040 * spread) 0.25 .9 ;
+    let b2 = exc |> Filter.bpf  520. 10. |> delay (0.029 * spread) 0.25 .9 ;
+    let b3 = exc |> Filter.bpf  900. 12. |> delay (0.021 * spread) 0.25 .9 ;
+    let b4 = exc |> Filter.bpf 1600. 14. |> delay (0.015 * spread) 0.25 .9 ;
+    let b5 = exc |> Filter.bpf 2800. 16. |> delay (0.011 * spread) 0.25 .9 ;
+    let b6 = exc |> Filter.bpf 4300. 18. |> delay (0.008 * spread) 0.25 .9 ;
+    #
+    # let b1 = exc |> Filter.bpf  280. 10. |> delay_wo (0.040 * spread) 0.25 |> (*) 1.00;
+    # let b2 = exc |> Filter.bpf  520. 10. |> delay_wo (0.029 * spread) 0.25 |> (*) 0.90;
+    # let b3 = exc |> Filter.bpf  900. 12. |> delay_wo (0.021 * spread) 0.25 |> (*) 0.75;
+    # let b4 = exc |> Filter.bpf 1600. 14. |> delay_wo (0.015 * spread) 0.25 |> (*) 0.55;
+    # let b5 = exc |> Filter.bpf 2800. 16. |> delay_wo (0.011 * spread) 0.25 |> (*) 0.38;
+    # let b6 = exc |> Filter.bpf 4300. 18. |> delay_wo (0.008 * spread) 0.25 |> (*) 0.25;
+
+    let y = b1 + b2 + b3 + b4 + b5 + b6;
+    y
+    |> allpass 0.0013 0.01 0.6
+    |> allpass 0.0007 0.01 0.55
+);
+
+ice_chirp () |> play_node

@@ -1,0 +1,15 @@
+open DSP;
+
+let buf = load_soundfile "fat_amen_mono_48000.wav";
+
+compile_audio_fn (
+  let sh = fn pitch stretch ->
+   rbufplay_finer 1 
+      (array_of_buf buf)
+      pitch
+      stretch
+      0.
+      (trig 0.)
+);
+
+sh 1. 1.5 |> play_node

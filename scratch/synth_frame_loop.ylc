@@ -1,0 +1,20 @@
+open DSP;
+open engine/bindings/Synth; 
+import std/Arrays;
+import std/Math;
+
+compile_audio_fn (
+
+  let x = fn ratio ->
+    let arr = [| 100., 200.|]; 
+    let out = [| 0. |];
+
+    dsp_array.foldi (fn i out x ->
+      out[0] := (out[0]) + (sin_osc (ratio * x))
+    ) out arr
+    ;
+    out[0]
+);
+
+
+x 8. |> play_node

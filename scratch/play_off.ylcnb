@@ -1,0 +1,24 @@
+# open DSP;
+#
+# let q = 60. / 150.;
+#
+# #%%
+# play_pattern 1. (
+#   let c = fn () -> yield 1.; yield (pat ".5 .5 .2" |> cor_map (fn d -> print "something else??\n"; d))
+#   ;;
+#   let x = c () |> cor_map (fn d-> print `p {d}\n`;d)
+#
+# )
+
+let s = (fn () ->
+  let se = [|0|];
+  let a = fn () ->
+    let x = fn d ->
+      se[0] := d + (se[0]); d
+    ;;
+    x 3
+  ;;
+  a ();
+  print `??{se[0]}\n`
+
+) in s ()

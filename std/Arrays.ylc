@@ -155,4 +155,5 @@ let test = module () ->
   let test_of_list = (of_list 3 [1,2,3]) == [|1,2,3|];
 
   # let test_sum_foldi = (foldi (fn i r x -> r + i) [|1, 2, 3|]) == 6;
+  # let test_polynomial = fold (fn acc s -> acc * 4 + s) 0 [|0,1,2|] == 6;
 ;

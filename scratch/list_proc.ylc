@@ -1,0 +1,9 @@
+let x = [|1,2,3|];
+
+for z = iter x in (
+  print `{z}\n`
+);
+
+for z = iter x in (
+  print `{z}\n`
+);

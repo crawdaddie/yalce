@@ -150,6 +150,12 @@ LLVMValueRef compile_lambda_as_closure(Ast *expr, Type *expected_clos_type,
                                        JITLangCtx *ctx, LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
 
+  //
+  ObjString fn_name = expr->data.AST_LAMBDA.fn_name;
+  bool is_anon = false;
+  if (fn_name.chars == NULL) {
+    is_anon = true;
+  }
   Type *clos_type = expr->type;
   clos_type = resolve_type_in_env(clos_type, ctx->env);
 
@@ -158,10 +164,16 @@ LLVMValueRef compile_lambda_as_closure(Ast *expr, Type *expected_clos_type,
   START_FUNC(module, "lambda", clos_fn_type);
 
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx);
+
+  LLVMValueRef record = LLVMGetParam(func, 0);
+
+  if (!is_anon) {
+    add_recursive_closure_fn_ref(fn_name, func, expected_clos_type, record,
+                                 closure_rec_type, &fn_ctx, module, builder);
+  }
   // int len = fn_type_args_len(expected_clos_type);
   // LLVMValueRef args[len + 1];
   Type *recordt = clos_type->closure_meta;
-  LLVMValueRef record = LLVMGetParam(func, 0);
 
   int i = 0;
   for (AstList *closed_vals = expr->data.AST_LAMBDA.closed_vals; closed_vals;
@@ -186,19 +198,29 @@ LLVMValueRef compile_lambda_as_closure(Ast *expr, Type *expected_clos_type,
   int j = 1;
   for (AstList *fn_params = expr->data.AST_LAMBDA.params; fn_params;
        fn_params = fn_params->next, ef = ef->data.T_FN.to, j++) {
+
     Ast *param = fn_params->ast;
     if (param->tag == AST_VOID) {
       continue;
     }
     LLVMValueRef param_val = LLVMGetParam(func, j);
+    bind_fn_param(param_val, ef->data.T_FN.from, param, ctx, &fn_ctx, module,
+                  builder);
   }
 
   LLVMValueRef body = codegen_lambda_body(expr, &fn_ctx, module, builder);
 
-  if (fn_return_type(clos_type)->kind == T_VOID) {
-    LLVMBuildRetVoid(builder);
-  } else {
-    LLVMBuildRet(builder, body);
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  if (current_block && !LLVMGetBasicBlockTerminator(current_block)) {
+    if (LLVMIsACallInst(body)) {
+      LLVMSetTailCall(body, true);
+    }
+
+    if (fn_return_type(clos_type)->kind == T_VOID) {
+      LLVMBuildRetVoid(builder);
+    } else {
+      LLVMBuildRet(builder, body);
+    }
   }
 
   END_FUNC;

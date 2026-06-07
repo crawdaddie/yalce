@@ -1,0 +1,260 @@
+open DSP;
+open engine/bindings/Synth; 
+import std/Arrays;
+import std/Math;
+
+# type SpectralAnalysis = (
+#   fft_size: Int,
+#   hop_size: Int,
+#   sample_rate: Int,
+#   num_frames: Int,
+#   num_bins: Int,
+#   mags: Array of Double,
+#   phase_incs: Array of Double,
+#   transients: Array of Double, 
+# );
+#
+
+# let buf = load_soundfile "fat_amen_mono_48000.wav";
+
+let hann = fn i fft_size ->
+  0.5 - 0.5 * Math.cos ((2. * Math.PI * i) / (fft_size - 1))
+;;
+
+let window_buf = fn win buf ->
+  for i = 0 .. (array_size win) in (
+    win[i] := (buf[i]) * hann i (array_size win)
+  );
+  win
+;;
+
+let get_phase_inc = fn frame_idx prev_phase bin_idx hop_size fft_size phase ->
+
+  let expected =
+    (2. * Math.PI * bin_idx * hop_size) / fft_size;
+
+  let delta =
+    normalize_phase (phase - prev_phase - expected);
+  expected + delta
+;;
+
+let normalize_transients = fn transients -> 
+
+  let max_transient = [| 0.0 |];
+  for frame_idx = 1 .. array_size transients in (
+    max_transient[0] := Math.max (max_transient[0]) (transients[frame_idx])
+  );
+
+  let transient_denom = Math.max (max_transient[0]) Math.epsilon;
+  for frame_idx = 0 .. (array_size transients) in (
+    transients[frame_idx] := (transients[frame_idx]) / transient_denom
+  );
+  transients
+
+
+;;
+
+
+
+let proc_buf = fn plan buf_arr ts: (SpectralAnalysis) ->
+  let win = array_fill_const ts.fft_size 0.;
+  let fft_re = array_fill_const ts.num_bins 0.;
+  let fft_im = array_fill_const ts.num_bins 0.;
+  let prev_phase = array_fill_const ts.num_bins 0.;
+
+
+  for frame_idx = 0 .. ts.num_frames in (
+    let bwin = buf_arr
+      |> array_range (frame_idx * ts.hop_size) (ts.fft_size)
+      |> window_buf win 
+      ;
+
+
+    let () = fftw_forward_execute plan fft_re fft_im bwin;
+
+    for i = 0 .. ts.num_bins in (
+      let mag = cmag (fft_re[i], fft_im[i]);
+      let phase = cphase (fft_re[i], fft_im[i]) |> normalize_phase;
+      let inc = get_phase_inc frame_idx (prev_phase[i]) i ts.hop_size ts.fft_size phase;
+
+      prev_phase[i] := phase;
+      let idx = (frame_idx * ts.num_bins) + i;
+      ts.mags[idx] := mag;
+      ts.phases[idx] := phase;
+      ts.phase_incs[idx] := inc
+    )
+
+  );
+
+  ts
+;;
+
+let proc_transients = fn ts: (SpectralAnalysis) ->
+  let prev_mag = array_fill_const ts.num_bins 0.;
+
+  for frame_idx = 0 .. ts.num_frames in (
+    let flux = [| 0.0 |];
+
+    for i = 0 .. ts.num_bins in (
+      let idx = (frame_idx * ts.num_bins) + i;
+      let mag = ts.mags[idx];
+
+      let log_mag = Math.log (mag + Math.epsilon);
+      let prev_log_mag = Math.log ((prev_mag[i]) + Math.epsilon);
+      let pos_delta = Math.max 0.0 (log_mag - prev_log_mag);
+
+
+
+      let bin_pos = i / ts.num_bins;
+      let weight = 0.2 + (0.8 * (bin_pos * bin_pos));
+
+      flux[0] := flux[0] + (weight * pos_delta);
+
+      prev_mag[i] := mag
+    );
+
+    ts.transients[frame_idx] := (flux[0]) / ts.num_bins
+  );
+
+  normalize_transients ts.transients;
+  ts
+;;
+
+let pick_transients = fn threshold: (Double) min_gap_frames: (Int) ts: (SpectralAnalysis)  ->
+  let peaks = array_fill_const ts.num_frames 0.0;
+  let last_onset = [| min_gap_frames |> Math.neg |];
+
+  let cur0 = ts.transients[0];
+  let next0 = ts.transients[1];
+  if (cur0 >= threshold) && (cur0 >= next0) then (
+    peaks[0] := cur0;
+    last_onset[0] := 0
+  );
+
+  for frame_idx = 1 .. (ts.num_frames - 1) in (
+    let cur = ts.transients[frame_idx];
+    let prev = ts.transients[frame_idx - 1];
+    let next = ts.transients[frame_idx + 1];
+    let enough_gap = (frame_idx - (last_onset[0])) >= min_gap_frames;
+
+    if ((cur >= threshold) && (cur > prev) && (cur >= next) && enough_gap) then (
+      peaks[frame_idx] := cur;
+      last_onset[0] := frame_idx
+    )
+  );
+
+  for frame_idx = 0 .. ts.num_frames in (
+    ts.transients[frame_idx] := peaks[frame_idx]
+  );
+
+  ts
+;;
+
+let TimeStretchAnalysis = fn ts: (SpectralAnalysis) buf: (Synth) ->
+  let plan = fftw_plan_forward_new (ts.fft_size);
+  let ba = array_of_buf buf;
+
+  let tts = ts
+  |> proc_buf plan ba
+  |> proc_transients
+  |> pick_transients 0.35 10
+  ;
+
+  plan |> fftw_plan_free;
+  tts
+;;
+
+let TimeStretchNew = fn fft_size hop_size buf ->
+  let samples = sig_size (node_out buf);
+  let num_bins = (fft_size / 2) + 1;
+  let num_frames =
+    if samples < fft_size then
+      0
+    else
+      1 + ((samples - fft_size) / hop_size);
+
+
+  let ts = SpectralAnalysis
+    fft_size
+    hop_size
+    48000
+    num_frames
+    num_bins
+    (array_fill_const (num_frames * num_bins) 0.0)
+    (array_fill_const (num_frames * num_bins) 0.0)
+    (array_fill_const (num_frames * num_bins) 0.0)
+    (array_fill_const num_frames 0.0)
+  ;
+
+  TimeStretchAnalysis ts buf
+;;
+
+
+# let ts = TimeStretchNew 4096 128 buf;
+#
+#
+# let ylc_spectrogram_open =
+#   extern fn Array of Double -> Array of Double -> Int -> Int -> Double -> Double -> Double -> ();
+#
+# let _ = dlopen "libs/gui/libgui.so";
+# #
+# ylc_spectrogram_open
+#   ts.mags
+#   ts.transients 
+#   ts.num_frames
+#   ts.num_bins
+#   (-90.0)
+#   0.0
+#   0.0;
+
+let transient_positions = fn a ->
+  let val0 = a[0];
+  let l = [| [0., ] |];
+  let s = [| 0 |];
+
+  for i = 0 .. array_size a in (
+    if (a[i] > 0.) then (
+      # print `non-zero trans {i}: {a[i]} / {array_size a} {(Double i) / array_size a}\n`;
+      l[0] := ((Double i) / (array_size a))::(l[0]);
+      s[0] := 1 + s[0]
+    )
+  );
+
+
+  let res = array_fill_const (s[0]) 0.;
+
+  let list_to_arr = fn l res i ->
+    match i with 
+    | 0 -> (
+      let x::rest = l;
+
+      # print `setting {x} to {i}\n`;
+      res[i] := x;
+      res
+    )
+    | _ -> (
+      let x::rest = l;
+      res[i] := x;
+      # print `setting {x} to {i}\n`;
+      list_to_arr rest res (i - 1)
+    )
+  ;;
+  list_to_arr (l[0]) res (s[0] - 1);
+  res
+;;
+
+
+# let offs = transient_positions ts.transients;
+# # Arrays.print_arr offs;
+# for i = 0 .. (array_size offs) in (
+#   print `off #{i}: {offs[i]}\n`
+# );
+# # let ts_ref = [| ts |];
+# # let ts_ptr = cstr ts_ref;
+# #
+# # compile_audio_fn (
+# #   let x = fn () ->
+# #     0.5 * (trig 0 |> pv_bufplay ts_ptr 1. 2. 0.) +
+# #     4. * bufplay (array_of_buf buf) 0.5 0 (trig 0)
+# # );
+# # x () |> play_node

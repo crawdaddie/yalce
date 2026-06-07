@@ -1,0 +1,57 @@
+open libs/audio_jit/DSP;
+
+let kick = @Audio fn freq dur ->
+  let t = trig 0;
+  t
+  |> decay 0.1
+  |> scale freq 600.
+  |> sin_osc
+  |> (+) (t |> rect 0.01 |> (*) (white ()))
+  |> (*) 2. |> Math.tanh  
+  |> (*) (t |> rect dur |> adsr 0. 0.1 1. 0.5 |> kill_on_end)
+;;
+
+let snare = @Audio fn () ->
+  let t = trig 0;
+  let f = ~[180., 300.];
+  t |> decay 0.1 |> scale f (1.5 * f) |> sin_osc  
+  |> (*) (~[1., 0.6]) |> (+) (t |> rect 0.01 |> (*) (white ())) |> (*) 1.2 |> Math.tanh  
+
+  |> (*) (t |> rect 0.2 |> adsr 0. 0.1 0.1 0.5 |> kill_on_end)
+  |> mix 1
+;;
+
+let snare_res = @Audio fn () ->
+  let t = trig 0;
+  let f = ~[180., 300.];
+  t |> decay 0.1 |> scale f (1.5 * f) |> sin_osc  
+  |> (*) (~[1., 0.3])
+  |> (+) (t |> rect 0.01 |> (*) (white ()))
+  |> (*) 1.2 |> Math.tanh  
+
+  |> (*) (t |> rect 0.2 |> adsr 0. 0.1 0.1 0.5 |> kill_on_end)
+  |> comb (lfnoise (~[2., 2.]) 0.001 0.005) 0.2 0.9
+  |> mix 1
+;;
+
+
+
+let hihat = @Audio fn () ->
+  let t = trig 0;
+  white ()
+  |> Filter.hpf 9000 3 
+  |> (*) (t |> adsr 0. 0.02 0.3 0.1 |> kill_on_end)
+;;
+
+
+
+let hihat2 = @Audio fn () ->
+  let t = trig 0;
+  white ()
+  |> Filter.hpf 1000 1 
+  |> (*) (t |> adsr 0.01 0.02 0.3 0.1 |> kill_on_end)
+;;
+
+
+
+

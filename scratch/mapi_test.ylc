@@ -1,0 +1,15 @@
+import std/Arrays;
+import std/Math;
+
+let window = fn i: (Int) fft_size: (Int) ->
+  0.5 - 0.5 * Math.cos ((2. * Math.PI * i) / (fft_size - 1))
+;;
+
+let proc = fn arr -> 
+  let cl = 3;
+  array_range 0 4 arr
+    |> Arrays.mapi (fn idx x -> x * window idx cl)
+;;
+
+let x = proc [|0., 1., 2., 3., 4., 5.|];
+print `{x[3]}\n`;

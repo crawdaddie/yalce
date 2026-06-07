@@ -200,6 +200,10 @@ static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
                                              JITLangCtx *ctx,
                                              LLVMModuleRef module,
                                              LLVMBuilderRef builder) {
+  // print_type_env(ctx->env);
+  // printf("[coro_create_from_generic]:\n");
+  // print_ast(ast);
+  // print_type(expected_fn_type);
   // TODO: figure out coroutines that accept other coroutines as args, eg:
   //
   // let cor_zip = fn c1 c2 ->

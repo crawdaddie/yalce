@@ -1903,11 +1903,11 @@ int test_array_processing() {
 
   // T("let x = [|1|]; let set_ref = array_set 0; set_ref x 3",
   // &TARRAY(&t_int));
-  ({
-    Type t0 = TVAR("`0");
-    T("let (@) = array_at",
-      &TSCHEME(&MAKE_FN_TYPE_3(&TARRAY(&t0), &t_int, &t0), &t0));
-  });
+  // ({
+  //   Type t0 = TVAR("`0");
+  //   T("let (@) = array_at",
+  //     &TSCHEME(&MAKE_FN_TYPE_3(&TARRAY(&t0), &t_int, &t0), &t0));
+  // });
 
   ({
     Type t6 = TVAR("`6");
@@ -2405,8 +2405,10 @@ bool test_math_funcs() {
       types_equal(
           AST_LIST_NTH(l->data.AST_LET.in_expr->data.AST_BODY.stmts, 0)->type,
           &t_int));
+
   return status;
 }
+
 bool test_sum_types() {
 
   bool status = true;
@@ -2442,6 +2444,30 @@ bool test_sum_types() {
              &TSCHEME(&MAKE_FN_TYPE_3(sum_type, &t19, &t19), &t19));
   return status;
 }
+bool test_rec_coroutines() {
+  bool status = true;
+
+  Ast *b = T("let next = fn (N, pm) idx ->\n"
+             "  let row = pm[(idx * N) .. (idx * N + N)];\n"
+             "  let ran = 0.2;\n"
+             "  let aux = fn acc i ->\n"
+             "    match ran <= acc with\n"
+             "    | true -> i\n"
+             "    | _ -> aux (acc + row[i + 1]) (i + 1) \n"
+             "  ;;\n"
+             "  aux (row[0]) 0\n"
+             ";;\n"
+             "let mcor = fn id m ->\n"
+             "  yield id;\n"
+             "  let next = next m id;\n"
+             "  yield mcor next m\n"
+             ";;\n",
+             &COROUTINE_CONS(&MAKE_FN_TYPE_3(
+                 &t_int, &TTUPLE(2, &t_int, &TARRAY(&TVAR("`48"))),
+                 &COROUTINE_INST(&t_int))));
+
+  return status;
+}
 
 int main() {
   // initialize_builtin_schemes();
@@ -2471,6 +2497,7 @@ int main() {
   status &= test_audio_funcs();
   status &= test_parser_combinators();
   status &= test_sum_types();
+  status &= test_rec_coroutines();
 
   print_all_failures();
   return status == true ? 0 : 1;

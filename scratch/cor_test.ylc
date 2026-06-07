@@ -1,0 +1,22 @@
+#! /usr/bin/env ylc
+let naturals = fn s ->
+  yield s;
+  yield naturals (s + 1)
+;;
+
+let arr = fn () ->
+  let x = naturals 0 |> cor_take 10 |> cor_filter (fn x -> x < 5) in
+  print `
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+`
+;;
+arr ()

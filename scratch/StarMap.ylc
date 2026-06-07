@@ -1,0 +1,141 @@
+open libs/gfx/Gfx;
+import std/Math;
+
+let star_count = 12000;
+
+let fract = fn x ->
+  x - (Math.floor x)
+;;
+
+let hash1 = fn x ->
+  fract (Math.sin (x * 127.1 + 311.7) * 43758.5453123)
+;;
+
+let hash2 = fn x ->
+  fract (Math.sin (x * 269.5 + 183.3) * 43758.5453123)
+;;
+
+let hash3 = fn x ->
+  fract (Math.sin (x * 419.2 + 371.9) * 43758.5453123)
+;;
+
+let stars = array_fill_const (star_count * 6) 0.0;
+
+for i = 0 .. (star_count - 1) in (
+  let fi = Double i;
+  let r1 = hash1 fi;
+  let r2 = hash2 fi;
+  let r3 = hash3 fi;
+  let r4 = hash1 (fi + 91.7);
+
+  let off = i * 6;
+
+  match r1 < 0.84 with
+  | true -> (
+    let angle = r2 * Math.PI * 2.0;
+    let radius = Math.pow r3 1.95;
+    let arm_phase = Double (i % 5) * (Math.PI * 0.4);
+    let theta = angle * 0.26 + arm_phase + radius * 6.0;
+    let spread = 0.14 + 0.86 * r4;
+
+    let core_pull = 0.35 + 0.65 * (1.0 - radius);
+    let x = Math.cos theta * radius * spread * core_pull;
+    let z = Math.sin theta * radius * spread * core_pull;
+    let y = (hash2 (fi + 13.7) - 0.5) * (0.34 * (1.0 - radius) + 0.035);
+
+    let core = 1.0 - radius;
+    let brightness = 0.24 + 0.95 * Math.pow core 1.1;
+    let heat = hash3 (fi + 41.3);
+    let r = brightness * (0.84 + 0.24 * heat);
+    let g = brightness * (0.76 + 0.17 * (1.0 - heat));
+    let b = brightness * (0.93 + 0.28 * (1.0 - heat));
+
+    stars[off] := x;
+    stars[off + 1] := y;
+    stars[off + 2] := z;
+    stars[off + 3] := r;
+    stars[off + 4] := g;
+    stars[off + 5] := b
+  )
+  | false -> (
+    let angle = r2 * Math.PI * 2.0;
+    let elev = (r3 - 0.5) * Math.PI;
+    let halo_r = 0.9 + 1.7 * Math.pow r4 1.25;
+    let x = Math.cos angle * Math.cos elev * halo_r;
+    let y = Math.sin elev * halo_r * 0.75;
+    let z = Math.sin angle * Math.cos elev * halo_r;
+
+    let brightness = 0.05 + 0.16 * (1.0 - r4);
+    stars[off] := x;
+    stars[off + 1] := y;
+    stars[off + 2] := z;
+    stars[off + 3] := brightness * 0.72;
+    stars[off + 4] := brightness * 0.8;
+    stars[off + 5] := brightness * 1.0
+  )
+);
+
+let points = gfx_points stars 6;
+
+let vs = `#version 430 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aColor;
+
+uniform float uYaw;
+uniform float uPitch;
+
+out vec3 vColor;
+
+void main() \{
+  float cy = cos(uYaw);
+  float sy = sin(uYaw);
+  vec3 p = vec3(
+    cy * aPos.x - sy * aPos.z,
+    aPos.y,
+    sy * aPos.x + cy * aPos.z
+  );
+
+  float cx = cos(uPitch);
+  float sx = sin(uPitch);
+  p = vec3(
+    p.x,
+    cx * p.y - sx * p.z,
+    sx * p.y + cx * p.z
+  );
+
+  float depth = 2.6 - p.z;
+  float s = 1.0 / max(depth, 0.4);
+
+  gl_Position = vec4(p.x * s * 1.45, p.y * s * 1.45, 0.0, 1.0);
+  gl_PointSize = 2.0 + 5.0 * max(aColor.r, max(aColor.g, aColor.b)) * s;
+  vColor = aColor;
+\}`;
+
+let fs = `#version 430 core
+in vec3 vColor;
+out vec4 fragColor;
+
+void main() \{
+  vec2 p = gl_PointCoord * 2.0 - 1.0;
+  float d = dot(p, p);
+  if (d > 1.0) discard;
+  fragColor = vec4(vColor * (1.0 - 0.6 * d), 1.0);
+\}`;
+
+let shader = gfx_shader vs fs;
+
+let frame = fn () ->
+  let t = gfx_time ();
+
+  gfx_begin_frame ();
+  gfx_clear 0.0 0.0 0.0 1.0;
+
+  gfx_use_shader shader;
+  gfx_uniform1f shader "uYaw" (t * 0.35);
+  gfx_uniform1f shader "uPitch" (-0.5);
+  gfx_draw_mesh points;
+
+  gfx_end_frame ()
+;;
+
+gfx_run frame;

@@ -1,0 +1,8 @@
+open DSP;
+open engine/bindings/Synth; 
+open engine/bindings/Sched; 
+compile_audio_fn (
+  let y = fn () ->
+    trig 0 |> adsr 0.01 0.1 0.5 0.8 |> (*) (sin_osc 100) |> delay 0.5 0.25 0.8 
+);
+y () |> play_node;

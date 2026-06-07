@@ -315,6 +315,9 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     }
   }
 
+  // printf("[codegen app] ");
+  // print_ast(ast);
+  // print_type(ast->type);
   Type *expected_fn_type = ast->data.AST_APPLICATION.function->type;
 
   // if (is_ident(ast->data.AST_APPLICATION.function, "f")) {

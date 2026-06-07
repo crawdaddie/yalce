@@ -490,6 +490,7 @@ Ast *body_tail(Ast *body);
 Ast *array_index_expression(Ast *array, Ast *index_expr);
 
 Ast *array_offset_expression(Ast *array, Ast *index_expr);
+Ast *array_range_expression(Ast *array, Ast *start_expr, Ast *end_expr);
 bool find_top_level_range_at_line(Ast *root, const char *src, int line,
                                   source_range *out_range);
 

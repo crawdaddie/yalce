@@ -1,0 +1,171 @@
+import std/Math;
+
+let gfx_begin_frame = extern fn () -> ();
+let gfx_end_frame = extern fn () -> ();
+let gfx_clear = extern fn Double -> Double -> Double -> Double -> ();
+
+let gfx_shader = extern fn String -> String -> Ptr;
+let gfx_use_shader = extern fn Ptr -> ();
+let gfx_uniform_mat4 = extern fn Ptr -> String -> Array of Double -> ();
+
+let gfx_mesh = extern fn Array of Double -> Int -> Ptr;
+let gfx_draw_mesh = extern fn Ptr -> ();
+
+let gfx_time = extern fn () -> Double;
+let gfx_run = extern fn (() -> ()) -> ();
+
+let _ = dlopen "libs/gfx/libgfx.so";
+
+let vs = `#version 330 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aColor;
+
+uniform mat4 uModel;
+out vec3 vColor;
+
+void main() \{
+  vColor = aColor;
+  vec4 p = uModel * vec4(aPos, 1.0);
+  gl_Position = vec4(p.xyz * 0.3, 1.0);
+\}`;
+
+let fs = `#version 330 core
+in vec3 vColor;
+out vec4 fragColor;
+
+void main() \{
+  fragColor = vec4(vColor, 1.0);
+\}`;
+
+let cube_vertices = [|
+  -1., -1.,  1.,  1., 0., 0.,
+   1., -1.,  1.,  1., 0., 0.,
+   1.,  1.,  1.,  1., 0., 0.,
+  -1., -1.,  1.,  1., 0., 0.,
+   1.,  1.,  1.,  1., 0., 0.,
+  -1.,  1.,  1.,  1., 0., 0.,
+
+  -1., -1., -1.,  0., 1., 0.,
+   1.,  1., -1.,  0., 1., 0.,
+   1., -1., -1.,  0., 1., 0.,
+  -1., -1., -1.,  0., 1., 0.,
+  -1.,  1., -1.,  0., 1., 0.,
+   1.,  1., -1.,  0., 1., 0.,
+
+  -1., -1., -1.,  0., 0., 1.,
+  -1., -1.,  1.,  0., 0., 1.,
+  -1.,  1.,  1.,  0., 0., 1.,
+  -1., -1., -1.,  0., 0., 1.,
+  -1.,  1.,  1.,  0., 0., 1.,
+  -1.,  1., -1.,  0., 0., 1.,
+
+   1., -1., -1.,  1., 1., 0.,
+   1.,  1.,  1.,  1., 1., 0.,
+   1., -1.,  1.,  1., 1., 0.,
+   1., -1., -1.,  1., 1., 0.,
+   1.,  1., -1.,  1., 1., 0.,
+   1.,  1.,  1.,  1., 1., 0.,
+
+  -1.,  1., -1.,  1., 0., 1.,
+  -1.,  1.,  1.,  1., 0., 1.,
+   1.,  1.,  1.,  1., 0., 1.,
+  -1.,  1., -1.,  1., 0., 1.,
+   1.,  1.,  1.,  1., 0., 1.,
+   1.,  1., -1.,  1., 0., 1.,
+
+  -1., -1., -1.,  0., 1., 1.,
+   1., -1.,  1.,  0., 1., 1.,
+  -1., -1.,  1.,  0., 1., 1.,
+  -1., -1., -1.,  0., 1., 1.,
+   1., -1., -1.,  0., 1., 1.,
+   1., -1.,  1.,  0., 1., 1.,
+|];
+
+let cube = gfx_mesh cube_vertices 6;
+let shader = gfx_shader vs fs;
+
+let rotate_y = fn m a ->
+  let c = Math.cos a;
+  let s = Math.sin a;
+  m[0] := c;
+  m[1] := 0.;
+  m[2] := -1. * s;
+  m[3] := 0.;
+  m[4] := 0.;
+  m[5] := 1.;
+  m[6] := 0.;
+  m[7] := 0.;
+  m[8] := s;
+  m[9] := 0.;
+  m[10] := c;
+  m[11] := 0.;
+  m[12] := 0.;
+  m[13] := 0.;
+  m[14] := 0.;
+  m[15] := 1.
+;;
+
+let rotate_x = fn m a ->
+  let c = Math.cos a;
+  let s = Math.sin a;
+  m[0] := 1.;
+  m[1] := 0.;
+  m[2] := 0.;
+  m[3] := 0.;
+  m[4] := 0.;
+  m[5] := c;
+  m[6] := s;
+  m[7] := 0.;
+  m[8] := 0.;
+  m[9] := -1. * s;
+  m[10] := c;
+  m[11] := 0.;
+  m[12] := 0.;
+  m[13] := 0.;
+  m[14] := 0.;
+  m[15] := 1.
+;;
+
+let mat4_mul = fn out a b ->
+  out[0] := a[0] * b[0] + a[4] * b[1] + a[8] * b[2] + a[12] * b[3];
+  out[1] := a[1] * b[0] + a[5] * b[1] + a[9] * b[2] + a[13] * b[3];
+  out[2] := a[2] * b[0] + a[6] * b[1] + a[10] * b[2] + a[14] * b[3];
+  out[3] := a[3] * b[0] + a[7] * b[1] + a[11] * b[2] + a[15] * b[3];
+
+  out[4] := a[0] * b[4] + a[4] * b[5] + a[8] * b[6] + a[12] * b[7];
+  out[5] := a[1] * b[4] + a[5] * b[5] + a[9] * b[6] + a[13] * b[7];
+  out[6] := a[2] * b[4] + a[6] * b[5] + a[10] * b[6] + a[14] * b[7];
+  out[7] := a[3] * b[4] + a[7] * b[5] + a[11] * b[6] + a[15] * b[7];
+
+  out[8] := a[0] * b[8] + a[4] * b[9] + a[8] * b[10] + a[12] * b[11];
+  out[9] := a[1] * b[8] + a[5] * b[9] + a[9] * b[10] + a[13] * b[11];
+  out[10] := a[2] * b[8] + a[6] * b[9] + a[10] * b[10] + a[14] * b[11];
+  out[11] := a[3] * b[8] + a[7] * b[9] + a[11] * b[10] + a[15] * b[11];
+
+  out[12] := a[0] * b[12] + a[4] * b[13] + a[8] * b[14] + a[12] * b[15];
+  out[13] := a[1] * b[12] + a[5] * b[13] + a[9] * b[14] + a[13] * b[15];
+  out[14] := a[2] * b[12] + a[6] * b[13] + a[10] * b[14] + a[14] * b[15];
+  out[15] := a[3] * b[12] + a[7] * b[13] + a[11] * b[14] + a[15] * b[15]
+;;
+
+let frame = fn () ->
+  let t = gfx_time ();
+  let model = [|1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.|];
+  let tilt = [|1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.|];
+  let spin = [|1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1., 0., 0., 0., 0., 1.|];
+
+  rotate_x tilt (t * 0.6);
+  rotate_y spin t;
+  mat4_mul model spin tilt;
+
+  gfx_begin_frame ();
+  gfx_clear 0.02 0.02 0.04 1.0;
+
+  gfx_use_shader shader;
+  gfx_uniform_mat4 shader "uModel" model;
+  gfx_draw_mesh cube;
+
+  gfx_end_frame ()
+;;
+
+gfx_run frame;

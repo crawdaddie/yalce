@@ -1,0 +1,99 @@
+open DSP;
+open engine/bindings/Synth; 
+open engine/bindings/Sched; 
+import std/Math;
+# import analysis; import std/Arrays;
+
+# let amen = load_soundfile "~/Sounds/BREAKS/!!JUNGLE AND DRUM N BASS ORIGIN BREAKS/140 Lyn Collins - Think (About it) 1.wav";
+
+let geo = fn m s -> yield s; yield geo m (m*s);;
+let lin = fn a d -> yield a; yield lin d (a + d);;
+
+let parse_int = extern fn String -> Int;
+let q = 60. / 160.;
+let Amen = module () ->
+  let amen = load_soundfile "fat_amen_mono_48000.wav";
+
+  let active = [| "" |];
+
+  compile_audio_fn (
+    let breaks = fn gate start_pos vel ->
+      bufplay (array_of_buf amen) (gate * (60. / q) / 171.) start_pos (trig 0)
+      |> (*) (gate > 0. |> kill_on_end)
+      |> (*) vel
+
+  );
+
+  let synth = [| 
+    null_synth_ptr ()
+  |];
+
+  let play_break = fn k len tick ->
+    let ki = parse_int k;
+    synth[0] := breaks 1. ((Double ki) / 8) 1. |> play_node_dur tick len 0 
+  ;;
+
+  let process_key = fn key l: (Double) ->
+    let t = get_tl_tick ();
+    match key with
+    | "." -> ()
+    | "-" -> ()
+    | "a" -> (
+      (dur: ("0.25 * 4 !" |> pat), r: (geo 1.1 1.5))
+      |> cor_zip_struct
+      |> cor_map (fn (d, r) ->
+        synth[0] := breaks r (5. / 8) 1. |> play_node_dur (get_tl_tick ()) (d * q) 0 ;
+        d * q
+      )
+      |> play_routine t schedule_event ;
+      ()
+    )
+    | "b" -> (
+      (dur: ("0.125 * 4 0.25 * 2!" |> pat), r: (geo 0.9 2.))
+      |> cor_zip_struct
+      |> cor_map (fn (d, r) ->
+        synth[0] := breaks r (5. / 8) 1. |> play_node_dur (get_tl_tick ()) (d * q) 0 ;
+        d * q
+      )
+      |> play_routine t schedule_event ;
+      ()
+    )
+
+    | "c" -> (
+      (dur: ("0.125 * 8 !" |> pat), v: (lin 0.1 0.1))
+      |> cor_zip_struct
+      |> cor_map (fn (d, v) ->
+        synth[0] := breaks 1.5 (3. / 8) (Math.min 1. v) |> play_node_dur (get_tl_tick ()) (d * q) 0 ;
+        d * q
+      )
+      |> play_routine t schedule_event ;
+      ()
+    )
+    | k -> (
+        active[0] := k;
+        play_break k l t;
+        ()
+  )
+  ;;
+;
+
+play_pattern q (
+  let chops = (
+  dur:     pat "1",
+     k: (pat_key `
+     0-.0-.0-.a---
+     0-.0-.0-.3--3
+  0 0 5 5-.b--c---
+     0-.0-.3-.5-55
+ 3 3 3 3 3 c---c---
+     `  )
+  )
+  |> cor_zip_struct 
+  |> cor_map (fn (d, (key, l)) ->
+    Amen.process_key key (0.25 * q * Double l);
+    d * q * 0.25
+  )
+)
+
+
+

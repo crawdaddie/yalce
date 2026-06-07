@@ -726,3 +726,22 @@ long long u64pow(long long x, long long ex) {
   }
   return res;
 }
+
+int ipow(int base, int exp) {
+
+  // Source - https://stackoverflow.com/a/101613
+  // Posted by Elias Yarrkov, modified by community. See post 'Timeline' for
+  // change history Retrieved 2026-06-06, License - CC BY-SA 3.0
+  int result = 1;
+  for (;;) {
+    if (exp & 1)
+      result *= base;
+    exp >>= 1;
+    if (!exp)
+      break;
+    base *= base;
+  }
+
+  return result;
+}
+// let ipow = fn a ->

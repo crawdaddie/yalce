@@ -1,0 +1,72 @@
+open DSP;
+open engine/bindings/Sched; 
+
+register_audio_op (let dtune_sin = fn f m ->
+  sin_osc f
+  |> (*) m
+  |> Math.sin
+  ;
+); 
+
+let f = compile_audio_fn (fn freq mul dtune vel-> 
+  dtune_sin freq mul
+  |> (+) (dtune_sin (freq * (1. + dtune)) mul) 
+  |> (*) (adsr 0.001 0.1 0.7 1.5 (trig 0) |> kill_on_end)
+  |> (*) vel
+  )
+  ;
+
+import std/Lists;
+let rr = compile_audio_fn (fn inp size ->
+
+  let s = (1 / 8.) * Lists.fold (fn s i -> 
+    s + delay1 (lfnoise1 0.1 0.04 0.12) 0.12 0.6 inp;
+  ) inp [0,1,2,3,4,5,6,7];
+
+  let s1 = Lists.fold (fn s i -> s |> allpass1 (Math.rand_double_range 0. 0.2) 0.2 0.9) s [0,1,2,3]; 
+  let s2 = Lists.fold (fn s i -> s |> allpass1 (Math.rand_double_range 0. 0.2) 0.2 0.9) s [0,1,2,3]; 
+
+
+
+  let wet = 0.05 * (s1 + s2 + s)
+    |> Filter.lpf (7000.0 - 2500.0 * size) 0.707
+    |> Filter.hpf 120. 0.707
+    ;
+
+  0.25 * inp + 0.75 * wet
+);
+
+let rfx = Reverb.mccartney.cons [| 0., 2. |] |> play_node;
+
+let q = 60. / 50.;
+import pyramid;
+
+defer_quant q (fn t ->
+  (data: (pyramid.notes |> iter_of_array |> cor_loop),
+  elapsed: [|0.|]
+  )
+  |> cor_zip_struct
+  |> cor_map (fn ((d, ev_type, note, vel), elapsed) -> 
+    let e = elapsed[0];
+    elapsed[0] := e + d; 
+    (d, ev_type, note, vel, e)
+  )
+  |> cor_map (fn (d, ev_type, note, vel, el) -> 
+    match ev_type with
+    | "noteon" -> (
+      # print `note on {note}\n`;
+      f.cons [|
+        note |> midi_to_freq,
+        2.,
+        0.025 * Math.sin (0.25 * el),
+        vel / 128.
+      |]
+      |> play_into rfx
+    )
+    | "noteoff" -> ()
+    ;
+    d * q
+  )
+  |> play_routine t schedule_event
+);
+

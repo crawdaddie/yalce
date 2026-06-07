@@ -41,6 +41,11 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 
 void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
                           JITLangCtx *fn_ctx);
+void add_recursive_closure_fn_ref(ObjString fn_name, LLVMValueRef func,
+                                  Type *closure_type, LLVMValueRef closure_env,
+                                  LLVMTypeRef closure_env_type,
+                                  JITLangCtx *fn_ctx, LLVMModuleRef module,
+                                  LLVMBuilderRef builder);
 
 SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
                                  LLVMValueRef func);

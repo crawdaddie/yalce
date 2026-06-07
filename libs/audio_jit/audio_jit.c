@@ -731,6 +731,14 @@ Node *ylc_const_inlet(double val) {
   return node;
 }
 
+// LLVMValueRef ObjectConstructorHandler(Ast *ast, JITLangCtx *ctx,
+//                                       LLVMModuleRef module,
+//                                       LLVMBuilderRef builder) {
+//   printf("object???\n");
+//   print_ast(ast);
+//   return NULL;
+// }
+
 static void register_builtin(ht *stack, const char *name,
                              BuiltinHandler handler) {
   JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, NULL, NULL, NULL);
@@ -757,6 +765,8 @@ __attribute__((constructor)) static void ylc_audio_jit_init(void) {
 
   ht *stack = ylc_jit_ctx->frame->table;
   register_builtin(stack, "Audio", CompileAudioFnHandler);
+  // register_builtin(stack, "Object", ObjectConstructorHandler);
+
   register_builtin(stack, "compile_audio_fn", CompileAudioFnHandler);
   register_builtin(stack, "compile_spectral_fn", CompileSpectralFnHandler);
   fprintf(stderr, "libaudio_jit: registered compile_audio_fn\n");

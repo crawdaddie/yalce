@@ -1,0 +1,11 @@
+let c = fn () -> yield 1; yield 2; yield 3;;
+let x = c () |> cor_map ((*) 2.) |> cor_loop in 
+print `
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+`
+

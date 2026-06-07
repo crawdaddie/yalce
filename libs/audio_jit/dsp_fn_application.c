@@ -2559,6 +2559,28 @@ double delay_sample(_DoubleArray buf, double delay_secs, double spf,
   return out;
 }
 
+double delay_wo_sample(_DoubleArray buf, double delay_secs, double spf,
+                       int *write_pos, double input) {
+  int32_t buf_size = buf.size;
+  double *buf_data = buf.data;
+  double delay_samps_f = delay_secs / spf;
+  if (delay_samps_f < 1.0)
+    delay_samps_f = 1.0;
+  if (delay_samps_f >= buf_size)
+    delay_samps_f = buf_size - 1;
+
+  int delay_i = (int)delay_samps_f;
+  double frac = delay_samps_f - delay_i;
+
+  int read0 = (*write_pos - delay_i + buf_size) % buf_size;
+  int read1 = (read0 - 1 + buf_size) % buf_size;
+  double delayed = buf_data[read0] * (1.0 - frac) + buf_data[read1] * frac;
+
+  buf_data[*write_pos] = input;
+  *write_pos = (*write_pos + 1) % buf_size;
+  return delayed;
+}
+
 // Interpolating feedback comb:
 // delayed = lerp(...), out = input + fb*delayed, buf[write] = out
 double comb_sample(_DoubleArray buf, double delay_secs, double spf,
@@ -3628,6 +3650,75 @@ static DspValue build_delay_kernel_op(Ast *ast, DspBuildCtx *dsp_ctx,
   return DSP_MULTI(lanes, vals);
 }
 
+static DspValue build_delay_wo_kernel_op(Ast *ast, DspBuildCtx *dsp_ctx,
+                                         JITLangCtx *ctx,
+                                         LLVMModuleRef module,
+                                         LLVMBuilderRef builder,
+                                         const char *fn_name,
+                                         const char *call_name) {
+  Ast *args = ast->data.AST_APPLICATION.args;
+  if (ast->data.AST_APPLICATION.len < 3) {
+    fprintf(stderr, "Error: %s expects 3 args\n",
+            ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value);
+    return DSP_SCALAR(LLVMConstReal(LLVMDoubleType(), 0.0));
+  }
+
+  DspValue delay_secs_v =
+      dsp_build_expr(args + 0, dsp_ctx, ctx, module, builder);
+  DspValue input_v = dsp_build_expr(args + 2, dsp_ctx, ctx, module, builder);
+
+  int max_delay_lanes = delay_kernel_max_delay_lanes(args + 1);
+  int lanes = max(max(delay_secs_v.lanes, input_v.lanes), max_delay_lanes);
+  if (lanes <= 0) {
+    return DSP_NULL;
+  }
+
+  LLVMTypeRef i32_ty = LLVMInt32Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef i32_ptr_ty = LLVMPointerType(i32_ty, 0);
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+  LLVMTypeRef arr_ty =
+      LLVMStructType((LLVMTypeRef[]){i32_ty, f64_ptr_ty}, 2, 0);
+  LLVMTypeRef fn_ty = LLVMFunctionType(
+      f64_ty, (LLVMTypeRef[]){arr_ty, f64_ty, f64_ty, i32_ptr_ty, f64_ty}, 5,
+      0);
+  LLVMValueRef fn = LLVMGetNamedFunction(module, fn_name);
+  if (!fn) {
+    fn = LLVMAddFunction(module, fn_name, fn_ty);
+    LLVMSetLinkage(fn, LLVMExternalLinkage);
+  }
+
+  LLVMValueRef *vals = lanes > 1 ? dsp_alloc_lane_vals(dsp_ctx, lanes) : NULL;
+  if (lanes > 1 && !vals) {
+    return DSP_NULL;
+  }
+
+  for (int i = 0; i < lanes; i++) {
+    int32_t buf_size = 0;
+    if (!eval_delay_buf_size_for_lane(args + 1, i, dsp_ctx, ctx, &buf_size)) {
+      return DSP_SCALAR(LLVMConstReal(LLVMDoubleType(), 0.0));
+    }
+
+    DelayBufIR db = build_delay_buf_ir(dsp_ctx, builder, buf_size, true, true);
+
+    LLVMValueRef delay_secs =
+        ensure_float(args[0].type, dsp_value_lane(delay_secs_v, i), builder);
+    LLVMValueRef input =
+        ensure_float(args[2].type, dsp_value_lane(input_v, i), builder);
+
+    LLVMValueRef call_args[] = {db.buf_arr,       delay_secs, dsp_ctx->spf,
+                                db.write_pos_ptr, input};
+    LLVMValueRef out =
+        LLVMBuildCall2(builder, fn_ty, fn, call_args, 5, call_name);
+    if (lanes == 1) {
+      return DSP_SCALAR(out);
+    }
+    vals[i] = out;
+  }
+
+  return DSP_MULTI(lanes, vals);
+}
+
 DspValue multi_chan_mul(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
   return multi_chan_arith(ast, dsp_ctx, ctx, module, builder, LLVMBuildMul,
@@ -4023,6 +4114,11 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return build_delay_kernel_op(ast, dsp_ctx, ctx, module, builder,
                                  (DelayKernelOp){.fn_name = "delay_sample",
                                                  .call_name = "delay.sample"});
+  }
+
+  if (is_ident(f, "delay_wo")) {
+    return build_delay_wo_kernel_op(ast, dsp_ctx, ctx, module, builder,
+                                    "delay_wo_sample", "delay_wo.sample");
   }
 
   if (is_ident(f, "array_size")) {

@@ -1,0 +1,19 @@
+open engine/bindings/Synth; 
+open engine/bindings/Sched; 
+# iter_of_array [|3., 3., 3., 4., 3.|] |> cor_loop |> play_routine 0 schedule_event
+
+let SynthMod = module () ->
+  let synth = (fn freq = (inlet 100.) ->
+    sin_node freq |> tanh_node 5.
+  )
+  |> play_tpl
+  ;
+;
+
+# set_input_scalar_offset synth 0 0 500.
+defer_quant 1. (fn t->
+  iter_of_array [| 100., 200., 400., 800. |]
+  |> cor_loop
+  |> cor_map (fn x -> set_input_scalar SynthMod.synth 0 x; 0.125)
+  |> play_routine t schedule_event
+) 

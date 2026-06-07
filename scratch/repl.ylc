@@ -1,0 +1,133 @@
+open DSP;
+open engine/bindings/Synth; 
+open engine/bindings/Sched; 
+
+import std/Math;
+import std/Arrays;
+
+
+
+compile_audio_fn (
+  let acid = fn f t ->
+
+    let ffreq = t |> decay 2. |> scale f 8000;
+
+    let osc = fn f -> saw_osc f + saw_osc (f * 1.01) + saw_osc (f * 1.02) |> (*) 0.3;;
+
+    f
+    |> lag 0.3
+    |> osc
+    |> Filter.lpf ffreq 10.
+    |> (*) 5 |> Math.tanh
+    |> (*) (adsr 0 0.1 0.8 0.5 t)
+    |> (*) (Math.db_amp -15)
+);
+
+
+compile_audio_fn (
+  let kick = fn () ->
+    let t = trig 0;
+    let freq = t |> decay 0.1 |> scale 30 4000;
+    freq
+    |> sin_osc 
+    |> (+) (t |> decay 0.4 |> (*) (white ()))
+    |> (*) 2. |> Math.tanh
+    |> (*) (adsr 0 0.1 0.8 0.2 (t |> rect 0.25) |> kill_on_end)
+);
+
+compile_audio_fn (
+  let chirp = fn f dt ->
+    let t = trig 0;
+    let freq = t |> decay dt |> scale f 10000.;
+    freq
+    |> sin_osc 
+    |> (*) (t |> rect dt |> kill_on_end) 
+    # |> comb (lfnoise0 0 0.01 0.02) 0.5 0.9
+    |> (*) 0.5
+);
+
+
+let q = 60. / 150.;
+
+compile_audio_fn (
+  let fx = fn dt inp ->
+    delay dt 2. 0.3 inp 
+
+);
+
+let rfx = fx (0.5 * q) 0. |> play_node;
+let x = acid 50 0. |> play_into rfx;
+
+import std/Arrays;
+let semi_ratio = fn x -> Math.pow 2. (x / 12.);;
+let trig = fn () -> 
+  let fo = get_tl_tick ();
+  set_input_scalar_offset x 0 fo ([|0., 0., 0., 24. + 8., 24. + 7., 12., 12. + 3.|] |> Arrays.map (fn x -> 60. * (semi_ratio x)) |> Math.array_choose);
+  set_input_trig_offset x 1 fo
+;;
+
+let closed_hh_buf = load_soundfile "./engine/assets/hihat_closed.wav";
+let open_hh_buf = load_soundfile  "./engine/assets/hihat_open.wav";
+
+
+compile_audio_fn (
+  let closed_hh = fn () ->
+    let t = trig 0;
+    t |> bufplay (array_of_buf closed_hh_buf) (1.5 * 44100. / 48000.) 0
+    |> (*) (rect 0.1 t |> kill_on_end)
+);
+
+compile_audio_fn (
+  let open_hh = fn () ->
+    let t = trig 0;
+    t |> bufplay (array_of_buf open_hh_buf) (1.5 * 44100. / 48000.) 0
+    |> (*) (rect 0.1 t |> kill_on_end)
+);
+
+# pat (
+#   let a = pat "3 3 3 4 1 1 1" |> cor_map (fn d -> (dur: d, embed: kick ()))
+# );
+
+defer_quant q (fn t ->
+  iter_of_array [|3., 3., 3., 4., 1., 1., 1.,|]  
+  |> cor_loop
+  |> cor_map (fn d -> trig (); d)
+  |> cor_map ((*) (q * 0.25))
+  |> play_routine t schedule_event
+  ;
+
+
+  iter_of_array [|3., 3., 3., 4., 3.|]  
+  |> cor_loop
+  |> cor_map ((*) (q * 0.25))
+  |> cor_map (fn d -> kick () |> play_node_offset (get_tl_tick ()); d)
+  |> play_routine t schedule_event
+  ;
+
+  let hh = fn () -> closed_hh () |> play_node_offset (get_tl_tick ());;
+  let ohh = fn () -> open_hh () |> play_node_offset (get_tl_tick ());;
+
+  let tts_pat = fn () ->
+    hh ();
+    yield 0.25;
+    hh ();
+    yield 0.25;
+    ohh ();
+    yield 0.5;
+    yield tts_pat ()
+  ;;
+
+  tts_pat ()
+  |> cor_map ((*) q)
+  |> play_routine t schedule_event
+  ;
+
+  iter_of_array [|1.,1., 1., 1., 4., 1.,1., 1.,  4., 1. |]  
+  |> cor_loop
+  |> cor_map (fn d -> chirp (Math.rand_double_range 100. 1000.) 0.02 |> play_node_offset (get_tl_tick ()); d)
+  |> cor_map ((*) (q * 0.25))
+  |> play_routine t schedule_event
+  ;
+
+)
+

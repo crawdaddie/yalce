@@ -1,0 +1,82 @@
+let gfx_begin_frame = extern fn () -> ();
+let gfx_end_frame = extern fn () -> ();
+let gfx_stop = extern fn () -> ();
+
+let gfx_clear = extern fn Double -> Double -> Double -> Double -> ();
+let gfx_viewport = extern fn Int -> Int -> Int -> Int -> ();
+
+let gfx_screen = extern fn () -> Ptr;
+let gfx_target = extern fn Int -> Int -> Ptr;
+let gfx_bind_target = extern fn Ptr -> ();
+
+# Shaders:
+let gfx_shader = extern fn String -> String -> Ptr;
+let gfx_use_shader = extern fn Ptr -> ();
+
+# Uniforms:
+let gfx_uniform1f = extern fn Ptr -> String -> Double -> ();
+let gfx_uniform2f = extern fn Ptr -> String -> Double -> Double -> ();
+let gfx_uniform3f = extern fn Ptr -> String -> Double -> Double -> Double -> ();
+let gfx_uniform4f = extern fn Ptr -> String -> Double -> Double -> Double -> Double -> ();
+let gfx_uniform_mat4 = extern fn Ptr -> String -> Array of Double -> ();
+let gfx_uniform_tex = extern fn Ptr -> String -> Ptr -> Int -> ();
+
+# Textures/targets:
+let gfx_texture_rgba8 = extern fn Int -> Int -> Ptr;
+let gfx_texture_f32 = extern fn Int -> Int -> Ptr;
+
+# Geometry:
+let gfx_fullscreen_quad = extern fn () -> Ptr;
+let gfx_points = extern fn Array of Double -> Int -> Ptr;
+let gfx_lines = extern fn Array of Double -> Int -> Ptr;
+let gfx_mesh = extern fn Array of Double -> Int -> Ptr;
+let gfx_draw_mesh = extern fn Ptr -> ();
+
+# Context/query helpers:
+let gfx_time = extern fn () -> Double;
+let gfx_dt = extern fn () -> Double;
+let gfx_resolution = extern fn () -> (Int, Int);
+let gfx_mouse = extern fn () -> (Double, Double);
+
+let gfx_run = extern fn (() -> ()) -> ();
+let _ = dlopen "libs/gfx/libgfx.so";
+
+#
+let quad = gfx_fullscreen_quad ();
+let shader = gfx_shader
+  `#version 330 core
+   layout(location = 0) in vec2 aPos;
+   out vec2 uv;
+   void main() \{
+     uv = aPos * 0.5 + 0.5;
+     gl_Position = vec4(aPos, 0.0, 1.0);
+   \}`
+  `#version 330 core
+   in vec2 uv;
+   uniform float uTime;
+   uniform vec2 uResolution;
+   out vec4 fragColor;
+   void main() \{
+     vec2 p = uv * 2.0 - 1.0;
+     float v = 0.5 + 0.5 * sin(10.0 * p.x + uTime) * cos(10.0 * p.y - uTime);
+     fragColor = vec4(v, v * 0.5, 1.0 - v, 1.0);
+   \}`
+;
+
+let frame = fn () ->
+  let t = gfx_time ();
+  let w, h = gfx_resolution ();
+
+  gfx_begin_frame ();
+  gfx_clear 0.0 0.0 0.0 1.0;
+
+  gfx_use_shader shader;
+  gfx_uniform1f shader "uTime" t;
+  gfx_uniform2f shader "uResolution" (Double w) (Double h);
+  gfx_draw_mesh quad;
+
+  gfx_end_frame ()
+;;
+
+gfx_run frame;
+

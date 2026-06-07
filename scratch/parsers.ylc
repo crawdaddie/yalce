@@ -1,0 +1,38 @@
+let bind = fn p token_func input ->
+  match p input with
+  | None -> None
+  | Some (x, rest) -> (token_func x) rest  
+;;
+
+let (>>=) = bind;
+
+let isdigit = extern fn Char -> Bool;
+
+let digit = fn input ->
+  let s = array_size input;
+
+  match (s, input[0]) with
+  | (0, _) -> None
+  | (_, x) if isdigit x -> Some (array_range 0 1 input, array_succ input)
+  | _ -> None
+;;
+
+let return = fn x -> (fn inp -> Some (x, inp));;
+
+let parser = fn input ->
+  digit >>= (fn first ->
+  digit >>= (fn second ->
+    return (first, second)
+  )) input
+;;
+let res = parser "12";
+match res with
+| Some ((x, y), inp) -> print `{x}:{y}:{inp}\n`
+| None -> print "parsed none"
+
+# let parser = (digit >>= (fn first -> return first));
+# let res = "12" |> parser;
+# match res with 
+# | Some (x, inp) -> print `{x}:{inp}`
+# | None -> print "none"
+# print `{digit "12helrg"}\n`;
