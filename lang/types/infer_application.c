@@ -356,6 +356,18 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     }
   }
 
+  // bool debug_app = is_ident(ast, "fold") || is_ident(ast, "encode_hist");
+  // if (debug_app) {
+  //   fprintf(stderr, "\nDEBUG app: ");
+  //   print_ast_err(ast);
+  //   fprintf(stderr, "\nfunc_type: ");
+  //   print_type_err(func_type);
+  //   for (int i = 0; i < num_args; i++) {
+  //     fprintf(stderr, "arg[%d]: ", i);
+  //     print_type_err(arg_types[i]);
+  //   }
+  // }
+
   // Step 3: Create expected function type
   Type *result_type = next_tvar();
   Type *expected_type = result_type;
@@ -378,10 +390,23 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
     return NULL;
   }
 
-  ctx->constraints = merge_constraints(ctx->constraints, unify_ctx.constraints);
+  // ctx->constraints = merge_constraints(ctx->constraints,
+  // unify_ctx.constraints); Merge constraints from argument inference and
+  // application unification
+  Constraint *all_constraints =
+      merge_constraints(ctx->constraints, unify_ctx.constraints);
+  ctx->constraints = all_constraints;
 
   // Step 5: Solve constraints and apply substitutions
-  Subst *solution = solve_constraints(unify_ctx.constraints);
+  // Subst *solution = solve_constraints(unify_ctx.constraints);
+  Subst *solution = solve_constraints(all_constraints);
+
+  // if (debug_app) {
+  //   fprintf(stderr, "expected pre-subst: ");
+  //   print_type_err(expected_type);
+  //   fprintf(stderr, "solution:\n");
+  //   print_subst(solution);
+  // }
 
   ctx->subst = compose_subst(solution, ctx->subst);
 
@@ -429,5 +454,9 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
       has_const_args(expected_type, args, num_args)) {
     res->attr = set_attr(res->attr, ATTR_COMPILE_TIME_CONST);
   }
+  // if (debug_app) {
+  //   fprintf(stderr, "result: ");
+  //   print_type_err(res);
+  // }
   return res;
 }

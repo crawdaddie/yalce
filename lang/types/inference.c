@@ -823,7 +823,6 @@ TypeList *typelist_extend(TypeList *tlist, Type *t) {
 }
 
 TypeList *free_vars_type(TypeList *vars, Type *t) {
-
   switch (t->kind) {
 
   case T_VAR: {
@@ -889,11 +888,9 @@ Subst *solve_constraints___(Constraint *constraints) {
     }
 
     if (existing->kind == T_TYPECLASS_RESOLVE && !is_generic(new_type)) {
-      for (int i = 0; i < existing->data.T_CONS.num_args; i++) {
-        if (existing->data.T_CONS.args[i]->kind == T_VAR) {
-          subst = subst_extend(subst, existing->data.T_CONS.args[i]->data.T_VAR,
-                               new_type);
-        }
+      TypeList *frees = free_vars_type(NULL, existing);
+      for (TypeList *f = frees; f; f = f->next) {
+        subst = subst_extend(subst, f->type->data.T_VAR, new_type);
       }
       continue;
     }
@@ -998,11 +995,9 @@ Subst *solve_constraints(Constraint *constraints) {
     }
 
     if (existing->kind == T_TYPECLASS_RESOLVE && !is_generic(new_type)) {
-      for (int i = 0; i < existing->data.T_CONS.num_args; i++) {
-        if (existing->data.T_CONS.args[i]->kind == T_VAR) {
-          subst = subst_extend(subst, existing->data.T_CONS.args[i]->data.T_VAR,
-                               new_type);
-        }
+      TypeList *frees = free_vars_type(NULL, existing);
+      for (TypeList *f = frees; f; f = f->next) {
+        subst = subst_extend(subst, f->type->data.T_VAR, new_type);
       }
       continue;
     }
@@ -1544,6 +1539,9 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
     return type_ref->type;
   }
 
+  Type *instantiated = instantiate(type_ref->type, ctx);
+  ast->type = instantiated;
+
   if (type_ref->md.type == BT_VAR) {
     handle_yield_boundary_crossing(type_ref->md, ast, ctx);
     handle_closed_over_value(type_ref->md, ast, ctx);
@@ -1554,7 +1552,7 @@ Type *infer_identifier(Ast *ast, TICtx *ctx) {
     handle_closed_over_value(type_ref->md, ast, ctx);
   }
 
-  return instantiate(type_ref->type, ctx);
+  return instantiated;
 }
 bool find_trait_impl_rank(Ast *impl, double *rank) {
   if (impl->data.AST_LAMBDA.body->tag != AST_BODY) {

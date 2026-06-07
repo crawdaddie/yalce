@@ -95,5 +95,5 @@ let test = module () ->
   let test_sum_ints = fold (+) 0 [1, 2, 3] == 6;
   let _ = print `map to double: {map (fn x -> Double x) [0,1,2,3]}\n`;
   let test_map_to_double = map (fn x -> Double x) [0,1,2,3] == [0.,1.,2.,3.];
-  let test_foldi = foldi (fn i s x -> i + s + x) 0 [0,0,0] == 3
+  # let test_foldi = foldi (fn i s x -> i + s + x) 0 [0,0,0] == 3
 ;

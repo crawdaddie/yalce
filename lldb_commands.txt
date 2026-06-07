@@ -1,0 +1,5 @@
+breakpoint set -n main
+run
+continue
+thread backtrace all
+quit

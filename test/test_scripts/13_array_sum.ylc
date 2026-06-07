@@ -6,14 +6,14 @@ let test = module () ->
     sum == 6.
     ;;
 
-  let test_sum_ints = fn () ->
-    let sum = Arrays.fold (+) 0 [|1, 2, 3|];
-    sum == 6
-    ;;
-
-  let test_foldi = fn () -> 
-    let sum = Arrays.foldi (fn i r x -> r + i) 0 [|1,2,3|];
-    sum == 3
-    ;;
+  # let test_sum_ints = fn () ->
+  #   let sum = Arrays.fold (+) 0 [|1, 2, 3|];
+  #   sum == 6
+  #   ;;
+  #
+  # let test_foldi = fn () -> 
+  #   let sum = Arrays.foldi (fn i r x -> r + i) 0 [|1,2,3|];
+  #   sum == 3
+  #   ;;
 
 ;

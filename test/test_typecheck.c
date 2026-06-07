@@ -718,9 +718,9 @@ int test_funcs() {
       &TSCHEME(
           &MAKE_FN_TYPE_4(&t0, &t1, &t2,
                           &MAKE_TC_RESOLVE_2(
-                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
+                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t1,
                               &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t1, &t2))),
+                                                 &t0, &t2))),
           &t2, &t1, &t0));
   });
 
@@ -744,16 +744,16 @@ int test_funcs() {
   T("let f = fn x: (Int) (y, z): (Int, Double) -> x + y + z;;",
     &MAKE_FN_TYPE_3(&t_int, &TTUPLE(2, &t_int, &t_num), &t_num));
   ({
-    Type t0 = arithmetic_var("`0");
-    Type t2 = arithmetic_var("`2");
-    Type t3 = arithmetic_var("`3");
+    Type t0 = TVAR("`0");
+    Type t2 = TVAR("`2");
+    Type t3 = TVAR("`3");
     T("let f = fn x (y, z) -> x + y + z;;",
       &TSCHEME(
           &MAKE_FN_TYPE_3(&t0, &TTUPLE(2, &t2, &t3),
                           &MAKE_TC_RESOLVE_2(
-                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
+                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t2,
                               &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t2, &t3))),
+                                                 &t0, &t3))),
           &t3, &t2, &t0));
   });
 
@@ -2022,6 +2022,38 @@ int test_array_processing() {
                         &array_el));
   });
 
+  ({
+    Type r = TVAR("`6");
+    Type t = TVAR("`5");
+    Ast *b = T("let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->\n"
+               "  match array_size a with\n"
+               "  | 0 -> res\n"
+               "  | _ -> (\n"
+               "    fold f (f res (a[0])) (array_succ a)\n"
+               "  )\n"
+               ";;\n"
+               "fold (fn acc s -> (acc * 4) + s) 0 [|0, 1, 2|]\n",
+               &t_int);
+    Ast *app = b->data.AST_BODY.stmts->next->ast;
+  });
+
+  ({
+    Type r = TVAR("`6");
+    Type t = TVAR("`5");
+    Ast *b = T("let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->\n"
+               "  match array_size a with\n"
+               "  | 0 -> res\n"
+               "  | _ -> (\n"
+               "    fold f (f res (a[0])) (array_succ a)\n"
+               "  )\n"
+               ";;\n"
+               "let encode_hist = fn m arr -> fold (fn acc s -> (acc * m) + s) "
+               "0 arr ;;\n"
+               "encode_hist 4 [|0,1,2|]\n",
+               &t_int);
+    Ast *app = b->data.AST_BODY.stmts->next->ast;
+  });
+
   return status;
 }
 int test_networking_funcs() {
@@ -2490,7 +2522,6 @@ int main() {
   status &= test_coroutines();
   //
   status &= test_list_processing();
-  status &= test_array_processing();
   status &= test_math_funcs();
   status &= test_funcs();
   status &= test_curried_funcs();
@@ -2498,6 +2529,7 @@ int main() {
   status &= test_parser_combinators();
   status &= test_sum_types();
   status &= test_rec_coroutines();
+  status &= test_array_processing();
 
   print_all_failures();
   return status == true ? 0 : 1;
