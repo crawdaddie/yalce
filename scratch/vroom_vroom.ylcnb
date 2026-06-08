@@ -1,4 +1,4 @@
-open DSP;
+open libs/audio_jit/DSP;
 
 let bpm = 151.;
 let q = 60. / bpm;
@@ -372,7 +372,7 @@ play_pattern (16 * q) (
   |> cor_zip_struct
   |> cor_map (fn (d, n) ->
     # print `note: {Double n}\n`;
-    harm_synth (midi_to_freq (Double n)) (d * q * 0.5) |> play_node;
+    harm_synth (midi_to_freq (Double n)) (d * q * 0.1) |> play_node;
     d * q * .5
   )
 );

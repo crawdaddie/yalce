@@ -1,0 +1,77 @@
+import std/Math;
+import std/Arrays;
+
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+let read_bytes = extern fn Ptr -> String;
+
+let skip_csv_header = fn arr ->
+  let aux = fn arr: (String) idx ->
+    match arr[idx] with
+    | '\n' -> idx
+    | _ -> aux arr (idx + 1)
+  ;;
+  let off = aux arr 0;
+  array_offset off arr
+;;
+
+# %%
+let revlist = fn n arr l ->
+  match l with
+  | [] -> arr
+  | x::rest -> (
+    arr[n - 1] := x;
+    revlist (n - 1) arr rest
+  )
+;;
+
+let fscanf = extern fn Ptr -> Ptr -> Ptr -> Ptr -> Int;
+let read_vals = fn fd ->
+  let aux = fn fd rows acc ->
+    let sop = [|0|];
+    let alto = [|0|];
+    let rc = fscanf fd (cstr "%d,%*d,%*d,%*d%*[\r\n]") (cstr slot);
+    # slot[0] := slot[0]
+    match rc with
+    | x if x >= 1 -> (
+      # print `{rows}: {slot[0]}\n`;
+      aux fd (rows + 1) ((slot[0]) :: acc)
+    )
+    | _ -> (rows, acc)
+  ;;
+  let n, vals_rev = aux fd 0 [];
+  let arr = array_fill_const n 0;
+  revlist n arr vals_rev;
+  arr 
+;;
+
+let read_sop = fn path ->
+  match open_file path "rb" with
+  | Some fd -> (
+      let slot = [|0|];
+      let rc = fscanf fd (cstr "%*[^\n]\n") (cstr slot);
+      let vals = read_vals fd;
+      fclose fd;
+      vals
+  )
+  | _ -> [| |]
+  ;;
+
+let v = read_sop "~/projects/jsb_chorales/train/chorale_000.csv" ;
+# %%
+
+let encode_history = fn states arr -> 
+  Arrays.fold (fn acc s -> (acc * states) + s) 0 arr
+;;
+
+let STATES = 33;
+let MEM = 4;
+let init_hist = encode_history STATES (v[0 .. MEM]);
+
+
+let rows = Math.ipow STATES MEM;
+let counts = array_fill_const (rows * STATES) 0;
+#%%
+Prdd
+counts
+
