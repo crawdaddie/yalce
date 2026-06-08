@@ -346,10 +346,12 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
 
   // Step 2: Infer argument types
   Type **arg_types = t_alloc(sizeof(Type *) * num_args);
+  TICtx app_ctx = *ctx;
+  app_ctx.constraints = NULL;
 
   for (int i = 0; i < num_args; i++) {
 
-    arg_types[i] = infer(args + i, ctx);
+    arg_types[i] = infer(args + i, &app_ctx);
 
     if (!arg_types[i]) {
       return type_error(ast, "Cannot infer argument %d type", i + 1);
@@ -393,13 +395,13 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
   // ctx->constraints = merge_constraints(ctx->constraints,
   // unify_ctx.constraints); Merge constraints from argument inference and
   // application unification
-  Constraint *all_constraints =
-      merge_constraints(ctx->constraints, unify_ctx.constraints);
-  ctx->constraints = all_constraints;
+  Constraint *app_constraints =
+      merge_constraints(app_ctx.constraints, unify_ctx.constraints);
+  ctx->constraints = merge_constraints(ctx->constraints, app_constraints);
 
   // Step 5: Solve constraints and apply substitutions
   // Subst *solution = solve_constraints(unify_ctx.constraints);
-  Subst *solution = solve_constraints(all_constraints);
+  Subst *solution = solve_constraints(app_constraints);
 
   // if (debug_app) {
   //   fprintf(stderr, "expected pre-subst: ");
@@ -408,6 +410,7 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
   //   print_subst(solution);
   // }
 
+  ctx->yielded_type = app_ctx.yielded_type;
   ctx->subst = compose_subst(solution, ctx->subst);
 
   if (is_closure(func_type)) {

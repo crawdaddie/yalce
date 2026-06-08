@@ -1,5 +1,6 @@
 open engine/bindings/Synth;
 open engine/bindings/Sched;
+
 let sample_rate = 48000;
 import std/Math;
 
