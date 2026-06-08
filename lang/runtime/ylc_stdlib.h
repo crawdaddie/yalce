@@ -83,6 +83,7 @@ typedef struct ReadLinesResult {
 ReadLinesResult read_lines(FILE *fd);
 
 struct _OptFile open_file(_String path, _String mode);
+int read_line(_String buf, FILE *fd);
 
 void _scanf(const char *fmt_string, const char *input_string, int size,
             void **pointers);

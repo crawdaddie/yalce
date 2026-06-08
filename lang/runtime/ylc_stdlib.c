@@ -282,7 +282,21 @@ ReadLinesResult read_lines(FILE *f) {
 }
 
 struct _OptFile open_file(_String path, _String mode) {
-  FILE *f = fopen(path.chars, mode.chars);
+  const char *filename = path.chars;
+
+  if (*filename == '~') {
+    char *HOME = getenv("HOME");
+    if (!HOME) {
+      fprintf(stderr, "could not resolve ~");
+      return (struct _OptFile){1, NULL};
+    }
+
+    char *mem = calloc(strlen(HOME) + strlen(filename), sizeof(char));
+    sprintf(mem, "%s%s", HOME, filename + 1);
+    filename = mem;
+  }
+
+  FILE *f = fopen(filename, mode.chars);
   if (f) {
     return (struct _OptFile){0, f};
   }

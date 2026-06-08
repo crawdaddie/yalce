@@ -349,13 +349,7 @@ local function get_text_from_lsp_selection_range(bufnr)
 		return nil
 	end
 
-	return get_text_for_range(
-		bufnr,
-		range.start.line,
-		range.start.character,
-		range["end"].line,
-		range["end"].character
-	)
+	return get_text_for_range(bufnr, range.start.line, range.start.character, range["end"].line, range["end"].character)
 end
 
 local function range_end_to_visual_pos(bufnr, range)
@@ -476,10 +470,10 @@ function M.open(opts)
 		return
 	end
 
-		if not opts.debug and not opts.raw_cmd and not opts.notebook and is_notebook_path(script_path) then
-			M.open_notebook()
-			return
-		end
+	if not opts.debug and not opts.raw_cmd and not opts.notebook and is_notebook_path(script_path) then
+		M.open_notebook()
+		return
+	end
 
 	if is_job_running() then
 		M.stop()
@@ -494,13 +488,13 @@ function M.open(opts)
 
 	state.script_path = script_path
 	local term_cmd
-		if opts.raw_cmd then
-			term_cmd = tbl_copy(opts.raw_cmd)
-		elseif opts.notebook then
-			term_cmd = opts.debug and build_debug_cmd(script_path, true) or build_notebook_cmd()
-		else
-			term_cmd = opts.debug and build_debug_cmd(script_path, false) or build_cmd(script_path)
-		end
+	if opts.raw_cmd then
+		term_cmd = tbl_copy(opts.raw_cmd)
+	elseif opts.notebook then
+		term_cmd = opts.debug and build_debug_cmd(script_path, true) or build_notebook_cmd()
+	else
+		term_cmd = opts.debug and build_debug_cmd(script_path, false) or build_cmd(script_path)
+	end
 	state.job_id = vim.fn.termopen(term_cmd, {
 		env = current_env(),
 		on_stdout = function()
@@ -519,7 +513,10 @@ function M.open(opts)
 				end
 
 				state.job_id = nil
-				notify(string.format("YLC terminal exited with code %d for %s", code, exited_script or "<unknown>"), vim.log.levels.WARN)
+				notify(
+					string.format("YLC terminal exited with code %d for %s", code, exited_script or "<unknown>"),
+					vim.log.levels.WARN
+				)
 			end)
 		end,
 	})
@@ -688,13 +685,8 @@ function M.select_and_send_current_node()
 
 	select_range(bufnr, range)
 
-	local text = get_text_for_range(
-		bufnr,
-		range.start.line,
-		range.start.character,
-		range["end"].line,
-		range["end"].character
-	)
+	local text =
+		get_text_for_range(bufnr, range.start.line, range.start.character, range["end"].line, range["end"].character)
 	if not text or text == "" then
 		notify("LSP selection range returned empty text, sending current line", vim.log.levels.WARN)
 		M.send_current_line()
@@ -755,44 +747,44 @@ function M.send_current_paragraph()
 end
 
 function M.send_visual_selection()
-  local start_pos = vim.fn.getpos("'<")
-  local end_pos = vim.fn.getpos("'>")
-  local start_row = start_pos[2]
-  local start_col = start_pos[3]
-  local end_row = end_pos[2]
-  local end_col = end_pos[3]
-  local visual_mode = vim.fn.visualmode()
+	local start_pos = vim.fn.getpos("'<")
+	local end_pos = vim.fn.getpos("'>")
+	local start_row = start_pos[2]
+	local start_col = start_pos[3]
+	local end_row = end_pos[2]
+	local end_col = end_pos[3]
+	local visual_mode = vim.fn.visualmode()
 
-  if start_row == 0 or end_row == 0 then
-    notify("No visual selection available", vim.log.levels.WARN)
-    return
-  end
+	if start_row == 0 or end_row == 0 then
+		notify("No visual selection available", vim.log.levels.WARN)
+		return
+	end
 
 	if start_row > end_row or (start_row == end_row and start_col > end_col) then
 		start_row, end_row = end_row, start_row
 		start_col, end_col = end_col, start_col
 	end
 
-  local lines = vim.api.nvim_buf_get_lines(0, start_row - 1, end_row, false)
-  if #lines == 0 then
-    notify("Nothing selected", vim.log.levels.WARN)
-    return
-  end
+	local lines = vim.api.nvim_buf_get_lines(0, start_row - 1, end_row, false)
+	if #lines == 0 then
+		notify("Nothing selected", vim.log.levels.WARN)
+		return
+	end
 
-  if visual_mode == "V" then
-    M.send(table.concat(lines, "\n"))
-    return
-  end
+	if visual_mode == "V" then
+		M.send(table.concat(lines, "\n"))
+		return
+	end
 
-  if visual_mode == "\22" then
-    notify("Blockwise visual send is not supported", vim.log.levels.WARN)
-    return
-  end
+	if visual_mode == "\22" then
+		notify("Blockwise visual send is not supported", vim.log.levels.WARN)
+		return
+	end
 
-  lines[1] = string.sub(lines[1], math.max(start_col, 1))
-  lines[#lines] = string.sub(lines[#lines], 1, math.max(end_col, 1))
+	lines[1] = string.sub(lines[1], math.max(start_col, 1))
+	lines[#lines] = string.sub(lines[#lines], 1, math.max(end_col, 1))
 
-  M.send(table.concat(lines, "\n"))
+	M.send(table.concat(lines, "\n"))
 end
 
 function M.setup(opts)

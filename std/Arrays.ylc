@@ -126,15 +126,29 @@ let last = fn x: (Array of T) ->
   x [len - 1]
 ;;
 
-import std/Lists;
-let of_list = fn len l ->
-  let h::rest = l;
-  let arr = array_fill_const len h;
-
-  let (_, res) = Lists.fold (fn (i, r) x -> (r[i] := x; (i + 1, r))) (1, arr) rest;
-  res
-;;
-  
+# let of_list = fn len l ->
+#   let x::rest = l;
+#   let arr = array_fill_const len x;
+#
+#   let aux = fn len arr idx ->  
+#     match l with
+#     | [] -> arr
+#     | x::reset -> (
+#       arr[n-1] 
+#     )
+#
+#   ;;
+#
+# ;;
+# import std/Lists;
+# let of_list = fn len l ->
+#   let h::rest = l;
+#   let arr = array_fill_const len h;
+#
+#   let (_, res) = Lists.fold (fn (i, r) x -> (r[i] := x; (i + 1, r))) (1, arr) rest;
+#   res
+# ;;
+#
 
 let test = module () ->
   let test_sum_doubles = fold (+) 0. [|1., 2., 3.|] == 6.;
@@ -152,8 +166,9 @@ let test = module () ->
     s == [| 4., 5., 6.|]
   ;
 
-  let test_of_list = (of_list 3 [1,2,3]) == [|1,2,3|];
+  # let test_of_list = (of_list 3 [1,2,3]) == [|1,2,3|];
 
   # let test_sum_foldi = foldi (fn i r x -> r + i) [|1, 2, 3|] == 6;
+  # polynomial x [| a0, a1, ... an |] = a0x^n + a1x^n-1 + ... +an
   let test_polynomial = fold (fn acc s -> acc * 4 + s) 0 [|0,1,2|] == 6;
 ;
