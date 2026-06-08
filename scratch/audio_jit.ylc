@@ -1,4 +1,4 @@
-open DSP;
+open libs/audio_jit/DSP;
 open engine/bindings/Synth; 
 open engine/bindings/Sched; 
 
