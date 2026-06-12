@@ -36,15 +36,28 @@ Type *compute_fn_type(Ast *expr, TICtx *ctx) {
   }
   sig = expr;
 
+  int is_variadic = false;
   Type *param_types[num_params];
   for (int i = 0; i < num_params; i++) {
     Ast *p = sig->data.AST_LIST.items;
     Type *t = compute_type_expression(p, ctx);
+    if (t->kind == T_CONS && strcmp(t->data.T_CONS.name, "Variadic") == 0) {
+      is_variadic = true;
+      t = t->data.T_CONS.args[0];
+    }
     param_types[i] = t;
+
     sig = sig->data.AST_LIST.items + 1;
   }
   Type *ret = compute_type_expression(sig, ctx);
   Type *f = create_type_multi_param_fn(num_params, param_types, ret);
+
+  if (is_variadic) {
+    Type **x = t_alloc(sizeof(Type *));
+    x[0] = f;
+    f = create_cons_type("Variadic", 1, x);
+  }
+
   return f;
 }
 
@@ -223,6 +236,26 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
     Type *inf = infer(expr, ctx);
 
     return inf;
+  }
+  case AST_LET: {
+    Ast *bind = expr->data.AST_LET.binding;
+    expr = expr->data.AST_LET.expr;
+    Type *constraint = compute_type_expression(expr, ctx);
+
+    if (constraint->kind == T_SCHEME) {
+      constraint = constraint->data.T_SCHEME.type;
+    }
+
+    TypeClass *tc = t_alloc(sizeof(TypeClass));
+
+    *tc = (TypeClass){
+        .name = constraint->data.T_CONS.name,
+        .module = constraint,
+    };
+
+    Type *t = compute_type_expression(bind, ctx);
+    typeclasses_extend(t, tc);
+    return t;
   }
 
   default: {

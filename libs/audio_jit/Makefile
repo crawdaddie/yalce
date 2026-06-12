@@ -29,7 +29,7 @@ LIB_NAME    = libaudio_jit
 DYNAMIC_LIB = $(LIB_NAME).so
 BUILD_DIR   = build
 
-C_SOURCES = audio_jit.c compile_synth.c dsp_fn_application.c dsp_build_expr.c pattern_coroutine.c dsp_array_proc.c dsp_fork.c dsp_runtime.c dsp_spectral.c play_handler.c
+C_SOURCES = audio_jit.c compile_synth.c dsp_fn_application.c dsp_build_expr.c pattern_coroutine.c dsp_array_proc.c dsp_fork.c dsp_runtime.c dsp_spectral.c play_handler.c 
 CPP_SOURCES =
 OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
 OBJECTS += $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(CPP_SOURCES))

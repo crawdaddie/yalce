@@ -66,50 +66,51 @@ extern int yydebug;
     FALSE = 267,                   /* FALSE  */
     PIPE = 268,                    /* PIPE  */
     EXTERN = 269,                  /* EXTERN  */
-    DOUBLE_DOT = 270,              /* DOUBLE_DOT  */
-    LET = 271,                     /* LET  */
-    FN = 272,                      /* FN  */
-    MODULE = 273,                  /* MODULE  */
-    MATCH = 274,                   /* MATCH  */
-    WITH = 275,                    /* WITH  */
-    ARROW = 276,                   /* ARROW  */
-    DOUBLE_COLON = 277,            /* DOUBLE_COLON  */
-    TOK_VOID = 278,                /* TOK_VOID  */
-    IN = 279,                      /* IN  */
-    AND = 280,                     /* AND  */
-    ASYNC = 281,                   /* ASYNC  */
-    DOUBLE_AT = 282,               /* DOUBLE_AT  */
-    AT = 283,                      /* AT  */
-    THUNK = 284,                   /* THUNK  */
-    IMPORT = 285,                  /* IMPORT  */
-    OPEN = 286,                    /* OPEN  */
-    IMPLEMENTS = 287,              /* IMPLEMENTS  */
-    AMPERSAND = 288,               /* AMPERSAND  */
-    TYPE = 289,                    /* TYPE  */
-    TEST_ID = 290,                 /* TEST_ID  */
-    MUT = 291,                     /* MUT  */
-    THEN = 292,                    /* THEN  */
-    ELSE = 293,                    /* ELSE  */
-    YIELD = 294,                   /* YIELD  */
-    AWAIT = 295,                   /* AWAIT  */
-    FOR = 296,                     /* FOR  */
-    IF = 297,                      /* IF  */
-    OF = 298,                      /* OF  */
-    FSTRING_START = 299,           /* FSTRING_START  */
-    FSTRING_END = 300,             /* FSTRING_END  */
-    FSTRING_INTERP_START = 301,    /* FSTRING_INTERP_START  */
-    FSTRING_INTERP_END = 302,      /* FSTRING_INTERP_END  */
-    FSTRING_TEXT = 303,            /* FSTRING_TEXT  */
-    MATCH_BODY_PREC = 304,         /* MATCH_BODY_PREC  */
-    DOUBLE_AMP = 305,              /* DOUBLE_AMP  */
-    DOUBLE_PIPE = 306,             /* DOUBLE_PIPE  */
-    GE = 307,                      /* GE  */
-    LE = 308,                      /* LE  */
-    EQ = 309,                      /* EQ  */
-    NE = 310,                      /* NE  */
-    MODULO = 311,                  /* MODULO  */
-    APPLICATION = 312,             /* APPLICATION  */
-    UMINUS = 313                   /* UMINUS  */
+    TRIPLE_DOT = 270,              /* TRIPLE_DOT  */
+    DOUBLE_DOT = 271,              /* DOUBLE_DOT  */
+    LET = 272,                     /* LET  */
+    FN = 273,                      /* FN  */
+    MODULE = 274,                  /* MODULE  */
+    MATCH = 275,                   /* MATCH  */
+    WITH = 276,                    /* WITH  */
+    ARROW = 277,                   /* ARROW  */
+    DOUBLE_COLON = 278,            /* DOUBLE_COLON  */
+    TOK_VOID = 279,                /* TOK_VOID  */
+    IN = 280,                      /* IN  */
+    AND = 281,                     /* AND  */
+    ASYNC = 282,                   /* ASYNC  */
+    DOUBLE_AT = 283,               /* DOUBLE_AT  */
+    AT = 284,                      /* AT  */
+    THUNK = 285,                   /* THUNK  */
+    IMPORT = 286,                  /* IMPORT  */
+    OPEN = 287,                    /* OPEN  */
+    IMPLEMENTS = 288,              /* IMPLEMENTS  */
+    AMPERSAND = 289,               /* AMPERSAND  */
+    TYPE = 290,                    /* TYPE  */
+    TEST_ID = 291,                 /* TEST_ID  */
+    MUT = 292,                     /* MUT  */
+    THEN = 293,                    /* THEN  */
+    ELSE = 294,                    /* ELSE  */
+    YIELD = 295,                   /* YIELD  */
+    AWAIT = 296,                   /* AWAIT  */
+    FOR = 297,                     /* FOR  */
+    IF = 298,                      /* IF  */
+    OF = 299,                      /* OF  */
+    FSTRING_START = 300,           /* FSTRING_START  */
+    FSTRING_END = 301,             /* FSTRING_END  */
+    FSTRING_INTERP_START = 302,    /* FSTRING_INTERP_START  */
+    FSTRING_INTERP_END = 303,      /* FSTRING_INTERP_END  */
+    FSTRING_TEXT = 304,            /* FSTRING_TEXT  */
+    MATCH_BODY_PREC = 305,         /* MATCH_BODY_PREC  */
+    DOUBLE_AMP = 306,              /* DOUBLE_AMP  */
+    DOUBLE_PIPE = 307,             /* DOUBLE_PIPE  */
+    GE = 308,                      /* GE  */
+    LE = 309,                      /* LE  */
+    EQ = 310,                      /* EQ  */
+    NE = 311,                      /* NE  */
+    MODULO = 312,                  /* MODULO  */
+    APPLICATION = 313,             /* APPLICATION  */
+    UMINUS = 314                   /* UMINUS  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -130,50 +131,51 @@ extern int yydebug;
 #define FALSE 267
 #define PIPE 268
 #define EXTERN 269
-#define DOUBLE_DOT 270
-#define LET 271
-#define FN 272
-#define MODULE 273
-#define MATCH 274
-#define WITH 275
-#define ARROW 276
-#define DOUBLE_COLON 277
-#define TOK_VOID 278
-#define IN 279
-#define AND 280
-#define ASYNC 281
-#define DOUBLE_AT 282
-#define AT 283
-#define THUNK 284
-#define IMPORT 285
-#define OPEN 286
-#define IMPLEMENTS 287
-#define AMPERSAND 288
-#define TYPE 289
-#define TEST_ID 290
-#define MUT 291
-#define THEN 292
-#define ELSE 293
-#define YIELD 294
-#define AWAIT 295
-#define FOR 296
-#define IF 297
-#define OF 298
-#define FSTRING_START 299
-#define FSTRING_END 300
-#define FSTRING_INTERP_START 301
-#define FSTRING_INTERP_END 302
-#define FSTRING_TEXT 303
-#define MATCH_BODY_PREC 304
-#define DOUBLE_AMP 305
-#define DOUBLE_PIPE 306
-#define GE 307
-#define LE 308
-#define EQ 309
-#define NE 310
-#define MODULO 311
-#define APPLICATION 312
-#define UMINUS 313
+#define TRIPLE_DOT 270
+#define DOUBLE_DOT 271
+#define LET 272
+#define FN 273
+#define MODULE 274
+#define MATCH 275
+#define WITH 276
+#define ARROW 277
+#define DOUBLE_COLON 278
+#define TOK_VOID 279
+#define IN 280
+#define AND 281
+#define ASYNC 282
+#define DOUBLE_AT 283
+#define AT 284
+#define THUNK 285
+#define IMPORT 286
+#define OPEN 287
+#define IMPLEMENTS 288
+#define AMPERSAND 289
+#define TYPE 290
+#define TEST_ID 291
+#define MUT 292
+#define THEN 293
+#define ELSE 294
+#define YIELD 295
+#define AWAIT 296
+#define FOR 297
+#define IF 298
+#define OF 299
+#define FSTRING_START 300
+#define FSTRING_END 301
+#define FSTRING_INTERP_START 302
+#define FSTRING_INTERP_END 303
+#define FSTRING_TEXT 304
+#define MATCH_BODY_PREC 305
+#define DOUBLE_AMP 306
+#define DOUBLE_PIPE 307
+#define GE 308
+#define LE 309
+#define EQ 310
+#define NE 311
+#define MODULO 312
+#define APPLICATION 313
+#define UMINUS 314
 
 /* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
@@ -189,7 +191,7 @@ union YYSTYPE
     float vfloat;
     char vchar;
 
-#line 193 "lang/y.tab.h"
+#line 195 "lang/y.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

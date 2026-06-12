@@ -211,6 +211,10 @@ bool is_generic(Type *t) {
     if (t->data.T_CONS.num_args == 0) {
       return false;
     }
+
+    if (strcmp(t->data.T_CONS.name, "Variadic") == 0) {
+      return true;
+    }
     if (strcmp(t->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         Type *arg = t->data.T_CONS.args[i];

@@ -19,6 +19,7 @@
 #include "./dsp_fork.h"
 #include "./dsp_rubber_band.h"
 #include "./dsp_spectral.h"
+#include "dsp_pan.h"
 #include <llvm-c/Target.h>
 #include <llvm-c/Types.h>
 
@@ -1051,20 +1052,20 @@ static DspValue build_bufplay(LLVMValueRef buf, LLVMValueRef rate,
   if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
     LLVMValueRef init_base = dsp_consume_init_state(
         dsp_ctx, dsp_ctx->init_builder, 24, 8, "bufplay.init.base");
-    LLVMValueRef prev_init_ptr_i8 = LLVMBuildGEP2(
-        dsp_ctx->init_builder, i8_ty, init_base,
-        (LLVMValueRef[]){LLVMConstInt(i64_ty, 8, 0)}, 1,
-        "bufplay.prev_trig_init_ptr_i8");
-    LLVMValueRef prev_init_ptr = LLVMBuildBitCast(
-        dsp_ctx->init_builder, prev_init_ptr_i8, f64_ptr_ty,
-        "bufplay.prev_trig_init_ptr");
-    LLVMValueRef active_init_ptr_i8 = LLVMBuildGEP2(
-        dsp_ctx->init_builder, i8_ty, init_base,
-        (LLVMValueRef[]){LLVMConstInt(i64_ty, 16, 0)}, 1,
-        "bufplay.active_init_ptr_i8");
-    LLVMValueRef active_init_ptr = LLVMBuildBitCast(
-        dsp_ctx->init_builder, active_init_ptr_i8, f64_ptr_ty,
-        "bufplay.active_init_ptr");
+    LLVMValueRef prev_init_ptr_i8 =
+        LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, init_base,
+                      (LLVMValueRef[]){LLVMConstInt(i64_ty, 8, 0)}, 1,
+                      "bufplay.prev_trig_init_ptr_i8");
+    LLVMValueRef prev_init_ptr =
+        LLVMBuildBitCast(dsp_ctx->init_builder, prev_init_ptr_i8, f64_ptr_ty,
+                         "bufplay.prev_trig_init_ptr");
+    LLVMValueRef active_init_ptr_i8 =
+        LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, init_base,
+                      (LLVMValueRef[]){LLVMConstInt(i64_ty, 16, 0)}, 1,
+                      "bufplay.active_init_ptr_i8");
+    LLVMValueRef active_init_ptr =
+        LLVMBuildBitCast(dsp_ctx->init_builder, active_init_ptr_i8, f64_ptr_ty,
+                         "bufplay.active_init_ptr");
     LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, 0.0),
                    prev_init_ptr);
     LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, 0.0),
@@ -1083,8 +1084,8 @@ static DspValue build_bufplay(LLVMValueRef buf, LLVMValueRef rate,
   LLVMValueRef active_ptr_i8 = LLVMBuildGEP2(
       builder, i8_ty, base, (LLVMValueRef[]){LLVMConstInt(i64_ty, 16, 0)}, 1,
       "bufplay.active_ptr_i8");
-  LLVMValueRef active_ptr =
-      LLVMBuildBitCast(builder, active_ptr_i8, f64_ptr_ty, "bufplay.active_ptr");
+  LLVMValueRef active_ptr = LLVMBuildBitCast(builder, active_ptr_i8, f64_ptr_ty,
+                                             "bufplay.active_ptr");
 
   LLVMValueRef phase =
       LLVMBuildLoad2(builder, f64_ty, phase_ptr, "bufplay.phase");
@@ -1102,8 +1103,8 @@ static DspValue build_bufplay(LLVMValueRef buf, LLVMValueRef rate,
       LLVMBuildFCmp(builder, LLVMRealOLT, prev_trig, half, "bufplay.prev_lo");
   LLVMValueRef rising =
       LLVMBuildAnd(builder, trig_hi, prev_lo, "bufplay.trig_rising");
-  LLVMValueRef cur_phase = LLVMBuildSelect(
-      builder, rising, start_pos, phase, "bufplay.cur_phase");
+  LLVMValueRef cur_phase =
+      LLVMBuildSelect(builder, rising, start_pos, phase, "bufplay.cur_phase");
   LLVMValueRef active_hi =
       LLVMBuildFCmp(builder, LLVMRealOGE, active, half, "bufplay.active_hi");
   LLVMValueRef should_play =
@@ -1121,8 +1122,8 @@ static DspValue build_bufplay(LLVMValueRef buf, LLVMValueRef rate,
       LLVMBuildSelect(builder, ovf, zero, advanced, "bufplay.wrap_ovf");
   next = LLVMBuildSelect(builder, udf, one, next, "bufplay.wrap_udf");
 
-  LLVMValueRef stored_phase =
-      LLVMBuildSelect(builder, should_play, next, phase, "bufplay.stored_phase");
+  LLVMValueRef stored_phase = LLVMBuildSelect(builder, should_play, next, phase,
+                                              "bufplay.stored_phase");
   LLVMBuildStore(builder, stored_phase, phase_ptr);
   LLVMBuildStore(builder, trig, prev_trig_ptr);
   LLVMBuildStore(
@@ -1131,8 +1132,8 @@ static DspValue build_bufplay(LLVMValueRef buf, LLVMValueRef rate,
       active_ptr);
 
   if (num_channels <= 1) {
-    LLVMValueRef sample = build_tabread(buf, cur_phase, dsp_ctx, ctx, module,
-                                        builder);
+    LLVMValueRef sample =
+        build_tabread(buf, cur_phase, dsp_ctx, ctx, module, builder);
     return DSP_SCALAR(
         LLVMBuildSelect(builder, should_play, sample, zero, "bufplay.sample"));
   }
@@ -1570,7 +1571,6 @@ static LLVMValueRef build_grains_env(int32_t max_grains, LLVMValueRef buf,
 LLVMValueRef build_exp_decay(LLVMValueRef T, LLVMValueRef trig,
                              DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
                              LLVMModuleRef module, LLVMBuilderRef builder) {
-  (void)ctx;
 
   int off = dsp_ctx->state_offset;
   dsp_ctx->state_offset += 16;
@@ -3651,8 +3651,7 @@ static DspValue build_delay_kernel_op(Ast *ast, DspBuildCtx *dsp_ctx,
 }
 
 static DspValue build_delay_wo_kernel_op(Ast *ast, DspBuildCtx *dsp_ctx,
-                                         JITLangCtx *ctx,
-                                         LLVMModuleRef module,
+                                         JITLangCtx *ctx, LLVMModuleRef module,
                                          LLVMBuilderRef builder,
                                          const char *fn_name,
                                          const char *call_name) {
@@ -3706,7 +3705,7 @@ static DspValue build_delay_wo_kernel_op(Ast *ast, DspBuildCtx *dsp_ctx,
     LLVMValueRef input =
         ensure_float(args[2].type, dsp_value_lane(input_v, i), builder);
 
-    LLVMValueRef call_args[] = {db.buf_arr,       delay_secs, dsp_ctx->spf,
+    LLVMValueRef call_args[] = {db.buf_arr, delay_secs, dsp_ctx->spf,
                                 db.write_pos_ptr, input};
     LLVMValueRef out =
         LLVMBuildCall2(builder, fn_ty, fn, call_args, 5, call_name);
@@ -4950,8 +4949,9 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
           sym->symbol_data._USER_DEFINED_SYMBOL = attrs;
           dsp_ctx->state_offset = arg_ctx.state_offset;
         } else {
-          DspValue arg_val = dsp_build_expr(ast->data.AST_APPLICATION.args + idx,
-                                            dsp_ctx, &lctx, module, builder);
+          DspValue arg_val =
+              dsp_build_expr(ast->data.AST_APPLICATION.args + idx, dsp_ctx,
+                             &lctx, module, builder);
           LLVMValueRef scalar_arg = arg_val.scalar;
           if (types_equal(param_type, &t_num)) {
             if (arg_val.lanes > 1) {
@@ -5111,6 +5111,9 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     return dsp_fft_region(ast, dsp_ctx, ctx, module, builder);
   }
 
+  // if (is_ident(f, "pan2")) {
+  //   return dsp_pan2(ast, dsp_ctx, ctx, module, builder);
+  // }
   // if (is_ident(f, "fft")) {
   //
   //   return dsp_fft_region(ast, dsp_ctx, ctx, module, builder);

@@ -63,6 +63,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "]"                     return *yytext;
 "import"                return IMPORT;
 "open"                  return OPEN;
+"..."                   return TRIPLE_DOT;
 ".."                    return DOUBLE_DOT;
 "."                     return *yytext;
 "type"                  return TYPE;

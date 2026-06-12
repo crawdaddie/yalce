@@ -333,6 +333,10 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, JITLangCtx *ctx,
     } else if (is_closure(expr_type)) {
       expr_val = codegen(expr, ctx, module, builder);
       create_fn_binding(binding, expr_type, expr_val, ctx, module, builder);
+    } else if (expr->tag == AST_APPLICATION &&
+               expr->data.AST_APPLICATION.args->tag == AST_LAMBDA) {
+      // Special case: eg let s = @Audio fn () -> ... ;; -- decorated lambda
+      expr_val = codegen(expr, ctx, module, builder);
     } else {
 
       expr_val = create_fn_binding(binding, expr_type,

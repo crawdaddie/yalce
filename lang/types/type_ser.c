@@ -36,7 +36,12 @@ void print_tc_list_to_stream(Type *t, FILE *stream) {
 
   fprintf(stream, " with ");
   for (TypeClass *i = t->implements; i; i = i->next) {
-    fprintf(stream, "%s, ", i->name);
+    if (i->module) {
+      print_type_to_stream(i->module, stream);
+    } else {
+      fprintf(stream, "%s ", i->name);
+    }
+    fprintf(stream, ",");
   }
 }
 

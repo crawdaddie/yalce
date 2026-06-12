@@ -211,6 +211,7 @@ struct Ast {
       Ast *expr;
       Ast *in_expr;
       bool is_mut;
+      bool is_decorated_let;
     } AST_LET;
 
     struct AST_INT {
@@ -473,6 +474,7 @@ typedef struct AstVisitor {
   // Optional: visitor-specific data
   void *data; // Generic pointer for visitor-specific state
 } AstVisitor;
+
 Ast *ast_module(Ast *lambda);
 // extern char *__import_current_dir;
 Ast *ast_import_stmt(ObjString path_identifier, bool import_all);
@@ -496,5 +498,7 @@ bool find_top_level_range_at_line(Ast *root, const char *src, int line,
 
 Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
                           Ast *lambda_expr);
+
+Ast *ast_variadic_expr(Ast *ast);
 // Ast *array_offset_expression(Ast *array, Ast *index_expr);
 #endif

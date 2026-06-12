@@ -378,6 +378,36 @@ bool implements(Type *t, TypeClass *tc) {
   return false;
 }
 
+Type *extend_variadic_template(Type *variadic, Type *target) {
+  Type *variadic_fn = variadic->data.T_CONS.args[0];
+  int target_arity = fn_type_args_len(target);
+  int template_arity = fn_type_args_len(variadic_fn);
+
+  if (variadic_fn->kind != T_FN || target->kind != T_FN ||
+      template_arity <= 0 || target_arity < template_arity) {
+    return NULL;
+  }
+
+  Type **param_types = t_alloc(sizeof(Type *) * target_arity);
+  Type *last_param_type = NULL;
+  int fixed_prefix_arity = template_arity - 1;
+  int i = 0;
+
+  for (Type *v = variadic_fn; v->kind == T_FN; v = v->data.T_FN.to, i++) {
+    last_param_type = v->data.T_FN.from;
+    if (i < fixed_prefix_arity) {
+      param_types[i] = deep_copy_type(v->data.T_FN.from);
+    }
+  }
+
+  for (i = fixed_prefix_arity; i < target_arity; i++) {
+    param_types[i] = deep_copy_type(last_param_type);
+  }
+
+  return create_type_multi_param_fn(
+      target_arity, param_types, deep_copy_type(fn_return_type(variadic_fn)));
+}
+
 int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
   if (types_equal(t1, t2)) {
@@ -394,14 +424,33 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
   }
 
   if (IS_PRIMITIVE_TYPE(t1)) {
-
     add_constraint(unify_res, t2, t1);
     return 0;
   }
+
   if (t1->implements && t2->kind != T_VAR) {
 
     for (TypeClass *tc = t1->implements; tc; tc = tc->next) {
 
+      if (CHARS_EQ(tc->name, "Variadic") && t2->kind == T_FN) {
+        Type *matching_variadic = extend_variadic_template(tc->module, t2);
+        if (!matching_variadic) {
+          return 1;
+        }
+
+        TICtx variadic_ur = {};
+        if (unify(matching_variadic, t2, &variadic_ur) != 0) {
+          return 1;
+        }
+
+        unify_res->constraints =
+            merge_constraints(unify_res->constraints, variadic_ur.constraints);
+
+        if (t1->kind == T_VAR) {
+          add_constraint(unify_res, t1, matching_variadic);
+        }
+        continue;
+      }
       if ((!CHARS_EQ(tc->name, "Constructor")) && !implements(t2, tc)) {
 
         if (t2->kind == T_TYPECLASS_RESOLVE) {
@@ -1433,7 +1482,12 @@ Type *infer_let_binding(Ast *ast, TICtx *ctx) {
 
   Type *val_type = infer(expr, ctx);
 
-  if (is_generic(val_type) && val_type->kind == T_FN) {
+  if (is_generic(val_type) && val_type->kind == T_FN
+      // &&
+      //       !(val_type->data.T_FN.from->kind == T_CONS &&
+      //         strcmp(val_type->data.T_FN.from->data.T_CONS.name, "Variadic")
+      //         == 0)
+  ) {
     val_type = generalize(val_type, ctx);
   }
   int binding_scope = ctx->scope;

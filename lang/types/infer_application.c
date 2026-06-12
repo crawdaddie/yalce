@@ -263,7 +263,6 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
   if (is_coroutine_type(func_type) &&
       ast->data.AST_APPLICATION.args->tag == AST_VOID) {
-
     Type f = MAKE_FN_TYPE_2(&t_void,
                             create_option_type(func_type->data.T_CONS.args[0]));
     return infer_fn_application(&f, ast, ctx);
@@ -289,6 +288,7 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   if (func_type->kind == T_CONS) {
     return infer_cons_application(func_type, ast, ctx);
   }
+
   if (IS_PRIMITIVE_TYPE(func_type)) {
     infer(ast->data.AST_APPLICATION.args, ctx);
     return func_type;
@@ -297,7 +297,6 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   Type *x = infer_fn_application(func_type, ast, ctx);
 
   if (is_ident(ast, "array_fill_const")) {
-
     if (has_attr(ast->data.AST_APPLICATION.args->type->attr,
                  ATTR_COMPILE_TIME_CONST)) {
       x->attr = set_attr(x->attr, ATTR_COMPILE_TIME_CONST);
@@ -311,6 +310,10 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
       x->meta = ast->data.AST_APPLICATION.args->type->meta;
     }
   }
+
+  // print_ast(ast);
+  // print_type(x);
+  // print_type(ast->data.AST_APPLICATION.function->type);
 
   return x;
 }
@@ -457,6 +460,8 @@ Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
       has_const_args(expected_type, args, num_args)) {
     res->attr = set_attr(res->attr, ATTR_COMPILE_TIME_CONST);
   }
+  // print_ast(ast);
+  // print_type(res);
   // if (debug_app) {
   //   fprintf(stderr, "result: ");
   //   print_type_err(res);

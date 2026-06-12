@@ -1505,14 +1505,22 @@ Ast *array_range_expression(Ast *array, Ast *start_expr, Ast *end_expr) {
 
 Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
                           Ast *lambda_expr) {
-  // printf("%s = @ %s --\n", binding.chars, decorator.chars);
-  // print_ast(lambda_expr);
+
+  // if (lambda_expr->tag == AST_LAMBDA) {
+  //   lambda_expr->data.AST_LAMBDA.fn_name = binding;
+  //   Ast *dec_id = ast_identifier(decorator);
+  //   Ast *bind = ast_identifier(binding);
+  //   Ast *let = ast_let(bind, lambda_expr, NULL);
+  //   let->data.AST_LET.is_decorated_let = true;
+  //   return ast_application(dec_id, let);
+  // }
+
   if (lambda_expr->tag == AST_LAMBDA) {
     lambda_expr->data.AST_LAMBDA.fn_name = binding;
     Ast *dec_id = ast_identifier(decorator);
     Ast *bind = ast_identifier(binding);
-    Ast *let = ast_let(bind, lambda_expr, NULL);
-    return ast_application(dec_id, let);
+    Ast *let = ast_let(bind, ast_application(dec_id, lambda_expr), NULL);
+    return let;
   }
   return NULL;
 }
@@ -1524,3 +1532,9 @@ Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
 //                       index_expr),
 //       array);
 // }
+//
+//
+Ast *ast_variadic_expr(Ast *ast) {
+  return ast_cons_decl(TOKEN_OF, ast_identifier((ObjString){"Variadic", 8}),
+                       ast);
+}

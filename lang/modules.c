@@ -287,7 +287,9 @@ Type *infer_inline_module(Ast *ast, TICtx *ctx) {
 }
 
 YLCModule *init_import(YLCModule *mod) {
+  ParsingContext _pctx = pctx;
   Ast *mod_ast = parse_input_script(mod->path);
+  pctx = _pctx;
 
   mod_ast = ast_lambda(NULL, mod_ast);
   mod_ast->tag = AST_MODULE;

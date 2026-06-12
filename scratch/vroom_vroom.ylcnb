@@ -362,7 +362,7 @@ play_pattern (16 * q) (
       Vocals.trig 39.7;
       yield 64.
     )
-    in x () |> cor_loop |> cor_map (fn d-> d * q)
+    in x () |> cor_loop |> cor_map (fn d -> d * q)
   );
 
   let chorus_riff = (

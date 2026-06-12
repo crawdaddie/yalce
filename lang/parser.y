@@ -51,6 +51,7 @@ extern char *yytext;
 %token TRUE FALSE
 %token PIPE
 %token EXTERN
+%token TRIPLE_DOT
 %token DOUBLE_DOT
 %token LET
 %token FN
@@ -422,6 +423,7 @@ type_expr_no_tuple:
   | '|' type_atom                   { $$ = ast_list($2); }
   | type_expr_no_tuple '|' type_atom { $$ = ast_list_push($1, $3); }
   | fn_signature                    { $$ = ast_fn_signature_of_list($1); }
+  | type_atom TRIPLE_DOT            { $$ = ast_variadic_expr($1); }
   ;
 
 type_atom:

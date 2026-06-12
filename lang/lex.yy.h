@@ -468,7 +468,7 @@ extern int yylex (void);
 #undef yyTABLES_NAME
 #endif
 
-#line 269 "lang/lex.l"
+#line 270 "lang/lex.l"
 
 
 #line 474 "lang/lex.yy.h"

@@ -8,11 +8,11 @@ let null_synth_ptr = extern fn () -> Synth;
 type Signal = Double;
 type Scalar = Double;
 
-let compile_audio_fn = extern fn T -> T;
-let Audio = extern fn T -> T;
 
-# let play = play_node;
-let play = extern fn T -> T;
+let compile_audio_fn = extern fn T -> T;
+
+let Audio = extern fn (T: (Double ... -> Double)) -> T;
+
 let pat = extern fn String -> Coroutine of Double;
 let pat_key = extern fn String -> Coroutine of (String, Int);
 let pat_key_chars = extern fn String -> Coroutine of String;
@@ -84,7 +84,6 @@ let lag = extern fn Double -> Double -> Double;
 let arr_choose = extern fn Array of Double -> Double -> Double;
 # On each trigger, advance to the next element in the array.
 let arr_seq = extern fn Array of Double -> Double -> Double;
-let pan2 = extern fn Double -> Double;
 let fftw_plan_free = extern fn Ptr -> ();
 
 # Allocate a delay buffer sized from a maximum delay time.

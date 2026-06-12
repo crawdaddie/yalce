@@ -769,15 +769,36 @@ void print_synth_record(SynthRecord rec) {
 LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
+
   Ast *source = ast->data.AST_APPLICATION.args;
-  Ast *lambda = source->data.AST_LET.expr;
-  Ast *binding = source->data.AST_LET.binding;
-  const char *name = binding->data.AST_IDENTIFIER.value;
+  Ast binding;
+
+  Ast *lambda;
+  if (source->tag == AST_LAMBDA) {
+    lambda = source;
+
+    ObjString _name = lambda->data.AST_LAMBDA.fn_name;
+    binding = (Ast){.tag = AST_IDENTIFIER,
+                    .data = {.AST_IDENTIFIER = {
+                                 .value = _name.chars,
+                                 .length = _name.length,
+                             }}};
+  } else {
+    lambda = source->data.AST_LET.expr;
+    binding = *(source->data.AST_LET.binding);
+  }
+
+  const char *name = binding.data.AST_IDENTIFIER.value;
+
+  // Ast *source = ast->data.AST_APPLICATION.args;
+  // Ast *lambda = source->data.AST_LET.expr;
+  // Ast *binding = source->data.AST_LET.binding;
+  // const char *name = binding->data.AST_IDENTIFIER.value;
 
   LLVMTypeRef frame_ty = synth_frame_fn_type(lambda, ctx, module, builder);
 
   // Determine synth_id before compiling so we can emit the registration call.
-  JITSymbol *existing = lookup_id_ast(binding, ctx);
+  JITSymbol *existing = lookup_id_ast(&binding, ctx);
   int synth_id;
   if (existing && existing->type == (symbol_type)STYPE_AUDIO_JIT_SYM) {
     synth_id = audio_sym_synth_id(existing);

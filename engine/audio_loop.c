@@ -619,6 +619,7 @@ int init_audio() {
 
   scheduler_event_loop();
   gc_loop(get_audio_ctx());
+
   audio_started = 1;
   // midi_setup();
 
