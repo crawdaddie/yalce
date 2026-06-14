@@ -76,7 +76,12 @@ typedef struct TICtx {
   FILE *err_stream; // Replace const char *err
 } TICtx;
 
+typedef struct {
+  Subst *subst;
+} Solution;
+
 Type *infer(Ast *ast, TICtx *ctx);
+int infer_solve(TICtx *ctx, Solution *sol);
 
 typedef struct VarList {
   const char *var;

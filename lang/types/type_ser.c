@@ -1,6 +1,5 @@
 #include "./type_ser.h"
 #include "./type.h"
-#include "infer_lambda.h"
 #include <string.h>
 
 static char *type_name_mapping[] = {

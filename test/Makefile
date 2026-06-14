@@ -66,6 +66,14 @@ test_typecheck: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 		$(LDFLAGS)
 	$(BUILD_DIR)/test_typecheck
 
+test_inference: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
+	$(CC) $(CFLAGS) test_inference.c \
+		$(LANG_SRCS) \
+		$(LANG_SRC_DIR)/types/*.c \
+		-o $(BUILD_DIR)/test_inference \
+		$(LDFLAGS)
+	$(BUILD_DIR)/test_inference
+
 test_range_server: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(CC) $(CFLAGS) test_range_server.c \
 		$(LANG_SRCS) \
