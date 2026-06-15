@@ -44,12 +44,16 @@ typedef struct {
 } binding_md;
 
 // TypeEnv represents a mapping from variable names to their types
+// with optional scheme variables for HM-style polymorphism.
+// scheme_vars: free variables in `type` that were NOT free in the
+// environment at generalization time. NULL means monomorphic.
 typedef struct TypeEnv {
   const char *name;
   Type *type;
   binding_md md;
   int ref_count;
 
+  TypeList *scheme_vars;   // vars to freshen on instantiation
   struct TypeEnv *next;
   bool is_opened_var;
 } TypeEnv;
@@ -95,11 +99,21 @@ typedef struct VarList {
 // } Scheme;
 
 Type *infer(Ast *ast, TICtx *ctx);
+
+// New binding-based polymorphism (HM core)
+void generalize_env(TypeEnv *entry, TypeEnv *env);
+Type *instantiate_env(TypeEnv *entry, TICtx *ctx);
+
+// Backward-compatible T_SCHEME wrappers (transitionary)
 Type *generalize(Type *t, TICtx *ctx);
 Type *instantiate(Type *sch, TICtx *ctx);
 Type *instantiate_type_in_env(Type *sch, TypeEnv *env);
 Type *env_lookup(TypeEnv *env, const char *name);
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
+
+TypeList *free_vars_type(TypeList *acc, Type *t);
+TypeList *free_vars_env(TypeList *acc, TypeEnv *env);
+
 Type *extract_member_from_sum_type(Type *cons, Ast *id);
 Type *extract_member_from_sum_type_idx(Type *cons, Ast *id, int *idx);
 void *type_error(Ast *ast, const char *fmt, ...);

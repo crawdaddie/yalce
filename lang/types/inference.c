@@ -1,4 +1,5 @@
 #include "./inference.h"
+#include "../ht.h"
 #include "../parse.h"
 #include "./builtins.h"
 #include "types/type.h"
@@ -8,41 +9,87 @@
 #include <stdlib.h>
 #include <string.h>
 
-Type *infer_expr(Ast *ast, TICtx *ctx);
+Type *infer_match_expression(Ast *ast, TICtx *ctx) {
+  // Stub: will contain pattern matching type inference
+  return next_tvar();
+}
 
+Type *infer_application(Ast *ast, TICtx *ctx) {
+  // Stub: will contain pattern matching type inference
+  return next_tvar();
+}
+
+Type *infer_lambda(Ast *ast, TICtx *ctx) {
+  // Stub: will contain pattern matching type inference
+  return next_tvar();
+}
+
+// ============================================================================
+// Forward declarations for static helpers in this file
+// ============================================================================
+Type *infer_expr(Ast *ast, TICtx *ctx);
+static Type *apply_subst_to_type(Subst *subst, Type *t);
+static Subst *extend_subst(Subst *subst, const char *var, Type *type);
+
+// ============================================================================
+// Top-level inference pipeline
+// ============================================================================
+
+// infer_solve: solve accumulated constraints, return substitution.
+// Empty constraint set is trivially satisfiable.
 int infer_solve(TICtx *ctx, Solution *sol) {
+  if (!ctx->constraints) {
+    sol->subst = NULL;
+    return 0;
+  }
   sol->subst = solve_constraints(ctx->constraints);
   return sol->subst ? 0 : 1;
 }
 
-void infer_final(Ast *ast, const Solution *solved, TICtx *ctx) {}
+// infer_final: apply final substitution to all AST node types.
+// This is the ONE place where AST type annotations are mutated post-solve.
+static void finalize_ast_types(Ast *ast, Subst *subst);
 
-Type *apply_solution(Type *raw, Solution *solved) {
-  if (!solved || !solved->subst)
-    return raw;
-
-  return apply_substitution(solved->subst, raw);
+void infer_final(Ast *ast, const Solution *solved, TICtx *ctx) {
+  if (!solved || !solved->subst) {
+    return;
+  }
+  finalize_ast_types(ast, solved->subst);
 }
 
+Type *apply_solution(Type *raw, Solution *solved) {
+  if (!solved || !solved->subst) {
+    return raw;
+  }
+  return apply_subst_to_type(solved->subst, raw);
+}
+
+// infer: the public entry point.
+// 1. Infer expression types and generate constraints
+// 2. Solve constraints once
+// 3. Apply substitution to the result type
+// 4. Finalize AST annotations
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *raw = infer_expr(ast, ctx);
   if (!raw) {
     return NULL;
   }
-  print_constraints(ctx->constraints);
 
-  // Solution solution;
-  // if (infer_solve(ctx, &solution)) {
-  //   return NULL;
-  // }
-  //
-  // infer_final(ast, &solution, ctx);
-  // return apply_solution(raw, &solution);
-  return raw;
+  Solution sol = {0};
+  if (infer_solve(ctx, &sol)) {
+    return NULL;
+  }
+
+  Type *final = apply_solution(raw, &sol);
+  infer_final(ast, &sol, ctx);
+  return final;
 }
 
-Type *infer_list_literal(Ast *ast, TICtx *ctx) {
+// ============================================================================
+// Literal inference helpers
+// ============================================================================
 
+Type *infer_list_literal(Ast *ast, TICtx *ctx) {
   if (ast->data.AST_LIST.len == 0) {
     Type *t = t_alloc(sizeof(Type));
     Type **contained = t_alloc(sizeof(Type *));
@@ -74,78 +121,245 @@ Type *infer_list_literal(Ast *ast, TICtx *ctx) {
   return type;
 }
 
-void register_binding(Ast *b, Type *bt, TICtx *ctx) {
-  switch (b->tag) {
-  case AST_IDENTIFIER: {
-    ctx->env = env_extend(ctx->env, b->data.AST_IDENTIFIER.value, bt);
-    break;
-  }
-  case AST_TUPLE: {
-    int len = b->data.AST_LIST.len;
-    for (int i = 0; i < len; i++) {
-      register_binding(b->data.AST_LIST.items + i, bt->data.T_CONS.args[i],
-                       ctx);
+// ============================================================================
+// Environment helpers
+// ============================================================================
+
+TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
+  TypeEnv *new_env = t_alloc(sizeof(TypeEnv));
+  new_env->name = name;
+  new_env->type = type;
+  new_env->scheme_vars = NULL;
+  new_env->next = env;
+  return new_env;
+}
+
+TypeEnv *lookup_type_ref(TypeEnv *env, const char *name) {
+  for (TypeEnv *e = env; e != NULL; e = e->next) {
+    if (strcmp(e->name, name) == 0) {
+      return e;
     }
-    break;
   }
+  return NULL;
+}
+
+Type *env_lookup(TypeEnv *env, const char *name) {
+  TypeEnv *e = lookup_type_ref(env, name);
+  if (!e)
+    return NULL;
+  return e->type;
+}
+
+// ============================================================================
+// Free variable helpers
+// ============================================================================
+
+static bool type_list_contains_str(TypeList *l, const char *name) {
+  for (TypeList *c = l; c; c = c->next) {
+    if (c->type && c->type->kind == T_VAR &&
+        strcmp(c->type->data.T_VAR, name) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static TypeList *type_list_append_var(TypeList *acc, Type *tvar) {
+  TypeList *node = t_alloc(sizeof(TypeList));
+  node->type = tvar;
+  node->next = NULL;
+  if (!acc)
+    return node;
+  TypeList *tail = acc;
+  while (tail->next)
+    tail = tail->next;
+  tail->next = node;
+  return acc;
+}
+
+TypeList *free_vars_type(TypeList *acc, Type *t) {
+  if (!t)
+    return acc;
+  switch (t->kind) {
+  case T_VAR:
+    // Skip recursive placeholders
+    if (t->is_recursive_type_ref)
+      return acc;
+    if (!type_list_contains_str(acc, t->data.T_VAR)) {
+      acc = type_list_append_var(acc, t);
+    }
+    return acc;
+  case T_FN:
+    acc = free_vars_type(acc, t->data.T_FN.from);
+    acc = free_vars_type(acc, t->data.T_FN.to);
+    return acc;
+  case T_CONS:
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      acc = free_vars_type(acc, t->data.T_CONS.args[i]);
+    }
+    return acc;
+  case T_SCHEME:
+    // During transition: some places still use T_SCHEME
+    return free_vars_type(acc, t->data.T_SCHEME.type);
+  default:
+    return acc;
   }
 }
 
-Type *infer_let_expr(Ast *ast, TICtx *ctx) {
+TypeList *free_vars_env(TypeList *acc, TypeEnv *env) {
+  for (TypeEnv *e = env; e; e = e->next) {
+    acc = free_vars_type(acc, e->type);
+  }
+  return acc;
+}
 
+static TypeList *set_diff(TypeList *a, TypeList *b) {
+  TypeList *result = NULL;
+  for (TypeList *la = a; la; la = la->next) {
+    if (la->type && la->type->kind == T_VAR) {
+      if (!type_list_contains_str(b, la->type->data.T_VAR)) {
+        result = type_list_append_var(result, la->type);
+      }
+    }
+  }
+  return result;
+}
+
+// ============================================================================
+// Generalize / Instantiate
+// Operate on TypeEnv entries, not on Type nodes directly.
+// ============================================================================
+
+void generalize_env(TypeEnv *entry, TypeEnv *env) {
+  TypeList *fv_type = free_vars_type(NULL, entry->type);
+  TypeList *fv_env = free_vars_env(NULL, env);
+  entry->scheme_vars = set_diff(fv_type, fv_env);
+}
+
+// instantiate: replace scheme_vars with fresh type variables.
+Type *instantiate_env(TypeEnv *entry, TICtx *ctx) {
+  if (!entry->scheme_vars) {
+    return entry->type;
+  }
+
+  Subst *base = NULL;
+  for (TypeList *v = entry->scheme_vars; v; v = v->next) {
+    if (v->type && v->type->kind == T_VAR) {
+      Type *fresh = next_tvar();
+      fresh->implements = v->type->implements;
+      base = extend_subst(base, v->type->data.T_VAR, fresh);
+    }
+  }
+  if (!base)
+    return entry->type;
+  return apply_subst_to_type(base, entry->type);
+}
+
+Type *instantiate_type_in_env(Type *sch, TypeEnv *env) {
+  // Stub for external callers still using T_SCHEME
+  return sch;
+}
+
+// ============================================================================
+// Backward-compatible wrappers (transitionary - external callers use T_SCHEME)
+// ============================================================================
+
+// generalize: create a T_SCHEME wrapper from a type.
+Type *generalize(Type *t, TICtx *ctx) {
+  (void)ctx;
+  if (!is_generic(t))
+    return t;
+
+  Type *scheme = t_alloc(sizeof(Type));
+  TypeList *vars = free_vars_type(NULL, t);
+  int n = 0;
+  for (TypeList *vl = vars; vl; vl = vl->next)
+    n++;
+
+  *scheme =
+      (Type){T_SCHEME, {.T_SCHEME = {.vars = vars, .num_vars = n, .type = t}}};
+  return scheme;
+}
+
+// instantiate: unwrap T_SCHEME and freshen its vars.
+Type *instantiate(Type *t, TICtx *ctx) {
+  if (!t || t->kind != T_SCHEME)
+    return t;
+
+  TypeEnv stub = {.name = "",
+                  .type = t->data.T_SCHEME.type,
+                  .scheme_vars = t->data.T_SCHEME.vars};
+  return instantiate_env(&stub, ctx);
+}
+
+// ============================================================================
+// Expression inference - HM core dispatcher
+// ============================================================================
+
+static Type *infer_identifier(Ast *ast, TICtx *ctx) {
+  const char *name = ast->data.AST_IDENTIFIER.value;
+  TypeEnv *ref = lookup_type_ref(ctx->env, name);
+
+  if (ref) {
+    return instantiate_env(ref, ctx);
+  }
+
+  Type *builtin = lookup_builtin_type(name);
+  if (builtin) {
+    if (builtin->kind == T_SCHEME) {
+      TypeEnv stub = {.name = name,
+                      .type = builtin->data.T_SCHEME.type,
+                      .scheme_vars = builtin->data.T_SCHEME.vars};
+      return instantiate_env(&stub, ctx);
+    }
+    return builtin;
+  }
+
+  return next_tvar();
+}
+
+static Type *infer_let_expr(Ast *ast, TICtx *ctx) {
   Ast *binding = ast->data.AST_LET.binding;
   Ast *expr = ast->data.AST_LET.expr;
   Ast *body = ast->data.AST_LET.in_expr;
-  TICtx body_ctx;
 
-  if (body) {
-    body_ctx = *ctx;
-    body_ctx.scope++;
-  }
-
-  Type *expr_type = infer_expr(expr, body ? &body_ctx : ctx);
-
+  Type *expr_type = infer_expr(expr, ctx);
   if (!expr_type) {
     return NULL;
   }
 
   switch (binding->tag) {
   case AST_IDENTIFIER: {
-    Type *binding_type;
-    if (is_generic(expr_type)) {
-      binding_type = next_tvar();
-      add_constraint(ctx, expr_type, binding_type);
-    } else {
-      binding_type = expr_type;
-    }
-    register_binding(binding, binding_type, ctx);
+    ctx->env =
+        env_extend(ctx->env, binding->data.AST_IDENTIFIER.value, expr_type);
+    generalize_env(ctx->env, ctx->env->next);
     break;
   }
-
   case AST_TUPLE: {
     int len = binding->data.AST_LIST.len;
-
     Type **vars = t_alloc(sizeof(Type *) * len);
     for (int i = 0; i < len; i++) {
       Ast *b = binding->data.AST_LIST.items + i;
       Type *bt = next_tvar();
-      vars[i] = b->type;
-
-      b->type = bt;
-      ctx->env = env_extend(ctx->env, binding->data.AST_IDENTIFIER.value, bt);
-    };
+      vars[i] = bt;
+      Ast *id = b;
+      if (b->tag == AST_LET)
+        id = b->data.AST_LET.binding;
+      if (id->tag == AST_IDENTIFIER) {
+        ctx->env = env_extend(ctx->env, id->data.AST_IDENTIFIER.value, bt);
+      }
+    }
     Type *lhs_tuple = create_tuple_type(len, vars);
     add_constraint(ctx, expr_type, lhs_tuple);
-    register_binding(binding, lhs_tuple, ctx);
+    break;
   }
-  default: {
+  default:
     type_error(ast, "Unsupported let binding shape");
     return NULL;
   }
-  }
 
   if (body) {
-    return infer_expr(body, &body_ctx);
+    return infer_expr(body, ctx);
   }
 
   return expr_type;
@@ -166,44 +380,37 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
                   }));
     break;
   }
-  case AST_INT: {
+  case AST_INT:
     type = &t_int;
     break;
-  }
-  case AST_DOUBLE: {
+  case AST_DOUBLE:
     type = &t_num;
     break;
-  }
-  case AST_STRING: {
+  case AST_STRING:
     type = &t_string;
     break;
-  }
-  case AST_CHAR: {
+  case AST_CHAR:
     type = &t_char;
     break;
-  }
-  case AST_BOOL: {
+  case AST_BOOL:
     type = &t_bool;
     break;
-  }
-  case AST_VOID: {
+  case AST_VOID:
     type = &t_void;
     break;
-  }
+
   case AST_ARRAY:
-  case AST_LIST: {
+  case AST_LIST:
     type = infer_list_literal(ast, ctx);
     break;
-  }
+
   case AST_TUPLE: {
     int len = ast->data.AST_LIST.len;
     Type **args = t_alloc(sizeof(Type *) * len);
-
     const char **names = NULL;
     if (ast->data.AST_LIST.items[0].tag == AST_LET) {
       names = t_alloc(sizeof(char *) * len);
     }
-
     for (int i = 0; i < len; i++) {
       if (names) {
         names[i] = ast->data.AST_LIST.items[i]
@@ -213,86 +420,86 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
       } else {
         args[i] = infer_expr(&ast->data.AST_LIST.items[i], ctx);
       }
+      if (!args[i])
+        return NULL;
     }
-
     type = create_tuple_type(len, args);
-
-    if (names) {
+    if (names)
       type->data.T_CONS.names = names;
-    }
-
     break;
   }
-  case AST_LET: {
+
+  case AST_LET:
     type = infer_let_expr(ast, ctx);
     break;
-  }
-  case AST_TYPE_DECL: {
+  case AST_IDENTIFIER:
+    type = infer_identifier(ast, ctx);
     break;
-  }
-  case AST_FMT_STRING: {
+
+  // Feature overlays
+  case AST_APPLICATION:
+    type = infer_application(ast, ctx);
     break;
-  }
-  case AST_IDENTIFIER: {
+  case AST_LAMBDA:
+    type = infer_lambda(ast, ctx);
     break;
-  }
-  case AST_APPLICATION: {
+  case AST_MATCH:
+    type = infer_match_expression(ast, ctx);
     break;
-  }
-  case AST_LAMBDA: {
+
+  // Stubs for constructs handled by future overlays
+  case AST_TYPE_DECL:
     break;
-  }
-  case AST_MATCH: {
+  case AST_FMT_STRING:
     break;
-  }
-  case AST_EXTERN_FN: {
+  case AST_EXTERN_FN:
     break;
-  }
-  case AST_YIELD: {
+  case AST_YIELD:
     break;
-  }
-  default: {
-  }
+
+  default:
+    break;
   }
 
   ast->type = type;
   return type;
 }
 
-TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
-  TypeEnv *new_env = t_alloc(sizeof(TypeEnv));
-  new_env->name = name;
-  new_env->type = type;
-  new_env->next = env;
-  return new_env;
-}
+// ============================================================================
+// Constraint infrastructure
+// ============================================================================
 
-Type *env_lookup(TypeEnv *env, const char *name) {
-  for (TypeEnv *e = env; e != NULL; e = e->next) {
-    if (strcmp(e->name, name) == 0) {
-      return e->type;
+void add_constraint(TICtx *result, Type *var, Type *type) {
+  if (!var || !type) {
+    return;
+  }
+  for (Constraint *c = result->constraints; c; c = c->next) {
+    if (types_equal(c->var, var) && types_equal(c->type, type)) {
+      return;
     }
   }
-  return NULL;
-}
-
-void *type_error(Ast *ast, const char *fmt, ...) { return NULL; }
-
-Type *generalize(Type *t, TICtx *ctx) { return t; }
-
-Type *instantiate(Type *sch, TICtx *ctx) { return sch; }
-
-Type *instantiate_type_in_env(Type *sch, TypeEnv *env) { return sch; }
-
-Type *extract_member_from_sum_type(Type *cons, Ast *id) { return NULL; }
-
-Type *extract_member_from_sum_type_idx(Type *cons, Ast *id, int *idx) {
-  return NULL;
+  Constraint *constraint = t_alloc(sizeof(Constraint));
+  *constraint =
+      (Constraint){.var = var, .type = type, .next = result->constraints};
+  result->constraints = constraint;
 }
 
 Constraint *merge_constraints(Constraint *list1, Constraint *list2) {
+  // Simple concat for now
+  if (!list1)
+    return list2;
+  if (!list2)
+    return list1;
+  Constraint *tail = list1;
+  while (tail->next)
+    tail = tail->next;
+  tail->next = list2;
   return list1;
 }
+
+// ============================================================================
+// Unification (structural only - no feature-specific branching)
+// ============================================================================
 
 static bool occurs_in(const char *var, Type *type) {
   if (!type)
@@ -457,9 +664,62 @@ Type *apply_substitution(Subst *subst, Type *t) {
   return apply_subst_to_type(subst, t);
 }
 
+// ============================================================================
+// Backward-compatible wrappers (transitionary - external callers use T_SCHEME)
+// ============================================================================
+
+// generalize_type: create a T_SCHEME wrapper from a type.
+// Used during transition by type_expressions.c and modules.c.
+Type *generalize_type(Type *t, TICtx *ctx) {
+  if (!is_generic(t))
+    return t;
+
+  Type *scheme = t_alloc(sizeof(Type));
+  TypeList *vars = free_vars_type(NULL, t);
+  int n = 0;
+  for (TypeList *vl = vars; vl; vl = vl->next)
+    n++;
+
+  *scheme =
+      (Type){T_SCHEME, {.T_SCHEME = {.vars = vars, .num_vars = n, .type = t}}};
+  return scheme;
+}
+
+// instantiate_type: unwrap T_SCHEME and freshen its vars.
+// Used during transition by type_expressions.c and modules.c.
+Type *instantiate_type(Type *t, TICtx *ctx) {
+  if (t->kind != T_SCHEME)
+    return t;
+
+  TypeEnv stub = {.name = "",
+                  .type = t->data.T_SCHEME.type,
+                  .scheme_vars = t->data.T_SCHEME.vars};
+  return instantiate_env(&stub, ctx);
+}
+
+// ============================================================================
+// Stubs for remaining infrastructure
+// ============================================================================
+
+void *type_error(Ast *ast, const char *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  fprintf(stderr, "Type Error: ");
+  vfprintf(stderr, fmt, args);
+  va_end(args);
+  fprintf(stderr, " ");
+  print_location(ast);
+  return NULL;
+}
+
 TypeEnv *apply_subst_env(Subst *subst, TypeEnv *env) { return env; }
 
-int unify(Type *t1, Type *t2, TICtx *unify_res) { return 0; }
+int unify(Type *t1, Type *t2, TICtx *unify_res) {
+  // Legacy unify returning 0 always; application inference will move
+  // to explicit constraint generation instead.
+  add_constraint(unify_res, t1, t2);
+  return 0;
+}
 
 void print_constraints(Constraint *constraints) {
   for (Constraint *c = constraints; c; c = c->next) {
@@ -476,27 +736,9 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md binding_type,
   return 0;
 }
 
-TypeEnv *lookup_type_ref(TypeEnv *env, const char *name) { return NULL; }
-
 bool is_list_cons_operator(Ast *ast) { return false; }
 
 void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {}
-
-void add_constraint(TICtx *result, Type *var, Type *type) {
-  if (!var || !type) {
-    return;
-  }
-  for (Constraint *c = result->constraints; c; c = c->next) {
-    if (types_equal(c->var, var) && types_equal(c->type, type)) {
-      return;
-    }
-  }
-
-  Constraint *constraint = t_alloc(sizeof(Constraint));
-  *constraint =
-      (Constraint){.var = var, .type = type, .next = result->constraints};
-  result->constraints = constraint;
-}
 
 Type *resolve_type_in_env(Type *r, TypeEnv *env) { return r; }
 
@@ -504,9 +746,19 @@ Type *find_in_subst(Subst *subst, const char *name) { return NULL; }
 
 bool is_constant_expr(Ast *expr, TICtx *ctx) { return false; }
 
-void reset_type_var_counter() {}
+Type *empty_type() {
+  Type *t = t_alloc(sizeof(Type));
+  memset(t, 0, sizeof(Type));
+  return t;
+}
+
+// ============================================================================
+// Type variable generation
+// ============================================================================
 
 static int type_var_counter = 0;
+
+void reset_type_var_counter() { type_var_counter = 0; }
 
 Type *next_tvar() {
   Type *tvar = t_alloc(sizeof(Type));
@@ -517,8 +769,103 @@ Type *next_tvar() {
   return tvar;
 }
 
-Type *empty_type() {
-  Type *t = t_alloc(sizeof(Type));
-  memset(t, 0, sizeof(Type));
-  return t;
+// ============================================================================
+// AST finalization: apply substitution to every node's type annotation
+// ============================================================================
+
+static void finalize_ast_types(Ast *ast, Subst *subst) {
+  if (!ast)
+    return;
+
+  if (ast->type) {
+    ast->type = apply_subst_to_type(subst, ast->type);
+  }
+
+  switch (ast->tag) {
+  case AST_BODY: {
+    AST_LIST_ITER(ast->data.AST_BODY.stmts,
+                  ({ finalize_ast_types(l->ast, subst); }));
+    break;
+  }
+  case AST_LET: {
+    finalize_ast_types(ast->data.AST_LET.binding, subst);
+    finalize_ast_types(ast->data.AST_LET.expr, subst);
+    finalize_ast_types(ast->data.AST_LET.in_expr, subst);
+    break;
+  }
+  case AST_APPLICATION: {
+    finalize_ast_types(ast->data.AST_APPLICATION.function, subst);
+    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      finalize_ast_types(ast->data.AST_APPLICATION.args + i, subst);
+    }
+    break;
+  }
+  case AST_LAMBDA: {
+    finalize_ast_types(ast->data.AST_LAMBDA.body, subst);
+    break;
+  }
+  case AST_MATCH: {
+    finalize_ast_types(ast->data.AST_MATCH.expr, subst);
+    for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
+      finalize_ast_types(ast->data.AST_MATCH.branches + i, subst);
+    }
+    break;
+  }
+  case AST_TUPLE:
+  case AST_ARRAY:
+  case AST_LIST: {
+    for (int i = 0; i < ast->data.AST_LIST.len; i++) {
+      finalize_ast_types(ast->data.AST_LIST.items + i, subst);
+    }
+    break;
+  }
+  case AST_RECORD_ACCESS: {
+    finalize_ast_types(ast->data.AST_RECORD_ACCESS.record, subst);
+    finalize_ast_types(ast->data.AST_RECORD_ACCESS.member, subst);
+    break;
+  }
+  case AST_YIELD: {
+    finalize_ast_types(ast->data.AST_YIELD.expr, subst);
+    break;
+  }
+  case AST_UNOP: {
+    finalize_ast_types(ast->data.AST_UNOP.expr, subst);
+    break;
+  }
+  case AST_BINOP: {
+    finalize_ast_types(ast->data.AST_BINOP.left, subst);
+    finalize_ast_types(ast->data.AST_BINOP.right, subst);
+    break;
+  }
+  case AST_RANGE_EXPRESSION: {
+    finalize_ast_types(ast->data.AST_RANGE_EXPRESSION.from, subst);
+    finalize_ast_types(ast->data.AST_RANGE_EXPRESSION.to, subst);
+    break;
+  }
+  default:
+    break;
+  }
+}
+
+// ============================================================================
+// Binding helpers (legacy, will be replaced by env-based binding)
+// ============================================================================
+
+void register_binding(Ast *b, Type *bt, TICtx *ctx) {
+  switch (b->tag) {
+  case AST_IDENTIFIER: {
+    ctx->env = env_extend(ctx->env, b->data.AST_IDENTIFIER.value, bt);
+    break;
+  }
+  case AST_TUPLE: {
+    int len = b->data.AST_LIST.len;
+    for (int i = 0; i < len; i++) {
+      register_binding(b->data.AST_LIST.items + i, bt->data.T_CONS.args[i],
+                       ctx);
+    }
+    break;
+  }
+  default:
+    break;
+  }
 }
