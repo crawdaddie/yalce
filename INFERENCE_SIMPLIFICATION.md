@@ -677,3 +677,288 @@ The highest-leverage sequence is:
 6. only then reconsider deeper representation changes
 
 That approach should make the whole system easier to understand without forcing a destabilizing rewrite.
+
+## Current State Addendum
+
+This section summarizes the current inference implementation after the recent simplification work. It is intended as a checkpoint: what has improved, what is still incomplete, and which performance/lifetime issues are now visible more clearly.
+
+### What Is Simpler Now
+
+The current implementation is already closer to the target shape than the original system:
+
+- inference is mostly routed through dedicated helpers such as `infer_application`, `infer_lambda`, `infer_match_expression`, `infer_identifier`, and `infer_let_expr`
+- equality constraints and trait-related obligations are now represented separately
+- trait/promotion-style logic is expressed through `Predicate` obligations rather than being fully embedded in `T_TYPECLASS_RESOLVE`
+- final substitution application to AST annotations is centralized in `finalize_ast_types`
+- builtin polymorphism is expressed through `TypeEnv + scheme_vars + predicates`
+
+These are real architectural improvements and should be preserved while continuing to simplify the implementation.
+
+## Outstanding Correctness / Design Issues
+
+### 1. Recursive functions are only partially integrated
+
+Named lambdas now support recursive self-reference by prebinding the lambda name to a fresh provisional type during `infer_lambda`, then constraining that provisional type to the inferred function type.
+
+This is the right simplified shape for monomorphic recursion, but the surrounding design is still incomplete:
+
+- recursive support is only wired through named lambdas, not general recursive lets
+- recursive bindings are not yet clearly documented as monomorphic within their own definition
+- recursion is still not represented as a first-class policy boundary in the inference contracts
+
+The intended rule should remain:
+
+- recursive bindings introduce a provisional monotype before inferring the RHS
+- the RHS is inferred under that binding
+- the provisional type is unified with the inferred RHS type
+- generalization, if any, only happens after the RHS is complete
+
+### 2. Match inference now works structurally, but its invariants are still fragile
+
+`infer_match_expression` now:
+
+- infers the scrutinee
+- binds each pattern against the scrutinee type in a branch-local environment
+- constrains each branch body to a shared result type
+
+This is the right core shape.
+
+However, match remains an area where representation details can still leak:
+
+- the AST stores branches as a flat `pattern, body, pattern, body` array, so every traversal must remember that `len` counts branches while storage uses `len * 2`
+- branch-local type annotations depend on post-solve finalization being applied consistently to every branch node
+- guard clauses and constructor patterns are working, but they still rely on the pattern binder understanding concrete AST lowering details
+
+This is better than before, but the implementation is still more representation-sensitive than ideal.
+
+### 3. Pattern binding has become the hidden feature hub
+
+`bind_pattern(...)` is now doing useful work for:
+
+- let destructuring
+- lambda parameters
+- match patterns
+- tuple/list patterns
+- nullary constructors
+- constructor-style application patterns
+- match guards
+
+This is a good consolidation, but it also means the pattern binder is becoming a new feature concentration point. If more pattern forms are added without care, the same complexity that used to live in `infer()` / `unify()` will simply migrate into `bind_pattern(...)`.
+
+The desired contract should be explicit:
+
+- `bind_pattern(pattern, expected_type, ctx)` only generates constraints and env bindings
+- it should not perform unrelated finalization or ad hoc policy work
+- constructor-specific logic should stay narrow and ideally route through constructor metadata rather than AST-shape special cases
+
+### 4. Builtin polymorphism is cleaner, but still transitional
+
+The current `TypeEnv`-based builtin scheme representation is much better than the older `T_SCHEME`-heavy approach, but the system is still in a mixed state:
+
+- builtin and env polymorphism use `TypeEnv + scheme_vars + predicates`
+- some external callers still use `T_SCHEME`
+- compatibility wrappers still exist for generalization/instantiation
+
+This means there are still two overlapping polymorphism representations in the codebase.
+
+The long-term target should be:
+
+- one polymorphic binding representation for inference-time values
+- one clearly isolated compatibility layer for older external modules until they are migrated
+
+### 5. `Comparable` is the right obligation shape, but the solver policy is still centralized
+
+Renaming the witness-style obligation to `Comparable` clarified the semantics:
+
+- unary obligations: `Trait(t : Eq)` / `Trait(t : Ord)` / `Trait(t : Arithmetic)`
+- relational obligations: `Comparable(trait, lhs, rhs, witness)`
+
+This is a much better model than hiding everything inside type syntax.
+
+However, resolution policy still lives centrally in `resolve_predicates(...)`:
+
+- ranking by concrete typeclass rank
+- arithmetic-specific deferral rules
+- Eq/Ord witness pushback into generic operands
+
+That policy works, but it is still hardcoded in the typechecker rather than delegated to trait-specific logic.
+
+The long-term direction should remain:
+
+- traits own their comparison / witness resolution policy
+- the solver only coordinates obligation solving
+- `Comparable` remains the shared obligation shape, but not the place where all policy is hardcoded
+
+### 6. Finalization is improved, but still easy to under-apply
+
+`finalize_ast_types(...)` is now the clear post-solve AST rewrite phase. That is a major improvement.
+
+The remaining issue is that every AST form that can contain inferred subexpressions must be visited correctly, and missing one traversal causes stale or generic annotations to survive. Recent bugs around `AST_FMT_STRING` and `AST_MATCH` branch traversal are examples of this.
+
+The design implication is:
+
+- finalization is now the right boundary
+- but the AST traversal must be treated as a complete structural walk, not an ad hoc patch list
+
+## Performance Concerns
+
+The current system is correct enough to optimize, but the main costs are still dominated by representation choices rather than allocator overhead alone.
+
+### 1. Memory lifetime is not separated cleanly enough
+
+The most important performance concern is not just “how much do we allocate?”, but “which allocations must survive beyond `infer(...)`?”
+
+There are at least three relevant lifetimes:
+
+#### Persistent / AST lifetime
+
+These allocations must survive after inference completes:
+
+- final `ast->type` annotations
+- type nodes reachable from finalized AST annotations
+- retained `TypeEnv` entries that stay attached to later compilation phases
+- builtin type schemes and builtin predicate templates
+
+#### Inference-session lifetime
+
+These allocations only need to survive for one `infer(...)` invocation:
+
+- `Constraint` list nodes
+- accumulated instantiated `Predicate` obligation nodes in `ctx->predicates`
+- `Subst` list nodes
+- temporary `Comparable` argument arrays created during obligation copying / rewriting
+
+These are strong candidates for separate allocators or a dedicated inference-session arena.
+
+#### Scratch / solve-time temporary lifetime
+
+These allocations are even shorter-lived and often only need to survive during one solver pass or one helper call:
+
+- temporary rewritten `Type` nodes created by `apply_subst_to_type(...)`
+- temporary predicate copies from `predicate_apply_subst(...)`
+- temporary instantiated structures that are only used to derive the final substitution
+
+At the moment these lifetimes are not cleanly separated enough. This makes memory profiling harder and causes temporary churn to look more persistent than it really is.
+
+### 2. Separate allocators help memory behavior, but are not the main speed win
+
+Giving `Constraint`, `Predicate`, and `Subst` their own inference-session allocators is still worthwhile because it:
+
+- reduces lifetime confusion
+- improves locality within each node kind
+- makes teardown effectively free
+- makes allocation profiling by category much easier
+
+However, this is mostly a constant-factor improvement. It helps memory behavior directly and runtime somewhat, but it does not fix the dominant algorithmic costs.
+
+### 3. The current substitution representation is the main solver bottleneck
+
+The current substitution design uses:
+
+- linked-list substitution nodes
+- string-based type-variable identity
+- repeated linear lookup by variable name
+
+This affects:
+
+- `lookup_subst(...)`
+- `find_root_var(...)`
+- `apply_subst_to_type(...)`
+- `unify_types(...)`
+- predicate resolution
+
+The result is a lot of repeated linear work plus repeated string comparisons.
+
+The most important medium-term speed improvement would be:
+
+- give type variables a stable integer id
+- store solver state indexed by that id
+- replace linked-list substitution lookup with table-driven lookup, ideally union-find style
+
+This is why adding an `id` to `T_VAR` is a useful preparatory step. It opens the path toward:
+
+- array-indexed type-variable state
+- path compression
+- cheaper root lookup
+- less repeated string handling
+
+### 4. Constraint management is still too list-oriented
+
+Constraints are currently maintained as a linked list, and insertion currently scans existing constraints to avoid exact duplicates.
+
+This has two costs:
+
+- poor cache locality from linked-list traversal
+- O(n) duplicate checks during insertion
+
+At current scale this may be acceptable, but it is not a good long-term shape.
+
+Likely improvements:
+
+- remove duplicate checking entirely unless measurements prove it is valuable
+- or replace it with a hash-based dedup strategy
+- eventually store constraints in a growable array / worklist rather than a linked list
+
+### 5. Predicate rewriting is allocation-heavy
+
+`predicate_apply_subst(...)` currently rewrites whole predicate lists and rebuilds comparable argument arrays.
+
+That is not wrong, but it is a likely source of avoidable temporary allocation churn.
+
+Possible future improvements:
+
+- resolve predicates against the current substitution on demand rather than rewriting the whole list
+- allocate rewritten predicates in scratch memory only
+- reduce repeated arg-array rebuilding for small fixed-arity builtins
+
+### 6. `apply_subst_to_type(...)` is a likely hot path
+
+This helper is structurally correct and already preserves sharing where it can, but it still rebuilds function/constructor nodes whenever any child changes.
+
+That means it is probably one of the main temporary allocation sources during solving and finalization.
+
+It should be profiled specifically:
+
+- number of calls per `infer(...)`
+- number of new `Type` nodes allocated inside it
+- how often the same logical type is rewritten repeatedly
+
+If solving is slow, this function is a prime suspect.
+
+## Recommended Performance Instrumentation
+
+Before changing data structures aggressively, add measurements.
+
+The most useful immediate counters are:
+
+- number of `Type` allocations during one `infer(...)`
+- number of `Constraint` allocations
+- number of `Predicate` allocations
+- number of `Subst` allocations
+- number of calls to `apply_subst_to_type(...)`
+- number of constraints solved
+- number of predicate-resolution iterations
+
+These counters should ideally be split by lifetime bucket:
+
+- persistent
+- inference-session
+- scratch
+
+Without that distinction, memory measurements will remain noisy and misleading.
+
+## Practical Next Steps
+
+The current priority order should be:
+
+1. separate persistent allocations from inference-session allocations
+2. add allocation and hot-path counters
+3. stop paying obvious O(n) costs where they are not buying much
+4. continue the move from string-based `T_VAR` identity toward integer-id-based lookup
+5. only then consider deeper solver data-structure replacement
+
+The most important strategic point is this:
+
+- allocator separation is mainly about lifetime clarity and memory behavior
+- the biggest speed wins will come from better type-variable and substitution data structures
+- both should be designed together, but allocator/lifetime cleanup is the safer first step
