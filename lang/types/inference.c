@@ -607,9 +607,10 @@ static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out) {
     if (unify_types(t1->data.T_FN.from, t2->data.T_FN.from, subst, &s1))
       return 1;
     Subst *s2 = NULL;
-    if (unify_types(t1->data.T_FN.to, t2->data.T_FN.to, s1 ? s1 : subst, &s2))
+    Subst *use_subst = (s1 != NULL) ? s1 : subst;
+    if (unify_types(t1->data.T_FN.to, t2->data.T_FN.to, use_subst, &s2))
       return 1;
-    *out = s2 ? s2 : subst;
+    *out = (s2 != NULL) ? s2 : use_subst;
     return 0;
   }
 

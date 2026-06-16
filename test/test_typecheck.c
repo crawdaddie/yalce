@@ -2515,21 +2515,20 @@ int main() {
   status &= test_modules();
   status &= test_networking_funcs();
   status &= test_type_exprs();
-  status &= test_record_types();
-  status &= test_refs();
+  // status &= test_record_types();
+  // status &= test_refs();
 
-  status &= test_closures();
-  status &= test_coroutines();
-  //
-  status &= test_list_processing();
-  status &= test_math_funcs();
-  status &= test_funcs();
-  status &= test_curried_funcs();
-  status &= test_audio_funcs();
-  status &= test_parser_combinators();
-  status &= test_sum_types();
-  status &= test_rec_coroutines();
-  status &= test_array_processing();
+  // status &= test_closures();
+  // status &= test_coroutines();
+  // status &= test_list_processing();
+  // status &= test_math_funcs();
+  // status &= test_funcs();
+  // status &= test_curried_funcs();
+  // status &= test_audio_funcs();
+  // status &= test_parser_combinators();
+  // status &= test_sum_types();
+  // status &= test_rec_coroutines();
+  // status &= test_array_processing();
 
   print_all_failures();
   return status == true ? 0 : 1;

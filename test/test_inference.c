@@ -340,6 +340,207 @@ static void test_infer_solve() {
   }
 }
 
+static void test_unify_fn_types() {
+  printf("\n--- test_unify_fn_types ---\n");
+  reset_type_var_counter();
+
+  TICtx ctx = {0};
+  ctx.env = NULL;
+  ctx.constraints = NULL;
+
+  Type *tvar1 = next_tvar();
+  char *tvar1_name = tvar1->data.T_VAR;
+  Type *tvar2 = next_tvar();
+  char *tvar2_name = tvar2->data.T_VAR;
+
+  Type *fn1 = t_alloc(sizeof(Type));
+  fn1->kind = T_FN;
+  fn1->data.T_FN.from = tvar1;
+  fn1->data.T_FN.to = &t_int;
+
+  Type *fn2 = t_alloc(sizeof(Type));
+  fn2->kind = T_FN;
+  fn2->data.T_FN.from = &t_string;
+  fn2->data.T_FN.to = tvar2;
+
+  add_constraint(&ctx, fn1, fn2);
+
+  Subst *subst = solve_constraints(ctx.constraints);
+
+  if (subst) {
+    Type *result_from = apply_substitution(subst, tvar1);
+    Type *result_to = apply_substitution(subst, tvar2);
+
+    if (result_from && result_to && 
+        result_from->kind == T_CONS && result_to->kind == T_INT) {
+      printf("✅ PASS: Function types unified correctly\n");
+      tests_passed++;
+    } else {
+      printf("❌ FAIL: Function types not unified correctly\n");
+      tests_failed++;
+    }
+  } else {
+    printf("❌ FAIL: Function type unification failed\n");
+    tests_failed++;
+  }
+}
+
+static void test_unify_nested_fn() {
+  printf("\n--- test_unify_nested_fn ---\n");
+  reset_type_var_counter();
+
+  TICtx ctx = {0};
+  ctx.env = NULL;
+  ctx.constraints = NULL;
+
+  Type *tvar = next_tvar();
+  char *tvar_name = tvar->data.T_VAR;
+
+  Type *nested_fn = t_alloc(sizeof(Type));
+  nested_fn->kind = T_FN;
+  nested_fn->data.T_FN.from = tvar;
+  nested_fn->data.T_FN.to = tvar;
+
+  Type *concrete_fn = t_alloc(sizeof(Type));
+  concrete_fn->kind = T_FN;
+  concrete_fn->data.T_FN.from = &t_int;
+  concrete_fn->data.T_FN.to = &t_int;
+
+  add_constraint(&ctx, nested_fn, concrete_fn);
+
+  Subst *subst = solve_constraints(ctx.constraints);
+
+  if (subst) {
+    Type *result = apply_substitution(subst, tvar);
+    if (result && result->kind == T_INT) {
+      printf("✅ PASS: Nested function types unified\n");
+      tests_passed++;
+    } else {
+      printf("❌ FAIL: Nested function type not unified (kind=%d)\n",
+             result ? result->kind : -1);
+      tests_failed++;
+    }
+  } else {
+    printf("❌ FAIL: Nested function type unification failed\n");
+    tests_failed++;
+  }
+}
+
+static void test_occurs_check_rejects() {
+  printf("\n--- test_occurs_check_rejects ---\n");
+  reset_type_var_counter();
+
+  TICtx ctx = {0};
+  ctx.env = NULL;
+  ctx.constraints = NULL;
+
+  Type *tvar = next_tvar();
+  char *tvar_name = tvar->data.T_VAR;
+
+  Type *list_of_tvar = t_alloc(sizeof(Type));
+  Type **args = t_alloc(sizeof(Type *));
+  args[0] = tvar;
+  list_of_tvar->kind = T_CONS;
+  list_of_tvar->data.T_CONS.name = TYPE_NAME_LIST;
+  list_of_tvar->data.T_CONS.args = args;
+  list_of_tvar->data.T_CONS.num_args = 1;
+
+  add_constraint(&ctx, tvar, list_of_tvar);
+
+  Subst *subst = solve_constraints(ctx.constraints);
+
+  if (subst == NULL) {
+    printf("✅ PASS: Occurs check correctly rejects infinite type\n");
+    tests_passed++;
+  } else {
+    printf("❌ FAIL: Occurs check should reject infinite type\n");
+    tests_failed++;
+  }
+}
+
+static void test_unify_cons_types() {
+  printf("\n--- test_unify_cons_types ---\n");
+  reset_type_var_counter();
+
+  TICtx ctx = {0};
+  ctx.env = NULL;
+  ctx.constraints = NULL;
+
+  Type *tvar = next_tvar();
+
+  Type *cons1 = t_alloc(sizeof(Type));
+  Type **args1 = t_alloc(sizeof(Type *));
+  args1[0] = &t_int;
+  cons1->kind = T_CONS;
+  cons1->data.T_CONS.name = TYPE_NAME_LIST;
+  cons1->data.T_CONS.args = args1;
+  cons1->data.T_CONS.num_args = 1;
+
+  Type *cons2 = t_alloc(sizeof(Type));
+  Type **args2 = t_alloc(sizeof(Type *));
+  args2[0] = tvar;
+  cons2->kind = T_CONS;
+  cons2->data.T_CONS.name = TYPE_NAME_LIST;
+  cons2->data.T_CONS.args = args2;
+  cons2->data.T_CONS.num_args = 1;
+
+  add_constraint(&ctx, cons1, cons2);
+
+  Subst *subst = solve_constraints(ctx.constraints);
+
+  if (subst) {
+    Type *result = apply_substitution(subst, tvar);
+    if (result->kind == T_INT) {
+      printf("✅ PASS: Cons types unified\n");
+      tests_passed++;
+    } else {
+      printf("❌ FAIL: Cons type not unified correctly\n");
+      tests_failed++;
+    }
+  } else {
+    printf("❌ FAIL: Cons type unification failed\n");
+    tests_failed++;
+  }
+}
+
+static void test_unify_arity_mismatch() {
+  printf("\n--- test_unify_arity_mismatch ---\n");
+  reset_type_var_counter();
+
+  TICtx ctx = {0};
+  ctx.env = NULL;
+  ctx.constraints = NULL;
+
+  Type *cons1 = t_alloc(sizeof(Type));
+  Type **args1 = t_alloc(sizeof(Type *) * 2);
+  args1[0] = &t_int;
+  args1[1] = &t_string;
+  cons1->kind = T_CONS;
+  cons1->data.T_CONS.name = TYPE_NAME_LIST;
+  cons1->data.T_CONS.args = args1;
+  cons1->data.T_CONS.num_args = 2;
+
+  Type *cons2 = t_alloc(sizeof(Type));
+  Type **args2 = t_alloc(sizeof(Type *));
+  args2[0] = &t_int;
+  cons2->kind = T_CONS;
+  cons2->data.T_CONS.name = TYPE_NAME_LIST;
+  cons2->data.T_CONS.args = args2;
+  cons2->data.T_CONS.num_args = 1;
+
+  add_constraint(&ctx, cons1, cons2);
+
+  Subst *subst = solve_constraints(ctx.constraints);
+
+  if (subst == NULL) {
+    printf("✅ PASS: Arity mismatch correctly rejected\n");
+    tests_passed++;
+  } else {
+    printf("❌ FAIL: Should reject arity mismatch\n");
+    tests_failed++;
+  }
+}
+
 int main() {
   printf("=== Testing add_constraint ===\n");
 
@@ -358,6 +559,14 @@ int main() {
   test_apply_substitution_nested();
   test_compose_subst();
   test_infer_solve();
+
+  printf("\n=== Testing unification ===\n");
+
+  test_unify_fn_types();
+  test_unify_nested_fn();
+  test_unify_cons_types();
+  test_unify_arity_mismatch();
+  test_occurs_check_rejects();
 
   printf("\n=== Results: %d passed, %d failed ===\n", tests_passed,
          tests_failed);
