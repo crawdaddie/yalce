@@ -1,27 +1,120 @@
 #include "./inference.h"
 #include "../ht.h"
 #include "../parse.h"
+#include "../serde.h"
 #include "./builtins.h"
-#include "types/type.h"
-#include "types/type_ser.h"
+#include "./type.h"
+#include "./type_ser.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+// ============================================================================
+// Forward declarations for static helpers implemented in this file
+// ============================================================================
+Type *infer_expr(Ast *ast, TICtx *ctx);
+static Type *apply_subst_to_type(Subst *subst, Type *t);
+static Subst *extend_subst(Subst *subst, const char *var, Type *type);
+static Type *find_root_var(Subst *subst, Type *t);
+static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out);
+static int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx);
+
 Type *infer_match_expression(Ast *ast, TICtx *ctx) {
-  // Stub: will contain pattern matching type inference
-  return next_tvar();
+  Type *scrutinee_type = infer_expr(ast->data.AST_MATCH.expr, ctx);
+  if (!scrutinee_type) {
+    return NULL;
+  }
+
+  Type *result_type = next_tvar();
+  for (size_t i = 0; i < ast->data.AST_MATCH.len; i++) {
+    Ast *pattern = ast->data.AST_MATCH.branches + (i * 2);
+    Ast *body = ast->data.AST_MATCH.branches + (i * 2) + 1;
+    TypeEnv *saved_env = ctx->env;
+
+    if (bind_pattern(pattern, scrutinee_type, ctx) != 0) {
+      ctx->env = saved_env;
+      return type_error(pattern, "Unsupported match pattern");
+    }
+
+    Type *body_type = infer_expr(body, ctx);
+    ctx->env = saved_env;
+    if (!body_type) {
+      return NULL;
+    }
+    add_constraint(ctx, body_type, result_type);
+  }
+
+  return result_type;
 }
 
 Type *infer_application(Ast *ast, TICtx *ctx) {
-  // Stub: will contain pattern matching type inference
-  return next_tvar();
+  Ast *fn_ast = ast->data.AST_APPLICATION.function;
+  size_t nargs = ast->data.AST_APPLICATION.len;
+
+  Type *fn_type = infer_expr(fn_ast, ctx);
+  if (!fn_type)
+    return NULL;
+
+  Type *current = fn_type;
+  for (size_t i = 0; i < nargs; i++) {
+    Type *arg_type = infer_expr(ast->data.AST_APPLICATION.args + i, ctx);
+    if (!arg_type)
+      return NULL;
+
+    if (current->kind == T_FN) {
+      add_constraint(ctx, arg_type, current->data.T_FN.from);
+      current = current->data.T_FN.to;
+    } else {
+      // function position has too few params / is not a function
+      Type *result = next_tvar();
+      Type *expected = type_fn(arg_type, result);
+      add_constraint(ctx, current, expected);
+      current = result;
+    }
+  }
+
+  return current;
 }
 
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
-  // Stub: will contain pattern matching type inference
-  return next_tvar();
+  TypeEnv *saved_env = ctx->env;
+  size_t len = ast->data.AST_LAMBDA.len;
+  Type **param_types = len ? t_alloc(sizeof(Type *) * len) : NULL;
+  Type *self_type = NULL;
+
+  if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
+    self_type = next_tvar();
+    ctx->env =
+        env_extend(ctx->env, ast->data.AST_LAMBDA.fn_name.chars, self_type);
+  }
+
+  AstList *param = ast->data.AST_LAMBDA.params;
+  for (size_t i = 0; i < len && param; i++, param = param->next) {
+    Type *pt = next_tvar();
+    param_types[i] = pt;
+    if (bind_pattern(param->ast, pt, ctx) != 0) {
+      ctx->env = saved_env;
+      return type_error(param->ast, "Unsupported lambda parameter");
+    }
+  }
+
+  Type *body_type = infer_expr(ast->data.AST_LAMBDA.body, ctx);
+  ctx->env = saved_env;
+  if (!body_type) {
+    return NULL;
+  }
+
+  Type *fn_type = body_type;
+  for (size_t i = len; i > 0; i--) {
+    fn_type = type_fn(param_types[i - 1], fn_type);
+  }
+
+  if (self_type) {
+    add_constraint(ctx, self_type, fn_type);
+  }
+
+  return fn_type;
 }
 
 // ============================================================================
@@ -30,6 +123,8 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 Type *infer_expr(Ast *ast, TICtx *ctx);
 static Type *apply_subst_to_type(Subst *subst, Type *t);
 static Subst *extend_subst(Subst *subst, const char *var, Type *type);
+static Type *find_root_var(Subst *subst, Type *t);
+static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out);
 
 // ============================================================================
 // Top-level inference pipeline
@@ -65,19 +160,36 @@ Type *apply_solution(Type *raw, Solution *solved) {
 }
 
 // infer: the public entry point.
-// 1. Infer expression types and generate constraints
-// 2. Solve constraints once
-// 3. Apply substitution to the result type
-// 4. Finalize AST annotations
+// 1. Infer expression types and generate constraints + predicates
+// 2. Solve equality constraints once
+// 3. Resolve trait predicates using the substitution (may extend subst)
+// 4. Apply substitution to the result type
+// 5. Finalize AST annotations
 Type *infer(Ast *ast, TICtx *ctx) {
   Type *raw = infer_expr(ast, ctx);
   if (!raw) {
     return NULL;
   }
-
+  // printf("[Constraints]\n");
+  // print_constraints(ctx->constraints);
+  //
+  // printf("[Predicates]\n");
+  // print_predicates(ctx->predicates);
+  //
   Solution sol = {0};
   if (infer_solve(ctx, &sol)) {
     return NULL;
+  }
+
+  // printf("[Solution]\n");
+  // print_subst(ctx->subst);
+
+  // Resolve accumulated trait predicates using the solved substitution
+  if (ctx->predicates) {
+    Predicate *resolved = predicate_apply_subst(sol.subst, ctx->predicates);
+    if (resolve_predicates(&sol.subst, resolved, ctx->err_stream) != 0) {
+      return NULL;
+    }
   }
 
   Type *final = apply_solution(raw, &sol);
@@ -90,24 +202,16 @@ Type *infer(Ast *ast, TICtx *ctx) {
 // ============================================================================
 
 Type *infer_list_literal(Ast *ast, TICtx *ctx) {
-  if (ast->data.AST_LIST.len == 0) {
-    Type *t = t_alloc(sizeof(Type));
-    Type **contained = t_alloc(sizeof(Type *));
-    contained[0] = next_tvar();
-    *t = (Type){
-        T_CONS,
-        {.T_CONS = {ast->tag == AST_LIST ? TYPE_NAME_LIST : TYPE_NAME_ARRAY,
-                    contained, 1}}};
-    return t;
-  }
-
+  Type *el_type = next_tvar();
   int len = ast->data.AST_LIST.len;
-  Type *el_type = infer_expr(ast->data.AST_LIST.items, ctx);
 
-  for (int i = 1; i < len; i++) {
+  for (int i = 0; i < len; i++) {
     Ast *el = ast->data.AST_LIST.items + i;
-    Type *_el_type = infer_expr(el, ctx);
-    el_type = _el_type;
+    Type *item_type = infer_expr(el, ctx);
+    if (!item_type) {
+      return NULL;
+    }
+    add_constraint(ctx, item_type, el_type);
   }
 
   Type *type = t_alloc(sizeof(Type));
@@ -126,10 +230,16 @@ Type *infer_list_literal(Ast *ast, TICtx *ctx) {
 // ============================================================================
 
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type) {
+  return env_extend_with_preds(env, name, type, NULL);
+}
+
+TypeEnv *env_extend_with_preds(TypeEnv *env, const char *name, Type *type,
+                               Predicate *preds) {
   TypeEnv *new_env = t_alloc(sizeof(TypeEnv));
   new_env->name = name;
   new_env->type = type;
   new_env->scheme_vars = NULL;
+  new_env->predicates = preds;
   new_env->next = env;
   return new_env;
 }
@@ -157,7 +267,7 @@ Type *env_lookup(TypeEnv *env, const char *name) {
 static bool type_list_contains_str(TypeList *l, const char *name) {
   for (TypeList *c = l; c; c = c->next) {
     if (c->type && c->type->kind == T_VAR &&
-        strcmp(c->type->data.T_VAR, name) == 0) {
+        strcmp(c->type->data.T_VAR.name, name) == 0) {
       return true;
     }
   }
@@ -185,7 +295,7 @@ TypeList *free_vars_type(TypeList *acc, Type *t) {
     // Skip recursive placeholders
     if (t->is_recursive_type_ref)
       return acc;
-    if (!type_list_contains_str(acc, t->data.T_VAR)) {
+    if (!type_list_contains_str(acc, t->data.T_VAR.name)) {
       acc = type_list_append_var(acc, t);
     }
     return acc;
@@ -217,7 +327,7 @@ static TypeList *set_diff(TypeList *a, TypeList *b) {
   TypeList *result = NULL;
   for (TypeList *la = a; la; la = la->next) {
     if (la->type && la->type->kind == T_VAR) {
-      if (!type_list_contains_str(b, la->type->data.T_VAR)) {
+      if (!type_list_contains_str(b, la->type->data.T_VAR.name)) {
         result = type_list_append_var(result, la->type);
       }
     }
@@ -236,20 +346,65 @@ void generalize_env(TypeEnv *entry, TypeEnv *env) {
   entry->scheme_vars = set_diff(fv_type, fv_env);
 }
 
-// instantiate: replace scheme_vars with fresh type variables.
+// instantiate: replace scheme_vars with fresh type variables, and copy
+// predicates into the inference context with freshened types.
 Type *instantiate_env(TypeEnv *entry, TICtx *ctx) {
+  // No scheme vars: monomorphic. Still copy predicates if present.
   if (!entry->scheme_vars) {
+    for (Predicate *p = entry->predicates; p; p = p->next) {
+      if (p->kind == PRED_TRAIT) {
+        ctx->predicates =
+            predicate_append(ctx->predicates, p->trait, p->data.TRAIT.type);
+      } else if (p->kind == PRED_COMPARABLE) {
+        // Monomorphic but has comparability obligations — copy as-is
+        int n = 0;
+        while (p->data.COMPARABLE.args[n])
+          n++;
+        Type **args = t_alloc(sizeof(Type *) * (n + 1));
+        for (int i = 0; i < n; i++)
+          args[i] = p->data.COMPARABLE.args[i];
+        args[n] = NULL;
+        ctx->predicates = predicate_append_comparable(
+            ctx->predicates, p->trait, p->data.COMPARABLE.witness, args);
+      }
+    }
     return entry->type;
   }
 
+  // Build freshening substitution from scheme vars
   Subst *base = NULL;
   for (TypeList *v = entry->scheme_vars; v; v = v->next) {
     if (v->type && v->type->kind == T_VAR) {
       Type *fresh = next_tvar();
       fresh->implements = v->type->implements;
-      base = extend_subst(base, v->type->data.T_VAR, fresh);
+      base = extend_subst(base, v->type->data.T_VAR.name, fresh);
     }
   }
+
+  // Copy predicates with freshened types / result / args
+  for (Predicate *p = entry->predicates; p; p = p->next) {
+    if (p->kind == PRED_TRAIT) {
+      Type *fresh_type = base ? apply_subst_to_type(base, p->data.TRAIT.type)
+                              : p->data.TRAIT.type;
+      ctx->predicates = predicate_append(ctx->predicates, p->trait, fresh_type);
+    } else if (p->kind == PRED_COMPARABLE) {
+      Type *fresh_witness =
+          base ? apply_subst_to_type(base, p->data.COMPARABLE.witness)
+               : p->data.COMPARABLE.witness;
+      int n = 0;
+      while (p->data.COMPARABLE.args[n])
+        n++;
+      Type **args = t_alloc(sizeof(Type *) * (n + 1));
+      for (int i = 0; i < n; i++) {
+        args[i] = base ? apply_subst_to_type(base, p->data.COMPARABLE.args[i])
+                       : p->data.COMPARABLE.args[i];
+      }
+      args[n] = NULL;
+      ctx->predicates = predicate_append_comparable(ctx->predicates, p->trait,
+                                                    fresh_witness, args);
+    }
+  }
+
   if (!base)
     return entry->type;
   return apply_subst_to_type(base, entry->type);
@@ -304,18 +459,129 @@ static Type *infer_identifier(Ast *ast, TICtx *ctx) {
     return instantiate_env(ref, ctx);
   }
 
-  Type *builtin = lookup_builtin_type(name);
+  // New: builtins stored as TypeEnv entries with predicates
+  TypeEnv *builtin = lookup_builtin_env(name);
   if (builtin) {
-    if (builtin->kind == T_SCHEME) {
-      TypeEnv stub = {.name = name,
-                      .type = builtin->data.T_SCHEME.type,
-                      .scheme_vars = builtin->data.T_SCHEME.vars};
-      return instantiate_env(&stub, ctx);
-    }
-    return builtin;
+    return instantiate_env(builtin, ctx);
   }
 
   return next_tvar();
+}
+
+static int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx) {
+  if (!pattern || !value_type) {
+    return 1;
+  }
+
+  if (pattern->tag == AST_LET) {
+    pattern = pattern->data.AST_LET.binding;
+  }
+
+  switch (pattern->tag) {
+  case AST_PLACEHOLDER_ID:
+    return 0;
+  case AST_INT:
+    add_constraint(ctx, value_type, &t_int);
+    return 0;
+  case AST_DOUBLE:
+    add_constraint(ctx, value_type, &t_num);
+    return 0;
+  case AST_STRING:
+    add_constraint(ctx, value_type, &t_string);
+    return 0;
+  case AST_CHAR:
+    add_constraint(ctx, value_type, &t_char);
+    return 0;
+  case AST_BOOL:
+    add_constraint(ctx, value_type, &t_bool);
+    return 0;
+  case AST_VOID:
+    add_constraint(ctx, value_type, &t_void);
+    return 0;
+  case AST_IDENTIFIER: {
+    const char *name = pattern->data.AST_IDENTIFIER.value;
+    if (strcmp(name, "_") == 0) {
+      return 0;
+    }
+    TypeEnv *builtin = lookup_builtin_env(name);
+    if (builtin && builtin->type && builtin->type->kind != T_FN) {
+      add_constraint(ctx, value_type, instantiate_env(builtin, ctx));
+      return 0;
+    }
+    ctx->env = env_extend(ctx->env, name, value_type);
+    return 0;
+  }
+  case AST_MATCH_GUARD_CLAUSE: {
+    if (bind_pattern(pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr, value_type,
+                     ctx) != 0) {
+      return 1;
+    }
+    Type *guard_type =
+        infer_expr(pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr, ctx);
+    if (!guard_type) {
+      return 1;
+    }
+    add_constraint(ctx, guard_type, &t_bool);
+    return 0;
+  }
+  case AST_TUPLE: {
+    int len = pattern->data.AST_LIST.len;
+    Type **items = t_alloc(sizeof(Type *) * len);
+    for (int i = 0; i < len; i++) {
+      items[i] = next_tvar();
+    }
+    add_constraint(ctx, value_type, create_tuple_type(len, items));
+    for (int i = 0; i < len; i++) {
+      if (bind_pattern(pattern->data.AST_LIST.items + i, items[i], ctx) != 0) {
+        return 1;
+      }
+    }
+    return 0;
+  }
+  case AST_APPLICATION: {
+    if (pattern->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+        strcmp(
+            pattern->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+            TYPE_NAME_OP_LIST_PREPEND) == 0 &&
+        pattern->data.AST_APPLICATION.len == 2) {
+      Type *item_type = next_tvar();
+      Type *rest_type = create_list_type_of_type(item_type);
+      add_constraint(ctx, value_type, rest_type);
+
+      if (bind_pattern(pattern->data.AST_APPLICATION.args, item_type, ctx) !=
+          0) {
+        return 1;
+      }
+      return bind_pattern(pattern->data.AST_APPLICATION.args + 1, rest_type,
+                          ctx);
+    }
+
+    if (pattern->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
+      TypeEnv *builtin = lookup_builtin_env(
+          pattern->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value);
+      if (builtin) {
+        Type *current = instantiate_env(builtin, ctx);
+        for (size_t i = 0; i < pattern->data.AST_APPLICATION.len; i++) {
+          if (!current || current->kind != T_FN) {
+            return 1;
+          }
+          if (bind_pattern(pattern->data.AST_APPLICATION.args + i,
+                           current->data.T_FN.from, ctx) != 0) {
+            return 1;
+          }
+          current = current->data.T_FN.to;
+        }
+        add_constraint(ctx, value_type, current);
+        return 0;
+      }
+    }
+    break;
+  }
+  default:
+    break;
+  }
+
+  return 1;
 }
 
 static Type *infer_let_expr(Ast *ast, TICtx *ctx) {
@@ -328,32 +594,7 @@ static Type *infer_let_expr(Ast *ast, TICtx *ctx) {
     return NULL;
   }
 
-  switch (binding->tag) {
-  case AST_IDENTIFIER: {
-    ctx->env =
-        env_extend(ctx->env, binding->data.AST_IDENTIFIER.value, expr_type);
-    generalize_env(ctx->env, ctx->env->next);
-    break;
-  }
-  case AST_TUPLE: {
-    int len = binding->data.AST_LIST.len;
-    Type **vars = t_alloc(sizeof(Type *) * len);
-    for (int i = 0; i < len; i++) {
-      Ast *b = binding->data.AST_LIST.items + i;
-      Type *bt = next_tvar();
-      vars[i] = bt;
-      Ast *id = b;
-      if (b->tag == AST_LET)
-        id = b->data.AST_LET.binding;
-      if (id->tag == AST_IDENTIFIER) {
-        ctx->env = env_extend(ctx->env, id->data.AST_IDENTIFIER.value, bt);
-      }
-    }
-    Type *lhs_tuple = create_tuple_type(len, vars);
-    add_constraint(ctx, expr_type, lhs_tuple);
-    break;
-  }
-  default:
+  if (bind_pattern(binding, expr_type, ctx) != 0) {
     type_error(ast, "Unsupported let binding shape");
     return NULL;
   }
@@ -436,7 +677,6 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
     type = infer_identifier(ast, ctx);
     break;
 
-  // Feature overlays
   case AST_APPLICATION:
     type = infer_application(ast, ctx);
     break;
@@ -451,6 +691,13 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
   case AST_TYPE_DECL:
     break;
   case AST_FMT_STRING:
+    for (int i = 0; i < ast->data.AST_LIST.len; i++) {
+      Ast *item = ast->data.AST_LIST.items + i;
+      if (infer_expr(item, ctx) == NULL) {
+        return NULL;
+      }
+    }
+    type = &t_string;
     break;
   case AST_EXTERN_FN:
     break;
@@ -466,6 +713,271 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
 }
 
 // ============================================================================
+// Predicate helpers
+// ============================================================================
+
+Predicate *predicate_append(Predicate *list, TypeClass *trait, Type *type) {
+  Predicate *p = t_alloc(sizeof(Predicate));
+  *p = (Predicate){.kind = PRED_TRAIT,
+                   .trait = trait,
+                   .data = {.TRAIT = {.type = type}},
+                   .next = list};
+  return p;
+}
+
+Predicate *predicate_append_comparable(Predicate *list, TypeClass *trait,
+                                       Type *witness, Type **args) {
+  Predicate *p = t_alloc(sizeof(Predicate));
+  *p = (Predicate){.kind = PRED_COMPARABLE,
+                   .trait = trait,
+                   .data = {.COMPARABLE = {.witness = witness, .args = args}},
+                   .next = list};
+  return p;
+}
+
+Predicate *predicate_apply_subst(Subst *subst, Predicate *preds) {
+  Predicate *result = NULL;
+  for (Predicate *p = preds; p; p = p->next) {
+    if (p->kind == PRED_TRAIT) {
+      Type *resolved = apply_subst_to_type(subst, p->data.TRAIT.type);
+      result = predicate_append(result, p->trait, resolved);
+    } else if (p->kind == PRED_COMPARABLE) {
+      Type *resolved_witness =
+          apply_subst_to_type(subst, p->data.COMPARABLE.witness);
+      int n = 0;
+      while (p->data.COMPARABLE.args[n])
+        n++;
+      Type **resolved_args = t_alloc(sizeof(Type *) * (n + 1));
+      for (int i = 0; i < n; i++) {
+        resolved_args[i] =
+            apply_subst_to_type(subst, p->data.COMPARABLE.args[i]);
+      }
+      resolved_args[n] = NULL;
+      result = predicate_append_comparable(result, p->trait, resolved_witness,
+                                           resolved_args);
+    }
+  }
+  return result;
+}
+
+Predicate *predicate_duplicate(Predicate *preds) {
+  Predicate *result = NULL;
+  for (Predicate *p = preds; p; p = p->next) {
+    if (p->kind == PRED_TRAIT) {
+      result = predicate_append(result, p->trait, p->data.TRAIT.type);
+    } else if (p->kind == PRED_COMPARABLE) {
+      int n = 0;
+      while (p->data.COMPARABLE.args[n])
+        n++;
+      Type **args = t_alloc(sizeof(Type *) * (n + 1));
+      for (int i = 0; i < n; i++)
+        args[i] = p->data.COMPARABLE.args[i];
+      args[n] = NULL;
+      result = predicate_append_comparable(result, p->trait,
+                                           p->data.COMPARABLE.witness, args);
+    }
+  }
+  return result;
+}
+
+void print_predicate(Predicate *p) {
+  switch (p->kind) {
+  case PRED_TRAIT: {
+    printf("Trait( ");
+    if (p->data.TRAIT.type) {
+      print_type_to_stream(p->data.TRAIT.type, stdout);
+    } else {
+      printf("(null)");
+    }
+    printf(" : %s )", p->trait ? p->trait->name : "(null)");
+    printf("\n");
+    break;
+  }
+
+  case PRED_COMPARABLE: {
+
+    printf("Comparable( ");
+    if (p->data.COMPARABLE.witness) {
+      print_type_to_stream(p->data.COMPARABLE.witness, stdout);
+    } else {
+      printf("(null)");
+    }
+    printf(" = resolve(%s,", p->trait ? p->trait->name : "(null)");
+    for (int i = 0; p->data.COMPARABLE.args && p->data.COMPARABLE.args[i];
+         i++) {
+
+      if (i > 0) {
+        printf(", ");
+      }
+
+      print_type_to_stream(p->data.COMPARABLE.args[i], stdout);
+    }
+    printf(") )");
+    printf("\n");
+    break;
+  }
+  default: {
+  }
+  }
+}
+
+void print_predicates(Predicate *predicates) {
+  for (Predicate *p = predicates; p; p = p->next) {
+    print_predicate(p);
+  }
+}
+
+int resolve_predicates(Subst **subst_ptr, Predicate *preds, FILE *err_stream) {
+  Subst *subst = subst_ptr ? *subst_ptr : NULL;
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    for (Predicate *p = preds; p; p = p->next) {
+      if (p->kind == PRED_TRAIT) {
+        Type *t = apply_subst_to_type(subst, p->data.TRAIT.type);
+
+        // Still generic after substitution — skip (defer)
+        if (is_generic(t))
+          continue;
+
+        // Check the trait
+        if (!type_implements(t, p->trait)) {
+          if (err_stream) {
+            fprintf(err_stream, "Type Error: ");
+            print_type_to_stream(t, err_stream);
+            fprintf(err_stream, " does not implement %s\n", p->trait->name);
+            fflush(err_stream);
+          }
+          return 1;
+        }
+      } else if (p->kind == PRED_COMPARABLE) {
+        // Resolve a common witness type for the operands. If all operands are
+        // concrete, use the highest-ranked implementation for this trait. If
+        // only some operands are concrete, use that concrete operand as the
+        // witness and push it back into the generic operands.
+        Type *witness = NULL;
+        double max_rank = -1.;
+        bool all_concrete = true;
+        int i = 0;
+        for (; p->data.COMPARABLE.args[i]; i++) {
+          Type *arg = apply_subst_to_type(subst, p->data.COMPARABLE.args[i]);
+          if (is_generic(arg)) {
+            all_concrete = false;
+            continue;
+          }
+          if (!witness) {
+            witness = arg;
+          }
+          double rank = get_typeclass_rank(arg, p->trait->name);
+          if (rank > max_rank) {
+            max_rank = rank;
+            witness = arg;
+          }
+        }
+
+        Type *result = find_root_var(subst, p->data.COMPARABLE.witness);
+        Type *resolved_result = apply_subst_to_type(subst, result);
+
+        if (!witness && !is_generic(resolved_result)) {
+          witness = resolved_result;
+        }
+
+        if (!witness) {
+          continue;
+        }
+
+        // Arithmetic needs all operands concrete before choosing a witness
+        // from the operands themselves, otherwise nested expressions like `1
+        // + (2.0 * 8)` can collapse to the first concrete operand too early.
+        // A concrete result witness, however, is safe to push back into
+        // generic operands.
+        if (p->trait == GenericArithmetic && !all_concrete &&
+            is_generic(resolved_result)) {
+          continue;
+        }
+
+        Subst *next_subst = NULL;
+        if (unify_types(result, witness, subst, &next_subst) != 0) {
+          if (err_stream) {
+            fprintf(err_stream, "Type Error: failed to resolve comparable ");
+            print_type_to_stream(result, err_stream);
+            fprintf(err_stream, " to ");
+            print_type_to_stream(witness, err_stream);
+            fprintf(err_stream, " for %s\n",
+                    p->trait ? p->trait->name : "(null)");
+            fflush(err_stream);
+          }
+          return 1;
+        }
+        if (next_subst) {
+          subst = next_subst;
+          changed = true;
+        }
+
+        if (p->trait == GenericArithmetic && !all_concrete) {
+          for (int j = 0; p->data.COMPARABLE.args[j]; j++) {
+            Type *arg = apply_subst_to_type(subst, p->data.COMPARABLE.args[j]);
+            if (!is_generic(arg)) {
+              continue;
+            }
+            next_subst = NULL;
+            if (unify_types(p->data.COMPARABLE.args[j], witness, subst,
+                            &next_subst) != 0) {
+              if (err_stream) {
+                fprintf(err_stream, "Type Error: failed to make arithmetic "
+                                    "operand comparable at ");
+                print_type_to_stream(witness, err_stream);
+                fprintf(err_stream, "\n");
+                fflush(err_stream);
+              }
+              return 1;
+            }
+            if (next_subst) {
+              subst = next_subst;
+              changed = true;
+            }
+          }
+        }
+
+        // Eq/Ord comparability should push the resolved witness back only
+        // into operands that are still generic. This forces `None` in `Some 1
+        // == None` to become `Option Int` without rejecting already concrete
+        // mixed comparisons like `1 == 2.0`.
+        if (p->trait == GenericEq || p->trait == GenericOrd) {
+          for (int j = 0; p->data.COMPARABLE.args[j]; j++) {
+            Type *arg = apply_subst_to_type(subst, p->data.COMPARABLE.args[j]);
+            if (!is_generic(arg)) {
+              continue;
+            }
+            next_subst = NULL;
+            if (unify_types(p->data.COMPARABLE.args[j], witness, subst,
+                            &next_subst) != 0) {
+              if (err_stream) {
+                fprintf(err_stream,
+                        "Type Error: failed to make operand comparable at ");
+                print_type_to_stream(witness, err_stream);
+                fprintf(err_stream, " for %s\n",
+                        p->trait ? p->trait->name : "(null)");
+                fflush(err_stream);
+              }
+              return 1;
+            }
+            if (next_subst) {
+              subst = next_subst;
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+  }
+  if (subst_ptr) {
+    *subst_ptr = subst;
+  }
+  return 0;
+}
+
+// ============================================================================
 // Constraint infrastructure
 // ============================================================================
 
@@ -474,13 +986,16 @@ void add_constraint(TICtx *result, Type *var, Type *type) {
     return;
   }
   for (Constraint *c = result->constraints; c; c = c->next) {
-    if (types_equal(c->var, var) && types_equal(c->type, type)) {
+    if (c->kind == CONSTRAINT_EQUALITY &&
+        types_equal(c->data.EQUALITY.left, var) &&
+        types_equal(c->data.EQUALITY.right, type)) {
       return;
     }
   }
   Constraint *constraint = t_alloc(sizeof(Constraint));
-  *constraint =
-      (Constraint){.var = var, .type = type, .next = result->constraints};
+  *constraint = (Constraint){.kind = CONSTRAINT_EQUALITY,
+                             .data = {.EQUALITY = {.left = var, .right = type}},
+                             .next = result->constraints};
   result->constraints = constraint;
 }
 
@@ -507,7 +1022,7 @@ static bool occurs_in(const char *var, Type *type) {
 
   switch (type->kind) {
   case T_VAR:
-    return strcmp(type->data.T_VAR, var) == 0;
+    return strcmp(type->data.T_VAR.name, var) == 0;
   case T_FN:
     return occurs_in(var, type->data.T_FN.from) ||
            occurs_in(var, type->data.T_FN.to);
@@ -545,8 +1060,10 @@ static Type *apply_subst_to_type(Subst *subst, Type *t) {
 
   switch (t->kind) {
   case T_VAR: {
-    Type *found = lookup_subst(subst, t->data.T_VAR);
-    return found ? found : t;
+    Type *found = lookup_subst(subst, t->data.T_VAR.name);
+    if (!found || types_equal(found, t))
+      return t;
+    return apply_subst_to_type(subst, found);
   }
   case T_FN: {
     Type *from = apply_subst_to_type(subst, t->data.T_FN.from);
@@ -581,6 +1098,19 @@ static Type *apply_subst_to_type(Subst *subst, Type *t) {
   }
 }
 
+static Type *find_root_var(Subst *subst, Type *t) {
+  if (!t || t->kind != T_VAR)
+    return apply_subst_to_type(subst, t);
+
+  Type *next = lookup_subst(subst, t->data.T_VAR.name);
+  if (!next)
+    return t;
+  if (next->kind != T_VAR ||
+      strcmp(next->data.T_VAR.name, t->data.T_VAR.name) == 0)
+    return apply_subst_to_type(subst, next);
+  return find_root_var(subst, next);
+}
+
 static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out) {
   t1 = apply_subst_to_type(subst, t1);
   t2 = apply_subst_to_type(subst, t2);
@@ -589,16 +1119,16 @@ static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out) {
     return 0;
 
   if (t1->kind == T_VAR) {
-    if (occurs_in(t1->data.T_VAR, t2))
+    if (occurs_in(t1->data.T_VAR.name, t2))
       return 1;
-    *out = extend_subst(subst, t1->data.T_VAR, t2);
+    *out = extend_subst(subst, t1->data.T_VAR.name, t2);
     return 0;
   }
 
   if (t2->kind == T_VAR) {
-    if (occurs_in(t2->data.T_VAR, t1))
+    if (occurs_in(t2->data.T_VAR.name, t1))
       return 1;
-    *out = extend_subst(subst, t2->data.T_VAR, t1);
+    *out = extend_subst(subst, t2->data.T_VAR.name, t1);
     return 0;
   }
 
@@ -636,8 +1166,12 @@ Subst *solve_constraints(Constraint *constraints) {
   Subst *subst = NULL;
 
   for (Constraint *c = constraints; c != NULL; c = c->next) {
+    if (c->kind != CONSTRAINT_EQUALITY) {
+      return NULL;
+    }
     Subst *new_subst = NULL;
-    if (unify_types(c->var, c->type, subst, &new_subst) != 0) {
+    if (unify_types(c->data.EQUALITY.left, c->data.EQUALITY.right, subst,
+                    &new_subst) != 0) {
       return NULL;
     }
     if (new_subst) {
@@ -666,7 +1200,8 @@ Type *apply_substitution(Subst *subst, Type *t) {
 }
 
 // ============================================================================
-// Backward-compatible wrappers (transitionary - external callers use T_SCHEME)
+// Backward-compatible wrappers (transitionary - external callers use
+// T_SCHEME)
 // ============================================================================
 
 // generalize_type: create a T_SCHEME wrapper from a type.
@@ -724,9 +1259,13 @@ int unify(Type *t1, Type *t2, TICtx *unify_res) {
 
 void print_constraints(Constraint *constraints) {
   for (Constraint *c = constraints; c; c = c->next) {
-    print_type(c->var);
-    printf("::");
-    print_type(c->type);
+    if (c->kind != CONSTRAINT_EQUALITY) {
+      continue;
+    }
+    print_type_to_stream(c->data.EQUALITY.left, stdout);
+    printf("\t:: ");
+    print_type_to_stream(c->data.EQUALITY.right, stdout);
+    printf("\n");
   }
 }
 
@@ -765,7 +1304,8 @@ Type *next_tvar() {
   Type *tvar = t_alloc(sizeof(Type));
   char *tname = t_alloc(sizeof(char) * 5);
   sprintf(tname, "`%d", type_var_counter);
-  *tvar = (Type){T_VAR, {.T_VAR = tname}};
+  *tvar = (Type){T_VAR,
+                 {.T_VAR = {.name = tname, .id = type_var_counter}}};
   type_var_counter++;
   return tvar;
 }
@@ -807,14 +1347,25 @@ static void finalize_ast_types(Ast *ast, Subst *subst) {
   }
   case AST_MATCH: {
     finalize_ast_types(ast->data.AST_MATCH.expr, subst);
-    for (int i = 0; i < ast->data.AST_MATCH.len; i++) {
+    for (int i = 0; i < ast->data.AST_MATCH.len * 2; i++) {
       finalize_ast_types(ast->data.AST_MATCH.branches + i, subst);
     }
+    break;
+  }
+  case AST_MATCH_GUARD_CLAUSE: {
+    finalize_ast_types(ast->data.AST_MATCH_GUARD_CLAUSE.test_expr, subst);
+    finalize_ast_types(ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, subst);
     break;
   }
   case AST_TUPLE:
   case AST_ARRAY:
   case AST_LIST: {
+    for (int i = 0; i < ast->data.AST_LIST.len; i++) {
+      finalize_ast_types(ast->data.AST_LIST.items + i, subst);
+    }
+    break;
+  }
+  case AST_FMT_STRING: {
     for (int i = 0; i < ast->data.AST_LIST.len; i++) {
       finalize_ast_types(ast->data.AST_LIST.items + i, subst);
     }
@@ -831,11 +1382,6 @@ static void finalize_ast_types(Ast *ast, Subst *subst) {
   }
   case AST_UNOP: {
     finalize_ast_types(ast->data.AST_UNOP.expr, subst);
-    break;
-  }
-  case AST_BINOP: {
-    finalize_ast_types(ast->data.AST_BINOP.left, subst);
-    finalize_ast_types(ast->data.AST_BINOP.right, subst);
     break;
   }
   case AST_RANGE_EXPRESSION: {

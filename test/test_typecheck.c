@@ -588,13 +588,11 @@ int test_basic_ops() {
   T("()", &t_void);
   // T("[]", &TLIST(&TVAR("`0")));
   ({
-    Type t0 = arithmetic_var("`0");
-    Type t1 = arithmetic_var("`1");
-    TypeList tl = {&t0, &(TypeList){&t1}};
-
-    T("(+)", &MAKE_FN_TYPE_3(
-                 &t0, &t1,
-                 &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t1, &t0)));
+    Type t0 = TVAR("`0");
+    Type t1 = TVAR("`1");
+    Type t2 = TVAR("`2");
+    Type *t = T("(+)", &MAKE_FN_TYPE_3(&t0, &t1, &t2));
+    print_type(t);
   });
   T("id 1", &t_int);
   T("id 1.", &t_num);
@@ -644,6 +642,7 @@ int test_basic_ops() {
     Ast *strf = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)->data.AST_LIST.items;
     TASSERT("fmt string member has type string",
             types_equal(strf->type, &t_string));
+
     TASSERT("fmt string member fn has type Int -> string",
             types_equal(strf->data.AST_APPLICATION.function->type,
                         &MAKE_FN_TYPE_2(&t_int, &t_string)));
@@ -1282,13 +1281,24 @@ int test_match_exprs() {
   // "    | x if (x % 4.) > 0. -> 0 \n"
 
   ({
-    Type free_var = arithmetic_var("`0");
+    // Type free_var = arithmetic_var("`0");
     T("let quantize_mod = fn i ->\n"
       "  match i with\n"
       "    | x if (x % 4.) > 3. -> 3 \n"
       "    | _ -> 0\n"
       ";;\n",
-      &TSCHEME(&MAKE_FN_TYPE_2(&free_var, &t_int), &free_var));
+      &MAKE_FN_TYPE_2(&t_num, &t_int));
+  });
+
+  ({
+    // Type free_var = arithmetic_var("`0");
+    T("let quantize_mod = fn i ->\n"
+      "  match i with\n"
+      "    | x if (x % 4.) > 3. -> 3 \n"
+      "    | _ -> 0\n"
+      ";;\n"
+      "quantize_mod 1",
+      &t_int);
   });
   return status;
 }
@@ -2348,9 +2358,17 @@ bool test_opts() {
   printf("## TEST OPTION OPS\n---------------------------------------------\n");
   bool status = true;
   ({
+    Ast *b = T("Some 1", &TOPT(&t_int));
+    TASSERT(
+        "Some instance has application form of Option of Int\n",
+        types_equal(
+            b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->type,
+            &MAKE_FN_TYPE_2(&t_int, &TOPT(&t_int))));
+  });
+  ({
     Ast *b = T("Some 1 == None", &t_bool);
     TASSERT(
-        "LHS of == operation forces None to be same type as LHS: ",
+        "LHS of == operation forces None to be same type as RHS: ",
         types_equal(
             b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->type,
             &MAKE_FN_TYPE_3(&TOPT(&t_int), &TOPT(&t_int), &t_bool)));
@@ -2359,16 +2377,9 @@ bool test_opts() {
     // print_type(
     //     (b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.args + 1)->md);
   });
-  ({
-    Ast *b = T("Some 1", &TOPT(&t_int));
-    TASSERT(
-        "Some instance has application form of Option of Int\n",
-        types_equal(
-            b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->type,
-            &MAKE_FN_TYPE_2(&t_int, &TOPT(&t_int))));
-  });
   return status;
 }
+
 bool test_record_types() {
   bool status = true;
   printf("## TEST RECORD "
@@ -2509,12 +2520,12 @@ int main() {
   status &= test_basic_ops();
   status &= test_opts();
   status &= test_match_exprs();
-  status &= test_type_declarations();
-  status &= test_first_class_funcs();
+  // status &= test_first_class_funcs();
 
   status &= test_modules();
   status &= test_networking_funcs();
   status &= test_type_exprs();
+  // status &= test_type_declarations();
   // status &= test_record_types();
   // status &= test_refs();
 

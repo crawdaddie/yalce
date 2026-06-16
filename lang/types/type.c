@@ -44,7 +44,9 @@ bool types_match(Type *t1, Type *t2) {
 
   case T_VAR: {
 
-    bool eq = strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0;
+    bool eq = t1->data.T_VAR.id >= 0 && t2->data.T_VAR.id >= 0
+                  ? t1->data.T_VAR.id == t2->data.T_VAR.id
+                  : strcmp(t1->data.T_VAR.name, t2->data.T_VAR.name) == 0;
     if (t2->implements != NULL) {
     }
     return eq;
@@ -123,7 +125,9 @@ bool types_equal(Type *t1, Type *t2) {
 
   case T_VAR: {
 
-    bool eq = strcmp(t1->data.T_VAR, t2->data.T_VAR) == 0;
+    bool eq = t1->data.T_VAR.id >= 0 && t2->data.T_VAR.id >= 0
+                  ? t1->data.T_VAR.id == t2->data.T_VAR.id
+                  : strcmp(t1->data.T_VAR.name, t2->data.T_VAR.name) == 0;
     if (t2->implements != NULL) {
     }
     return eq;
@@ -186,8 +190,9 @@ Type *tvar(const char *name) {
   }
   mem->kind = T_VAR;
   size_t name_len = strlen(name);
-  mem->data.T_VAR = t_alloc(sizeof(char) * (name_len + 1));
-  memcpy(mem->data.T_VAR, name, name_len + 1);
+  mem->data.T_VAR.name = t_alloc(sizeof(char) * (name_len + 1));
+  memcpy((char *)mem->data.T_VAR.name, name, name_len + 1);
+  mem->data.T_VAR.id = -1;
   return mem;
 }
 
@@ -311,7 +316,8 @@ Type *deep_copy_type(const Type *original) {
 
   switch (original->kind) {
   case T_VAR:
-    copy->data.T_VAR = strdup(original->data.T_VAR);
+    copy->data.T_VAR.name = strdup(original->data.T_VAR.name);
+    copy->data.T_VAR.id = original->data.T_VAR.id;
     break;
   case T_TYPECLASS_RESOLVE:
   case T_CONS:

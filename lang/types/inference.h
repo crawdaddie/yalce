@@ -13,11 +13,42 @@ typedef struct Subst {
   struct Subst *next;
 } Subst;
 
+typedef enum {
+  CONSTRAINT_EQUALITY,
+} ConstraintKind;
+
 typedef struct Constraint {
-  Type *var;  // Variable type (e.g., "t0")
-  Type *type; // Required type (e.g., Int or Double)
+  ConstraintKind kind;
+  union {
+    struct {
+      Type *left;
+      Type *right;
+    } EQUALITY;
+  } data;
   struct Constraint *next;
 } Constraint;
+
+// A predicate: "type t must implement trait tc"
+typedef enum {
+  PRED_TRAIT,      // type must implement a typeclass
+  PRED_COMPARABLE, // operands compare at a common witness type under a tc
+} PredicateKind;
+
+typedef struct Predicate {
+  PredicateKind kind;
+  TypeClass *trait;
+  union {
+    struct {
+      Type *type;
+    } TRAIT;
+    struct {
+      Type *witness;
+      Type **args;
+    } COMPARABLE;
+  } data;
+  struct Predicate *next;
+} Predicate;
+
 typedef struct {
   enum BindingType {
     BT_VAR,
@@ -53,7 +84,8 @@ typedef struct TypeEnv {
   binding_md md;
   int ref_count;
 
-  TypeList *scheme_vars;   // vars to freshen on instantiation
+  TypeList *scheme_vars; // vars to freshen on instantiation
+  Predicate *predicates; // trait obligations for this binding (NULL = none)
   struct TypeEnv *next;
   bool is_opened_var;
 } TypeEnv;
@@ -72,6 +104,7 @@ typedef struct TICtx {
   LambdaScope *current_scope;
 
   Constraint *constraints;
+  Predicate *predicates; // accumulated trait obligations
   Type *yielded_type;
   int scope;
   int current_fn_base_scope;
@@ -110,6 +143,8 @@ Type *instantiate(Type *sch, TICtx *ctx);
 Type *instantiate_type_in_env(Type *sch, TypeEnv *env);
 Type *env_lookup(TypeEnv *env, const char *name);
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
+TypeEnv *env_extend_with_preds(TypeEnv *env, const char *name, Type *type,
+                               Predicate *preds);
 
 TypeList *free_vars_type(TypeList *acc, Type *t);
 TypeList *free_vars_env(TypeList *acc, TypeEnv *env);
@@ -149,4 +184,13 @@ Type *find_in_subst(Subst *subst, const char *name);
 
 bool is_constant_expr(Ast *expr, TICtx *ctx);
 
+// Predicate helpers
+Predicate *predicate_append(Predicate *list, TypeClass *trait, Type *type);
+Predicate *predicate_append_comparable(Predicate *list, TypeClass *trait,
+                                       Type *witness, Type **args);
+Predicate *predicate_apply_subst(Subst *subst, Predicate *preds);
+Predicate *predicate_duplicate(Predicate *preds);
+int resolve_predicates(Subst **subst, Predicate *preds, FILE *err_stream);
+
+void print_predicates(Predicate *predicates);
 #endif

@@ -1,8 +1,8 @@
 #ifndef _LANG_TYPE_BUILTINS_H
 #define _LANG_TYPE_BUILTINS_H
 #include "../ht.h"
+#include "./inference.h"
 #include "type.h"
-extern ht builtin_types;
 
 extern Type t_int;
 extern Type t_uint64;
@@ -20,12 +20,20 @@ extern Type t_none;
 extern Type t_builtin_print;
 
 void initialize_builtin_types();
-void add_builtin(char *name, Type *t);
 
-void print_builtin_types();
-
+// Deprecated: old API returning Type* (uses T_SCHEME internally).
+// Prefer lookup_builtin_env() for the new predicate-aware type system.
 Type *lookup_builtin_type(const char *name);
 
+// New API: builtins stored as TypeEnv entries with predicates.
+TypeEnv *lookup_builtin_env(const char *name);
+
+// Convenience: expose the generic typeclasses for external use.
+extern TypeClass *GenericArithmetic;
+extern TypeClass *GenericOrd;
+extern TypeClass *GenericEq;
+
+// Kept for backward compat with existing callers — will be removed.
 extern Type arithmetic_scheme;
 extern Type ord_scheme;
 extern Type eq_scheme;

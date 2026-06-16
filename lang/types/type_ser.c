@@ -24,7 +24,6 @@ char *type_to_string_dynamic(Type *t) {
 }
 
 char *type_to_string(Type *t, char *buffer) {
-  (void)buffer; // Ignore the buffer argument
   return type_to_string_dynamic(t);
 }
 
@@ -197,12 +196,13 @@ void print_type_to_stream(Type *t, FILE *stream) {
     break;
   }
   case T_VAR: {
-    uint64_t vname = (uint64_t)t->data.T_VAR;
-    if (vname < 65) {
-      vname += 65;
-      fprintf(stream, "%c", (char)vname);
+    int vid = t->data.T_VAR.id;
+    if (vid >= 0 && vid < 65) {
+      fprintf(stream, "%c", (char)(vid + 65));
+    } else if (t->data.T_VAR.name) {
+      fprintf(stream, "%s", t->data.T_VAR.name);
     } else {
-      fprintf(stream, "%s", t->data.T_VAR);
+      fprintf(stream, "`%d", vid);
     }
 
     print_tc_list_to_stream(t, stream);

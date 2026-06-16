@@ -91,7 +91,7 @@ bool is_string_type(Type *type);
                                           ret_type)}}})
 #define arithmetic_var(n)                                                      \
   (Type) {                                                                     \
-    T_VAR, {.T_VAR = n},                                                       \
+    T_VAR, {.T_VAR = {.name = n, .id = -1}},                                   \
         .implements = &(TypeClass){.name = TYPE_NAME_TYPECLASS_ARITHMETIC,     \
                                    .rank = 1000.},                             \
   }
@@ -102,7 +102,7 @@ bool is_string_type(Type *type);
 
 #define ord_var(n)                                                             \
   (Type) {                                                                     \
-    T_VAR, {.T_VAR = n},                                                       \
+    T_VAR, {.T_VAR = {.name = n, .id = -1}},                                   \
         .implements =                                                          \
             &(TypeClass){.name = TYPE_NAME_TYPECLASS_ORD, .rank = 1000.},      \
   }
@@ -122,7 +122,7 @@ bool is_string_type(Type *type);
 //   }
 //
 #define eq_var(n)                                                              \
-  (Type) { T_VAR, {.T_VAR = n}, }
+  (Type) { T_VAR, {.T_VAR = {.name = n, .id = -1}}, }
 
 #define TCONS(name, num, ...)                                                  \
   ((Type){T_CONS, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}})
@@ -150,7 +150,7 @@ bool is_string_type(Type *type);
 #define TVAR(n)                                                                \
   ((Type){                                                                     \
       T_VAR,                                                                   \
-      {.T_VAR = n},                                                            \
+      {.T_VAR = {.name = n, .id = -1}},                                        \
   })
 
 
@@ -223,7 +223,10 @@ typedef struct Type {
     // Type Variables (T_VAR):
     // They represent unknown types that can be unified with other types during
     // inference.
-    const char *T_VAR;
+    struct {
+      const char *name;
+      int id;
+    } T_VAR;
 
     struct {
       const char *name;
@@ -396,4 +399,3 @@ Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2);
 
 #define _GET_ARG_COUNT_HELPER(_1, _2, _3, _4, _5, _6, _7, _8, N, ...) N
 #endif
-
