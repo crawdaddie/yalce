@@ -58,10 +58,9 @@ static TypeEnv *find_binding(TypeEnv *env, const char *name) {
   return lookup_type_ref(env, name);
 }
 
-static bool subst_maps_to(Subst *subst, const char *var_name, Type *expected) {
+static bool subst_maps_to(Subst *subst, int var_id, Type *expected) {
   for (Subst *s = subst; s != NULL; s = s->next) {
-    if (s->var && strcmp(s->var, var_name) == 0 &&
-        types_equal(s->type, expected)) {
+    if (s->var_id == var_id && types_equal(s->type, expected)) {
       return true;
     }
   }
@@ -496,7 +495,7 @@ static void test_infer_final_rewrites_nested_ast_annotations() {
                           .args = NULL,
                           .len = 0,
                       }}};
-  Subst subst = {.var = a->data.T_VAR.name, .type = &t_int, .next = NULL};
+  Subst subst = {.var_id = a->data.T_VAR.id, .type = &t_int, .next = NULL};
   Solution solved = {.subst = &subst};
   TICtx ctx = {0};
 

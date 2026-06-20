@@ -560,4 +560,6 @@ void initialize_builtin_types() {
   array_set_scheme = *lookup_builtin_env("array_set")->type;
   array_fill_const_scheme = *lookup_builtin_env("array_fill_const")->type;
   array_fill_scheme = *lookup_builtin_env("array_fill")->type;
+
+  mark_type_var_counter_floor();
 }

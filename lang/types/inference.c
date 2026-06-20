@@ -17,7 +17,7 @@
 // ============================================================================
 Type *infer_expr(Ast *ast, TICtx *ctx);
 static Type *apply_subst_to_type(Subst *subst, Type *t);
-static Subst *extend_subst(Subst *subst, const char *var, Type *type);
+static Subst *extend_subst(Subst *subst, int var_id, Type *type);
 static Type *find_root_var(Subst *subst, Type *t);
 static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out);
 int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx);
@@ -37,7 +37,7 @@ static bool is_empty_subst(Subst *subst);
 static bool is_recursive_self_reference(Ast *ast, TICtx *ctx);
 static Type *callable_view(Type *type);
 
-static Subst empty_subst_sentinel = {.var = NULL, .type = NULL, .next = NULL};
+static Subst empty_subst_sentinel = {.var_id = -1, .type = NULL, .next = NULL};
 
 static bool is_recursive_self_reference(Ast *ast, TICtx *ctx) {
   if (!ast || !ctx || !ctx->current_fn_ast) {
@@ -316,7 +316,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 // ============================================================================
 Type *infer_expr(Ast *ast, TICtx *ctx);
 static Type *apply_subst_to_type(Subst *subst, Type *t);
-static Subst *extend_subst(Subst *subst, const char *var, Type *type);
+static Subst *extend_subst(Subst *subst, int var_id, Type *type);
 static Type *find_root_var(Subst *subst, Type *t);
 static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out);
 
@@ -604,10 +604,9 @@ static int checkpoint_generalizable_slice(TypeEnv *slice_head,
 // Free variable helpers
 // ============================================================================
 
-static bool type_list_contains_str(TypeList *l, const char *name) {
+static bool type_list_contains_var_id(TypeList *l, int var_id) {
   for (TypeList *c = l; c; c = c->next) {
-    if (c->type && c->type->kind == T_VAR &&
-        strcmp(c->type->data.T_VAR.name, name) == 0) {
+    if (c->type && c->type->kind == T_VAR && c->type->data.T_VAR.id == var_id) {
       return true;
     }
   }
@@ -634,7 +633,7 @@ TypeList *free_vars_type(TypeList *acc, Type *t) {
     return acc;
   switch (t->kind) {
   case T_VAR:
-    if (!type_list_contains_str(acc, t->data.T_VAR.name)) {
+    if (!type_list_contains_var_id(acc, t->data.T_VAR.id)) {
       acc = type_list_append_var(acc, t);
     }
     return acc;
@@ -669,7 +668,7 @@ static TypeList *set_diff(TypeList *a, TypeList *b) {
   TypeList *result = NULL;
   for (TypeList *la = a; la; la = la->next) {
     if (la->type && la->type->kind == T_VAR) {
-      if (!type_list_contains_str(b, la->type->data.T_VAR.name)) {
+      if (!type_list_contains_var_id(b, la->type->data.T_VAR.id)) {
         result = type_list_append_var(result, la->type);
       }
     }
@@ -721,7 +720,7 @@ Type *instantiate_env(TypeEnv *entry, TICtx *ctx) {
     if (v->type && v->type->kind == T_VAR) {
       Type *fresh = next_tvar();
       fresh->implements = v->type->implements;
-      base = extend_subst(base, v->type->data.T_VAR.name, fresh);
+      base = extend_subst(base, v->type->data.T_VAR.id, fresh);
     }
   }
 
@@ -1627,21 +1626,22 @@ Constraint *merge_constraints(Constraint *list1, Constraint *list2) {
 // Unification (structural only - no feature-specific branching)
 // ============================================================================
 
-static bool occurs_in(const char *var, Type *type) {
+static bool occurs_in(int var_id, Type *type) {
   if (!type)
     return false;
 
   switch (type->kind) {
   case T_VAR:
-    return strcmp(type->data.T_VAR.name, var) == 0;
+    return type->data.T_VAR.id == var_id;
   case T_RECURSIVE_REF:
     return false;
   case T_FN:
-    return occurs_in(var, type->data.T_FN.from) ||
-           occurs_in(var, type->data.T_FN.to);
+    return occurs_in(var_id, type->data.T_FN.from) ||
+           occurs_in(var_id, type->data.T_FN.to);
   case T_CONS:
+  case T_SUM:
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-      if (occurs_in(var, type->data.T_CONS.args[i]))
+      if (occurs_in(var_id, type->data.T_CONS.args[i]))
         return true;
     }
     return false;
@@ -1650,26 +1650,26 @@ static bool occurs_in(const char *var, Type *type) {
   }
 }
 
-static Subst *extend_subst(Subst *subst, const char *var, Type *type) {
+static Subst *extend_subst(Subst *subst, int var_id, Type *type) {
   if (is_empty_subst(subst)) {
     subst = NULL;
   }
   Subst *s = t_alloc(sizeof(Subst));
-  s->var = var;
+  s->var_id = var_id;
   s->type = type;
   s->next = subst;
   return s;
 }
 
-static Type *lookup_subst(Subst *subst, const char *var) {
+static Type *lookup_subst(Subst *subst, int var_id) {
   if (is_empty_subst(subst)) {
     return NULL;
   }
   for (Subst *s = subst; s != NULL; s = s->next) {
-    if (!s->var) {
+    if (s->var_id < 0) {
       continue;
     }
-    if (strcmp(s->var, var) == 0) {
+    if (s->var_id == var_id) {
       return s->type;
     }
   }
@@ -1682,7 +1682,7 @@ static Type *apply_subst_to_type(Subst *subst, Type *t) {
 
   switch (t->kind) {
   case T_VAR: {
-    Type *found = lookup_subst(subst, t->data.T_VAR.name);
+    Type *found = lookup_subst(subst, t->data.T_VAR.id);
     if (!found || types_equal(found, t))
       return t;
     return apply_subst_to_type(subst, found);
@@ -1736,11 +1736,11 @@ static Type *find_root_var(Subst *subst, Type *t) {
   if (!t || t->kind != T_VAR)
     return apply_subst_to_type(subst, t);
 
-  Type *next = lookup_subst(subst, t->data.T_VAR.name);
+  Type *next = lookup_subst(subst, t->data.T_VAR.id);
   if (!next)
     return t;
   if (next->kind != T_VAR ||
-      strcmp(next->data.T_VAR.name, t->data.T_VAR.name) == 0)
+      next->data.T_VAR.id == t->data.T_VAR.id)
     return apply_subst_to_type(subst, next);
   return find_root_var(subst, next);
 }
@@ -1753,16 +1753,16 @@ static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out) {
     return 0;
 
   if (t1->kind == T_VAR) {
-    if (occurs_in(t1->data.T_VAR.name, t2))
+    if (occurs_in(t1->data.T_VAR.id, t2))
       return 1;
-    *out = extend_subst(subst, t1->data.T_VAR.name, t2);
+    *out = extend_subst(subst, t1->data.T_VAR.id, t2);
     return 0;
   }
 
   if (t2->kind == T_VAR) {
-    if (occurs_in(t2->data.T_VAR.name, t1))
+    if (occurs_in(t2->data.T_VAR.id, t1))
       return 1;
-    *out = extend_subst(subst, t2->data.T_VAR.name, t1);
+    *out = extend_subst(subst, t2->data.T_VAR.id, t1);
     return 0;
   }
 
@@ -1864,7 +1864,7 @@ Subst *compose_subst(Subst *s1, Subst *s2) {
   for (Subst *s = s1; s != NULL; s = s->next) {
     Type *applied = apply_subst_to_type(s2, s->type);
     Subst *new_s = t_alloc(sizeof(Subst));
-    new_s->var = s->var;
+    new_s->var_id = s->var_id;
     new_s->type = applied;
     new_s->next = result;
     result = new_s;
@@ -1971,7 +1971,9 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {}
 
 Type *resolve_type_in_env(Type *r, TypeEnv *env) { return r; }
 
-Type *find_in_subst(Subst *subst, const char *name) { return NULL; }
+Type *find_in_subst(Subst *subst, int var_id) {
+  return lookup_subst(subst, var_id);
+}
 
 bool is_constant_expr(Ast *expr, TICtx *ctx) { return false; }
 
@@ -1986,8 +1988,11 @@ Type *empty_type() {
 // ============================================================================
 
 static int type_var_counter = 0;
+static int type_var_counter_floor = 0;
 
-void reset_type_var_counter() { type_var_counter = 0; }
+void reset_type_var_counter() { type_var_counter = type_var_counter_floor; }
+
+void mark_type_var_counter_floor() { type_var_counter_floor = type_var_counter; }
 
 Type *next_tvar() {
   Type *tvar = t_alloc(sizeof(Type));

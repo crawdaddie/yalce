@@ -22,6 +22,8 @@ static int failure_count = 0;
 typedef struct {
   int left_id;
   int right_id;
+  const char *left_name;
+  const char *right_name;
 } TypeVarAlphaPair;
 
 #define MAX_ALPHA_TYPE_VARS 512
@@ -84,6 +86,9 @@ static bool alpha_typelist_equal(TypeList *left, TypeList *right,
 
 static bool alpha_typeclass_equal(TypeClass *left, TypeClass *right,
                                   TypeVarAlphaPair *pairs, int *pair_count) {
+  if (!left || !right) {
+    return true;
+  }
   while (left && right) {
     if (strcmp(left->name, right->name) != 0 || left->rank != right->rank) {
       return false;
@@ -114,15 +119,26 @@ static bool alpha_typeenv_equal(TypeEnv *left, TypeEnv *right,
   return left == NULL && right == NULL;
 }
 
-static bool alpha_bind_var_ids(int left_id, int right_id,
-                               TypeVarAlphaPair *pairs, int *pair_count) {
+static bool alpha_bind_vars(int left_id, const char *left_name, int right_id,
+                            const char *right_name, TypeVarAlphaPair *pairs,
+                            int *pair_count) {
   int left_idx = -1;
   int right_idx = -1;
   for (int i = 0; i < *pair_count; i++) {
-    if (pairs[i].left_id == left_id) {
+    bool left_matches =
+        left_id >= 0 ? pairs[i].left_id == left_id
+                     : (pairs[i].left_id < 0 && pairs[i].left_name &&
+                        left_name &&
+                        strcmp(pairs[i].left_name, left_name) == 0);
+    bool right_matches =
+        right_id >= 0 ? pairs[i].right_id == right_id
+                      : (pairs[i].right_id < 0 && pairs[i].right_name &&
+                         right_name &&
+                         strcmp(pairs[i].right_name, right_name) == 0);
+    if (left_matches) {
       left_idx = i;
     }
-    if (pairs[i].right_id == right_id) {
+    if (right_matches) {
       right_idx = i;
     }
   }
@@ -137,6 +153,8 @@ static bool alpha_bind_var_ids(int left_id, int right_id,
 
   pairs[*pair_count].left_id = left_id;
   pairs[*pair_count].right_id = right_id;
+  pairs[*pair_count].left_name = left_name;
+  pairs[*pair_count].right_name = right_name;
   (*pair_count)++;
   return true;
 }
@@ -170,15 +188,7 @@ static bool alpha_type_equal_inner(Type *left, Type *right,
   }
 
   if (left->is_coroutine_instance != right->is_coroutine_instance ||
-      left->scope != right->scope ||
-      left->yield_boundary != right->yield_boundary ||
-      left->attr != right->attr ||
       left->is_recursive_type_ref != right->is_recursive_type_ref) {
-    return false;
-  }
-
-  if (!alpha_typeclass_equal(left->implements, right->implements, pairs,
-                             pair_count)) {
     return false;
   }
 
@@ -194,8 +204,14 @@ static bool alpha_type_equal_inner(Type *left, Type *right,
     return true;
 
   case T_VAR:
-    return alpha_bind_var_ids(left->data.T_VAR.id, right->data.T_VAR.id, pairs,
-                              pair_count);
+    if (left->data.T_VAR.id < 0 && right->data.T_VAR.id < 0 &&
+        left->data.T_VAR.name && right->data.T_VAR.name &&
+        strcmp(left->data.T_VAR.name, right->data.T_VAR.name) == 0) {
+      return true;
+    }
+    return alpha_bind_vars(left->data.T_VAR.id, left->data.T_VAR.name,
+                           right->data.T_VAR.id, right->data.T_VAR.name, pairs,
+                           pair_count);
 
   case T_RECURSIVE_REF:
     return strcmp(left->data.T_RECURSIVE_REF.name,
@@ -222,8 +238,9 @@ static bool alpha_type_equal_inner(Type *left, Type *right,
                                   pairs, pair_count) &&
            alpha_type_equal_inner(left->data.T_FN.to, right->data.T_FN.to,
                                   pairs, pair_count) &&
-           alpha_type_equal_inner(left->closure_meta, right->closure_meta, pairs,
-                                  pair_count);
+           (!left->closure_meta || !right->closure_meta ||
+            alpha_type_equal_inner(left->closure_meta, right->closure_meta,
+                                   pairs, pair_count));
 
   case T_SCHEME:
     return left->data.T_SCHEME.num_vars == right->data.T_SCHEME.num_vars &&
@@ -1897,7 +1914,7 @@ int test_coroutines() {
 
     Type mapper = MAKE_FN_TYPE_2(&t_int, &t_string);
     // Type mapper = t_ptr;
-    bool res = types_equal(&mapper, cor_map_arg->type);
+    bool res = test_types_equal(&mapper, cor_map_arg->type);
     const char *msg = "runner arg can be materialised to specific type:";
     if (res) {
       printf("✅ %s\n", msg);
@@ -2469,9 +2486,9 @@ int test_array_processing() {
         (app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args->type);
 
     TASSERT("array arg at has type `13 -- ",
-            types_equal((app->data.AST_APPLICATION.args + 1)
-                            ->data.AST_APPLICATION.args->type,
-                        &array_el));
+            test_types_equal((app->data.AST_APPLICATION.args + 1)
+                                 ->data.AST_APPLICATION.args->type,
+                             &array_el));
   });
 
   ({
@@ -2523,7 +2540,7 @@ int test_networking_funcs() {
     Type expected =
         MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&t6), &t2),
                        &TTUPLE(2, &TTUPLE(2, &TLIST(&t6), &t2), &TOPT(&t6)));
-    bool pop_left_ok = types_equal(pop_left_type, &expected);
+    bool pop_left_ok = test_types_equal(pop_left_type, &expected);
     if (pop_left_ok) {
       fprintf(stderr, "✅ pop_left has expected type\n");
     } else {
@@ -2538,7 +2555,7 @@ int test_networking_funcs() {
                    .branches[1]
                    .data.AST_LIST.items[1];
 
-    bool res = types_equal(none.type, &TOPT(&t6));
+    bool res = test_types_equal(none.type, &TOPT(&t6));
     const char *msg = "None return val";
     if (res) {
       printf("✅ %s\n", msg);

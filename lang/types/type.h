@@ -22,7 +22,7 @@ typedef struct TypeClass {
 } TypeClass;
 
 typedef struct Subst {
-  const char *var;
+  int var_id;
   Type *type;
   struct Subst *next;
 } Subst;

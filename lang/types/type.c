@@ -138,9 +138,7 @@ bool types_match(Type *t1, Type *t2) {
   }
 
   case T_VAR: {
-    bool eq = t1->data.T_VAR.id >= 0 && t2->data.T_VAR.id >= 0
-                  ? t1->data.T_VAR.id == t2->data.T_VAR.id
-                  : strcmp(t1->data.T_VAR.name, t2->data.T_VAR.name) == 0;
+    bool eq = t1->data.T_VAR.id == t2->data.T_VAR.id;
     if (t2->implements != NULL) {
     }
     return eq;
@@ -242,9 +240,7 @@ bool types_equal(Type *t1, Type *t2) {
   }
 
   case T_VAR: {
-    bool eq = t1->data.T_VAR.id >= 0 && t2->data.T_VAR.id >= 0
-                  ? t1->data.T_VAR.id == t2->data.T_VAR.id
-                  : strcmp(t1->data.T_VAR.name, t2->data.T_VAR.name) == 0;
+    bool eq = t1->data.T_VAR.id == t2->data.T_VAR.id;
     if (t2->implements != NULL) {
     }
     return eq;
