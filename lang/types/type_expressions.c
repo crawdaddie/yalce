@@ -7,6 +7,22 @@
 
 static const char *current_type_decl_name = NULL;
 static TypeEnv *current_type_decl_env = NULL;
+static TypeEnv *current_type_var_env = NULL;
+
+static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx);
+
+static Type *lookup_or_bind_type_var(const char *name) {
+  TypeEnv *bound = lookup_type_ref(current_type_var_env, name);
+  if (bound) {
+    return bound->type;
+  }
+
+  Type *type = tvar(name);
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = name, .type = type, .next = current_type_var_env};
+  current_type_var_env = entry;
+  return type;
+}
 
 Type *create_sum_type(int len, Type **members) {
   Type *sum = empty_type();
@@ -33,16 +49,16 @@ Type *compute_fn_type(Ast *expr, TICtx *ctx) {
   Type *param_types[num_params];
   for (int i = 0; i < num_params; i++) {
     Ast *p = sig->data.AST_LIST.items;
-    Type *t = compute_type_expression(p, ctx);
+    Type *t = compute_type_expression_inner(p, ctx);
     param_types[i] = t;
     sig = sig->data.AST_LIST.items + 1;
   }
-  Type *ret = compute_type_expression(sig, ctx);
+  Type *ret = compute_type_expression_inner(sig, ctx);
   Type *f = create_type_multi_param_fn(num_params, param_types, ret);
   return f;
 }
 
-Type *compute_type_expression(Ast *expr, TICtx *ctx) {
+static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
   switch (expr->tag) {
   case AST_FN_SIGNATURE: {
     return compute_fn_type(expr, ctx);
@@ -72,7 +88,7 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
     if (builtin_type) {
       return builtin_type;
     }
-    return tvar(name);
+    return lookup_or_bind_type_var(name);
   }
   case AST_TUPLE: {
     // print_ast("compute tuple??\n");
@@ -93,7 +109,7 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
         mem_ast = mem_ast->data.AST_LET.expr;
       }
 
-      Type *mem = compute_type_expression(mem_ast, ctx);
+      Type *mem = compute_type_expression_inner(mem_ast, ctx);
 
       members[i] = mem;
     }
@@ -127,7 +143,8 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
           name = item->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
         }
 
-        Type *sch = compute_type_expression(expr->data.AST_LIST.items + i, ctx);
+        Type *sch = compute_type_expression_inner(expr->data.AST_LIST.items + i,
+                                                  ctx);
         if (!sch) {
           return NULL;
         }
@@ -158,7 +175,7 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
       Ast *container_ast = expr->data.AST_BINOP.left;
       Ast *contained_ast = expr->data.AST_BINOP.right;
 
-      Type *container = compute_type_expression(container_ast, ctx);
+      Type *container = compute_type_expression_inner(container_ast, ctx);
       if (container->kind == T_VAR) {
         container->kind = T_CONS;
       }
@@ -167,7 +184,7 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
         return type_error(container_ast, "could not find type");
       }
 
-      Type *contained = compute_type_expression(contained_ast, ctx);
+      Type *contained = compute_type_expression_inner(contained_ast, ctx);
 
       if (is_pointer_type(container)) {
         container = deep_copy_type(container);
@@ -209,6 +226,14 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
   }
 
   return NULL;
+}
+
+Type *compute_type_expression(Ast *expr, TICtx *ctx) {
+  TypeEnv *saved_type_var_env = current_type_var_env;
+  current_type_var_env = NULL;
+  Type *result = compute_type_expression_inner(expr, ctx);
+  current_type_var_env = saved_type_var_env;
+  return result;
 }
 
 int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx);

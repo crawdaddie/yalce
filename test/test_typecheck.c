@@ -19,6 +19,13 @@ typedef struct {
 static TestFailure failures[MAX_FAILURES];
 static int failure_count = 0;
 
+typedef struct {
+  int left_id;
+  int right_id;
+} TypeVarAlphaPair;
+
+#define MAX_ALPHA_TYPE_VARS 512
+
 static void add_failure(const char *message, const char *file, int line) {
   if (failure_count < MAX_FAILURES) {
     strncpy(failures[failure_count].message, message, MAX_FAILURE_MSG_LEN - 1);
@@ -59,6 +66,191 @@ static void print_all_failures() {
   }
 }
 
+static bool alpha_type_equal_inner(Type *left, Type *right,
+                                   TypeVarAlphaPair *pairs,
+                                   int *pair_count);
+
+static bool alpha_typelist_equal(TypeList *left, TypeList *right,
+                                 TypeVarAlphaPair *pairs, int *pair_count) {
+  while (left && right) {
+    if (!alpha_type_equal_inner(left->type, right->type, pairs, pair_count)) {
+      return false;
+    }
+    left = left->next;
+    right = right->next;
+  }
+  return left == NULL && right == NULL;
+}
+
+static bool alpha_typeclass_equal(TypeClass *left, TypeClass *right,
+                                  TypeVarAlphaPair *pairs, int *pair_count) {
+  while (left && right) {
+    if (strcmp(left->name, right->name) != 0 || left->rank != right->rank) {
+      return false;
+    }
+    if (!alpha_typelist_equal(left->params, right->params, pairs, pair_count)) {
+      return false;
+    }
+    if (!alpha_type_equal_inner(left->module, right->module, pairs,
+                                pair_count)) {
+      return false;
+    }
+    left = left->next;
+    right = right->next;
+  }
+  return left == NULL && right == NULL;
+}
+
+static bool alpha_typeenv_equal(TypeEnv *left, TypeEnv *right,
+                                TypeVarAlphaPair *pairs, int *pair_count) {
+  while (left && right) {
+    if (strcmp(left->name, right->name) != 0 ||
+        !alpha_type_equal_inner(left->type, right->type, pairs, pair_count)) {
+      return false;
+    }
+    left = left->next;
+    right = right->next;
+  }
+  return left == NULL && right == NULL;
+}
+
+static bool alpha_bind_var_ids(int left_id, int right_id,
+                               TypeVarAlphaPair *pairs, int *pair_count) {
+  int left_idx = -1;
+  int right_idx = -1;
+  for (int i = 0; i < *pair_count; i++) {
+    if (pairs[i].left_id == left_id) {
+      left_idx = i;
+    }
+    if (pairs[i].right_id == right_id) {
+      right_idx = i;
+    }
+  }
+
+  if (left_idx >= 0 || right_idx >= 0) {
+    return left_idx >= 0 && right_idx >= 0 && left_idx == right_idx;
+  }
+
+  if (*pair_count >= MAX_ALPHA_TYPE_VARS) {
+    return false;
+  }
+
+  pairs[*pair_count].left_id = left_id;
+  pairs[*pair_count].right_id = right_id;
+  (*pair_count)++;
+  return true;
+}
+
+static bool alpha_type_equal_inner(Type *left, Type *right,
+                                   TypeVarAlphaPair *pairs,
+                                   int *pair_count) {
+  if (left == right) {
+    return true;
+  }
+
+  if (left == NULL || right == NULL) {
+    return left == right;
+  }
+
+  if (left->kind != right->kind) {
+    if (left->kind == T_MODULE && right->kind == T_CONS) {
+      return false;
+    }
+    if (right->kind == T_MODULE && left->kind == T_CONS) {
+      return false;
+    }
+    return false;
+  }
+
+  if (left->alias || right->alias) {
+    if (!(left->alias && right->alias &&
+          strcmp(left->alias, right->alias) == 0)) {
+      return false;
+    }
+  }
+
+  if (left->is_coroutine_instance != right->is_coroutine_instance ||
+      left->scope != right->scope ||
+      left->yield_boundary != right->yield_boundary ||
+      left->attr != right->attr ||
+      left->is_recursive_type_ref != right->is_recursive_type_ref) {
+    return false;
+  }
+
+  if (!alpha_typeclass_equal(left->implements, right->implements, pairs,
+                             pair_count)) {
+    return false;
+  }
+
+  switch (left->kind) {
+  case T_INT:
+  case T_UINT64:
+  case T_NUM:
+  case T_STRING:
+  case T_BOOL:
+  case T_CHAR:
+  case T_VOID:
+  case T_EMPTY_LIST:
+    return true;
+
+  case T_VAR:
+    return alpha_bind_var_ids(left->data.T_VAR.id, right->data.T_VAR.id, pairs,
+                              pair_count);
+
+  case T_RECURSIVE_REF:
+    return strcmp(left->data.T_RECURSIVE_REF.name,
+                  right->data.T_RECURSIVE_REF.name) == 0;
+
+  case T_TYPECLASS_RESOLVE:
+  case T_CONS:
+  case T_SUM:
+    if (strcmp(left->data.T_CONS.name, right->data.T_CONS.name) != 0 ||
+        left->data.T_CONS.num_args != right->data.T_CONS.num_args) {
+      return false;
+    }
+    for (int i = 0; i < left->data.T_CONS.num_args; i++) {
+      if (!alpha_type_equal_inner(left->data.T_CONS.args[i],
+                                  right->data.T_CONS.args[i], pairs,
+                                  pair_count)) {
+        return false;
+      }
+    }
+    return true;
+
+  case T_FN:
+    return alpha_type_equal_inner(left->data.T_FN.from, right->data.T_FN.from,
+                                  pairs, pair_count) &&
+           alpha_type_equal_inner(left->data.T_FN.to, right->data.T_FN.to,
+                                  pairs, pair_count) &&
+           alpha_type_equal_inner(left->closure_meta, right->closure_meta, pairs,
+                                  pair_count);
+
+  case T_SCHEME:
+    return left->data.T_SCHEME.num_vars == right->data.T_SCHEME.num_vars &&
+           alpha_typelist_equal(left->data.T_SCHEME.vars,
+                                right->data.T_SCHEME.vars, pairs, pair_count) &&
+           alpha_type_equal_inner(left->data.T_SCHEME.type,
+                                  right->data.T_SCHEME.type, pairs,
+                                  pair_count);
+
+  case T_MODULE:
+    return alpha_typeenv_equal(left->data.T_MODULE.env, right->data.T_MODULE.env,
+                               pairs, pair_count);
+  }
+
+  return false;
+}
+
+static bool test_types_equal(Type *left, Type *right) {
+  if (types_equal(left, right)) {
+    return true;
+  }
+
+  TypeVarAlphaPair pairs[MAX_ALPHA_TYPE_VARS] = {0};
+  int pair_count = 0;
+  return alpha_type_equal_inner(left, right, pairs, &pair_count);
+}
+
 #define xT(input, type)
 
 static TICtx test_ctx;
@@ -70,7 +262,7 @@ static TICtx test_ctx;
     Ast *ast = parse_input(input, NULL);                                       \
     TICtx ctx = {.env = NULL};                                                 \
     stat &= (infer(ast, &ctx) != NULL);                                        \
-    stat &= (types_equal(ast->type, _type));                                   \
+    stat &= (test_types_equal(ast->type, _type));                              \
     if (stat) {                                                                \
       char *ts = type_to_string_dynamic(_type);                                \
       fprintf(stderr, "✅ => %s\n", ts);                                       \
@@ -103,7 +295,7 @@ static TICtx test_ctx;
   })
 #define TASSERT_EQ(t1, t2, msg)                                                \
   ({                                                                           \
-    if (types_equal(t1, t2)) {                                                 \
+    if (test_types_equal(t1, t2)) {                                            \
       status &= true;                                                          \
       fprintf(stderr, "✅ %s\n", msg);                                         \
     } else {                                                                   \
@@ -2741,7 +2933,7 @@ bool test_sum_types() {
   TICtx ctx = {.env = NULL};
   infer(sum_type_expr, &ctx);
   Type *sum_type = sum_type_expr->type;
-  Type t19 = TVAR("`9");
+  Type t19 = TVAR("`14");
 
   Ast *b = T("type Seq =\n"
              "  | SeqInt of Int\n"

@@ -319,15 +319,10 @@ void tfree(void *mem) {
 }
 
 Type *tvar(const char *name) {
-  Type *mem = empty_type();
-  if (!mem) {
-    fprintf(stderr, "Error allocating memory for type");
-  }
-  mem->kind = T_VAR;
+  Type *mem = next_tvar();
   size_t name_len = strlen(name);
   mem->data.T_VAR.name = t_alloc(sizeof(char) * (name_len + 1));
   memcpy((char *)mem->data.T_VAR.name, name, name_len + 1);
-  mem->data.T_VAR.id = -1;
   return mem;
 }
 
