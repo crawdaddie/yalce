@@ -34,10 +34,13 @@ static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
 static bool predicate_is_generic(Predicate *p);
 static Predicate *predicate_filter_generic(Predicate *preds);
 static bool is_empty_subst(Subst *subst);
+static Subst *alloc_subst_table(void);
+static void ensure_subst_capacity(Subst *subst, int var_id);
+static Subst *clone_subst(Subst *subst);
 static bool is_recursive_self_reference(Ast *ast, TICtx *ctx);
 static Type *callable_view(Type *type);
 
-static Subst empty_subst_sentinel = {.var_id = -1, .type = NULL, .next = NULL};
+static Subst empty_subst_sentinel = {.bindings = NULL, .cap = 0};
 
 static bool is_recursive_self_reference(Ast *ast, TICtx *ctx) {
   if (!ast || !ctx || !ctx->current_fn_ast) {
@@ -1650,30 +1653,61 @@ static bool occurs_in(int var_id, Type *type) {
   }
 }
 
-static Subst *extend_subst(Subst *subst, int var_id, Type *type) {
-  if (is_empty_subst(subst)) {
-    subst = NULL;
-  }
-  Subst *s = t_alloc(sizeof(Subst));
-  s->var_id = var_id;
-  s->type = type;
-  s->next = subst;
-  return s;
+static Subst *alloc_subst_table(void) {
+  Subst *subst = t_alloc(sizeof(Subst));
+  subst->bindings = NULL;
+  subst->cap = 0;
+  return subst;
 }
 
-static Type *lookup_subst(Subst *subst, int var_id) {
+static void ensure_subst_capacity(Subst *subst, int var_id) {
+  if (!subst || var_id < 0) {
+    return;
+  }
+  if (var_id < subst->cap) {
+    return;
+  }
+
+  int new_cap = subst->cap > 0 ? subst->cap : 8;
+  while (new_cap <= var_id) {
+    new_cap *= 2;
+  }
+
+  Type **bindings = t_alloc(sizeof(Type *) * (size_t)new_cap);
+  memset(bindings, 0, sizeof(Type *) * (size_t)new_cap);
+  if (subst->bindings && subst->cap > 0) {
+    memcpy(bindings, subst->bindings, sizeof(Type *) * (size_t)subst->cap);
+  }
+  subst->bindings = bindings;
+  subst->cap = new_cap;
+}
+
+static Subst *clone_subst(Subst *subst) {
   if (is_empty_subst(subst)) {
     return NULL;
   }
-  for (Subst *s = subst; s != NULL; s = s->next) {
-    if (s->var_id < 0) {
-      continue;
-    }
-    if (s->var_id == var_id) {
-      return s->type;
-    }
+  Subst *copy = alloc_subst_table();
+  if (subst->cap > 0) {
+    ensure_subst_capacity(copy, subst->cap - 1);
+    memcpy(copy->bindings, subst->bindings, sizeof(Type *) * (size_t)subst->cap);
   }
-  return NULL;
+  return copy;
+}
+
+static Subst *extend_subst(Subst *subst, int var_id, Type *type) {
+  if (is_empty_subst(subst)) {
+    subst = alloc_subst_table();
+  }
+  ensure_subst_capacity(subst, var_id);
+  subst->bindings[var_id] = type;
+  return subst;
+}
+
+static Type *lookup_subst(Subst *subst, int var_id) {
+  if (is_empty_subst(subst) || var_id < 0 || var_id >= subst->cap) {
+    return NULL;
+  }
+  return subst->bindings[var_id];
 }
 
 static Type *apply_subst_to_type(Subst *subst, Type *t) {
@@ -1834,7 +1868,7 @@ static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out) {
 }
 
 Subst *solve_constraints(Constraint *constraints) {
-  Subst *subst = NULL;
+  Subst *subst = &empty_subst_sentinel;
 
   for (Constraint *c = constraints; c != NULL; c = c->next) {
     if (c->kind != CONSTRAINT_EQUALITY) {
@@ -1850,7 +1884,7 @@ Subst *solve_constraints(Constraint *constraints) {
     }
   }
 
-  return subst ? subst : &empty_subst_sentinel;
+  return subst;
 }
 
 Subst *compose_subst(Subst *s1, Subst *s2) {
@@ -1860,16 +1894,27 @@ Subst *compose_subst(Subst *s1, Subst *s2) {
   if (is_empty_subst(s2)) {
     s2 = NULL;
   }
-  Subst *result = s2;
-  for (Subst *s = s1; s != NULL; s = s->next) {
-    Type *applied = apply_subst_to_type(s2, s->type);
-    Subst *new_s = t_alloc(sizeof(Subst));
-    new_s->var_id = s->var_id;
-    new_s->type = applied;
-    new_s->next = result;
-    result = new_s;
+  if (!s1 && !s2) {
+    return &empty_subst_sentinel;
   }
-  return result;
+  if (!s1) {
+    return s2;
+  }
+  if (!s2) {
+    return s1;
+  }
+
+  Subst *result = clone_subst(s2);
+  for (int var_id = 0; var_id < s1->cap; var_id++) {
+    Type *binding = s1->bindings[var_id];
+    if (!binding) {
+      continue;
+    }
+    Type *applied = apply_subst_to_type(s2, binding);
+    ensure_subst_capacity(result, var_id);
+    result->bindings[var_id] = applied;
+  }
+  return result ? result : &empty_subst_sentinel;
 }
 
 Type *apply_substitution(Subst *subst, Type *t) {
@@ -1877,7 +1922,8 @@ Type *apply_substitution(Subst *subst, Type *t) {
 }
 
 static bool is_empty_subst(Subst *subst) {
-  return subst == &empty_subst_sentinel;
+  return !subst || subst == &empty_subst_sentinel ||
+         (subst->cap == 0 && subst->bindings == NULL);
 }
 
 // ============================================================================

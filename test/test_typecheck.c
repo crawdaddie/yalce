@@ -69,8 +69,7 @@ static void print_all_failures() {
 }
 
 static bool alpha_type_equal_inner(Type *left, Type *right,
-                                   TypeVarAlphaPair *pairs,
-                                   int *pair_count);
+                                   TypeVarAlphaPair *pairs, int *pair_count);
 
 static bool alpha_typelist_equal(TypeList *left, TypeList *right,
                                  TypeVarAlphaPair *pairs, int *pair_count) {
@@ -126,15 +125,15 @@ static bool alpha_bind_vars(int left_id, const char *left_name, int right_id,
   int right_idx = -1;
   for (int i = 0; i < *pair_count; i++) {
     bool left_matches =
-        left_id >= 0 ? pairs[i].left_id == left_id
-                     : (pairs[i].left_id < 0 && pairs[i].left_name &&
-                        left_name &&
-                        strcmp(pairs[i].left_name, left_name) == 0);
+        left_id >= 0
+            ? pairs[i].left_id == left_id
+            : (pairs[i].left_id < 0 && pairs[i].left_name && left_name &&
+               strcmp(pairs[i].left_name, left_name) == 0);
     bool right_matches =
-        right_id >= 0 ? pairs[i].right_id == right_id
-                      : (pairs[i].right_id < 0 && pairs[i].right_name &&
-                         right_name &&
-                         strcmp(pairs[i].right_name, right_name) == 0);
+        right_id >= 0
+            ? pairs[i].right_id == right_id
+            : (pairs[i].right_id < 0 && pairs[i].right_name && right_name &&
+               strcmp(pairs[i].right_name, right_name) == 0);
     if (left_matches) {
       left_idx = i;
     }
@@ -160,8 +159,7 @@ static bool alpha_bind_vars(int left_id, const char *left_name, int right_id,
 }
 
 static bool alpha_type_equal_inner(Type *left, Type *right,
-                                   TypeVarAlphaPair *pairs,
-                                   int *pair_count) {
+                                   TypeVarAlphaPair *pairs, int *pair_count) {
   if (left == right) {
     return true;
   }
@@ -247,12 +245,11 @@ static bool alpha_type_equal_inner(Type *left, Type *right,
            alpha_typelist_equal(left->data.T_SCHEME.vars,
                                 right->data.T_SCHEME.vars, pairs, pair_count) &&
            alpha_type_equal_inner(left->data.T_SCHEME.type,
-                                  right->data.T_SCHEME.type, pairs,
-                                  pair_count);
+                                  right->data.T_SCHEME.type, pairs, pair_count);
 
   case T_MODULE:
-    return alpha_typeenv_equal(left->data.T_MODULE.env, right->data.T_MODULE.env,
-                               pairs, pair_count);
+    return alpha_typeenv_equal(left->data.T_MODULE.env,
+                               right->data.T_MODULE.env, pairs, pair_count);
   }
 
   return false;

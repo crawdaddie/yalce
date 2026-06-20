@@ -59,12 +59,8 @@ static TypeEnv *find_binding(TypeEnv *env, const char *name) {
 }
 
 static bool subst_maps_to(Subst *subst, int var_id, Type *expected) {
-  for (Subst *s = subst; s != NULL; s = s->next) {
-    if (s->var_id == var_id && types_equal(s->type, expected)) {
-      return true;
-    }
-  }
-  return false;
+  Type *found = find_in_subst(subst, var_id);
+  return found != NULL && types_equal(found, expected);
 }
 
 static bool has_constraint(TICtx *ctx, Type *left, Type *right) {
@@ -495,7 +491,11 @@ static void test_infer_final_rewrites_nested_ast_annotations() {
                           .args = NULL,
                           .len = 0,
                       }}};
-  Subst subst = {.var_id = a->data.T_VAR.id, .type = &t_int, .next = NULL};
+  int cap = a->data.T_VAR.id + 1;
+  Type **bindings = t_alloc(sizeof(Type *) * (size_t)cap);
+  memset(bindings, 0, sizeof(Type *) * (size_t)cap);
+  bindings[a->data.T_VAR.id] = &t_int;
+  Subst subst = {.bindings = bindings, .cap = cap};
   Solution solved = {.subst = &subst};
   TICtx ctx = {0};
 

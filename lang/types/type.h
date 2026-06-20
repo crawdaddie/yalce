@@ -22,9 +22,8 @@ typedef struct TypeClass {
 } TypeClass;
 
 typedef struct Subst {
-  int var_id;
-  Type *type;
-  struct Subst *next;
+  Type **bindings;
+  int cap;
 } Subst;
 
 typedef enum {
