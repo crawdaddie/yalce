@@ -24,6 +24,9 @@ typedef struct TypeClass {
 typedef struct Subst {
   Type **bindings;
   int cap;
+  int *var_ids;
+  Type **types;
+  int len;
 } Subst;
 
 typedef enum {

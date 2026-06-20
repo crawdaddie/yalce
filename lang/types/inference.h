@@ -8,6 +8,8 @@ DECLARE_ARENA_ALLOCATOR_DEFAULT(t);
 void reset_type_var_counter();
 void mark_type_var_counter_floor();
 
+extern int type_var_counter;
+
 typedef struct LambdaScope {
   Ast *fn_ast;
   int base_scope;

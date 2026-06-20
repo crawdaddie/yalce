@@ -34,13 +34,17 @@ static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
 static bool predicate_is_generic(Predicate *p);
 static Predicate *predicate_filter_generic(Predicate *preds);
 static bool is_empty_subst(Subst *subst);
-static Subst *alloc_subst_table(void);
-static void ensure_subst_capacity(Subst *subst, int var_id);
+static Subst *alloc_indexed_subst(int initial_cap);
+static Subst *alloc_sparse_subst(void);
+static void ensure_indexed_subst_capacity(Subst *subst, int var_id);
+static void ensure_sparse_subst_capacity(Subst *subst, int needed_len);
+static bool subst_is_indexed(Subst *subst);
 static Subst *clone_subst(Subst *subst);
 static bool is_recursive_self_reference(Ast *ast, TICtx *ctx);
 static Type *callable_view(Type *type);
 
-static Subst empty_subst_sentinel = {.bindings = NULL, .cap = 0};
+static Subst empty_subst_sentinel = {
+    .bindings = NULL, .cap = 0, .var_ids = NULL, .types = NULL, .len = 0};
 
 static bool is_recursive_self_reference(Ast *ast, TICtx *ctx) {
   if (!ast || !ctx || !ctx->current_fn_ast) {
@@ -1653,15 +1657,40 @@ static bool occurs_in(int var_id, Type *type) {
   }
 }
 
-static Subst *alloc_subst_table(void) {
+static Subst *alloc_indexed_subst(int initial_cap) {
   Subst *subst = t_alloc(sizeof(Subst));
   subst->bindings = NULL;
   subst->cap = 0;
+  subst->var_ids = NULL;
+  subst->types = NULL;
+  subst->len = 0;
+  if (initial_cap > 0) {
+    subst->bindings = t_alloc(sizeof(Type *) * (size_t)initial_cap);
+    memset(subst->bindings, 0, sizeof(Type *) * (size_t)initial_cap);
+    subst->cap = initial_cap;
+  }
   return subst;
 }
 
-static void ensure_subst_capacity(Subst *subst, int var_id) {
+static Subst *alloc_sparse_subst(void) {
+  Subst *subst = t_alloc(sizeof(Subst));
+  subst->bindings = NULL;
+  subst->cap = 0;
+  subst->var_ids = NULL;
+  subst->types = NULL;
+  subst->len = 0;
+  return subst;
+}
+
+static bool subst_is_indexed(Subst *subst) {
+  return subst && subst != &empty_subst_sentinel && subst->bindings != NULL;
+}
+
+static void ensure_indexed_subst_capacity(Subst *subst, int var_id) {
   if (!subst || var_id < 0) {
+    return;
+  }
+  if (!subst_is_indexed(subst)) {
     return;
   }
   if (var_id < subst->cap) {
@@ -1682,32 +1711,86 @@ static void ensure_subst_capacity(Subst *subst, int var_id) {
   subst->cap = new_cap;
 }
 
+static void ensure_sparse_subst_capacity(Subst *subst, int needed_len) {
+  if (!subst || subst_is_indexed(subst) || needed_len <= subst->cap) {
+    return;
+  }
+  int new_cap = subst->cap > 0 ? subst->cap : 4;
+  while (new_cap < needed_len) {
+    new_cap *= 2;
+  }
+
+  int *var_ids = t_alloc(sizeof(int) * (size_t)new_cap);
+  Type **types = t_alloc(sizeof(Type *) * (size_t)new_cap);
+  if (subst->len > 0) {
+    memcpy(var_ids, subst->var_ids, sizeof(int) * (size_t)subst->len);
+    memcpy(types, subst->types, sizeof(Type *) * (size_t)subst->len);
+  }
+  subst->var_ids = var_ids;
+  subst->types = types;
+  subst->cap = new_cap;
+}
+
 static Subst *clone_subst(Subst *subst) {
   if (is_empty_subst(subst)) {
     return NULL;
   }
-  Subst *copy = alloc_subst_table();
-  if (subst->cap > 0) {
-    ensure_subst_capacity(copy, subst->cap - 1);
-    memcpy(copy->bindings, subst->bindings, sizeof(Type *) * (size_t)subst->cap);
+  if (subst_is_indexed(subst)) {
+    Subst *copy = alloc_indexed_subst(subst->cap);
+    if (subst->cap > 0) {
+      memcpy(copy->bindings, subst->bindings,
+             sizeof(Type *) * (size_t)subst->cap);
+    }
+    return copy;
+  }
+  Subst *copy = alloc_sparse_subst();
+  if (subst->len > 0) {
+    ensure_sparse_subst_capacity(copy, subst->len);
+    memcpy(copy->var_ids, subst->var_ids, sizeof(int) * (size_t)subst->len);
+    memcpy(copy->types, subst->types, sizeof(Type *) * (size_t)subst->len);
+    copy->len = subst->len;
   }
   return copy;
 }
 
 static Subst *extend_subst(Subst *subst, int var_id, Type *type) {
   if (is_empty_subst(subst)) {
-    subst = alloc_subst_table();
+    subst = alloc_sparse_subst();
   }
-  ensure_subst_capacity(subst, var_id);
-  subst->bindings[var_id] = type;
+  if (subst_is_indexed(subst)) {
+    ensure_indexed_subst_capacity(subst, var_id);
+    subst->bindings[var_id] = type;
+    return subst;
+  }
+  for (int i = 0; i < subst->len; i++) {
+    if (subst->var_ids[i] == var_id) {
+      subst->types[i] = type;
+      return subst;
+    }
+  }
+  ensure_sparse_subst_capacity(subst, subst->len + 1);
+  subst->var_ids[subst->len] = var_id;
+  subst->types[subst->len] = type;
+  subst->len++;
   return subst;
 }
 
 static Type *lookup_subst(Subst *subst, int var_id) {
-  if (is_empty_subst(subst) || var_id < 0 || var_id >= subst->cap) {
+  if (is_empty_subst(subst) || var_id < 0) {
     return NULL;
   }
-  return subst->bindings[var_id];
+  if (subst_is_indexed(subst)) {
+    if (var_id >= subst->cap) {
+      return NULL;
+    }
+    return subst->bindings[var_id];
+  }
+  for (int i = 0; i < subst->len; i++) {
+    if (subst->var_ids[i] == var_id) {
+      return subst->types[i];
+    }
+  }
+  return NULL;
 }
 
 static Type *apply_subst_to_type(Subst *subst, Type *t) {
@@ -1773,8 +1856,7 @@ static Type *find_root_var(Subst *subst, Type *t) {
   Type *next = lookup_subst(subst, t->data.T_VAR.id);
   if (!next)
     return t;
-  if (next->kind != T_VAR ||
-      next->data.T_VAR.id == t->data.T_VAR.id)
+  if (next->kind != T_VAR || next->data.T_VAR.id == t->data.T_VAR.id)
     return apply_subst_to_type(subst, next);
   return find_root_var(subst, next);
 }
@@ -1868,7 +1950,7 @@ static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out) {
 }
 
 Subst *solve_constraints(Constraint *constraints) {
-  Subst *subst = &empty_subst_sentinel;
+  Subst *subst = alloc_indexed_subst(type_var_counter);
 
   for (Constraint *c = constraints; c != NULL; c = c->next) {
     if (c->kind != CONSTRAINT_EQUALITY) {
@@ -1884,7 +1966,7 @@ Subst *solve_constraints(Constraint *constraints) {
     }
   }
 
-  return subst;
+  return is_empty_subst(subst) ? &empty_subst_sentinel : subst;
 }
 
 Subst *compose_subst(Subst *s1, Subst *s2) {
@@ -1905,14 +1987,24 @@ Subst *compose_subst(Subst *s1, Subst *s2) {
   }
 
   Subst *result = clone_subst(s2);
-  for (int var_id = 0; var_id < s1->cap; var_id++) {
-    Type *binding = s1->bindings[var_id];
-    if (!binding) {
-      continue;
+  if (subst_is_indexed(s1)) {
+    for (int var_id = 0; var_id < s1->cap; var_id++) {
+      Type *binding = s1->bindings[var_id];
+      if (!binding) {
+        continue;
+      }
+      Type *applied = apply_subst_to_type(s2, binding);
+      result = extend_subst(result, var_id, applied);
     }
-    Type *applied = apply_subst_to_type(s2, binding);
-    ensure_subst_capacity(result, var_id);
-    result->bindings[var_id] = applied;
+  } else {
+    for (int i = 0; i < s1->len; i++) {
+      Type *binding = s1->types[i];
+      if (!binding) {
+        continue;
+      }
+      Type *applied = apply_subst_to_type(s2, binding);
+      result = extend_subst(result, s1->var_ids[i], applied);
+    }
   }
   return result ? result : &empty_subst_sentinel;
 }
@@ -1923,7 +2015,8 @@ Type *apply_substitution(Subst *subst, Type *t) {
 
 static bool is_empty_subst(Subst *subst) {
   return !subst || subst == &empty_subst_sentinel ||
-         (subst->cap == 0 && subst->bindings == NULL);
+         (subst->cap == 0 && subst->bindings == NULL && subst->len == 0 &&
+          subst->var_ids == NULL && subst->types == NULL);
 }
 
 // ============================================================================
@@ -2033,12 +2126,14 @@ Type *empty_type() {
 // Type variable generation
 // ============================================================================
 
-static int type_var_counter = 0;
-static int type_var_counter_floor = 0;
+int type_var_counter = 0;
+int type_var_counter_floor = 0;
 
 void reset_type_var_counter() { type_var_counter = type_var_counter_floor; }
 
-void mark_type_var_counter_floor() { type_var_counter_floor = type_var_counter; }
+void mark_type_var_counter_floor() {
+  type_var_counter_floor = type_var_counter;
+}
 
 Type *next_tvar() {
   Type *tvar = t_alloc(sizeof(Type));

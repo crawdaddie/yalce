@@ -322,9 +322,7 @@ Type *tvar(const char *name) {
   return mem;
 }
 
-Type *tvar_named(const char *name) {
-  return tvar(name);
-}
+Type *tvar_named(const char *name) { return tvar(name); }
 
 Type *trec(const char *name, TypeEnv *decl) {
   Type *mem = empty_type();
