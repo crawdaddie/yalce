@@ -323,11 +323,7 @@ Type *tvar(const char *name) {
 }
 
 Type *tvar_named(const char *name) {
-  Type *mem = tvar(name);
-  size_t name_len = strlen(name);
-  mem->data.T_VAR.name = t_alloc(sizeof(char) * (name_len + 1));
-  memcpy((char *)mem->data.T_VAR.name, name, name_len + 1);
-  return mem;
+  return tvar(name);
 }
 
 Type *trec(const char *name, TypeEnv *decl) {
