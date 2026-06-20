@@ -30,7 +30,7 @@ LANG_SRCS := $(LANG_SRC_DIR)/parse.c \
              $(YACC_OUTPUT)
 
 # Phony targets
-.PHONY: all clean test_parse test_typecheck test_scripts test_unification test_range_server test_range_server_tool test_lsp_server_tool
+.PHONY: all clean test_parse test_typecheck test_inference test_inference_benchmarking test_scripts test_unification test_range_server test_range_server_tool test_lsp_server_tool
 
 all:
 	-$(MAKE) test_parse
@@ -73,6 +73,14 @@ test_inference: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 		-o $(BUILD_DIR)/test_inference \
 		$(LDFLAGS)
 	$(BUILD_DIR)/test_inference
+
+test_inference_benchmarking: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
+	$(CC) $(CFLAGS) inference_benchmarking.c \
+		$(LANG_SRCS) \
+		$(LANG_SRC_DIR)/types/*.c \
+		-o $(BUILD_DIR)/inference_benchmarking \
+		$(LDFLAGS)
+	$(BUILD_DIR)/inference_benchmarking
 
 test_range_server: $(BUILD_DIR) $(LEX_OUTPUT) $(YACC_OUTPUT)
 	$(CC) $(CFLAGS) test_range_server.c \
