@@ -521,6 +521,7 @@ static void test_infer_solve_succeeds_with_empty_constraints() {
 }
 
 int main(void) {
+  reset_type_var_counter();
   initialize_builtin_types();
 
   test_add_constraint_deduplicates_exact_equality();

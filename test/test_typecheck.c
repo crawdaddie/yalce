@@ -3120,6 +3120,7 @@ bool test_rec_coroutines() {
 
 int main() {
   // initialize_builtin_schemes();
+  reset_type_var_counter();
   initialize_builtin_types();
 
   bool status = true;
