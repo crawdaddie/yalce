@@ -109,6 +109,14 @@ void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx) {
   }
 
   int scope = binding_info.data.VAR.scope;
+  int yield_boundary_scope = binding_info.data.VAR.yield_boundary_scope;
+
+  if (ctx->current_fn_ast && ctx->current_fn_ast->data.AST_LAMBDA.num_yields >
+                                 yield_boundary_scope) {
+    ast->data.AST_IDENTIFIER.crosses_yield_boundary = true;
+    extend_closed_vals(ctx->current_fn_ast, ast, ast->type);
+  }
+
   if (scope > 0 && scope < ctx->current_fn_base_scope) {
     propagate_closed_val_through_scopes(ast, ast->type, scope, ctx);
   }

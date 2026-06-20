@@ -3,6 +3,113 @@
 #include "../parse.h"
 #include <stdbool.h>
 #include <unistd.h>
+
+typedef struct Type Type;
+
+typedef struct TypeList {
+  Type *type;
+  struct TypeList *next;
+} TypeList;
+
+enum TypeClassType { TC_FN, TC_STRUCTURAL };
+
+typedef struct TypeClass {
+  const char *name;
+  double rank;
+  Type *module;
+  TypeList *params;
+  struct TypeClass *next;
+} TypeClass;
+
+typedef struct Subst {
+  const char *var;
+  Type *type;
+  struct Subst *next;
+} Subst;
+
+typedef enum {
+  CONSTRAINT_EQUALITY,
+} ConstraintKind;
+
+typedef struct Constraint {
+  ConstraintKind kind;
+  union {
+    struct {
+      Type *left;
+      Type *right;
+    } EQUALITY;
+  } data;
+  struct Constraint *next;
+} Constraint;
+
+// A predicate: "type t must implement trait tc"
+typedef enum {
+  PRED_TRAIT,      // type must implement a typeclass
+  PRED_COMPARABLE, // operands compare at a common witness type under a tc
+} PredicateKind;
+
+typedef struct Predicate {
+  PredicateKind kind;
+  TypeClass *trait;
+  union {
+    struct {
+      Type *type;
+      TypeList *params;
+    } TRAIT;
+    struct {
+      Type *witness;
+      Type **args;
+    } COMPARABLE;
+  } data;
+  struct Predicate *next;
+} Predicate;
+
+typedef struct {
+  enum BindingType {
+    BT_VAR,
+    BT_EXTERN_FN,
+    BT_RECURSIVE_REF,
+    BT_FN_PARAM,
+    BT_TYPE_DECL,
+    BT_TYPE_CONSTRUCTOR,
+  } type;
+
+  union {
+    struct {
+      int scope;
+      int yield_boundary_scope;
+    } VAR;
+
+    struct {
+      int scope;
+    } RECURSIVE_REF;
+
+    struct {
+      int scope;
+    } FN_PARAM;
+
+  } data;
+} binding_md;
+
+// TypeEnv represents a mapping from variable names to their types
+// with optional scheme variables for HM-style polymorphism.
+// scheme_vars: free variables in `type` that were NOT free in the
+// environment at generalization time. NULL means monomorphic.
+typedef struct TypeEnv {
+  const char *name;
+  Type *type;
+  binding_md md;
+  int ref_count;
+
+  TypeList *scheme_vars; // vars to freshen on instantiation
+  Predicate *predicates; // trait obligations for this binding (NULL = none)
+  struct TypeEnv *next;
+  struct TypeEnv *generalize_boundary;
+  bool can_generalize;
+  bool needs_generalization;
+  bool is_opened_var;
+} TypeEnv;
+
 #define _TSTORAGE_SIZE_DEFAULT 200000
 
 void reset_type_var_counter();
@@ -14,17 +121,6 @@ typedef struct Method {
   size_t size;
   Type *signature;
 } Method;
-
-enum TypeClassType { TC_FN, TC_STRUCTURAL };
-
-typedef struct TypeClass {
-  const char *name;
-  double rank;
-  Type *module;
-  struct TypeClass *next;
-} TypeClass;
-
-typedef struct Type Type;
 
 bool is_string_type(Type *type);
 
@@ -41,6 +137,7 @@ bool is_string_type(Type *type);
 #define TYPE_NAME_UINT64  "Uint64"
 #define TYPE_NAME_VOID    "()"
 #define TYPE_NAME_VARIANT "Sum"
+#define TYPE_NAME_OPTION  "Option"
 #define TYPE_NAME_SOME    "Some"
 #define TYPE_NAME_NONE    "None"
 #define TYPE_NAME_QUEUE   "Queue"
@@ -64,6 +161,7 @@ bool is_string_type(Type *type);
 #define TYPE_NAME_TYPECLASS_ARITHMETIC "Arithmetic"
 #define TYPE_NAME_TYPECLASS_EQ "Eq"
 #define TYPE_NAME_TYPECLASS_ORD "Ord"
+#define TYPE_NAME_TYPECLASS_FROM "From"
 #define TYPE_NAME_RUN_IN_SCHEDULER "run_in_scheduler"
 #define TYPE_NAME_COROUTINE_CONSTRUCTOR "CoroutineConstructor"
 #define TYPE_NAME_COROUTINE_INSTANCE "Coroutine"
@@ -135,10 +233,10 @@ bool is_string_type(Type *type);
 #define TTUPLE(num, ...)                                                       \
   ((Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, (Type *[]){__VA_ARGS__}, num}}})
 
-#define TOPT(of) TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, of), &t_none)
+#define TOPT(of) ((Type){T_SUM, {.T_CONS = {TYPE_NAME_OPTION, (Type *[]){&TCONS(TYPE_NAME_SOME, 1, of), &t_none}, 2}}})
 
-#define TSUM(num, ...) \
-  ((Type){T_CONS, {.T_CONS = {TYPE_NAME_VARIANT, (Type *[]){__VA_ARGS__}, num}}}) 
+#define TSUM(num, name, ...) \
+  ((Type){T_SUM, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}}) 
 
 // #define TYPECLASS_RESOLVE(tc_name, dep1, dep2, resolver)                       \
 //   ((Type){                                                                     \
@@ -153,6 +251,12 @@ bool is_string_type(Type *type);
       {.T_VAR = {.name = n, .id = -1}},                                        \
   })
 
+#define TREC(n)                                                                \
+  ((Type){                                                                     \
+      T_RECURSIVE_REF,                                                         \
+      {.T_RECURSIVE_REF = {.name = n}},                                        \
+  })
+
 
 typedef struct Type *(*CreateNewGenericTypeFn)(void *);
 enum TypeKind {
@@ -165,9 +269,12 @@ enum TypeKind {
   T_STRING = 6,
   T_FN,
   T_CONS,
+  T_SUM,
   T_VAR,
+  T_RECURSIVE_REF,
   T_EMPTY_LIST,
   T_TYPECLASS_RESOLVE,
+  T_MODULE,
   T_SCHEME,
 };
 #define TYPE_FLAGS_PRIMITIVE ((1 << T_STRING) | ((1 << T_STRING) - 1))
@@ -212,10 +319,6 @@ uint64_t clear_attr(uint64_t attrs, uint64_t flag);
 const char* fn_attr_to_string(FnAttributes attr);
 void print_fn_attrs(FnAttributes attrs);
 
-typedef struct TypeList {
-  Type *type;
-  struct TypeList *next;
-} TypeList;
 
 typedef struct Type {
   enum TypeKind kind;
@@ -227,6 +330,11 @@ typedef struct Type {
       const char *name;
       int id;
     } T_VAR;
+
+    struct {
+      const char *name;
+      TypeEnv *decl;
+    } T_RECURSIVE_REF;
 
     struct {
       const char *name;
@@ -246,6 +354,10 @@ typedef struct Type {
       int num_vars;
       Type *type;
     } T_SCHEME;
+    struct {
+      TypeEnv *env;
+      int size;
+    } T_MODULE;
 
   } data;
 
@@ -278,6 +390,7 @@ int fn_type_args_len(Type *);
 
 Type *empty_type();
 Type *tvar(const char *name);
+Type *trec(const char *name, TypeEnv *decl);
 bool is_generic(Type *t);
 
 Type *type_fn(Type *from, Type *to);
@@ -327,6 +440,7 @@ Type *concat_struct_types(Type *a, Type *b);
 bool is_struct_of_coroutines(Type *fn_type);
 
 TypeClass *get_typeclass_by_name(Type *t, const char *name);
+TypeClass *get_typeclass_instance(Type *t, const char *name, TypeList *params);
 double get_typeclass_rank(Type *t, const char *name);
 
 bool type_implements(Type *t, TypeClass *tc);

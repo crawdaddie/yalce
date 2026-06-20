@@ -12,4 +12,6 @@ type_to_string_dynamic(Type *t); // Returns malloc'd string, caller must free
 void print_type_env(TypeEnv *env);
 
 void print_type_to_stream(Type *t, FILE *stream);
+
+void print_type_env_stream(TypeEnv *env, FILE *stream);
 #endif

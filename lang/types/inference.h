@@ -7,89 +7,6 @@
 DECLARE_ARENA_ALLOCATOR_DEFAULT(t);
 void reset_type_var_counter();
 
-typedef struct Subst {
-  const char *var;
-  Type *type;
-  struct Subst *next;
-} Subst;
-
-typedef enum {
-  CONSTRAINT_EQUALITY,
-} ConstraintKind;
-
-typedef struct Constraint {
-  ConstraintKind kind;
-  union {
-    struct {
-      Type *left;
-      Type *right;
-    } EQUALITY;
-  } data;
-  struct Constraint *next;
-} Constraint;
-
-// A predicate: "type t must implement trait tc"
-typedef enum {
-  PRED_TRAIT,      // type must implement a typeclass
-  PRED_COMPARABLE, // operands compare at a common witness type under a tc
-} PredicateKind;
-
-typedef struct Predicate {
-  PredicateKind kind;
-  TypeClass *trait;
-  union {
-    struct {
-      Type *type;
-    } TRAIT;
-    struct {
-      Type *witness;
-      Type **args;
-    } COMPARABLE;
-  } data;
-  struct Predicate *next;
-} Predicate;
-
-typedef struct {
-  enum BindingType {
-    BT_VAR,
-    BT_EXTERN_FN,
-    BT_RECURSIVE_REF,
-    BT_FN_PARAM,
-  } type;
-
-  union {
-    struct {
-      int scope;
-      int yield_boundary_scope;
-    } VAR;
-
-    struct {
-      int scope;
-    } RECURSIVE_REF;
-
-    struct {
-      int scope;
-    } FN_PARAM;
-
-  } data;
-} binding_md;
-
-// TypeEnv represents a mapping from variable names to their types
-// with optional scheme variables for HM-style polymorphism.
-// scheme_vars: free variables in `type` that were NOT free in the
-// environment at generalization time. NULL means monomorphic.
-typedef struct TypeEnv {
-  const char *name;
-  Type *type;
-  binding_md md;
-  int ref_count;
-
-  TypeList *scheme_vars; // vars to freshen on instantiation
-  Predicate *predicates; // trait obligations for this binding (NULL = none)
-  struct TypeEnv *next;
-  bool is_opened_var;
-} TypeEnv;
-
 typedef struct LambdaScope {
   Ast *fn_ast;
   int base_scope;
@@ -186,6 +103,8 @@ bool is_constant_expr(Ast *expr, TICtx *ctx);
 
 // Predicate helpers
 Predicate *predicate_append(Predicate *list, TypeClass *trait, Type *type);
+Predicate *predicate_append_applied(Predicate *list, TypeClass *trait,
+                                    Type *type, TypeList *params);
 Predicate *predicate_append_comparable(Predicate *list, TypeClass *trait,
                                        Type *witness, Type **args);
 Predicate *predicate_apply_subst(Subst *subst, Predicate *preds);
@@ -193,4 +112,6 @@ Predicate *predicate_duplicate(Predicate *preds);
 int resolve_predicates(Subst **subst, Predicate *preds, FILE *err_stream);
 
 void print_predicates(Predicate *predicates);
+
+int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx);
 #endif

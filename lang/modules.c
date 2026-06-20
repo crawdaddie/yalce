@@ -191,7 +191,7 @@ Type *infer_module_import(Ast *ast, TICtx *ctx) {
   return module_struct_type;
 }
 
-Type *infer_inline_module(Ast *ast, TICtx *ctx) {
+Type *_infer_inline_module(Ast *ast, TICtx *ctx) {
 
   AstList *type_annotations = ast->data.AST_LAMBDA.type_annotations;
   AstList *params = ast->data.AST_LAMBDA.params;
@@ -331,18 +331,28 @@ Type *infer_module_access(Ast *ast, Type *rec_type, const char *member_name,
                           TICtx *ctx) {
   Type *type = NULL;
 
-  for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
-    if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
-      type = rec_type->data.T_CONS.args[i];
-      ast->data.AST_RECORD_ACCESS.index = i;
-      break;
+  if (rec_type->kind == T_MODULE) {
+    int i = 0;
+    for (TypeEnv *te = rec_type->data.T_MODULE.env; te; te = te->next, i++) {
+      if (CHARS_EQ(te->name, member_name)) {
+        ast->data.AST_RECORD_ACCESS.index = i;
+        return instantiate_env(te, ctx);
+      }
     }
+  } else {
+    for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
+      if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
+        type = rec_type->data.T_CONS.args[i];
+        ast->data.AST_RECORD_ACCESS.index = i;
+        break;
+      }
 
-    // if (type == NULL) {
-    //   fprintf(stderr, "Error: %s not found in module %s\n", member_name,
-    //           ast->data.AST_RECORD_ACCESS.record->data.AST_IDENTIFIER.value);
-    //   return NULL;
-    // }
+      // if (type == NULL) {
+      //   fprintf(stderr, "Error: %s not found in module %s\n", member_name,
+      //           ast->data.AST_RECORD_ACCESS.record->data.AST_IDENTIFIER.value);
+      //   return NULL;
+      // }
+    }
   }
 
   if (is_generic(type)) {

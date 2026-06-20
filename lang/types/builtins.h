@@ -32,6 +32,7 @@ TypeEnv *lookup_builtin_env(const char *name);
 extern TypeClass *GenericArithmetic;
 extern TypeClass *GenericOrd;
 extern TypeClass *GenericEq;
+extern TypeClass *GenericFrom;
 
 // Kept for backward compat with existing callers — will be removed.
 extern Type arithmetic_scheme;

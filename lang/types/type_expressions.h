@@ -5,4 +5,6 @@
 
 Type *compute_type_expression(Ast *expr, TICtx *ctx);
 Type *infer_type_declaration(Ast *ast, TICtx *ctx);
+
+Type *compute_fn_type(Ast *expr, TICtx *ctx);
 #endif

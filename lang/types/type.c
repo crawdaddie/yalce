@@ -13,6 +13,90 @@ Type *env_lookup(TypeEnv *env, const char *name);
 void reset_type_var_counter();
 Type *create_option_type(Type *option_of);
 
+bool types_equal(Type *t1, Type *t2);
+bool types_match(Type *t1, Type *t2);
+
+static bool typeclass_params_equal(TypeList *a, TypeList *b) {
+  while (a && b) {
+    if (!types_equal(a->type, b->type)) {
+      return false;
+    }
+    a = a->next;
+    b = b->next;
+  }
+  return a == NULL && b == NULL;
+}
+
+static TypeClass *make_typeclass_instance(const char *name, double rank,
+                                          TypeList *params) {
+  TypeClass *tc = t_alloc(sizeof(TypeClass));
+  *tc = (TypeClass){.name = name, .rank = rank, .params = params, .next = NULL};
+  return tc;
+}
+
+static bool has_typeclass_instance(Type *t, TypeClass *candidate) {
+  for (TypeClass *tc = t->implements; tc; tc = tc->next) {
+    if (strcmp(tc->name, candidate->name) == 0 &&
+        typeclass_params_equal(tc->params, candidate->params)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void extend_coroutine_from_instances(Type *coroutine, Type *yielded) {
+  TypeList *list_params = t_alloc(sizeof(TypeList));
+  list_params->type = create_list_type_of_type(yielded);
+  list_params->next = NULL;
+  typeclasses_extend(
+      coroutine,
+      make_typeclass_instance(TYPE_NAME_TYPECLASS_FROM, 1000.0, list_params));
+
+  TypeList *array_params = t_alloc(sizeof(TypeList));
+  array_params->type = create_array_type(yielded);
+  array_params->next = NULL;
+  typeclasses_extend(
+      coroutine,
+      make_typeclass_instance(TYPE_NAME_TYPECLASS_FROM, 1000.0, array_params));
+}
+
+static bool module_matches_cons(Type *mod, Type *cons, bool exact) {
+  if (!mod || !cons || mod->kind != T_MODULE || cons->kind != T_CONS ||
+      strcmp(cons->data.T_CONS.name, TYPE_NAME_MODULE) != 0) {
+    return false;
+  }
+
+  if (mod->data.T_MODULE.size != cons->data.T_CONS.num_args) {
+    return false;
+  }
+
+  TypeEnv *env = mod->data.T_MODULE.env;
+  for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
+    if (!env) {
+      return false;
+    }
+    if (cons->data.T_CONS.names && env->name &&
+        strcmp(cons->data.T_CONS.names[i], env->name) != 0) {
+      return false;
+    }
+    Type env_type = env->scheme_vars
+                        ? (Type){T_SCHEME,
+                                 {.T_SCHEME = {.vars = env->scheme_vars,
+                                               .num_vars = 0,
+                                               .type = env->type}}}
+                        : *env->type;
+    Type *lhs = env->scheme_vars ? &env_type : env->type;
+    bool ok = exact ? types_equal(lhs, cons->data.T_CONS.args[i])
+                    : types_match(lhs, cons->data.T_CONS.args[i]);
+    if (!ok) {
+      return false;
+    }
+    env = env->next;
+  }
+
+  return env == NULL;
+}
+
 bool types_match(Type *t1, Type *t2) {
   if (t1 == t2) {
     return true;
@@ -25,8 +109,19 @@ bool types_match(Type *t1, Type *t2) {
   if (t1->kind == T_VAR) {
     return true;
   }
+  if (t1->kind == T_RECURSIVE_REF) {
+    return t2->kind == T_RECURSIVE_REF &&
+           strcmp(t1->data.T_RECURSIVE_REF.name,
+                  t2->data.T_RECURSIVE_REF.name) == 0;
+  }
 
   if (t1->kind != t2->kind) {
+    if (t1->kind == T_MODULE && t2->kind == T_CONS) {
+      return module_matches_cons(t1, t2, false);
+    }
+    if (t2->kind == T_MODULE && t1->kind == T_CONS) {
+      return module_matches_cons(t2, t1, false);
+    }
     return false;
   }
 
@@ -43,7 +138,6 @@ bool types_match(Type *t1, Type *t2) {
   }
 
   case T_VAR: {
-
     bool eq = t1->data.T_VAR.id >= 0 && t2->data.T_VAR.id >= 0
                   ? t1->data.T_VAR.id == t2->data.T_VAR.id
                   : strcmp(t1->data.T_VAR.name, t2->data.T_VAR.name) == 0;
@@ -52,8 +146,14 @@ bool types_match(Type *t1, Type *t2) {
     return eq;
   }
 
+  case T_RECURSIVE_REF: {
+    return strcmp(t1->data.T_RECURSIVE_REF.name,
+                  t2->data.T_RECURSIVE_REF.name) == 0;
+  }
+
   case T_TYPECLASS_RESOLVE:
-  case T_CONS: {
+  case T_CONS:
+  case T_SUM: {
 
     if (t1->alias && t2->alias && (strcmp(t1->alias, t2->alias) != 0)) {
       return false;
@@ -94,6 +194,18 @@ bool types_match(Type *t1, Type *t2) {
   case T_SCHEME: {
     return types_match(t1->data.T_SCHEME.type, t2->data.T_SCHEME.type);
   }
+  case T_MODULE: {
+    TypeEnv *e1 = t1->data.T_MODULE.env;
+    TypeEnv *e2 = t2->data.T_MODULE.env;
+    while (e1 && e2) {
+      if (strcmp(e1->name, e2->name) != 0 || !types_match(e1->type, e2->type)) {
+        return false;
+      }
+      e1 = e1->next;
+      e2 = e2->next;
+    }
+    return e1 == NULL && e2 == NULL;
+  }
   }
   return false;
 }
@@ -108,6 +220,12 @@ bool types_equal(Type *t1, Type *t2) {
   }
 
   if (t1->kind != t2->kind) {
+    if (t1->kind == T_MODULE && t2->kind == T_CONS) {
+      return module_matches_cons(t1, t2, true);
+    }
+    if (t2->kind == T_MODULE && t1->kind == T_CONS) {
+      return module_matches_cons(t2, t1, true);
+    }
     return false;
   }
 
@@ -124,7 +242,6 @@ bool types_equal(Type *t1, Type *t2) {
   }
 
   case T_VAR: {
-
     bool eq = t1->data.T_VAR.id >= 0 && t2->data.T_VAR.id >= 0
                   ? t1->data.T_VAR.id == t2->data.T_VAR.id
                   : strcmp(t1->data.T_VAR.name, t2->data.T_VAR.name) == 0;
@@ -133,8 +250,14 @@ bool types_equal(Type *t1, Type *t2) {
     return eq;
   }
 
+  case T_RECURSIVE_REF: {
+    return strcmp(t1->data.T_RECURSIVE_REF.name,
+                  t2->data.T_RECURSIVE_REF.name) == 0;
+  }
+
   case T_TYPECLASS_RESOLVE:
-  case T_CONS: {
+  case T_CONS:
+  case T_SUM: {
 
     if (t1->alias && t2->alias && (strcmp(t1->alias, t2->alias) != 0)) {
       return false;
@@ -175,6 +298,18 @@ bool types_equal(Type *t1, Type *t2) {
   case T_SCHEME: {
     return types_equal(t1->data.T_SCHEME.type, t2->data.T_SCHEME.type);
   }
+  case T_MODULE: {
+    TypeEnv *e1 = t1->data.T_MODULE.env;
+    TypeEnv *e2 = t2->data.T_MODULE.env;
+    while (e1 && e2) {
+      if (strcmp(e1->name, e2->name) != 0 || !types_equal(e1->type, e2->type)) {
+        return false;
+      }
+      e1 = e1->next;
+      e2 = e2->next;
+    }
+    return e1 == NULL && e2 == NULL;
+  }
   }
   return false;
 }
@@ -196,6 +331,27 @@ Type *tvar(const char *name) {
   return mem;
 }
 
+Type *tvar_named(const char *name) {
+  Type *mem = tvar(name);
+  size_t name_len = strlen(name);
+  mem->data.T_VAR.name = t_alloc(sizeof(char) * (name_len + 1));
+  memcpy((char *)mem->data.T_VAR.name, name, name_len + 1);
+  return mem;
+}
+
+Type *trec(const char *name, TypeEnv *decl) {
+  Type *mem = empty_type();
+  if (!mem) {
+    fprintf(stderr, "Error allocating memory for recursive type ref");
+  }
+  mem->kind = T_RECURSIVE_REF;
+  size_t name_len = strlen(name);
+  mem->data.T_RECURSIVE_REF.name = t_alloc(sizeof(char) * (name_len + 1));
+  memcpy((char *)mem->data.T_RECURSIVE_REF.name, name, name_len + 1);
+  mem->data.T_RECURSIVE_REF.decl = decl;
+  return mem;
+}
+
 bool is_generic(Type *t) {
   if (t == NULL) {
     return false;
@@ -204,31 +360,22 @@ bool is_generic(Type *t) {
   switch (t->kind) {
 
   case T_VAR: {
-    if (t->is_recursive_type_ref) {
-      return false;
-    }
-
     return true;
   }
 
+  case T_RECURSIVE_REF: {
+    return false;
+  }
+
   case T_TYPECLASS_RESOLVE:
-  case T_CONS: {
+  case T_CONS:
+  case T_SUM: {
     if (t->data.T_CONS.num_args == 0) {
       return false;
     }
 
     if (strcmp(t->data.T_CONS.name, "Variadic") == 0) {
       return true;
-    }
-    if (strcmp(t->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
-      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-        Type *arg = t->data.T_CONS.args[i];
-        if (is_generic(arg)) {
-          return true;
-        }
-      }
-      return false;
-
     } else if (strcmp(t->data.T_CONS.name, "forall") == 0) {
       return true;
     } else {
@@ -319,8 +466,14 @@ Type *deep_copy_type(const Type *original) {
     copy->data.T_VAR.name = strdup(original->data.T_VAR.name);
     copy->data.T_VAR.id = original->data.T_VAR.id;
     break;
+  case T_RECURSIVE_REF:
+    copy->data.T_RECURSIVE_REF.name =
+        strdup(original->data.T_RECURSIVE_REF.name);
+    copy->data.T_RECURSIVE_REF.decl = original->data.T_RECURSIVE_REF.decl;
+    break;
   case T_TYPECLASS_RESOLVE:
   case T_CONS:
+  case T_SUM:
     // Deep copy of name and args
     copy->data.T_CONS.name = strdup(original->data.T_CONS.name);
     copy->data.T_CONS.num_args = original->data.T_CONS.num_args;
@@ -331,6 +484,11 @@ Type *deep_copy_type(const Type *original) {
       copy->data.T_CONS.args[i] = deep_copy_type(original->data.T_CONS.args[i]);
     }
     copy->data.T_CONS.names = original->data.T_CONS.names;
+
+    if (is_coroutine_type(copy)) {
+      copy->implements = NULL;
+      extend_coroutine_from_instances(copy, copy->data.T_CONS.args[0]);
+    }
 
     break;
   case T_FN: {
@@ -373,10 +531,7 @@ bool is_tuple_type(Type *type) {
          (strcmp(type->data.T_CONS.name, TYPE_NAME_TUPLE) == 0);
 }
 
-bool is_sum_type(Type *type) {
-  return type->kind == T_CONS &&
-         (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0);
-}
+bool is_sum_type(Type *type) { return type && type->kind == T_SUM; }
 
 Type *create_cons_type(const char *name, int len, Type **unified_args) {
   Type *cons = empty_type();
@@ -385,6 +540,15 @@ Type *create_cons_type(const char *name, int len, Type **unified_args) {
   cons->data.T_CONS.num_args = len;
   cons->data.T_CONS.args = unified_args;
   return cons;
+}
+
+static Type *create_sum_type_named(const char *name, int len, Type **members) {
+  Type *sum = empty_type();
+  sum->kind = T_SUM;
+  sum->data.T_CONS.name = name;
+  sum->data.T_CONS.num_args = len;
+  sum->data.T_CONS.args = members;
+  return sum;
 }
 
 TypeClass _GenericEq = {.name = TYPE_NAME_TYPECLASS_EQ, .rank = 1000.};
@@ -397,8 +561,7 @@ Type *create_option_type(Type *option_of) {
   variant_members[0] = create_cons_type(TYPE_NAME_SOME, 1, contained);
 
   variant_members[1] = create_cons_type(TYPE_NAME_NONE, 0, NULL);
-  Type *cons = create_cons_type(TYPE_NAME_VARIANT, 2, variant_members);
-  cons->alias = "Option";
+  Type *cons = create_sum_type_named(TYPE_NAME_OPTION, 2, variant_members);
   typeclasses_extend(cons, &_GenericEq);
   // printf("created option of \n");
   // print_type(option_of);
@@ -415,6 +578,15 @@ Type *ptr_of_type(Type *pointee) {
   ptr->data.T_CONS.args[0] = pointee;
   ptr->data.T_CONS.num_args = 1;
   return ptr;
+}
+
+Type *create_coroutine_instance_type(Type *ret_type) {
+  Type **args = t_alloc(sizeof(Type *));
+  args[0] = ret_type;
+
+  Type *coroutine = create_cons_type(TYPE_NAME_COROUTINE_INSTANCE, 1, args);
+  extend_coroutine_from_instances(coroutine, ret_type);
+  return coroutine;
 }
 
 Type *create_array_type(Type *of) {
@@ -592,6 +764,16 @@ TypeClass *get_typeclass_by_name(Type *t, const char *name) {
   return NULL;
 }
 
+TypeClass *get_typeclass_instance(Type *t, const char *name, TypeList *params) {
+  for (TypeClass *tc = t->implements; tc; tc = tc->next) {
+    if (strcmp(name, tc->name) == 0 &&
+        typeclass_params_equal(tc->params, params)) {
+      return tc;
+    }
+  }
+  return NULL;
+}
+
 bool type_implements(Type *t, TypeClass *constraint_tc) {
 
   if (t->kind == T_SCHEME) {
@@ -622,11 +804,7 @@ double get_typeclass_rank(Type *t, const char *name) {
 }
 
 bool is_simple_enum(Type *t) {
-  if (t->kind != T_CONS) {
-    return false;
-  }
-
-  if (strcmp(t->data.T_CONS.name, TYPE_NAME_VARIANT) != 0) {
+  if (t->kind != T_SUM) {
     return false;
   }
 
@@ -698,14 +876,15 @@ TypeClass *impls_extend(TypeClass *impls, TypeClass *tc) {
 }
 
 void typeclasses_extend(Type *t, TypeClass *tc) {
-  if (!type_implements(t, tc)) {
+  if (!has_typeclass_instance(t, tc)) {
     t->implements = impls_extend(t->implements, tc);
   }
 }
 
 bool is_module(Type *t) {
-  return t->kind == T_CONS &&
-         (strcmp(t->data.T_CONS.name, TYPE_NAME_MODULE) == 0);
+  return (t->kind == T_CONS &&
+          (strcmp(t->data.T_CONS.name, TYPE_NAME_MODULE) == 0)) ||
+         t->kind == T_MODULE;
 }
 
 bool is_closure(Type *type) { return type->closure_meta != NULL; }
@@ -722,7 +901,8 @@ Type *type_of_option(Type *opt) {
   return opt->data.T_CONS.args[0]->data.T_CONS.args[0];
 }
 bool is_option_type(Type *type) {
-  return (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) &&
+  return type && type->kind == T_SUM &&
+         (strcmp(type->data.T_CONS.name, TYPE_NAME_OPTION) == 0) &&
          (type->data.T_CONS.num_args == 2) &&
          (strcmp(type->data.T_CONS.args[0]->data.T_CONS.name, "Some") == 0) &&
          (strcmp(type->data.T_CONS.args[1]->data.T_CONS.name, "None") == 0);

@@ -2,6 +2,7 @@
 #include "./type.h"
 #include <string.h>
 
+void print_type_env_stream(TypeEnv *env, FILE *stream);
 static char *type_name_mapping[] = {
     [T_INT] = TYPE_NAME_INT,    [T_UINT64] = TYPE_NAME_UINT64,
     [T_NUM] = TYPE_NAME_DOUBLE, [T_BOOL] = TYPE_NAME_BOOL,
@@ -38,6 +39,16 @@ void print_tc_list_to_stream(Type *t, FILE *stream) {
       print_type_to_stream(i->module, stream);
     } else {
       fprintf(stream, "%s ", i->name);
+      if (i->params) {
+        fprintf(stream, "<");
+        for (TypeList *p = i->params; p; p = p->next) {
+          print_type_to_stream(p->type, stream);
+          if (p->next) {
+            fprintf(stream, ", ");
+          }
+        }
+        fprintf(stream, ">");
+      }
     }
     fprintf(stream, ",");
   }
@@ -84,7 +95,8 @@ void print_type_to_stream(Type *t, FILE *stream) {
     fprintf(stream, "]");
     break;
   }
-  case T_CONS: {
+  case T_CONS:
+  case T_SUM: {
 
     if (is_string_type(t)) {
       fprintf(stream, "String");
@@ -146,7 +158,7 @@ void print_type_to_stream(Type *t, FILE *stream) {
       break;
     }
 
-    if (t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, "Some")) {
+    if (t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_SOME)) {
       fprintf(stream, "Option of ");
 
       if (t->data.T_CONS.args[0]->kind == T_CONS) {
@@ -159,8 +171,7 @@ void print_type_to_stream(Type *t, FILE *stream) {
     }
 
     if (is_sum_type(t)) {
-      fprintf(stream, "%s { ",
-              t->alias != NULL ? t->alias : t->data.T_CONS.name);
+      fprintf(stream, "%s { ", t->data.T_CONS.name);
       for (int i = 0; i < t->data.T_CONS.num_args; i++) {
         print_type_to_stream(t->data.T_CONS.args[i], stream);
         if (i < t->data.T_CONS.num_args - 1) {
@@ -197,8 +208,10 @@ void print_type_to_stream(Type *t, FILE *stream) {
   }
   case T_VAR: {
     int vid = t->data.T_VAR.id;
+
     if (vid >= 0 && vid < 65) {
-      fprintf(stream, "%c", (char)(vid + 65));
+      // fprintf(stream, "%c", (char)(vid + 65));
+      fprintf(stream, "`%d", vid);
     } else if (t->data.T_VAR.name) {
       fprintf(stream, "%s", t->data.T_VAR.name);
     } else {
@@ -206,6 +219,11 @@ void print_type_to_stream(Type *t, FILE *stream) {
     }
 
     print_tc_list_to_stream(t, stream);
+    break;
+  }
+
+  case T_RECURSIVE_REF: {
+    fprintf(stream, "%s", t->data.T_RECURSIVE_REF.name);
     break;
   }
 
@@ -228,7 +246,6 @@ void print_type_to_stream(Type *t, FILE *stream) {
     break;
   }
   case T_SCHEME: {
-
     fprintf(stream, "∀ ");
     for (TypeList *v = t->data.T_SCHEME.vars; v; v = v->next) {
       Type *n = v->type;
@@ -238,6 +255,27 @@ void print_type_to_stream(Type *t, FILE *stream) {
 
     fprintf(stream, ": ");
     print_type_to_stream(t->data.T_SCHEME.type, stream);
+    break;
+  }
+  case T_MODULE: {
+    fprintf(stream, "%s", TYPE_NAME_MODULE);
+    if (t->data.T_MODULE.size > 0) {
+      fprintf(stream, " of \n");
+    }
+    for (TypeEnv *te = t->data.T_MODULE.env; te; te = te->next) {
+      fprintf(stream, "%s: ", te->name);
+      if (te->scheme_vars) {
+        fprintf(stream, "∀ ");
+        for (TypeList *v = te->scheme_vars; v; v = v->next) {
+          print_type_to_stream(v->type, stream);
+          fprintf(stream, ", ");
+        }
+        fprintf(stream, ": ");
+      }
+      print_type_to_stream(te->type, stream);
+      fprintf(stream, "\n");
+    }
+    break;
   }
   }
 }
@@ -270,13 +308,32 @@ void print_type_err(Type *t) {
   fprintf(stderr, "\n");
 }
 
+void print_type_env_stream(TypeEnv *env, FILE *stream) {
+  if (!env) {
+    return;
+  }
+  fprintf(stream, "%s : ", env->name);
+  if (env->scheme_vars) {
+    fprintf(stream, "∀ ");
+    for (TypeList *v = env->scheme_vars; v; v = v->next) {
+      Type *n = v->type;
+      print_type_to_stream(n, stream);
+      fprintf(stream, ", ");
+    }
+
+    fprintf(stream, ": ");
+  }
+
+  print_type_to_stream(env->type, stream);
+}
+
 void print_type_env(TypeEnv *env) {
   if (!env) {
     return;
   }
-  printf("%s : ", env->name);
-  print_type(env->type);
+  print_type_env_stream(env, stdout);
   if (env->next) {
-    print_type_env(env->next);
+    fprintf(stdout, "\n");
+    print_type_env_stream(env->next, stdout);
   }
 }
