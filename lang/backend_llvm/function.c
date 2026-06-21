@@ -9,6 +9,7 @@
 #include "types/type.h"
 #include "types/type_ser.h"
 #include "llvm-c/Core.h"
+#include <stdio.h>
 #include <stdlib.h>
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
@@ -353,7 +354,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 TypeEnv *codegen_bind_in_env(TypeEnv *env, Type *f, Type *t) {
   switch (f->kind) {
   case T_VAR: {
-    return env_extend(env, f->data.T_VAR, t);
+    return env_extend(env, f->data.T_VAR.name, t);
   }
   case T_CONS: {
     for (int i = 0; i < f->data.T_CONS.num_args; i++) {
@@ -372,10 +373,21 @@ TypeEnv *create_env_from_subst(TypeEnv *env, Subst *subst) {
   if (subst == NULL) {
     return env;
   }
-  Type *f = tvar(subst->var);
-  Type *t = subst->type;
-  env = codegen_bind_in_env(env, f, t);
-  return create_env_from_subst(env, subst->next);
+  int count = subst_table_binding_count(subst);
+  for (int i = 0; i < count; i++) {
+    int var_id = subst_table_bound_var_id(subst, i);
+    Type *t = subst_table_lookup(subst, var_id);
+    if (!t) {
+      continue;
+    }
+
+    char name[32];
+    snprintf(name, sizeof(name), "`%d", var_id);
+    Type *f = tvar(name);
+    f->data.T_VAR.id = var_id;
+    env = codegen_bind_in_env(env, f, t);
+  }
+  return env;
 }
 
 TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,

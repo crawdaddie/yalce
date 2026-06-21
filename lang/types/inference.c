@@ -4,6 +4,8 @@
 #include "../serde.h"
 #include "./builtins.h"
 #include "./closures.h"
+#include "./freshen_map.h"
+#include "./subst_table.h"
 #include "./type.h"
 #include "./type_ser.h"
 #include "type_expressions.h"
@@ -34,17 +36,9 @@ static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
 static bool predicate_is_generic(Predicate *p);
 static Predicate *predicate_filter_generic(Predicate *preds);
 static bool is_empty_subst(Subst *subst);
-static Subst *alloc_indexed_subst(int initial_cap);
-static Subst *alloc_sparse_subst(void);
-static void ensure_indexed_subst_capacity(Subst *subst, int var_id);
-static void ensure_sparse_subst_capacity(Subst *subst, int needed_len);
-static bool subst_is_indexed(Subst *subst);
 static Subst *clone_subst(Subst *subst);
 static bool is_recursive_self_reference(Ast *ast, TICtx *ctx);
 static Type *callable_view(Type *type);
-
-static Subst empty_subst_sentinel = {
-    .bindings = NULL, .cap = 0, .var_ids = NULL, .types = NULL, .len = 0};
 
 static bool is_recursive_self_reference(Ast *ast, TICtx *ctx) {
   if (!ast || !ctx || !ctx->current_fn_ast) {
@@ -722,36 +716,40 @@ Type *instantiate_env(TypeEnv *entry, TICtx *ctx) {
   }
 
   // Build freshening substitution from scheme vars
-  Subst *base = NULL;
+  FreshenMap base = {0};
   for (TypeList *v = entry->scheme_vars; v; v = v->next) {
     if (v->type && v->type->kind == T_VAR) {
       Type *fresh = next_tvar();
       fresh->implements = v->type->implements;
-      base = extend_subst(base, v->type->data.T_VAR.id, fresh);
+      freshen_map_extend(&base, v->type->data.T_VAR.id, fresh);
     }
   }
 
   // Copy predicates with freshened types / result / args
   for (Predicate *p = entry->predicates; p; p = p->next) {
     if (p->kind == PRED_TRAIT) {
-      Type *fresh_type = base ? apply_subst_to_type(base, p->data.TRAIT.type)
-                              : p->data.TRAIT.type;
+      Type *fresh_type =
+          base.len ? freshen_map_apply_to_type(&base, p->data.TRAIT.type)
+                   : p->data.TRAIT.type;
       TypeList *fresh_params =
-          base ? typelist_apply_subst(base, p->data.TRAIT.params)
-               : p->data.TRAIT.params;
+          base.len ? freshen_map_apply_to_typelist(&base, p->data.TRAIT.params)
+                   : p->data.TRAIT.params;
       ctx->predicates = predicate_append_applied(ctx->predicates, p->trait,
                                                  fresh_type, fresh_params);
     } else if (p->kind == PRED_COMPARABLE) {
       Type *fresh_witness =
-          base ? apply_subst_to_type(base, p->data.COMPARABLE.witness)
-               : p->data.COMPARABLE.witness;
+          base.len
+              ? freshen_map_apply_to_type(&base, p->data.COMPARABLE.witness)
+              : p->data.COMPARABLE.witness;
       int n = 0;
       while (p->data.COMPARABLE.args[n])
         n++;
       Type **args = t_alloc(sizeof(Type *) * (n + 1));
       for (int i = 0; i < n; i++) {
-        args[i] = base ? apply_subst_to_type(base, p->data.COMPARABLE.args[i])
-                       : p->data.COMPARABLE.args[i];
+        args[i] =
+            base.len
+                ? freshen_map_apply_to_type(&base, p->data.COMPARABLE.args[i])
+                : p->data.COMPARABLE.args[i];
       }
       args[n] = NULL;
       ctx->predicates = predicate_append_comparable(ctx->predicates, p->trait,
@@ -759,9 +757,9 @@ Type *instantiate_env(TypeEnv *entry, TICtx *ctx) {
     }
   }
 
-  if (!base)
+  if (!base.len)
     return entry->type;
-  return apply_subst_to_type(base, entry->type);
+  return freshen_map_apply_to_type(&base, entry->type);
 }
 
 Type *instantiate_type_in_env(Type *sch, TypeEnv *env) {
@@ -1657,140 +1655,17 @@ static bool occurs_in(int var_id, Type *type) {
   }
 }
 
-static Subst *alloc_indexed_subst(int initial_cap) {
-  Subst *subst = t_alloc(sizeof(Subst));
-  subst->bindings = NULL;
-  subst->cap = 0;
-  subst->var_ids = NULL;
-  subst->types = NULL;
-  subst->len = 0;
-  if (initial_cap > 0) {
-    subst->bindings = t_alloc(sizeof(Type *) * (size_t)initial_cap);
-    memset(subst->bindings, 0, sizeof(Type *) * (size_t)initial_cap);
-    subst->cap = initial_cap;
-  }
-  return subst;
-}
-
-static Subst *alloc_sparse_subst(void) {
-  Subst *subst = t_alloc(sizeof(Subst));
-  subst->bindings = NULL;
-  subst->cap = 0;
-  subst->var_ids = NULL;
-  subst->types = NULL;
-  subst->len = 0;
-  return subst;
-}
-
-static bool subst_is_indexed(Subst *subst) {
-  return subst && subst != &empty_subst_sentinel && subst->bindings != NULL;
-}
-
-static void ensure_indexed_subst_capacity(Subst *subst, int var_id) {
-  if (!subst || var_id < 0) {
-    return;
-  }
-  if (!subst_is_indexed(subst)) {
-    return;
-  }
-  if (var_id < subst->cap) {
-    return;
-  }
-
-  int new_cap = subst->cap > 0 ? subst->cap : 8;
-  while (new_cap <= var_id) {
-    new_cap *= 2;
-  }
-
-  Type **bindings = t_alloc(sizeof(Type *) * (size_t)new_cap);
-  memset(bindings, 0, sizeof(Type *) * (size_t)new_cap);
-  if (subst->bindings && subst->cap > 0) {
-    memcpy(bindings, subst->bindings, sizeof(Type *) * (size_t)subst->cap);
-  }
-  subst->bindings = bindings;
-  subst->cap = new_cap;
-}
-
-static void ensure_sparse_subst_capacity(Subst *subst, int needed_len) {
-  if (!subst || subst_is_indexed(subst) || needed_len <= subst->cap) {
-    return;
-  }
-  int new_cap = subst->cap > 0 ? subst->cap : 4;
-  while (new_cap < needed_len) {
-    new_cap *= 2;
-  }
-
-  int *var_ids = t_alloc(sizeof(int) * (size_t)new_cap);
-  Type **types = t_alloc(sizeof(Type *) * (size_t)new_cap);
-  if (subst->len > 0) {
-    memcpy(var_ids, subst->var_ids, sizeof(int) * (size_t)subst->len);
-    memcpy(types, subst->types, sizeof(Type *) * (size_t)subst->len);
-  }
-  subst->var_ids = var_ids;
-  subst->types = types;
-  subst->cap = new_cap;
-}
-
-static Subst *clone_subst(Subst *subst) {
-  if (is_empty_subst(subst)) {
-    return NULL;
-  }
-  if (subst_is_indexed(subst)) {
-    Subst *copy = alloc_indexed_subst(subst->cap);
-    if (subst->cap > 0) {
-      memcpy(copy->bindings, subst->bindings,
-             sizeof(Type *) * (size_t)subst->cap);
-    }
-    return copy;
-  }
-  Subst *copy = alloc_sparse_subst();
-  if (subst->len > 0) {
-    ensure_sparse_subst_capacity(copy, subst->len);
-    memcpy(copy->var_ids, subst->var_ids, sizeof(int) * (size_t)subst->len);
-    memcpy(copy->types, subst->types, sizeof(Type *) * (size_t)subst->len);
-    copy->len = subst->len;
-  }
-  return copy;
-}
+static Subst *clone_subst(Subst *subst) { return subst_table_clone(subst); }
 
 static Subst *extend_subst(Subst *subst, int var_id, Type *type) {
   if (is_empty_subst(subst)) {
-    subst = alloc_sparse_subst();
+    subst = subst_table_create(type_var_counter);
   }
-  if (subst_is_indexed(subst)) {
-    ensure_indexed_subst_capacity(subst, var_id);
-    subst->bindings[var_id] = type;
-    return subst;
-  }
-  for (int i = 0; i < subst->len; i++) {
-    if (subst->var_ids[i] == var_id) {
-      subst->types[i] = type;
-      return subst;
-    }
-  }
-  ensure_sparse_subst_capacity(subst, subst->len + 1);
-  subst->var_ids[subst->len] = var_id;
-  subst->types[subst->len] = type;
-  subst->len++;
-  return subst;
+  return subst_table_extend(subst, var_id, type);
 }
 
 static Type *lookup_subst(Subst *subst, int var_id) {
-  if (is_empty_subst(subst) || var_id < 0) {
-    return NULL;
-  }
-  if (subst_is_indexed(subst)) {
-    if (var_id >= subst->cap) {
-      return NULL;
-    }
-    return subst->bindings[var_id];
-  }
-  for (int i = 0; i < subst->len; i++) {
-    if (subst->var_ids[i] == var_id) {
-      return subst->types[i];
-    }
-  }
-  return NULL;
+  return subst_table_lookup(subst, var_id);
 }
 
 static Type *apply_subst_to_type(Subst *subst, Type *t) {
@@ -1950,7 +1825,7 @@ static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out) {
 }
 
 Subst *solve_constraints(Constraint *constraints) {
-  Subst *subst = alloc_indexed_subst(type_var_counter);
+  Subst *subst = subst_table_create(type_var_counter);
 
   for (Constraint *c = constraints; c != NULL; c = c->next) {
     if (c->kind != CONSTRAINT_EQUALITY) {
@@ -1966,7 +1841,7 @@ Subst *solve_constraints(Constraint *constraints) {
     }
   }
 
-  return is_empty_subst(subst) ? &empty_subst_sentinel : subst;
+  return is_empty_subst(subst) ? subst_table_empty() : subst;
 }
 
 Subst *compose_subst(Subst *s1, Subst *s2) {
@@ -1977,7 +1852,7 @@ Subst *compose_subst(Subst *s1, Subst *s2) {
     s2 = NULL;
   }
   if (!s1 && !s2) {
-    return &empty_subst_sentinel;
+    return subst_table_empty();
   }
   if (!s1) {
     return s2;
@@ -1987,37 +1862,27 @@ Subst *compose_subst(Subst *s1, Subst *s2) {
   }
 
   Subst *result = clone_subst(s2);
-  if (subst_is_indexed(s1)) {
-    for (int var_id = 0; var_id < s1->cap; var_id++) {
-      Type *binding = s1->bindings[var_id];
-      if (!binding) {
-        continue;
-      }
-      Type *applied = apply_subst_to_type(s2, binding);
-      result = extend_subst(result, var_id, applied);
+  int binding_count = subst_table_binding_count(s1);
+  for (int i = 0; i < binding_count; i++) {
+    int var_id = subst_table_bound_var_id(s1, i);
+    if (var_id < 0) {
+      continue;
     }
-  } else {
-    for (int i = 0; i < s1->len; i++) {
-      Type *binding = s1->types[i];
-      if (!binding) {
-        continue;
-      }
-      Type *applied = apply_subst_to_type(s2, binding);
-      result = extend_subst(result, s1->var_ids[i], applied);
+    Type *binding = lookup_subst(s1, var_id);
+    if (!binding) {
+      continue;
     }
+    Type *applied = apply_subst_to_type(s2, binding);
+    result = extend_subst(result, var_id, applied);
   }
-  return result ? result : &empty_subst_sentinel;
+  return result ? result : subst_table_empty();
 }
 
 Type *apply_substitution(Subst *subst, Type *t) {
   return apply_subst_to_type(subst, t);
 }
 
-static bool is_empty_subst(Subst *subst) {
-  return !subst || subst == &empty_subst_sentinel ||
-         (subst->cap == 0 && subst->bindings == NULL && subst->len == 0 &&
-          subst->var_ids == NULL && subst->types == NULL);
-}
+static bool is_empty_subst(Subst *subst) { return subst_table_is_empty(subst); }
 
 // ============================================================================
 // Backward-compatible wrappers (transitionary - external callers use
@@ -2127,13 +1992,8 @@ Type *empty_type() {
 // ============================================================================
 
 int type_var_counter = 0;
-int type_var_counter_floor = 0;
 
-void reset_type_var_counter() { type_var_counter = type_var_counter_floor; }
-
-void mark_type_var_counter_floor() {
-  type_var_counter_floor = type_var_counter;
-}
+void reset_type_var_counter() { type_var_counter = 0; }
 
 Type *next_tvar() {
   Type *tvar = t_alloc(sizeof(Type));

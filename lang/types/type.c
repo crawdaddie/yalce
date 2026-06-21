@@ -10,7 +10,6 @@
 Type *empty_type();
 
 Type *env_lookup(TypeEnv *env, const char *name);
-void reset_type_var_counter();
 Type *create_option_type(Type *option_of);
 
 bool types_equal(Type *t1, Type *t2);

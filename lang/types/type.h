@@ -1,6 +1,7 @@
 #ifndef _LANG_TYPE_TYPE_H
 #define _LANG_TYPE_TYPE_H
 #include "../parse.h"
+#include "./subst_table.h"
 #include <stdbool.h>
 #include <unistd.h>
 
@@ -20,14 +21,6 @@ typedef struct TypeClass {
   TypeList *params;
   struct TypeClass *next;
 } TypeClass;
-
-typedef struct Subst {
-  Type **bindings;
-  int cap;
-  int *var_ids;
-  Type **types;
-  int len;
-} Subst;
 
 typedef enum {
   CONSTRAINT_EQUALITY,
@@ -114,7 +107,6 @@ typedef struct TypeEnv {
 
 #define _TSTORAGE_SIZE_DEFAULT 200000
 
-void reset_type_var_counter();
 Type *next_tvar();
 
 typedef struct Method {

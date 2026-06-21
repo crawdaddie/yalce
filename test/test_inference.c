@@ -1,6 +1,8 @@
 #include "../lang/parse.h"
 #include "../lang/types/builtins.h"
+#include "../lang/types/freshen_map.h"
 #include "../lang/types/inference.h"
+#include "../lang/types/subst_table.h"
 #include "../lang/types/type.h"
 #include "../lang/types/type_ser.h"
 
@@ -61,6 +63,12 @@ static TypeEnv *find_binding(TypeEnv *env, const char *name) {
 static bool subst_maps_to(Subst *subst, int var_id, Type *expected) {
   Type *found = find_in_subst(subst, var_id);
   return found != NULL && types_equal(found, expected);
+}
+
+static bool typelist_matches_2(TypeList *list, Type *first, Type *second) {
+  return list && list->type && types_equal(list->type, first) && list->next &&
+         list->next->type && types_equal(list->next->type, second) &&
+         list->next->next == NULL;
 }
 
 static bool has_constraint(TICtx *ctx, Type *left, Type *right) {
@@ -198,6 +206,223 @@ static void test_apply_substitution_rewrites_nested_function_types() {
       types_equal(applied->data.T_FN.to, create_list_type_of_type(&t_int));
   assert_true(ok, "apply_substitution rewrites nested function type",
               "expected nested function type to be rewritten");
+}
+
+static void test_subst_table_tracks_populated_ids_without_duplicates() {
+  start_test(__func__, __LINE__);
+  reset_type_var_counter();
+  Type *a = next_tvar();
+  Type *b = next_tvar();
+
+  Subst *subst = subst_table_create(0);
+  subst = subst_table_extend(subst, a->data.T_VAR.id, &t_int);
+  subst = subst_table_extend(subst, b->data.T_VAR.id, &t_string);
+  subst = subst_table_extend(subst, a->data.T_VAR.id, &t_num);
+
+  bool count_ok = subst_table_binding_count(subst) == 2;
+  bool ids_ok = subst_table_bound_var_id(subst, 0) == a->data.T_VAR.id &&
+                subst_table_bound_var_id(subst, 1) == b->data.T_VAR.id;
+  bool overwrite_ok = types_equal(subst_table_lookup(subst, a->data.T_VAR.id),
+                                  &t_num);
+
+  assert_true(count_ok,
+              "subst_table tracks unique populated ids on overwrite",
+              "expected two unique populated ids, got %d",
+              subst_table_binding_count(subst));
+  assert_true(ids_ok, "subst_table preserves populated id insertion order",
+              "expected populated ids to preserve first-write order");
+  assert_true(overwrite_ok, "subst_table overwrites existing binding in place",
+              "expected overwritten binding to resolve to Num");
+}
+
+static void test_subst_table_empty_api_contract() {
+  start_test(__func__, __LINE__);
+  Subst *empty = subst_table_empty();
+
+  bool empty_ok = subst_table_is_empty(empty);
+  bool lookup_ok = subst_table_lookup(empty, 0) == NULL;
+  bool count_ok = subst_table_binding_count(empty) == 0;
+  bool id_ok = subst_table_bound_var_id(empty, 0) == -1;
+
+  assert_true(empty_ok, "subst_table_empty reports empty sentinel correctly",
+              "expected empty sentinel to be treated as empty");
+  assert_true(lookup_ok, "subst_table_empty returns NULL on lookup miss",
+              "expected lookup on empty sentinel to return NULL");
+  assert_true(count_ok, "subst_table_empty reports zero populated bindings",
+              "expected empty sentinel to report zero populated bindings");
+  assert_true(id_ok, "subst_table_empty rejects populated-id access",
+              "expected empty sentinel to reject populated-id access");
+}
+
+static void test_subst_table_lookup_miss_and_invalid_populated_index() {
+  start_test(__func__, __LINE__);
+  reset_type_var_counter();
+  Type *a = next_tvar();
+
+  Subst *subst = subst_table_create(0);
+  subst = subst_table_extend(subst, a->data.T_VAR.id, &t_int);
+
+  bool negative_lookup_ok = subst_table_lookup(subst, -1) == NULL;
+  bool far_lookup_ok =
+      subst_table_lookup(subst, a->data.T_VAR.id + 10) == NULL;
+  bool negative_index_ok = subst_table_bound_var_id(subst, -1) == -1;
+  bool high_index_ok = subst_table_bound_var_id(subst, 5) == -1;
+
+  assert_true(negative_lookup_ok,
+              "subst_table rejects negative lookup ids",
+              "expected negative lookup id to return NULL");
+  assert_true(far_lookup_ok, "subst_table returns NULL for unbound sparse id",
+              "expected unbound sparse lookup to return NULL");
+  assert_true(negative_index_ok,
+              "subst_table rejects negative populated-id indices",
+              "expected negative populated-id index to return -1");
+  assert_true(high_index_ok,
+              "subst_table rejects out-of-range populated-id indices",
+              "expected out-of-range populated-id index to return -1");
+}
+
+static void test_subst_table_ensure_capacity_preserves_existing_bindings() {
+  start_test(__func__, __LINE__);
+  reset_type_var_counter();
+  Type *a = next_tvar();
+  Type *b = next_tvar();
+  Type *c = next_tvar();
+
+  Subst *subst = subst_table_create(1);
+  subst = subst_table_extend(subst, a->data.T_VAR.id, &t_int);
+  subst = subst_table_extend(subst, c->data.T_VAR.id, &t_string);
+
+  bool grown_ok = subst->cap > c->data.T_VAR.id;
+  bool a_ok = types_equal(subst_table_lookup(subst, a->data.T_VAR.id), &t_int);
+  bool c_ok =
+      types_equal(subst_table_lookup(subst, c->data.T_VAR.id), &t_string);
+  bool b_ok = subst_table_lookup(subst, b->data.T_VAR.id) == NULL;
+  bool count_ok = subst_table_binding_count(subst) == 2;
+
+  assert_true(grown_ok, "subst_table grows capacity for higher sparse ids",
+              "expected table capacity to grow beyond highest inserted id");
+  assert_true(a_ok, "subst_table growth preserves lower existing bindings",
+              "expected lower binding to survive capacity growth");
+  assert_true(c_ok, "subst_table growth preserves new higher binding",
+              "expected higher binding to be stored after growth");
+  assert_true(b_ok, "subst_table growth leaves intermediate ids unbound",
+              "expected skipped intermediate id to remain unbound");
+  assert_true(count_ok,
+              "subst_table growth preserves unique populated binding count",
+              "expected two populated bindings after sparse growth");
+}
+
+static void test_subst_table_clone_preserves_populated_ids_and_bindings() {
+  start_test(__func__, __LINE__);
+  reset_type_var_counter();
+  Type *a = next_tvar();
+  Type *b = next_tvar();
+
+  Subst *subst = subst_table_create(0);
+  subst = subst_table_extend(subst, a->data.T_VAR.id, &t_int);
+  subst = subst_table_extend(subst, b->data.T_VAR.id, &t_string);
+
+  Subst *copy = subst_table_clone(subst);
+
+  bool count_ok = copy && subst_table_binding_count(copy) == 2;
+  bool ids_ok = copy && subst_table_bound_var_id(copy, 0) == a->data.T_VAR.id &&
+                subst_table_bound_var_id(copy, 1) == b->data.T_VAR.id;
+  bool bindings_ok = copy &&
+                     types_equal(subst_table_lookup(copy, a->data.T_VAR.id),
+                                 &t_int) &&
+                     types_equal(subst_table_lookup(copy, b->data.T_VAR.id),
+                                 &t_string);
+
+  assert_true(count_ok, "subst_table_clone preserves populated binding count",
+              "expected clone to preserve populated binding count");
+  assert_true(ids_ok, "subst_table_clone preserves populated id list",
+              "expected clone to preserve populated id order");
+  assert_true(bindings_ok, "subst_table_clone preserves bound values",
+              "expected clone to preserve bound values");
+}
+
+static void test_compose_subst_preserves_sparse_bindings_from_both_inputs() {
+  start_test(__func__, __LINE__);
+  reset_type_var_counter();
+  Type *a = next_tvar();
+  Type *b = next_tvar();
+  Type *c = next_tvar();
+
+  Subst *s1 = subst_table_create(0);
+  s1 = subst_table_extend(s1, a->data.T_VAR.id, b);
+
+  Subst *s2 = subst_table_create(0);
+  s2 = subst_table_extend(s2, b->data.T_VAR.id, &t_int);
+  s2 = subst_table_extend(s2, c->data.T_VAR.id, &t_string);
+
+  Subst *composed = compose_subst(s1, s2);
+
+  bool count_ok = composed && subst_table_binding_count(composed) == 3;
+  bool a_ok = composed && subst_maps_to(composed, a->data.T_VAR.id, &t_int);
+  bool b_ok = composed && subst_maps_to(composed, b->data.T_VAR.id, &t_int);
+  bool c_ok = composed && subst_maps_to(composed, c->data.T_VAR.id, &t_string);
+
+  assert_true(count_ok, "compose_subst retains sparse bindings from both sides",
+              "expected composed substitution to contain three live bindings");
+  assert_true(a_ok, "compose_subst applies rhs bindings through lhs values",
+              "expected composed substitution to map a to Int");
+  assert_true(b_ok, "compose_subst preserves rhs binding for shared graph",
+              "expected composed substitution to preserve b -> Int");
+  assert_true(c_ok, "compose_subst preserves unrelated rhs sparse binding",
+              "expected composed substitution to preserve c -> String");
+}
+
+static void test_freshen_map_rewrites_nested_type_structure() {
+  start_test(__func__, __LINE__);
+  reset_type_var_counter();
+  Type *a = next_tvar();
+  Type *b = next_tvar();
+  Type *fresh_a = next_tvar();
+  Type *fresh_b = next_tvar();
+
+  FreshenMap map = {0};
+  freshen_map_extend(&map, a->data.T_VAR.id, fresh_a);
+  freshen_map_extend(&map, b->data.T_VAR.id, fresh_b);
+
+  Type *nested =
+      type_fn(create_list_type_of_type(a), create_coroutine_instance_type(b));
+  Type *freshened = freshen_map_apply_to_type(&map, nested);
+
+  bool ok = freshened && freshened->kind == T_FN &&
+            types_equal(freshened->data.T_FN.from,
+                        create_list_type_of_type(fresh_a)) &&
+            types_equal(freshened->data.T_FN.to,
+                        create_coroutine_instance_type(fresh_b));
+
+  assert_true(ok, "freshen_map rewrites nested fn/cons type structure",
+              "expected freshen_map to rewrite nested type variables");
+}
+
+static void test_freshen_map_rewrites_typelist_and_overwrites_existing_entry() {
+  start_test(__func__, __LINE__);
+  reset_type_var_counter();
+  Type *a = next_tvar();
+  Type *b = next_tvar();
+  Type *fresh_a = next_tvar();
+  Type *fresh_b1 = next_tvar();
+  Type *fresh_b2 = next_tvar();
+
+  FreshenMap map = {0};
+  freshen_map_extend(&map, a->data.T_VAR.id, fresh_a);
+  freshen_map_extend(&map, b->data.T_VAR.id, fresh_b1);
+  freshen_map_extend(&map, b->data.T_VAR.id, fresh_b2);
+
+  TypeList params = {.type = a, .next = &(TypeList){.type = b, .next = NULL}};
+  TypeList *freshened = freshen_map_apply_to_typelist(&map, &params);
+
+  bool list_ok = typelist_matches_2(freshened, fresh_a, fresh_b2);
+  bool lookup_ok =
+      types_equal(freshen_map_lookup(&map, b->data.T_VAR.id), fresh_b2);
+
+  assert_true(list_ok, "freshen_map rewrites typelist using latest mappings",
+              "expected typelist freshening to apply rewritten vars");
+  assert_true(lookup_ok, "freshen_map_extend overwrites existing source id",
+              "expected freshen_map lookup to return latest overwritten type");
 }
 
 static void test_instantiate_env_freshens_scheme_vars_and_predicates() {
@@ -493,9 +718,19 @@ static void test_infer_final_rewrites_nested_ast_annotations() {
                       }}};
   int cap = a->data.T_VAR.id + 1;
   Type **bindings = t_alloc(sizeof(Type *) * (size_t)cap);
+  unsigned char *occupied = t_alloc(sizeof(unsigned char) * (size_t)cap);
+  int *present_ids = t_alloc(sizeof(int));
   memset(bindings, 0, sizeof(Type *) * (size_t)cap);
+  memset(occupied, 0, sizeof(unsigned char) * (size_t)cap);
   bindings[a->data.T_VAR.id] = &t_int;
-  Subst subst = {.bindings = bindings, .cap = cap};
+  occupied[a->data.T_VAR.id] = 1;
+  present_ids[0] = a->data.T_VAR.id;
+  Subst subst = {.bindings = bindings,
+                 .occupied = occupied,
+                 .present_ids = present_ids,
+                 .cap = cap,
+                 .count = 1,
+                 .present_cap = 1};
   Solution solved = {.subst = &subst};
   TICtx ctx = {0};
 
@@ -528,6 +763,14 @@ int main(void) {
   test_solve_constraints_function_unification();
   test_solve_constraints_occurs_check_rejects();
   test_apply_substitution_rewrites_nested_function_types();
+  test_subst_table_empty_api_contract();
+  test_subst_table_tracks_populated_ids_without_duplicates();
+  test_subst_table_lookup_miss_and_invalid_populated_index();
+  test_subst_table_ensure_capacity_preserves_existing_bindings();
+  test_subst_table_clone_preserves_populated_ids_and_bindings();
+  test_compose_subst_preserves_sparse_bindings_from_both_inputs();
+  test_freshen_map_rewrites_nested_type_structure();
+  test_freshen_map_rewrites_typelist_and_overwrites_existing_entry();
   test_instantiate_env_freshens_scheme_vars_and_predicates();
   test_resolve_predicates_from_succeeds_for_double_from_int();
   test_resolve_predicates_from_fails_for_int_from_double();
