@@ -115,7 +115,8 @@ static BindingKind classify_binding(Ast *expr, Type *expr_type,
     return is_generic(array_fn_type) ? BIND_GENERIC_FN : BIND_ARRAY_FN;
   }
 
-  if (is_closure(expr_type) && application_is_partial(expr)) {
+  if (expr->tag == AST_APPLICATION && expr->type->kind == T_FN) {
+
     return BIND_PARTIAL_CLOSURE;
   }
 
@@ -256,7 +257,8 @@ JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
   return NULL;
 }
 
-// Fall back to enum / ADT / builtin identifier materialization when no symbol exists.
+// Fall back to enum / ADT / builtin identifier materialization when no symbol
+// exists.
 static LLVMValueRef codegen_identifier_fallback(Ast *ast, const char *chars,
                                                 JITLangCtx *ctx,
                                                 LLVMModuleRef module,
@@ -312,8 +314,8 @@ static LLVMValueRef load_identifier_symbol(Ast *ast, const char *chars,
       return sym->val;
     }
 
-    sym->val = codegen_extern_fn(sym->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast,
-                                 ctx, module, builder);
+    sym->val = codegen_extern_fn(
+        sym->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast, ctx, module, builder);
     return sym->val;
 
   case STYPE_GENERIC_FUNCTION: {
@@ -394,7 +396,8 @@ LLVMValueRef create_fn_binding(Ast *binding, Type *fn_type, LLVMValueRef fn,
   return fn;
 }
 
-// Register an extern function whose LLVM declaration is emitted lazily on first use.
+// Register an extern function whose LLVM declaration is emitted lazily on first
+// use.
 LLVMValueRef create_lazy_extern_fn_binding(Ast *binding, Ast *expr,
                                            Type *fn_type, LLVMValueRef fn,
                                            JITLangCtx *ctx,
@@ -416,7 +419,8 @@ LLVMValueRef __handle_yield_boundary_crossing_binding(Ast *binding, Ast *expr,
                                                       JITLangCtx *ctx,
                                                       LLVMModuleRef module,
                                                       LLVMBuilderRef builder);
-// Lower the right-hand side of a let-binding and install the resulting symbol/value.
+// Lower the right-hand side of a let-binding and install the resulting
+// symbol/value.
 LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
   if (ctx->coro_ctx) {
@@ -437,11 +441,13 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, JITLangCtx *ctx,
                                  builder);
   case BIND_PARTIAL_CLOSURE:
     return create_closure_symbol(binding, expr, ctx, module, builder);
+
   case BIND_COROUTINE:
     return create_coroutine_symbol(binding, expr, binding_type, ctx, module,
                                    builder);
   case BIND_GENERIC_FN:
     return create_generic_fn_binding(binding, expr, ctx);
+
   case BIND_CONCRETE_FN:
     return emit_function_binding(binding, expr, binding_type, ctx, module,
                                  builder);

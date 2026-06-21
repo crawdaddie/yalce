@@ -18,8 +18,6 @@ LLVMTypeRef cor_inst_struct_type();
 
 LLVMTypeRef codegen_fn_type(LLVMTypeRef opt_ret_type, Type *fn_type, int fn_len,
                             JITLangCtx *ctx, LLVMModuleRef module) {
-  printf("fn len %d\n", fn_len);
-  print_type(fn_type);
   if (!fn_type || fn_type->kind != T_FN) {
     fprintf(stderr, "Error: codegen_fn_type expected function type\n");
     if (fn_type) {
@@ -302,8 +300,6 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   int fn_len = ast->data.AST_LAMBDA.len;
   int num_closure_vars = ast->data.AST_LAMBDA.num_closure_free_vars;
-
-  print_ast(ast);
 
   LLVMTypeRef prototype =
       codegen_fn_type(NULL, fn_type, fn_len + num_closure_vars, ctx, module);
