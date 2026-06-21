@@ -284,6 +284,7 @@ typedef uint64_t FnAttributes;
 #define FN_ATTR_REALTIME_SAFE  0x0000000000000008ULL  // Safe for audio callback
 #define FN_ATTR_ALLOCATES      0x0000000000000010ULL  // Module export
 #define FN_ATTR_RECURSIVE      0x0000000000000020ULL  // Recursive function
+#define FN_ATTR_COROUTINE_CONSTRUCTOR 0x0000000000000040ULL
 //
 //
 typedef uint64_t TypeAttributes;

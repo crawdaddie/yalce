@@ -26,7 +26,7 @@ Ast *create_module_from_root(Ast *ast_root) {
 
 bool is_module_ast(Ast *ast) {
   Type *t = ast->type;
-  return t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_MODULE);
+  return t && t->kind == T_MODULE;
 }
 
 YLCModule *get_imported_module(Ast *ast) {
@@ -52,240 +52,6 @@ void set_import_ref(Ast *ast, void *ref) {
 
 YLCModule *get_module(const char *key) { return ht_get(&module_registry, key); }
 
-Type *infer_module_import(Ast *ast, TICtx *ctx) {
-
-  AstList *type_annotations = ast->data.AST_LAMBDA.type_annotations;
-  AstList *params = ast->data.AST_LAMBDA.params;
-
-  // printf("infer parametrized module\n");
-  if (ast->data.AST_LAMBDA.len > 0) {
-
-    int i = 0;
-    for (AstList *p = params; p; i++, p = p->next,
-                 type_annotations = type_annotations ? type_annotations->next
-                                                     : NULL) {
-      // Ast *param = p->ast;
-      // print_ast(param);
-      // if (type_annotations && type_annotations->ast) {
-      //   printf("constraint: ");
-      //   print_ast(type_annotations->ast);
-      // }
-    }
-  }
-
-  Ast *body_ast;
-  AstList *stmt_list;
-  int len;
-  if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
-    // Single statement - create a temporary AstList node
-    AstList *single_stmt = t_alloc(sizeof(AstList));
-    single_stmt->ast = ast->data.AST_LAMBDA.body;
-    single_stmt->next = NULL;
-    stmt_list = single_stmt;
-    len = 1;
-  } else {
-    body_ast = ast->data.AST_LAMBDA.body;
-    stmt_list = body_ast->data.AST_BODY.stmts;
-    len = body_ast->data.AST_BODY.len;
-  }
-
-  int i = 0;
-  for (AstList *current = stmt_list; current != NULL;
-       current = current->next, i++) {
-    Ast *stmt = current->ast;
-    infer(stmt, ctx);
-  }
-
-  // printf("\n\n## module type env:\n");
-
-  int n = 0;
-  for (TypeEnv *t = ctx->env; t; t = t->next) {
-    if (t->is_opened_var) {
-      continue;
-    }
-
-    if (CHARS_EQ(t->name, "test") && is_module(t->type)) {
-      continue;
-    }
-
-    // printf("%s: ", t->name);
-    // print_type(t->type);
-    n++;
-  }
-
-  Type **member_types = t_alloc(sizeof(Type *) * n);
-  const char **names = t_alloc(sizeof(char *) * n);
-
-  int idx = 0;
-  for (TypeEnv *t = ctx->env; t; t = t->next) {
-    if (t->is_opened_var) {
-      continue;
-    }
-
-    if (CHARS_EQ(t->name, "test") && is_module(t->type)) {
-      continue;
-    }
-
-    names[idx] = t->name;
-    member_types[idx] = t->type;
-    idx++;
-  }
-
-  // if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
-  //   // Single statement - create a temporary AstList node
-  //   AstList *single_stmt = t_alloc(sizeof(AstList));
-  //   single_stmt->ast = ast->data.AST_LAMBDA.body;
-  //   single_stmt->next = NULL;
-  //   stmt_list = single_stmt;
-  //   len = 1;
-  // } else {
-  //   body_ast = ast->data.AST_LAMBDA.body;
-  //   stmt_list = body_ast->data.AST_BODY.stmts;
-  //   len = body_ast->data.AST_BODY.len;
-  // }
-
-  // Ast *stmt;
-  // Type **member_types = t_alloc(sizeof(Type *) * len);
-  // const char **names = t_alloc(sizeof(char *) * len);
-  //
-  // i = 0;
-  // for (AstList *current = stmt_list; current != NULL;
-  //      current = current->next, i++) {
-  //   stmt = current->ast;
-  //   Type *t = stmt->type;
-  //
-  //   if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
-  //         (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
-  //
-  //     // TODO: iter over stmts and only count the 'exportable members'
-  //     member_types[i] = NULL;
-  //   } else {
-  //     member_types[i] = t;
-  //
-  //     if (stmt->tag == AST_TYPE_DECL) {
-  //       names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
-  //
-  //       // printf("type decl of module %s\n", names[i]);
-  //       // print_ast(stmt);
-  //       // print_type(t);
-  //
-  //     } else if (stmt->tag == AST_IMPORT) {
-  //
-  //       names[i] = stmt->data.AST_IMPORT.identifier;
-  //     } else {
-  //       names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
-  //     }
-  //
-  //     if (!t) {
-  //       printf("could not infer module member\n");
-  //       print_ast_err(stmt);
-  //       return NULL;
-  //     }
-  //   }
-  // }
-
-  Type *module_struct_type =
-      create_cons_type(TYPE_NAME_MODULE, n, member_types);
-  module_struct_type->data.T_CONS.names = names;
-
-  return module_struct_type;
-}
-
-Type *_infer_inline_module(Ast *ast, TICtx *ctx) {
-
-  AstList *type_annotations = ast->data.AST_LAMBDA.type_annotations;
-  AstList *params = ast->data.AST_LAMBDA.params;
-
-  if (ast->data.AST_LAMBDA.len > 0) {
-
-    int i = 0;
-    for (AstList *p = params; p; i++, p = p->next,
-                 type_annotations = type_annotations ? type_annotations->next
-                                                     : NULL) {
-      Ast *param = p->ast;
-      print_ast(param);
-      if (type_annotations && type_annotations->ast) {
-        printf("constraint: ");
-        print_ast(type_annotations->ast);
-      }
-    }
-  }
-
-  Ast *body_ast;
-  AstList *stmt_list;
-  int len;
-
-  if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
-    // Single statement - create a temporary AstList node
-    AstList *single_stmt = t_alloc(sizeof(AstList));
-    single_stmt->ast = ast->data.AST_LAMBDA.body;
-    single_stmt->next = NULL;
-    stmt_list = single_stmt;
-    len = 1;
-  } else {
-    body_ast = ast->data.AST_LAMBDA.body;
-    stmt_list = body_ast->data.AST_BODY.stmts;
-    len = body_ast->data.AST_BODY.len;
-  }
-
-  TICtx module_ctx = *ctx;
-  TypeEnv *env_start = module_ctx.env;
-
-  Ast *stmt;
-  Type **member_types = t_alloc(sizeof(Type *) * len);
-  const char **names = t_alloc(sizeof(char *) * len);
-
-  int i = 0;
-  for (AstList *current = stmt_list; current != NULL; current = current->next) {
-    stmt = current->ast;
-
-    Type *t = infer(stmt, &module_ctx);
-    // if (stmt->tag == AST_APPLICATION &&
-    //     stmt->data.AST_APPLICATION.args->tag == AST_LET) {
-    //   stmt = stmt->data.AST_APPLICATION.args;
-    // }
-
-    if (stmt->tag == AST_APPLICATION &&
-        stmt->data.AST_APPLICATION.args->tag == AST_LET) {
-      stmt = stmt->data.AST_APPLICATION.args;
-    }
-    if (!((stmt->tag == AST_LET) || (stmt->tag == AST_TYPE_DECL) ||
-          (stmt->tag == AST_IMPORT) || (stmt->tag == AST_TRAIT_IMPL))) {
-      return type_error(stmt, "Please only have let statements and type"
-                              " declarations in a module\n");
-    }
-    member_types[i] = t;
-
-    if (stmt->tag == AST_TYPE_DECL) {
-      names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
-
-    } else if (stmt->tag == AST_IMPORT) {
-
-      names[i] = stmt->data.AST_IMPORT.identifier;
-    } else {
-      names[i] = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
-    }
-
-    if (!t) {
-      print_ast_err(stmt);
-      return NULL;
-    }
-    i++;
-  }
-
-  TypeEnv *env = module_ctx.env;
-
-  Type *module_struct_type =
-      create_cons_type(TYPE_NAME_MODULE, len, member_types);
-
-  module_struct_type->data.T_CONS.names = names;
-
-  // TODO: do we need to keep module env scope from being pushed up
-  // ctx->env = env;
-
-  return module_struct_type;
-}
-
 YLCModule *init_import(YLCModule *mod) {
   ParsingContext _pctx = pctx;
   Ast *mod_ast = parse_input_script(mod->path);
@@ -297,10 +63,18 @@ YLCModule *init_import(YLCModule *mod) {
   mod->ast = mod_ast;
   mod->custom_binops = custom_binops;
 
-  TICtx mod_ctx = {};
-  Type *mod_struct = infer_module_import(mod->ast, &mod_ctx);
-  mod->type = mod_struct;
-  mod->env = mod_ctx.env;
+  TICtx mod_ctx = {.custom_binops = custom_binops};
+  Type *mod_type = infer(mod->ast, &mod_ctx);
+  if (!mod_type || mod_type->kind != T_MODULE) {
+    fprintf(stderr, "Error: failed to infer module %s as T_MODULE\n",
+            mod->path);
+    mod->type = NULL;
+    mod->env = NULL;
+    return mod;
+  }
+
+  mod->type = mod_type;
+  mod->env = mod_type->data.T_MODULE.env;
   return mod;
 }
 
@@ -326,39 +100,3 @@ bool register_module_ast(const char *key, Ast *module_ast) {
   ht_set(&module_registry, key, new_module);
   return false; // success
 }
-
-Type *infer_module_access(Ast *ast, Type *rec_type, const char *member_name,
-                          TICtx *ctx) {
-  Type *type = NULL;
-
-  if (rec_type->kind == T_MODULE) {
-    int i = 0;
-    for (TypeEnv *te = rec_type->data.T_MODULE.env; te; te = te->next, i++) {
-      if (CHARS_EQ(te->name, member_name)) {
-        ast->data.AST_RECORD_ACCESS.index = i;
-        return instantiate_env(te, ctx);
-      }
-    }
-  } else {
-    for (int i = 0; i < rec_type->data.T_CONS.num_args; i++) {
-      if (CHARS_EQ(rec_type->data.T_CONS.names[i], member_name)) {
-        type = rec_type->data.T_CONS.args[i];
-        ast->data.AST_RECORD_ACCESS.index = i;
-        break;
-      }
-
-      // if (type == NULL) {
-      //   fprintf(stderr, "Error: %s not found in module %s\n", member_name,
-      //           ast->data.AST_RECORD_ACCESS.record->data.AST_IDENTIFIER.value);
-      //   return NULL;
-      // }
-    }
-  }
-
-  if (is_generic(type)) {
-    Type *gen = generalize(type, NULL);
-    type = instantiate(gen, ctx);
-  }
-  return type;
-}
-Type *get_import_type(Ast *ast) { return NULL; }

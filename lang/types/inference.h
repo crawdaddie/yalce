@@ -116,4 +116,16 @@ int resolve_predicates(Subst **subst, Predicate *preds, FILE *err_stream);
 void print_predicates(Predicate *predicates);
 
 int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx);
+
+Type *infer_expr(Ast *ast, TICtx *ctx);
+
+void set_env_slice_scope(TypeEnv *slice_head, TypeEnv *boundary, int scope);
+void set_env_slice_yield_boundary(TypeEnv *slice_head, TypeEnv *boundary,
+                                  int yield_boundary_scope);
+
+Type *apply_subst_to_type(Subst *subst, Type *t);
+
+bool predicate_is_generic(Predicate *p);
+
+Type *lookup_subst(Subst *subst, int var_id);
 #endif

@@ -1,5 +1,6 @@
 #include "./inference.h"
 #include "../ht.h"
+#include "../modules.h"
 #include "../parse.h"
 #include "../serde.h"
 #include "./builtins.h"
@@ -8,6 +9,9 @@
 #include "./subst_table.h"
 #include "./type.h"
 #include "./type_ser.h"
+#include "infer_application.h"
+#include "infer_lambda.h"
+#include "infer_let.h"
 #include "type_expressions.h"
 #include <stdarg.h>
 #include <stdio.h>
@@ -17,28 +21,25 @@
 // ============================================================================
 // Forward declarations for static helpers implemented in this file
 // ============================================================================
-Type *infer_expr(Ast *ast, TICtx *ctx);
-static Type *apply_subst_to_type(Subst *subst, Type *t);
 static Subst *extend_subst(Subst *subst, int var_id, Type *type);
 static Type *find_root_var(Subst *subst, Type *t);
 static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out);
 int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx);
-static void mark_generalizable_slice(TypeEnv *slice_head, TypeEnv *boundary);
-static void finalize_env_slice(TypeEnv *slice_head, TypeEnv *boundary,
-                               Subst *subst);
 static void finalize_env_generalization(TypeEnv *env, Subst *subst);
 static void finalize_ast_types(Ast *ast, Subst *subst);
-static int checkpoint_generalizable_slice(TypeEnv *slice_head,
-                                          TypeEnv *boundary, TICtx *ctx);
 static TypeList *typelist_apply_subst(Subst *subst, TypeList *params);
 static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
                                              Type *param_type);
-static bool predicate_is_generic(Predicate *p);
 static Predicate *predicate_filter_generic(Predicate *preds);
 static bool is_empty_subst(Subst *subst);
 static Subst *clone_subst(Subst *subst);
 static bool is_recursive_self_reference(Ast *ast, TICtx *ctx);
-static Type *callable_view(Type *type);
+static Type *infer_import_expr(Ast *ast, TICtx *ctx);
+static TypeEnv *copy_typeenv_entry(TypeEnv *src);
+static TypeEnv *copy_typeenv_chain(TypeEnv *src, int *size_out);
+static void open_module_env_into_scope(TypeEnv *mod_env, TICtx *ctx);
+static void import_module_binops_into_ctx(custom_binops_t *binops, TICtx *ctx);
+static Type *create_module_type_from_env(TypeEnv *mod_env, int mod_size);
 
 static bool is_recursive_self_reference(Ast *ast, TICtx *ctx) {
   if (!ast || !ctx || !ctx->current_fn_ast) {
@@ -63,15 +64,121 @@ static bool is_recursive_self_reference(Ast *ast, TICtx *ctx) {
   return false;
 }
 
-static Type *callable_view(Type *type) {
-  if (type && is_coroutine_type(type)) {
-    return type_fn(&t_void, create_option_type(type->data.T_CONS.args[0]));
+static TypeEnv *copy_typeenv_entry(TypeEnv *src) {
+  if (!src) {
+    return NULL;
   }
-  return type;
+
+  TypeEnv *dst = t_alloc(sizeof(TypeEnv));
+  *dst = *src;
+  dst->next = NULL;
+  return dst;
 }
 
-static void set_env_slice_scope(TypeEnv *slice_head, TypeEnv *boundary,
-                                int scope) {
+static TypeEnv *copy_typeenv_chain(TypeEnv *src, int *size_out) {
+  TypeEnv *head = NULL;
+  TypeEnv *tail = NULL;
+  int size = 0;
+
+  for (TypeEnv *cur = src; cur; cur = cur->next) {
+    TypeEnv *node = copy_typeenv_entry(cur);
+    if (!head) {
+      head = node;
+    } else {
+      tail->next = node;
+    }
+    tail = node;
+    size++;
+  }
+
+  if (size_out) {
+    *size_out = size;
+  }
+  return head;
+}
+
+static void open_module_env_into_scope(TypeEnv *mod_env, TICtx *ctx) {
+  if (!ctx) {
+    return;
+  }
+
+  for (TypeEnv *entry = mod_env; entry; entry = entry->next) {
+    TypeEnv *opened = copy_typeenv_entry(entry);
+    opened->is_opened_var = true;
+    opened->next = ctx->env;
+    ctx->env = opened;
+  }
+}
+
+static void import_module_binops_into_ctx(custom_binops_t *binops, TICtx *ctx) {
+  if (!ctx) {
+    return;
+  }
+
+  for (custom_binops_t *b = binops; b; b = b->next) {
+    custom_binops_t *copy = t_alloc(sizeof(custom_binops_t));
+    *copy = *b;
+    copy->next = ctx->custom_binops;
+    ctx->custom_binops = copy;
+  }
+}
+
+static Type *create_module_type_from_env(TypeEnv *mod_env, int mod_size) {
+  Type *mod = t_alloc(sizeof(Type));
+  *mod = (Type){.kind = T_MODULE,
+                .data = {.T_MODULE = {.env = mod_env, .size = mod_size}}};
+  return mod;
+}
+
+static Type *infer_import_expr(Ast *ast, TICtx *ctx) {
+  const char *key = ast->data.AST_IMPORT.fully_qualified_name;
+  const char *identifier = ast->data.AST_IMPORT.identifier;
+
+  if (!key) {
+    TypeEnv *mod_ref = lookup_type_ref(ctx->env, identifier);
+    if (!mod_ref || !mod_ref->type || mod_ref->type->kind != T_MODULE) {
+      fprintf(stderr, "Error: module %s not found in scope\n", identifier);
+      return NULL;
+    }
+
+    Type *module_type = mod_ref->type;
+    if (ast->data.AST_IMPORT.import_all) {
+      open_module_env_into_scope(module_type->data.T_MODULE.env, ctx);
+    } else {
+      ctx->env = env_extend(ctx->env, identifier, module_type);
+    }
+    return module_type;
+  }
+
+  YLCModule *mod = get_module(key);
+  if (!mod) {
+    fprintf(stderr, "Error: module %s not found\n", key);
+    return NULL;
+  }
+
+  if (!mod->env) {
+    mod = init_import(mod);
+  }
+  if (!mod || !mod->env) {
+    fprintf(stderr, "Error: failed to initialize module %s\n", key);
+    return NULL;
+  }
+
+  int mod_size = 0;
+  TypeEnv *mod_env_copy = copy_typeenv_chain(mod->env, &mod_size);
+  Type *module_type = create_module_type_from_env(mod_env_copy, mod_size);
+
+  if (ast->data.AST_IMPORT.import_all) {
+    open_module_env_into_scope(mod_env_copy, ctx);
+    import_module_binops_into_ctx(mod->custom_binops, ctx);
+  } else {
+    ctx->env = env_extend(ctx->env, identifier, module_type);
+  }
+
+  return module_type;
+}
+
+void set_env_slice_scope(TypeEnv *slice_head, TypeEnv *boundary, int scope) {
   for (TypeEnv *e = slice_head; e != boundary; e = e->next) {
     if (e->md.type == BT_VAR) {
       e->md.data.VAR.scope = scope;
@@ -79,8 +186,8 @@ static void set_env_slice_scope(TypeEnv *slice_head, TypeEnv *boundary,
   }
 }
 
-static void set_env_slice_yield_boundary(TypeEnv *slice_head, TypeEnv *boundary,
-                                         int yield_boundary_scope) {
+void set_env_slice_yield_boundary(TypeEnv *slice_head, TypeEnv *boundary,
+                                  int yield_boundary_scope) {
   for (TypeEnv *e = slice_head; e != boundary; e = e->next) {
     if (e->md.type == BT_VAR || e->md.type == BT_FN_PARAM) {
       e->md.data.VAR.yield_boundary_scope = yield_boundary_scope;
@@ -204,119 +311,9 @@ Type *infer_inline_module(Ast *ast, TICtx *ctx) {
   return mod;
 }
 
-Type *infer_application(Ast *ast, TICtx *ctx) {
-  Ast *fn_ast = ast->data.AST_APPLICATION.function;
-  size_t nargs = ast->data.AST_APPLICATION.len;
-
-  Type *fn_type = infer_expr(fn_ast, ctx);
-  if (!fn_type)
-    return NULL;
-
-  Type *current = fn_type;
-  for (size_t i = 0; i < nargs; i++) {
-    current = callable_view(current);
-    Type *arg_type = infer_expr(ast->data.AST_APPLICATION.args + i, ctx);
-    if (!arg_type)
-      return NULL;
-
-    if (current->kind == T_FN) {
-      Type *param_type = current->data.T_FN.from;
-      constrain_argument_for_parameter(ctx, arg_type, param_type);
-      current = current->data.T_FN.to;
-    } else {
-      // function position has too few params / is not a function
-      Type *result = next_tvar();
-      Type *expected = type_fn(arg_type, result);
-      add_constraint(ctx, current, expected);
-      current = result;
-    }
-  }
-
-  return current;
-}
-
-static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
-                                             Type *param_type) {
-  if (is_generic(arg_type) || is_generic(param_type) ||
-      types_equal(arg_type, param_type)) {
-    add_constraint(ctx, arg_type, param_type);
-    return;
-  }
-
-  TypeList *from_params = t_alloc(sizeof(TypeList));
-  from_params->type = arg_type;
-  from_params->next = NULL;
-  ctx->predicates = predicate_append_applied(ctx->predicates, GenericFrom,
-                                             param_type, from_params);
-}
-Type *infer_lambda(Ast *ast, TICtx *ctx) {
-  size_t len = ast->data.AST_LAMBDA.len;
-  Type **param_types = len ? t_alloc(sizeof(Type *) * len) : NULL;
-  Type *self_type = NULL;
-  int lambda_scope_depth = ctx->scope + 1;
-  LambdaScope lambda_scope = {
-      .fn_ast = ast,
-      .base_scope = lambda_scope_depth,
-      .parent = ctx->current_scope,
-  };
-  TICtx child = *ctx;
-
-  child.current_fn_ast = ast;
-  child.current_scope = &lambda_scope;
-  child.current_fn_base_scope = lambda_scope_depth;
-  child.scope = lambda_scope_depth;
-  child.yielded_type = NULL;
-
-  if (ast->data.AST_LAMBDA.fn_name.chars != NULL) {
-    self_type = next_tvar();
-    child.env =
-        env_extend(child.env, ast->data.AST_LAMBDA.fn_name.chars, self_type);
-  }
-
-  AstList *param = ast->data.AST_LAMBDA.params;
-  for (size_t i = 0; i < len && param; i++, param = param->next) {
-    Type *pt = next_tvar();
-    param_types[i] = pt;
-    TypeEnv *param_boundary = child.env;
-    if (bind_pattern(param->ast, pt, &child) != 0) {
-      return type_error(param->ast, "Unsupported lambda parameter");
-    }
-    set_env_slice_scope(child.env, param_boundary, lambda_scope_depth);
-    set_env_slice_yield_boundary(child.env, param_boundary,
-                                 ast->data.AST_LAMBDA.num_yields);
-  }
-
-  Type *body_type = infer_expr(ast->data.AST_LAMBDA.body, &child);
-  if (!body_type) {
-    return NULL;
-  }
-
-  ctx->constraints = child.constraints;
-  ctx->predicates = child.predicates;
-  ctx->subst = child.subst;
-
-  Type *fn_type = body_type;
-  if (child.yielded_type) {
-    // printf("[LAMBDA]\n");
-    // print_type(fn_type);
-    fn_type = create_coroutine_instance_type(fn_type);
-  }
-  for (size_t i = len; i > 0; i--) {
-    fn_type = type_fn(param_types[i - 1], fn_type);
-  }
-
-  if (self_type) {
-    add_constraint(ctx, self_type, fn_type);
-  }
-
-  return fn_type;
-}
-
 // ============================================================================
 // Forward declarations for static helpers in this file
 // ============================================================================
-Type *infer_expr(Ast *ast, TICtx *ctx);
-static Type *apply_subst_to_type(Subst *subst, Type *t);
 static Subst *extend_subst(Subst *subst, int var_id, Type *type);
 static Type *find_root_var(Subst *subst, Type *t);
 static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out);
@@ -468,80 +465,6 @@ Type *env_lookup(TypeEnv *env, const char *name) {
   return e->type;
 }
 
-/*
- * Mark a contiguous stack slice of env entries as eligible for deferred
- * generalization.
- *
- * Why this exists:
- * During inference we bind names into the environment before equality
- * constraints have been solved. At that point, many types still contain raw
- * inference variables that will later be substituted to concrete or more
- * precise types.
- *
- * If we generalized eagerly when inserting into the env, we would freeze those
- * unsolved variables too early. That caused previous regressions where lambda
- * parameters, destructuring binds, and other local names were turned into
- * polymorphic bindings prematurely, so later reads would instantiate fresh
- * copies instead of refining the original variable through constraints.
- *
- * The safe approach is:
- * 1. Insert env entries monomorphically during inference.
- * 2. Remember which newly-added entries are true let/module export bindings
- *    that should become polymorphic later.
- * 3. After solving, apply substitution to their types and only then compute
- *    scheme_vars via generalize_env().
- *
- * `slice_head` is the current env head after introducing the new bindings.
- * `boundary` is the env pointer from before those bindings were introduced.
- * Because the env is a linked stack, iterating from `slice_head` down to
- * `boundary` gives exactly the bindings introduced by this let/module scope.
- *
- * For each entry in that slice we store:
- * - `can_generalize = true`: this binding is allowed to become polymorphic.
- * - `needs_generalization = true`: post-solve finalization still needs to run.
- * - `generalize_boundary = boundary`: when we later compute
- *   free(type) - free(env), we must subtract the env that was in scope at the
- *   binding site, not the final top-level env. Using the wrong boundary would
- *   over-generalize captured outer variables.
- *
- * Note that this helper only marks bindings. It does not mutate their type or
- * compute scheme vars. That work is intentionally deferred to the post-solve
- * finalization pass.
- */
-static void mark_generalizable_slice(TypeEnv *slice_head, TypeEnv *boundary) {
-  for (TypeEnv *e = slice_head; e != boundary; e = e->next) {
-    e->can_generalize = true;
-    e->needs_generalization = true;
-    e->generalize_boundary = boundary;
-  }
-}
-
-static void finalize_env_slice(TypeEnv *slice_head, TypeEnv *boundary,
-                               Subst *subst) {
-  int len = 0;
-  for (TypeEnv *e = slice_head; e != boundary; e = e->next) {
-    len++;
-  }
-
-  TypeEnv **entries = len ? t_alloc(sizeof(TypeEnv *) * len) : NULL;
-  int i = len - 1;
-  for (TypeEnv *e = slice_head; e != boundary; e = e->next, i--) {
-    entries[i] = e;
-  }
-
-  for (int j = 0; j < len; j++) {
-    TypeEnv *e = entries[j];
-    e->type = apply_subst_to_type(subst, e->type);
-    if (e->needs_generalization) {
-      e->scheme_vars = NULL;
-      if (e->can_generalize) {
-        generalize_env(e, e->generalize_boundary);
-      }
-      e->needs_generalization = false;
-    }
-  }
-}
-
 static void finalize_env_generalization(TypeEnv *env, Subst *subst) {
   if (!env) {
     return;
@@ -569,36 +492,6 @@ static void finalize_env_generalization(TypeEnv *env, Subst *subst) {
       e->needs_generalization = false;
     }
   }
-}
-
-static int checkpoint_generalizable_slice(TypeEnv *slice_head,
-                                          TypeEnv *boundary, TICtx *ctx) {
-  Solution sol = {0};
-  if (infer_solve(ctx, &sol) != 0) {
-    return 1;
-  }
-
-  Subst *step_subst = sol.subst;
-  Predicate *remaining_preds = NULL;
-  if (ctx->predicates) {
-    Predicate *resolved = predicate_apply_subst(step_subst, ctx->predicates);
-    if (resolve_predicates(&step_subst, resolved, ctx->err_stream) != 0) {
-      return 1;
-    }
-    remaining_preds = predicate_filter_generic(resolved);
-  }
-
-  ctx->subst = compose_subst(step_subst, ctx->subst);
-  apply_subst_env(ctx->subst, ctx->env);
-  for (TypeEnv *e = slice_head; e != boundary; e = e->next) {
-    if (e->can_generalize) {
-      e->predicates = predicate_duplicate(remaining_preds);
-    }
-  }
-  ctx->predicates = NULL;
-  finalize_env_slice(slice_head, boundary, NULL);
-  ctx->constraints = NULL;
-  return 0;
 }
 
 // ============================================================================
@@ -978,43 +871,6 @@ int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx) {
   return 1;
 }
 
-static Type *infer_let_expr(Ast *ast, TICtx *ctx) {
-  Ast *binding = ast->data.AST_LET.binding;
-  Ast *expr = ast->data.AST_LET.expr;
-  Ast *body = ast->data.AST_LET.in_expr;
-  TypeEnv *outer_env = ctx->env;
-
-  Type *expr_type = infer_expr(expr, ctx);
-  if (!expr_type) {
-    return NULL;
-  }
-
-  if (bind_pattern(binding, expr_type, ctx) != 0) {
-    type_error(ast, "Unsupported let binding shape");
-    return NULL;
-  }
-
-  set_env_slice_scope(ctx->env, outer_env, ctx->scope);
-  if (ctx->current_fn_ast) {
-    set_env_slice_yield_boundary(
-        ctx->env, outer_env, ctx->current_fn_ast->data.AST_LAMBDA.num_yields);
-  }
-
-  mark_generalizable_slice(ctx->env, outer_env);
-  if (checkpoint_generalizable_slice(ctx->env, outer_env, ctx) != 0) {
-    ctx->env = outer_env;
-    return NULL;
-  }
-
-  if (body) {
-    Type *body_type = infer_expr(body, ctx);
-    ctx->env = outer_env;
-    return body_type;
-  }
-
-  return expr_type;
-}
-
 Type *infer_expr(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
 
@@ -1098,6 +954,9 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
 
   case AST_TYPE_DECL:
     type = infer_type_declaration(ast, ctx);
+    break;
+  case AST_IMPORT:
+    type = infer_import_expr(ast, ctx);
     break;
   case AST_FMT_STRING:
     for (int i = 0; i < ast->data.AST_LIST.len; i++) {
@@ -1536,7 +1395,7 @@ static TypeList *typelist_apply_subst(Subst *subst, TypeList *params) {
   return head;
 }
 
-static bool predicate_is_generic(Predicate *p) {
+bool predicate_is_generic(Predicate *p) {
   if (!p) {
     return false;
   }
@@ -1564,32 +1423,6 @@ static bool predicate_is_generic(Predicate *p) {
     return false;
   }
   return false;
-}
-
-static Predicate *predicate_filter_generic(Predicate *preds) {
-  Predicate *result = NULL;
-  for (Predicate *p = preds; p; p = p->next) {
-    if (!predicate_is_generic(p)) {
-      continue;
-    }
-    if (p->kind == PRED_TRAIT) {
-      result = predicate_append_applied(result, p->trait, p->data.TRAIT.type,
-                                        p->data.TRAIT.params);
-    } else if (p->kind == PRED_COMPARABLE) {
-      int n = 0;
-      while (p->data.COMPARABLE.args && p->data.COMPARABLE.args[n]) {
-        n++;
-      }
-      Type **args = t_alloc(sizeof(Type *) * (n + 1));
-      for (int i = 0; i < n; i++) {
-        args[i] = p->data.COMPARABLE.args[i];
-      }
-      args[n] = NULL;
-      result = predicate_append_comparable(result, p->trait,
-                                           p->data.COMPARABLE.witness, args);
-    }
-  }
-  return result;
 }
 
 // ============================================================================
@@ -1664,64 +1497,8 @@ static Subst *extend_subst(Subst *subst, int var_id, Type *type) {
   return subst_table_extend(subst, var_id, type);
 }
 
-static Type *lookup_subst(Subst *subst, int var_id) {
+Type *lookup_subst(Subst *subst, int var_id) {
   return subst_table_lookup(subst, var_id);
-}
-
-static Type *apply_subst_to_type(Subst *subst, Type *t) {
-  if (!t)
-    return NULL;
-
-  switch (t->kind) {
-  case T_VAR: {
-    Type *found = lookup_subst(subst, t->data.T_VAR.id);
-    if (!found || types_equal(found, t))
-      return t;
-    return apply_subst_to_type(subst, found);
-  }
-  case T_RECURSIVE_REF:
-    return t;
-  case T_FN: {
-    Type *from = apply_subst_to_type(subst, t->data.T_FN.from);
-    Type *to = apply_subst_to_type(subst, t->data.T_FN.to);
-    if (from == t->data.T_FN.from && to == t->data.T_FN.to) {
-      return t;
-    }
-    Type *result = t_alloc(sizeof(Type));
-    *result = (Type){T_FN, {.T_FN = {from, to}}};
-    return result;
-  }
-  case T_CONS:
-  case T_SUM: {
-    Type **new_args = NULL;
-    bool changed = false;
-    if (t->data.T_CONS.num_args > 0) {
-      new_args = t_alloc(sizeof(Type *) * t->data.T_CONS.num_args);
-      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-        new_args[i] = apply_subst_to_type(subst, t->data.T_CONS.args[i]);
-        if (new_args[i] != t->data.T_CONS.args[i])
-          changed = true;
-      }
-    }
-    if (!changed)
-      return t;
-    if (is_coroutine_type(t)) {
-      return create_coroutine_instance_type(new_args[0]);
-    }
-    Type *result = t_alloc(sizeof(Type));
-    *result = *t;
-    result->data.T_CONS.args = new_args;
-    return result;
-  }
-  case T_MODULE: {
-    if (t->data.T_MODULE.env) {
-      apply_subst_env(subst, t->data.T_MODULE.env);
-    }
-    return t;
-  }
-  default:
-    return t;
-  }
 }
 
 static Type *find_root_var(Subst *subst, Type *t) {
@@ -1884,6 +1661,62 @@ Type *apply_substitution(Subst *subst, Type *t) {
 
 static bool is_empty_subst(Subst *subst) { return subst_table_is_empty(subst); }
 
+Type *apply_subst_to_type(Subst *subst, Type *t) {
+  if (!t)
+    return NULL;
+
+  switch (t->kind) {
+  case T_VAR: {
+    Type *found = lookup_subst(subst, t->data.T_VAR.id);
+    if (!found || types_equal(found, t))
+      return t;
+    return apply_subst_to_type(subst, found);
+  }
+  case T_RECURSIVE_REF:
+    return t;
+  case T_FN: {
+    Type *from = apply_subst_to_type(subst, t->data.T_FN.from);
+    Type *to = apply_subst_to_type(subst, t->data.T_FN.to);
+    if (from == t->data.T_FN.from && to == t->data.T_FN.to) {
+      return t;
+    }
+    Type *result = t_alloc(sizeof(Type));
+    *result = (Type){T_FN, {.T_FN = {from, to}}};
+    return result;
+  }
+  case T_CONS:
+  case T_SUM: {
+    Type **new_args = NULL;
+    bool changed = false;
+    if (t->data.T_CONS.num_args > 0) {
+      new_args = t_alloc(sizeof(Type *) * t->data.T_CONS.num_args);
+      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+        new_args[i] = apply_subst_to_type(subst, t->data.T_CONS.args[i]);
+        if (new_args[i] != t->data.T_CONS.args[i])
+          changed = true;
+      }
+    }
+    if (!changed)
+      return t;
+    if (is_coroutine_type(t)) {
+      return create_coroutine_instance_type(new_args[0]);
+    }
+    Type *result = t_alloc(sizeof(Type));
+    *result = *t;
+    result->data.T_CONS.args = new_args;
+    return result;
+  }
+  case T_MODULE: {
+    if (t->data.T_MODULE.env) {
+      apply_subst_env(subst, t->data.T_MODULE.env);
+    }
+    return t;
+  }
+  default:
+    return t;
+  }
+}
+
 // ============================================================================
 // Backward-compatible wrappers (transitionary - external callers use
 // T_SCHEME)
@@ -1977,6 +1810,59 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) { return r; }
 
 Type *find_in_subst(Subst *subst, int var_id) {
   return lookup_subst(subst, var_id);
+}
+
+Type *extract_member_from_sum_type(Type *cons, Ast *id) {
+  if (!cons || cons->kind != T_SUM || !id) {
+    return NULL;
+  }
+
+  while (id->tag == AST_RECORD_ACCESS) {
+    id = id->data.AST_RECORD_ACCESS.member;
+  }
+
+  if (id->tag != AST_IDENTIFIER) {
+    return NULL;
+  }
+
+  for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
+    Type *mem = cons->data.T_CONS.args[i];
+    if (mem && (mem->kind == T_CONS || mem->kind == T_SUM) &&
+        CHARS_EQ(id->data.AST_IDENTIFIER.value, mem->data.T_CONS.name)) {
+      return mem;
+    }
+  }
+  return NULL;
+}
+
+Type *extract_member_from_sum_type_idx(Type *cons, Ast *id, int *idx) {
+  if (idx) {
+    *idx = -1;
+  }
+
+  if (!cons || cons->kind != T_SUM || !id) {
+    return NULL;
+  }
+
+  while (id->tag == AST_RECORD_ACCESS) {
+    id = id->data.AST_RECORD_ACCESS.member;
+  }
+
+  if (id->tag != AST_IDENTIFIER) {
+    return NULL;
+  }
+
+  for (int i = 0; i < cons->data.T_CONS.num_args; i++) {
+    Type *mem = cons->data.T_CONS.args[i];
+    if (mem && (mem->kind == T_CONS || mem->kind == T_SUM) &&
+        CHARS_EQ(id->data.AST_IDENTIFIER.value, mem->data.T_CONS.name)) {
+      if (idx) {
+        *idx = i;
+      }
+      return mem;
+    }
+  }
+  return NULL;
 }
 
 bool is_constant_expr(Ast *expr, TICtx *ctx) { return false; }

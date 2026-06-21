@@ -840,9 +840,9 @@ bool application_is_partial(Ast *app) {
 }
 
 bool is_coroutine_constructor_type(Type *fn_type) {
-  // return fn_type->kind == T_FN && fn_type->is_coroutine_constructor;
-  return fn_type->kind == T_CONS &&
-         CHARS_EQ(fn_type->data.T_CONS.name, TYPE_NAME_COROUTINE_CONSTRUCTOR);
+  return fn_type && fn_type->kind == T_FN &&
+         has_attr(fn_type->data.T_FN.attributes,
+                  FN_ATTR_COROUTINE_CONSTRUCTOR);
 }
 
 bool is_coroutine_type(Type *fn_type) {

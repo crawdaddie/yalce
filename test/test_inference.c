@@ -118,6 +118,13 @@ static bool has_any_trait_predicate(Predicate *preds, TypeClass *trait) {
   return false;
 }
 
+static Type *make_module_type_from_env(TypeEnv *env, int size) {
+  Type *mod = t_alloc(sizeof(Type));
+  *mod = (Type){.kind = T_MODULE,
+                .data = {.T_MODULE = {.env = env, .size = size}}};
+  return mod;
+}
+
 static Ast *parse_and_infer(const char *input, TICtx *ctx) {
   reset_type_var_counter();
   Ast *ast = parse_input((char *)input, NULL);
@@ -423,6 +430,101 @@ static void test_freshen_map_rewrites_typelist_and_overwrites_existing_entry() {
               "expected typelist freshening to apply rewritten vars");
   assert_true(lookup_ok, "freshen_map_extend overwrites existing source id",
               "expected freshen_map lookup to return latest overwritten type");
+}
+
+static void test_import_binds_module_value_into_scope() {
+  start_test(__func__, __LINE__);
+  TypeEnv member = {.name = "answer", .type = &t_int};
+  Type *module_type = make_module_type_from_env(&member, 1);
+  TypeEnv existing = {.name = "Existing", .type = module_type};
+  TICtx ctx = {.env = &existing, .err_stream = stderr};
+  Ast import_ast = {.tag = AST_IMPORT,
+                    .data = {.AST_IMPORT = {.identifier = "Existing",
+                                            .fully_qualified_name = NULL,
+                                            .import_all = false}}};
+
+  Type *result = infer_expr(&import_ast, &ctx);
+  TypeEnv *bound = lookup_type_ref(ctx.env, "Existing");
+
+  assert_true(result == module_type,
+              "import returns existing module type from scope",
+              "expected import of scoped module to return its module type");
+  assert_true(bound != NULL && bound->type == module_type,
+              "import binds module value into current scope",
+              "expected import to bind module value in current scope");
+}
+
+static void test_open_injects_module_env_entries_into_scope() {
+  start_test(__func__, __LINE__);
+  Type *a = tvar("a");
+  Type *id_type = type_fn(a, a);
+  TypeList scheme_vars = {.type = a, .next = NULL};
+  Predicate *preds = predicate_append(NULL, GenericArithmetic, a);
+  TypeEnv id_entry = {.name = "id",
+                      .type = id_type,
+                      .scheme_vars = &scheme_vars,
+                      .predicates = preds,
+                      .is_opened_var = false,
+                      .next = NULL};
+  Type *module_type = make_module_type_from_env(&id_entry, 1);
+  TypeEnv module_binding = {.name = "M", .type = module_type};
+  TICtx ctx = {.env = &module_binding, .err_stream = stderr};
+  Ast open_ast = {.tag = AST_IMPORT,
+                  .data = {.AST_IMPORT = {.identifier = "M",
+                                          .fully_qualified_name = NULL,
+                                          .import_all = true}}};
+
+  Type *result = infer_expr(&open_ast, &ctx);
+  TypeEnv *opened = lookup_type_ref(ctx.env, "id");
+
+  bool opened_ok = opened && opened->is_opened_var &&
+                   opened->scheme_vars == &scheme_vars &&
+                   opened->predicates == preds &&
+                   opened->type == id_type;
+
+  assert_true(result == module_type, "open returns module type",
+              "expected open to return the opened module type");
+  assert_true(opened_ok, "open injects module env entry with metadata intact",
+              "expected open to inject module env entry into scope");
+}
+
+static void test_extract_member_from_sum_type_finds_constructor_by_name() {
+  start_test(__func__, __LINE__);
+  Type *some = &TCONS(TYPE_NAME_SOME, 1, &t_int);
+  Type *none = &TCONS(TYPE_NAME_NONE, 0);
+  Type *opt = &TSUM(2, TYPE_NAME_OPTION, some, none);
+  Ast ctor = {.tag = AST_IDENTIFIER,
+              .data = {.AST_IDENTIFIER = {.value = TYPE_NAME_SOME,
+                                          .length = (int)strlen(TYPE_NAME_SOME)}}};
+
+  Type *member = extract_member_from_sum_type(opt, &ctor);
+
+  assert_true(member == some,
+              "extract_member_from_sum_type finds constructor in T_SUM",
+              "expected Some constructor to be found in Option sum type");
+}
+
+static void test_extract_member_from_sum_type_idx_handles_record_access_name() {
+  start_test(__func__, __LINE__);
+  Type *left = &TCONS("Left", 1, &t_int);
+  Type *right = &TCONS("Right", 1, &t_string);
+  Type *either = &TSUM(2, "Either", left, right);
+  Ast member = {.tag = AST_IDENTIFIER,
+                .data = {.AST_IDENTIFIER = {.value = "Right", .length = 5}}};
+  Ast record = {.tag = AST_IDENTIFIER,
+                .data = {.AST_IDENTIFIER = {.value = "Either", .length = 6}}};
+  Ast access = {.tag = AST_RECORD_ACCESS,
+                .data = {.AST_RECORD_ACCESS = {.record = &record,
+                                               .member = &member}}};
+  int idx = -1;
+
+  Type *found = extract_member_from_sum_type_idx(either, &access, &idx);
+
+  assert_true(found == right,
+              "extract_member_from_sum_type_idx resolves constructor via access tail",
+              "expected Right constructor to be resolved from record access");
+  assert_true(idx == 1, "extract_member_from_sum_type_idx reports constructor index",
+              "expected Right constructor index to be 1, got %d", idx);
 }
 
 static void test_instantiate_env_freshens_scheme_vars_and_predicates() {
@@ -771,6 +873,10 @@ int main(void) {
   test_compose_subst_preserves_sparse_bindings_from_both_inputs();
   test_freshen_map_rewrites_nested_type_structure();
   test_freshen_map_rewrites_typelist_and_overwrites_existing_entry();
+  test_import_binds_module_value_into_scope();
+  test_open_injects_module_env_entries_into_scope();
+  test_extract_member_from_sum_type_finds_constructor_by_name();
+  test_extract_member_from_sum_type_idx_handles_record_access_name();
   test_instantiate_env_freshens_scheme_vars_and_predicates();
   test_resolve_predicates_from_succeeds_for_double_from_int();
   test_resolve_predicates_from_fails_for_int_from_double();
