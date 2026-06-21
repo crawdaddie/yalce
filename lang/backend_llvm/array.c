@@ -113,7 +113,7 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
   Type *array_type_ref = ast->type;
   Type *element_type_ref = array_type_ref->data.T_CONS.args[0];
   if (is_generic(element_type_ref)) {
-    element_type_ref = resolve_type_in_env(element_type_ref, ctx->env);
+    element_type_ref = specialize_type_for_codegen(element_type_ref, ctx);
   }
   LLVMTypeRef element_type =
       element_type_ref->kind == T_FN

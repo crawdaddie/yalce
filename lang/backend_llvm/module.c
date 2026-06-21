@@ -126,8 +126,6 @@ LLVMValueRef create_constructor_module(Ast *trait, JITLangCtx *ctx,
   if (out_type->kind == T_SCHEME) {
     out_type = out_type->data.T_SCHEME.type;
   }
-  out_type->constructor = module_symbol;
-
   return LLVMConstInt(LLVMInt32Type(), 0, 0);
 }
 

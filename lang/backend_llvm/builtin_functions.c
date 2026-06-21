@@ -27,6 +27,19 @@
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);
 
+static Type *builtin_operand_type(Ast *operand_ast, JITLangCtx *ctx) {
+  if (!operand_ast) {
+    return NULL;
+  }
+
+  JITSymbol *sym = lookup_id_ast(operand_ast, ctx);
+  if (sym && sym->symbol_type) {
+    return specialize_type_for_codegen(sym->symbol_type, ctx);
+  }
+
+  return specialize_type_for_codegen(operand_ast->type, ctx);
+}
+
 LLVMValueRef create_arithmetic_typeclass_methods(Ast *trait, JITLangCtx *ctx,
                                                  LLVMModuleRef module,
                                                  LLVMBuilderRef builder) {
@@ -91,11 +104,11 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 Type *find_in_env_if_generic(Type *t, TypeEnv *env) {
   if (t->kind == T_VAR) {
-    Type *l = env_lookup(env, t->data.T_VAR);
-    if (l && t->kind != T_VAR) {
+    Type *l = env_lookup(env, t->data.T_VAR.name);
+    if (l && l->kind != T_VAR) {
       return l;
     }
-    if (l && t->kind == T_VAR) {
+    if (l && l->kind == T_VAR) {
       return find_in_env_if_generic(l, env);
     }
   }
@@ -238,8 +251,8 @@ LLVMValueRef curried_comparison_binop(Ast *saved_arg_ast,
                                       JITLangCtx *ctx, LLVMModuleRef module,
                                       LLVMBuilderRef builder) {
 
-  Type *free_arg_type = resolve_type_in_env(type->data.T_FN.from, ctx->env);
-  Type *saved_arg_type = resolve_type_in_env(saved_arg_ast->type, ctx->env);
+  Type *free_arg_type = specialize_type_for_codegen(type->data.T_FN.from, ctx);
+  Type *saved_arg_type = specialize_type_for_codegen(saved_arg_ast->type, ctx);
   Type *target_type = resolve_ord_target_type(saved_arg_type, free_arg_type);
 
   LLVMTypeRef llvm_return_type_ref = LLVMInt1Type();
@@ -389,8 +402,8 @@ LLVMValueRef GtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                     module, builder);
   }
 
-  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
-  fn_type = resolve_type_in_env(fn_type, ctx->env);
+  Type *fn_type = specialize_type_for_codegen(
+      ast->data.AST_APPLICATION.function->type, ctx);
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
   // printf("ord\n");
@@ -409,8 +422,8 @@ LLVMValueRef GteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                     module, builder);
   }
 
-  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
-  fn_type = resolve_type_in_env(fn_type, ctx->env);
+  Type *fn_type = specialize_type_for_codegen(
+      ast->data.AST_APPLICATION.function->type, ctx);
   Type *lt = fn_type->data.T_FN.from;
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
   ORD_BINOP(">=", LLVMRealOGE, LLVMIntSGE, LLVMIntUGE);
@@ -425,8 +438,8 @@ LLVMValueRef LtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                     module, builder);
   }
 
-  Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
-  fn_type = resolve_type_in_env(fn_type, ctx->env);
+  Type *fn_type = specialize_type_for_codegen(
+      ast->data.AST_APPLICATION.function->type, ctx);
   Type *lt = fn_type->data.T_FN.from;
 
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
@@ -443,7 +456,7 @@ LLVMValueRef LteHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   Type *fn_type = deep_copy_type(ast->data.AST_APPLICATION.function->type);
-  fn_type = resolve_type_in_env(fn_type, ctx->env);
+  fn_type = specialize_type_for_codegen(fn_type, ctx);
   Type *lt = fn_type->data.T_FN.from;
 
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
@@ -713,7 +726,7 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
                                LLVMBuilderRef builder) {
 
   if (type->kind == T_VAR) {
-    type = resolve_type_in_env(type, ctx->env);
+    type = specialize_type_for_codegen(type, ctx);
   }
 
   switch (type->kind) {
@@ -737,25 +750,16 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
   case T_NUM: {
     return LLVMBuildFCmp(builder, LLVMRealOEQ, l, r, "eq_num");
   }
-  case T_CONS: {
-
-    if ((strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) &&
-        (type->data.T_CONS.num_args == 2) &&
-        (strcmp(type->data.T_CONS.args[0]->data.T_CONS.name, "Some") == 0) &&
-        (strcmp(type->data.T_CONS.args[1]->data.T_CONS.name, "None") == 0)) {
-      return option_eq(type, l, r, ctx, module, builder);
-    }
-
+  case T_SUM: {
     if (is_option_type(type)) {
       return option_eq(type, l, r, ctx, module, builder);
     }
 
+    return sum_type_eq(type, l, r, ctx, module, builder);
+  }
+  case T_CONS: {
     if (is_list_type(type)) {
       return list_eq(type, l, r, ctx, module, builder);
-    }
-
-    if (is_sum_type(type)) {
-      return sum_type_eq(type, l, r, ctx, module, builder);
     }
 
     return cons_equality(type, l, r, ctx, module, builder);
@@ -771,9 +775,9 @@ LLVMValueRef EqAppHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *fn_type = ast->data.AST_APPLICATION.function->type;
   Type *lt = fn_type->data.T_FN.from;
 
-  lt = resolve_type_in_env(lt, ctx->env);
+  lt = specialize_type_for_codegen(lt, ctx);
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
-  rt = resolve_type_in_env(rt, ctx->env);
+  rt = specialize_type_for_codegen(rt, ctx);
   Type *target_type;
 
   if (types_equal(lt, rt)) {
@@ -806,9 +810,9 @@ LLVMValueRef NeqHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *fn_type = ast->data.AST_APPLICATION.function->type;
   Type *lt = fn_type->data.T_FN.from;
-  lt = resolve_type_in_env(lt, ctx->env);
+  lt = specialize_type_for_codegen(lt, ctx);
   Type *rt = fn_type->data.T_FN.to->data.T_FN.from;
-  rt = resolve_type_in_env(rt, ctx->env);
+  rt = specialize_type_for_codegen(rt, ctx);
 
   Type *target_type;
   if (get_typeclass_rank(lt, "eq") >= get_typeclass_rank(rt, "eq")) {
@@ -959,7 +963,7 @@ LLVMValueRef ArraySizeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Ast *array_ast = ast->data.AST_APPLICATION.args;
 
-  Type *arr_type = array_ast->type;
+  Type *arr_type = builtin_operand_type(array_ast, ctx);
   Type *el_type = arr_type->data.T_CONS.args[0];
   LLVMTypeRef llvm_el_type = type_to_llvm_type(el_type, ctx, module);
 
@@ -970,38 +974,48 @@ LLVMValueRef ArraySizeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef ArrayAtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
-
-  Type *ret_type = ast->type;
   Ast *array_ast = ast->data.AST_APPLICATION.args;
   Ast *idx_ast = ast->data.AST_APPLICATION.args + 1;
+  Type *arr_type = builtin_operand_type(array_ast, ctx);
+  Type *el_type = arr_type ? arr_type->data.T_CONS.args[0] : NULL;
   LLVMValueRef array = codegen(array_ast, ctx, module, builder);
   LLVMValueRef idx = codegen(idx_ast, ctx, module, builder);
-
-  if (ret_type->kind == T_FN) {
-    return get_array_element(builder, array, idx, GENERIC_PTR);
-  }
-
-  LLVMTypeRef el_type = type_to_llvm_type(ret_type, ctx, module);
 
   if (!el_type) {
     fprintf(stderr, "Error: no array element type found\n");
     return NULL;
   }
 
-  LLVMValueRef el = get_array_element(builder, array, idx, el_type);
+  if (el_type->kind == T_FN || is_coroutine_type(el_type)) {
+    return get_array_element(builder, array, idx, GENERIC_PTR);
+  }
+
+  LLVMTypeRef llvm_el_type = type_to_llvm_type(el_type, ctx, module);
+
+  if (!llvm_el_type) {
+    fprintf(stderr, "Error: no array element type found\n");
+    return NULL;
+  }
+
+  LLVMValueRef el = get_array_element(builder, array, idx, llvm_el_type);
   return el;
 }
 
 LLVMValueRef ArraySetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMBuilderRef builder) {
-  Type *ret_type = ast->type;
   Ast *idx_ast = ast->data.AST_APPLICATION.args + 1;
   Ast *array_ast = ast->data.AST_APPLICATION.args;
   Ast *val_ast = ast->data.AST_APPLICATION.args + 2;
+  Type *arr_type = builtin_operand_type(array_ast, ctx);
+  Type *el_type = arr_type ? arr_type->data.T_CONS.args[0] : NULL;
   LLVMValueRef array = codegen(array_ast, ctx, module, builder);
   LLVMValueRef idx = codegen(idx_ast, ctx, module, builder);
   LLVMValueRef val = codegen(val_ast, ctx, module, builder);
-  Type *el_type = ret_type->data.T_CONS.args[0];
+
+  if (!el_type) {
+    fprintf(stderr, "Error: no array element type found\n");
+    return NULL;
+  }
 
   return set_array_element(builder, array, idx, val,
                            el_type->kind == T_FN || is_coroutine_type(el_type)
@@ -1092,7 +1106,7 @@ LLVMValueRef LogicalOrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 Type *lookup_var_in_env(TypeEnv *env, Type *tvar) {
   if (tvar->kind == T_VAR) {
     while (tvar->kind == T_VAR) {
-      tvar = env_lookup(env, tvar->data.T_VAR);
+      tvar = env_lookup(env, tvar->data.T_VAR.name);
     }
   }
   return tvar;
@@ -1571,6 +1585,15 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
         _builtin_handler;                                                      \
     ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);                  \
   })
+#define GENERIC_FN_ENV(entry, _builtin_handler)                                 \
+  ({                                                                           \
+    JITSymbol *sym =                                                          \
+        new_symbol(STYPE_GENERIC_FUNCTION, (entry)->type, NULL, NULL);        \
+    sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler =                  \
+        _builtin_handler;                                                      \
+    ht_set_hash(stack, (entry)->name,                                          \
+                hash_string((entry)->name, strlen((entry)->name)), sym);       \
+  })
 
   // JITSymbol *sym = new_symbol(STYPE_TOP_LEVEL_VAR, &t_none,
   //                             codegen_none(LLVMVoidType(), builder), NULL);
@@ -1587,37 +1610,36 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
     ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);                  \
   });
 
-  GENERIC_FN_SYMBOL("+", &arithmetic_scheme, SumHandler);
-  GENERIC_FN_SYMBOL("-", &arithmetic_scheme, MinusHandler);
-  GENERIC_FN_SYMBOL("*", &arithmetic_scheme, MulHandler);
-  GENERIC_FN_SYMBOL("/", &arithmetic_scheme, DivHandler);
-  GENERIC_FN_SYMBOL("%", &arithmetic_scheme, ModHandler);
-  GENERIC_FN_SYMBOL(">", &ord_scheme, GtHandler);
-  GENERIC_FN_SYMBOL(">=", &ord_scheme, GteHandler);
-  GENERIC_FN_SYMBOL("<", &ord_scheme, LtHandler);
-  GENERIC_FN_SYMBOL("<=", &ord_scheme, LteHandler);
-  GENERIC_FN_SYMBOL("==", &ord_scheme, EqAppHandler);
-  GENERIC_FN_SYMBOL("!=", &ord_scheme, NeqHandler);
+  GENERIC_FN_ENV(builtin_envs.arith_add, SumHandler);
+  GENERIC_FN_ENV(builtin_envs.arith_sub, MinusHandler);
+  GENERIC_FN_ENV(builtin_envs.arith_mul, MulHandler);
+  GENERIC_FN_ENV(builtin_envs.arith_div, DivHandler);
+  GENERIC_FN_ENV(builtin_envs.arith_mod, ModHandler);
+  GENERIC_FN_ENV(builtin_envs.gt, GtHandler);
+  GENERIC_FN_ENV(builtin_envs.gte, GteHandler);
+  GENERIC_FN_ENV(builtin_envs.lt, LtHandler);
+  GENERIC_FN_ENV(builtin_envs.lte, LteHandler);
+  GENERIC_FN_ENV(builtin_envs.eq, EqAppHandler);
+  GENERIC_FN_ENV(builtin_envs.neq, NeqHandler);
   GENERIC_FN_SYMBOL("&&", &logical_op_scheme, LogicalAndHandler);
   GENERIC_FN_SYMBOL("||", &logical_op_scheme, LogicalOrHandler);
 
-  GENERIC_FN_SYMBOL("array_at", &array_at_scheme, ArrayAtHandler);
-  GENERIC_FN_SYMBOL("array_size", &array_size_scheme, ArraySizeHandler);
+  GENERIC_FN_ENV(builtin_envs.array_at, ArrayAtHandler);
+  GENERIC_FN_ENV(builtin_envs.array_size, ArraySizeHandler);
   GENERIC_FN_SYMBOL("array_succ", &array_id_scheme, ArraySuccHandler);
-  GENERIC_FN_SYMBOL("array_set", &array_set_scheme, ArraySetHandler);
-  GENERIC_FN_SYMBOL("array_fill_const", &array_fill_const_scheme,
-                    ArrayFillConstHandler);
-  GENERIC_FN_SYMBOL("array_fill", &array_fill_scheme, ArrayFillHandler);
-  GENERIC_FN_SYMBOL("array_range", &array_range_scheme, ArrayRangeHandler);
+  GENERIC_FN_ENV(builtin_envs.array_set, ArraySetHandler);
+  GENERIC_FN_ENV(builtin_envs.array_fill_const, ArrayFillConstHandler);
+  GENERIC_FN_ENV(builtin_envs.array_fill, ArrayFillHandler);
+  GENERIC_FN_ENV(builtin_envs.array_range, ArrayRangeHandler);
   GENERIC_FN_SYMBOL("array_offset", &array_offset_scheme, ArrayOffsetHandler);
 
-  GENERIC_FN_SYMBOL("Some", &opt_scheme, SomeConsHandler);
+  GENERIC_FN_ENV(builtin_envs.some, SomeConsHandler);
 
   GENERIC_FN_SYMBOL("::", &list_prepend_scheme, ListPrependHandler);
-  GENERIC_FN_SYMBOL("list_concat", &list_concat_scheme, ListConcatHandler);
+  GENERIC_FN_ENV(builtin_envs.list_concat, ListConcatHandler);
 
-  GENERIC_FN_SYMBOL("str", &str_fmt_scheme, StringFmtHandler);
-  GENERIC_FN_SYMBOL("print", &t_builtin_print, PrintHandler);
+  GENERIC_FN_ENV(builtin_envs.str, StringFmtHandler);
+  GENERIC_FN_ENV(builtin_envs.print, PrintHandler);
   // GENERIC_FN_SYMBOL("Coroutine", &cor_scheme, CorConsHandler);
 
   GENERIC_FN_SYMBOL("list_empty", NULL, ListEmptyHandler);
@@ -1643,7 +1665,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("cor_loop", &cor_loop_scheme, CorLoopHandler);
   GENERIC_FN_SYMBOL("cor_take", &cor_take_scheme, CorTakeHandler);
   // GENERIC_FN_SYMBOL("loop_cor", &loop_cor_scheme, LoopCorHandler);
-  GENERIC_FN_SYMBOL("cor_map", &cor_map_scheme, CorMapHandler);
+  GENERIC_FN_ENV(builtin_envs.cor_map, CorMapHandler);
   GENERIC_FN_SYMBOL("cor_filter", &cor_filter_scheme, CorFilterHandler);
   GENERIC_FN_SYMBOL("cor_stop", &cor_stop_scheme, CorStopHandler);
   GENERIC_FN_SYMBOL("iter_of_list", &iter_of_list_scheme, CorOfListHandler);

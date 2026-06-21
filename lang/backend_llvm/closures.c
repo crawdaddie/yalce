@@ -601,7 +601,6 @@ LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
 LLVMValueRef codegen_create_closure(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
-
   Type *fn_type;
 
   if (ast->tag == AST_APPLICATION) {

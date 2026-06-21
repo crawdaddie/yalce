@@ -165,8 +165,10 @@ LLVMValueRef emit_lowered_call(Ast *app, LoweredCallable callable,
 
     LLVMValueRef val = codegen(arg_ast, ctx, module, builder);
 
-    Type *from_type = deep_copy_type(arg_ast->type);
-    from_type = resolve_type_in_env(from_type, ctx->env);
+    Type *from_type = specialize_type_for_codegen(arg_ast->type, ctx);
+    if (to_type) {
+      to_type = specialize_type_for_codegen(to_type, ctx);
+    }
     val =
         handle_type_conversions(val, from_type, to_type, ctx, module, builder);
 

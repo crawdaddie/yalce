@@ -15,13 +15,21 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
                                JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder);
 
+static int sum_variant_count(Type *sum_type) {
+  return sum_type->data.T_CONS.num_args;
+}
+
+static Type *sum_variant_at(Type *sum_type, int idx) {
+  return sum_type->data.T_CONS.args[idx];
+}
+
 LLVMValueRef codegen_simple_enum_member(Type *enum_type, const char *mem_name,
                                         JITLangCtx *ctx, LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
 
   int vidx;
-  for (vidx = 0; vidx < enum_type->data.T_CONS.num_args; vidx++) {
-    if (strcmp(mem_name, enum_type->data.T_CONS.args[vidx]->data.T_CONS.name) ==
+  for (vidx = 0; vidx < sum_variant_count(enum_type); vidx++) {
+    if (strcmp(mem_name, sum_variant_at(enum_type, vidx)->data.T_CONS.name) ==
         0) {
       break;
     }
@@ -35,9 +43,9 @@ LLVMValueRef codegen_adt_member(Type *enum_type, const char *mem_name,
                                 LLVMBuilderRef builder) {
 
   if (CHARS_EQ(enum_type->data.T_CONS.name, TYPE_NAME_VARIANT) &&
-      (enum_type->data.T_CONS.num_args == 2) &&
-      (strcmp(enum_type->data.T_CONS.args[0]->data.T_CONS.name, "Some") == 0) &&
-      (strcmp(enum_type->data.T_CONS.args[1]->data.T_CONS.name, "None") == 0)) {
+      (sum_variant_count(enum_type) == 2) &&
+      (strcmp(sum_variant_at(enum_type, 0)->data.T_CONS.name, "Some") == 0) &&
+      (strcmp(sum_variant_at(enum_type, 1)->data.T_CONS.name, "None") == 0)) {
 
     if (strcmp(mem_name, "None") == 0) {
       return codegen_none(builder);
@@ -50,11 +58,9 @@ LLVMValueRef codegen_adt_member(Type *enum_type, const char *mem_name,
   }
 
   int vidx;
-  Type *member_type;
-  for (vidx = 0; vidx < enum_type->data.T_CONS.num_args; vidx++) {
-    if (strcmp(mem_name, enum_type->data.T_CONS.args[vidx]->data.T_CONS.name) ==
+  for (vidx = 0; vidx < sum_variant_count(enum_type); vidx++) {
+    if (strcmp(mem_name, sum_variant_at(enum_type, vidx)->data.T_CONS.name) ==
         0) {
-      member_type = enum_type->data.T_CONS.args[vidx];
       break;
     }
   }
@@ -72,14 +78,12 @@ LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
   }
 
   int i = 0;
-  while (strcmp(mem_name, enum_type->data.T_CONS.args[i]->data.T_CONS.name) !=
-         0) {
+  while (strcmp(mem_name, sum_variant_at(enum_type, i)->data.T_CONS.name) != 0) {
     i++;
   }
 
   LLVMValueRef some = LLVMGetUndef(tu_type);
 
-  int num = 0;
   some = LLVMBuildInsertValue(builder, some, LLVMConstInt(LLVMInt8Type(), i, 0),
                               0, "insert Some tag");
 
@@ -215,7 +219,7 @@ LLVMTypeRef codegen_adt_type(Type *type, JITLangCtx *ctx,
   if (type->alias != NULL && strcmp(type->alias, "Option") == 0) {
     Type *_underlying = type_of_option(type);
     if (is_generic(_underlying)) {
-      _underlying = resolve_type_in_env(_underlying, ctx->env);
+      _underlying = specialize_type_for_codegen(_underlying, ctx);
     }
     LLVMTypeRef underlying;
 
@@ -228,10 +232,10 @@ LLVMTypeRef codegen_adt_type(Type *type, JITLangCtx *ctx,
     return codegen_option_struct_type(underlying);
   }
 
-  int len = type->data.T_CONS.num_args;
+  int len = sum_variant_count(type);
   LLVMTypeRef contained_types[len];
-  for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-    Type *mem = type->data.T_CONS.args[i];
+  for (int i = 0; i < len; i++) {
+    Type *mem = sum_variant_at(type, i);
     contained_types[i] = type_to_llvm_type(mem, ctx, module);
   }
 
@@ -403,7 +407,8 @@ bool type_contains_recursive_ref(Type *type, const char *target_name) {
   case T_VAR:
     return type->is_recursive_type_ref;
 
-  case T_CONS: {
+  case T_CONS:
+  case T_SUM: {
 
     if (type->data.T_CONS.name &&
         strcmp(type->data.T_CONS.name, target_name) == 0) {
@@ -431,10 +436,10 @@ bool type_contains_recursive_ref(Type *type, const char *target_name) {
 Type *find_recursive_type_container(Type *t, const char *name,
                                     Type *container) {
   if (t->kind == T_VAR && t->is_recursive_type_ref &&
-      CHARS_EQ(t->data.T_VAR, name)) {
+      CHARS_EQ(t->data.T_VAR.name, name)) {
     return container;
   }
-  if (t->kind == T_CONS) {
+  if (t->kind == T_CONS || t->kind == T_SUM) {
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
       Type *x;
       if ((x = find_recursive_type_container(t->data.T_CONS.args[i], name,
@@ -462,28 +467,28 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
   LLVMTypeRef variant_struct = LLVMStructCreateNamed(llvm_ctx, name);
   STACK_ALLOC_CTX_PUSH(_ctx, ctx);
 
-  int len = type->data.T_CONS.num_args;
+  int len = sum_variant_count(type);
   LLVMTypeRef member_types[len];
 
   for (int i = 0; i < len; i++) {
-    Type *member_type = type->data.T_CONS.args[i];
+    Type *member_type = sum_variant_at(type, i);
 
     // Type *container;
-    if (type_contains_recursive_ref(member_type, name)) {
-
-      Type *container = find_recursive_type_container(
-          member_type->data.T_CONS.args[0], name, type);
-
-      if (!(is_list_type(container) || is_array_type(container) ||
-            is_coroutine_type(container))) {
-        fprintf(stderr,
-                "Error: type %s cannot hold a recursive reference without a "
-                "List or Array container\n",
-                name);
-
-        return NULL;
-      }
-    }
+    // if (type_contains_recursive_ref(member_type, name)) {
+    //
+    //   Type *container = find_recursive_type_container(
+    //       member_type->data.T_CONS.args[0], name, type);
+    //
+    //   if (!(is_list_type(container) || is_array_type(container) ||
+    //         is_coroutine_type(container))) {
+    //     fprintf(stderr,
+    //             "Error: type %s cannot hold a recursive reference without a "
+    //             "List or Array container\n",
+    //             name);
+    //
+    //     return NULL;
+    //   }
+    // }
     member_types[i] = type_to_llvm_type(member_type, ctx, module);
   }
 
@@ -551,7 +556,8 @@ LLVMValueRef cast_union(LLVMValueRef un, Type *desired_type, JITLangCtx *ctx,
   }
 
   case T_STRING:
-  case T_CONS: {
+  case T_CONS:
+  case T_SUM: {
     // Extract from byte array union storage
     // Store byte array to memory, then load as target type
     LLVMValueRef union_alloca =
@@ -602,7 +608,7 @@ LLVMValueRef sum_type_eq(Type *type, LLVMValueRef val1, LLVMValueRef val2,
 
   LLVMPositionBuilderAtEnd(builder, switch_block);
 
-  int num_variants = type->data.T_CONS.num_args;
+  int num_variants = sum_variant_count(type);
   LLVMBasicBlockRef default_block = tag_mismatch_block; // Should never happen
   LLVMValueRef switch_inst =
       LLVMBuildSwitch(builder, tag1, default_block, num_variants);
@@ -623,7 +629,7 @@ LLVMValueRef sum_type_eq(Type *type, LLVMValueRef val1, LLVMValueRef val2,
     LLVMAddCase(switch_inst, LLVMConstInt(TAG_TYPE, vidx, 0), variant_block);
 
     LLVMPositionBuilderAtEnd(builder, variant_block);
-    Type *variant_type = type->data.T_CONS.args[vidx];
+    Type *variant_type = sum_variant_at(type, vidx);
     Type *payload_type = NULL;
 
     if (variant_type->data.T_CONS.num_args > 0) {

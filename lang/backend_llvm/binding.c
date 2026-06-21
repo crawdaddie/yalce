@@ -13,6 +13,51 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
+static void refresh_bound_symbol(JITSymbol *sym, symbol_type type_tag, Type *type,
+                                 LLVMValueRef val, LLVMTypeRef llvm_type,
+                                 LLVMBuilderRef builder) {
+  sym->type = type_tag;
+  sym->symbol_type = type;
+  sym->val = val;
+  sym->llvm_type = llvm_type;
+  if (sym->storage) {
+    LLVMBuildStore(builder, val, sym->storage);
+  }
+}
+
+static JITSymbol *upsert_identifier_symbol(const char *chars, uint64_t id_hash,
+                                           symbol_type top_level_tag,
+                                           symbol_type local_tag, Type *type,
+                                           LLVMValueRef val,
+                                           LLVMTypeRef llvm_type,
+                                           JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
+  JITSymbol *ex_sym = ht_get_hash(ctx->frame->table, chars, id_hash);
+
+  if (ctx->stack_ptr == 0) {
+    if (ex_sym != NULL) {
+      refresh_bound_symbol(ex_sym, top_level_tag, type, val, llvm_type, builder);
+      ht_set_hash(ctx->frame->table, chars, id_hash, ex_sym);
+      return ex_sym;
+    }
+
+    JITSymbol *sym = new_symbol(top_level_tag, type, val, llvm_type);
+    codegen_set_global(chars, sym, val, type, llvm_type, ctx, module, builder);
+    ht_set_hash(ctx->frame->table, chars, id_hash, sym);
+    return sym;
+  }
+
+  if (ex_sym != NULL && ex_sym->storage) {
+    refresh_bound_symbol(ex_sym, ex_sym->type, type, val, llvm_type, builder);
+    return ex_sym;
+  }
+
+  JITSymbol *sym = new_symbol(local_tag, type, val, llvm_type);
+  ht_set_hash(ctx->frame->table, chars, id_hash, sym);
+  return sym;
+}
+
 void set_var_bindings(BindList *bl, JITLangCtx *ctx, LLVMModuleRef module,
                       LLVMBuilderRef builder) {
 
@@ -29,42 +74,8 @@ void set_var_bindings(BindList *bl, JITLangCtx *ctx, LLVMModuleRef module,
     LLVMTypeRef llvm_type = bl->val_type;
     LLVMValueRef val = bl->val;
     Type *type = bl->type;
-    if (ctx->stack_ptr == 0) {
-
-      JITSymbol *ex_sym = ht_get_hash(ctx->frame->table, chars, id_hash);
-
-      JITSymbol *sym;
-
-      if (ex_sym != NULL) {
-        // printf("restore existing symbol\n");
-        // print_ast(binding);
-        ex_sym->val = val;
-        ex_sym->llvm_type = llvm_type;
-        ex_sym->symbol_type = type;
-        if (ex_sym->storage) {
-          LLVMBuildStore(builder, val, ex_sym->storage);
-        }
-        sym = ex_sym;
-      } else {
-        sym = new_symbol(STYPE_TOP_LEVEL_VAR, type, val, llvm_type);
-        codegen_set_global(chars, sym, val, type, llvm_type, ctx, module,
-                           builder);
-      }
-
-      ht_set_hash(ctx->frame->table, chars, id_hash, sym);
-      continue;
-    }
-
-    JITSymbol *ex_sym = ht_get_hash(ctx->frame->table, chars, id_hash);
-
-    if (ex_sym != NULL && ex_sym->storage) {
-      LLVMBuildStore(builder, bl->val, ex_sym->storage);
-    } else {
-      // Local binding
-      JITSymbol *sym =
-          new_symbol(STYPE_LOCAL_VAR, b->type, b->val, b->val_type);
-      ht_set_hash(ctx->frame->table, chars, id_hash, sym);
-    }
+    upsert_identifier_symbol(chars, id_hash, STYPE_TOP_LEVEL_VAR, STYPE_LOCAL_VAR,
+                             type, val, llvm_type, ctx, module, builder);
   }
 }
 
@@ -108,42 +119,8 @@ LLVMValueRef bind_value(Ast *id, LLVMValueRef val, Type *val_type,
         (LLVMTypeRef[]){llvm_type, GENERIC_PTR, GENERIC_PTR}, 3, 0);
   }
 
-  Type *type = val_type;
-  if (ctx->stack_ptr == 0) {
-
-    JITSymbol *ex_sym = ht_get_hash(ctx->frame->table, chars, id_hash);
-
-    JITSymbol *sym;
-
-    if (ex_sym != NULL) {
-      // printf("restore existing symbol\n");
-      // print_ast(binding);
-      ex_sym->val = val;
-      ex_sym->llvm_type = llvm_type;
-      ex_sym->symbol_type = type;
-      if (ex_sym->storage) {
-        LLVMBuildStore(builder, val, ex_sym->storage);
-      }
-      sym = ex_sym;
-    } else {
-      sym = new_symbol(STYPE_TOP_LEVEL_VAR, type, val, llvm_type);
-      codegen_set_global(chars, sym, val, type, llvm_type, ctx, module,
-                         builder);
-    }
-
-    ht_set_hash(ctx->frame->table, chars, id_hash, sym);
-    return val;
-  }
-
-  JITSymbol *ex_sym = ht_get_hash(ctx->frame->table, chars, id_hash);
-
-  if (ex_sym != NULL && ex_sym->storage) {
-    LLVMBuildStore(builder, val, ex_sym->storage);
-  } else {
-    // Local binding
-    JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, val_type, val, llvm_type);
-    ht_set_hash(ctx->frame->table, chars, id_hash, sym);
-  }
+  upsert_identifier_symbol(chars, id_hash, STYPE_TOP_LEVEL_VAR, STYPE_LOCAL_VAR,
+                           val_type, val, llvm_type, ctx, module, builder);
   return val;
 }
 

@@ -3,6 +3,7 @@ let of_list = fn l ->
   let h = t in
   (h, t)
 ;;
+
 let append = fn n (h, t) ->
   match h with
   | [] -> of_list [n,]

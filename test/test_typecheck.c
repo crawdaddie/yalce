@@ -855,8 +855,16 @@ int test_list_processing() {
                ";\n",
                &t_bool);
 
-    // Ast *pop_left = AST_LIST_NTH(b->data.AST_BODY.stmts, 3);
-    // print_type(pop_left->type);
+    TypeEnv *q_entry = lookup_test_env_binding("q");
+    Type queue_int_type = TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int));
+
+    status &= TASSERT("piped append queue binding exists",
+                      b && q_entry && q_entry->type != NULL);
+    status &= TASSERT("piped append queue binding is monomorphic",
+                      q_entry && typelist_len(q_entry->scheme_vars) == 0);
+    status &= TASSERT("piped append queue binding specializes to "
+                      "(List<Int>, List<Int>)",
+                      q_entry && types_equal(q_entry->type, &queue_int_type));
   });
   ({
     Ast *ast = _T("let list_rev = fn l ->\n"
@@ -915,7 +923,60 @@ int test_list_processing() {
     status &= TASSERT("list_map equality preserves Arithmetic predicate",
                       ctx_has_trait_predicate(TYPE_NAME_TYPECLASS_ARITHMETIC));
   });
+  ({
+    Ast *ast = _T("let list_rev = fn l ->\n"
+                  "  let aux = fn ll res ->\n"
+                  "    match ll with\n"
+                  "    | [] -> res\n"
+                  "    | x :: rest -> aux rest (x :: res)\n"
+                  "  ;;\n"
+                  "  aux l []\n"
+                  ";;\n"
+                  "let list_map = fn f l ->\n"
+                  "  let aux = fn f l res -> \n"
+                  "    match l with\n"
+                  "    | [] -> res\n"
+                  "    | x :: rest -> aux f rest (f x :: res) \n"
+                  "  ;;\n"
+                  "  aux f l [] |> list_rev\n"
+                  ";;\n"
+                  "list_map (fn x -> Double x) [0,1,2,3] == [0.,1.,2.,3.]\n");
+    status &= TASSERT("list_map can map Int to Double",
+                      ast && ast->type && types_equal(ast->type, &t_bool));
+  });
+  ({
+    Ast *ast = _T("let list_rev = fn l ->\n"
+                  "  let aux = fn ll res ->\n"
+                  "    match ll with\n"
+                  "    | [] -> res\n"
+                  "    | x :: rest -> aux rest (x :: res)\n"
+                  "  ;;\n"
+                  "  aux l []\n"
+                  ";;\n"
+                  "let list_map = fn f l ->\n"
+                  "  let aux = fn f l res -> \n"
+                  "    match l with\n"
+                  "    | [] -> res\n"
+                  "    | x :: rest -> aux f rest (f x :: res) \n"
+                  "  ;;\n"
+                  "  aux f l [] |> list_rev\n"
+                  ";;\n"
+                  "list_map Double [0,1,2,3] == [0.,1.,2.,3.]\n");
+    status &= TASSERT("list_map accepts Double constructor directly",
+                      ast && ast->type && types_equal(ast->type, &t_bool));
+  });
 
+  ({
+    Type r = TVAR("'4");
+    Type a = TVAR("'5");
+    Type l = TLIST(&a);
+    T("let fold = fn f res a ->\n"
+      "match a with\n"
+      "| [] -> res\n"
+      "| x::rest -> fold f (f res x) rest\n"
+      ";;\n",
+      &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&r, &a, &r), &r, &l, &r));
+  });
   return status;
 }
 int test_aux() {
@@ -1369,6 +1430,35 @@ int test_funcs() {
     TASSERT(
         "instance of sum function in app is Int -> Int -> Int",
         types_equal(sum_inst->type, &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int)));
+  });
+  ({
+    Ast *b = T("let sum = fn a b -> a + b;;\n"
+               "let proc = fn f a b -> f a b;;\n"
+               "let t1 = proc sum 1 2 == 3;\n"
+               "let t2 = proc sum 1.0 2.0 == 3.0;\n"
+               "let t3 = proc (+) 1 2 == 3;\n"
+               "let t4 = proc (+) 1.0 2.0 == 3.0;\n"
+               "t4;\n",
+               &t_bool);
+
+    status &= TASSERT("first-class sum/proc mixed numeric specializations typecheck",
+                      b && b->type && types_equal(b->type, &t_bool));
+    TypeEnv *t1_entry = lookup_test_env_binding("t1");
+    TypeEnv *t2_entry = lookup_test_env_binding("t2");
+    TypeEnv *t3_entry = lookup_test_env_binding("t3");
+    TypeEnv *t4_entry = lookup_test_env_binding("t4");
+    status &= TASSERT("t1 binding exists and is Bool",
+                      t1_entry && t1_entry->type &&
+                          types_equal(t1_entry->type, &t_bool));
+    status &= TASSERT("t2 binding exists and is Bool",
+                      t2_entry && t2_entry->type &&
+                          types_equal(t2_entry->type, &t_bool));
+    status &= TASSERT("t3 binding exists and is Bool",
+                      t3_entry && t3_entry->type &&
+                          types_equal(t3_entry->type, &t_bool));
+    status &= TASSERT("t4 binding exists and is Bool",
+                      t4_entry && t4_entry->type &&
+                          types_equal(t4_entry->type, &t_bool));
   });
 
   T("let bind = extern fn Int -> Int -> Int -> Int;\n"

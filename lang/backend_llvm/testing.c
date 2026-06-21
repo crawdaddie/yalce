@@ -2,9 +2,11 @@
 #include "../types/builtins.h"
 #include "codegen.h"
 #include "config.h"
+#include "function.h"
 #include "jit.h"
 #include "serde.h"
 #include "symbols.h"
+#include "types.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/ExecutionEngine.h"
 #include <stdlib.h>
@@ -149,6 +151,23 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
 
         JITSymbol *sym = find_in_ctx(key, strlen(key),
                                      test_module->symbol_data.STYPE_MODULE.ctx);
+        LLVMValueRef test_fn = NULL;
+
+        if (sym && sym->type == STYPE_GENERIC_FUNCTION) {
+          Type *expected_type =
+              specialize_type_for_codegen(stmt->data.AST_LET.expr->type, ctx);
+          test_fn = get_specific_callable(
+              sym, expected_type, test_module->symbol_data.STYPE_MODULE.ctx,
+              module, builder);
+        } else if (sym) {
+          test_fn = sym->val;
+        }
+
+        if (!test_fn) {
+          fprintf(stderr, "Error: test function %s was not compiled\n", key);
+          LLVMDeleteFunction(func);
+          return NULL;
+        }
 
         // Increment num_tests
         num_tests =
@@ -157,7 +176,7 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
 
         // Call the test function
         LLVMValueRef test_call = LLVMBuildCall2(builder, test_func_type,
-                                                sym->val, NULL, 0, "test_call");
+                                                test_fn, NULL, 0, "test_call");
 
         // Increment num_passes if test passed
         LLVMValueRef should_increment = LLVMBuildZExt(

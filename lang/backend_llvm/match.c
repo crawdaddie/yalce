@@ -35,50 +35,76 @@ Ast *get_branch_tail(Ast *b) {
   return b;
 }
 
-int get_constructor_index(Ast *pattern) {
+static Ast *get_sum_constructor_head(Ast *pattern) {
+  if (!pattern) {
+    return NULL;
+  }
 
   if (pattern->tag == AST_MATCH_GUARD_CLAUSE) {
     pattern = pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr;
   }
 
-  if (pattern->tag == AST_IDENTIFIER) {
-
-    int idx;
-    extract_member_from_sum_type_idx(pattern->type, pattern, &idx);
-    return idx;
-  }
-
-  if (pattern->tag == AST_APPLICATION &&
-      pattern->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
-    int idx;
-    extract_member_from_sum_type_idx(
-        pattern->type, pattern->data.AST_APPLICATION.function, &idx);
-    return idx;
-  }
-
-  if (pattern->tag == AST_APPLICATION &&
-      pattern->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
-
-    Ast *id = pattern->data.AST_APPLICATION.function;
-    while (id->tag == AST_RECORD_ACCESS) {
-      id = id->data.AST_RECORD_ACCESS.member;
+  while (pattern && pattern->tag == AST_APPLICATION) {
+    Ast *fn = pattern->data.AST_APPLICATION.function;
+    if (!fn) {
+      return NULL;
     }
-    Ast p = *id;
-    p.type = pattern->type;
-    return get_constructor_index(&p);
+
+    if (fn->tag == AST_IDENTIFIER) {
+      return fn;
+    }
+
+    if (fn->tag == AST_RECORD_ACCESS) {
+      Ast *id = fn;
+      while (id->tag == AST_RECORD_ACCESS) {
+        id = id->data.AST_RECORD_ACCESS.member;
+      }
+      return id;
+    }
+
+    pattern = fn;
+  }
+
+  if (pattern->tag == AST_IDENTIFIER) {
+    return pattern;
   }
 
   if (pattern->tag == AST_RECORD_ACCESS) {
-
     Ast *id = pattern;
     while (id->tag == AST_RECORD_ACCESS) {
       id = id->data.AST_RECORD_ACCESS.member;
     }
-    Ast p = *id;
-    p.type = pattern->type;
-    return get_constructor_index(&p);
+    return id;
   }
-  return -1;
+
+  return NULL;
+}
+
+static Type *resolve_sum_constructor(Type *sum_type, Ast *pattern, int *idx) {
+  if (idx) {
+    *idx = -1;
+  }
+
+  if (!sum_type || sum_type->kind != T_SUM) {
+    return NULL;
+  }
+
+  Ast *head = get_sum_constructor_head(pattern);
+  if (!head) {
+    return NULL;
+  }
+
+  return extract_member_from_sum_type_idx(sum_type, head, idx);
+}
+
+static int get_constructor_index(Type *sum_type, Ast *pattern) {
+  if (!pattern) {
+    return -1;
+  }
+
+  int idx = -1;
+  resolve_sum_constructor(sum_type, pattern, &idx);
+  return idx;
 }
 
 // if we have an expression like this
@@ -99,8 +125,8 @@ int get_constructor_index(Ast *pattern) {
 // patterns_and_bodies: array of 2*n nodes where patterns are at 2i,
 // bodies at 2i+1 n: number of branches result: fixed-size array of 2*n nodes to
 // hold rearranged pairs
-void stable_partition_match_over_sum_type(Ast *patterns_and_bodies, size_t n,
-                                          Ast *result) {
+void stable_partition_match_over_sum_type(Type *sum_type, Ast *patterns_and_bodies,
+                                          size_t n, Ast *result) {
   if (n == 0)
     return;
 
@@ -135,7 +161,7 @@ void stable_partition_match_over_sum_type(Ast *patterns_and_bodies, size_t n,
       continue;
     }
 
-    int tag = get_constructor_index(&pattern);
+    int tag = get_constructor_index(sum_type, &pattern);
 
     if (tag < 0) {
       fprintf(stderr, "Error: match constructor rearranging failed %d\n", tag);
@@ -194,7 +220,7 @@ void stable_partition_match_over_sum_type(Ast *patterns_and_bodies, size_t n,
       continue;
     }
 
-    int tag = get_constructor_index(pattern);
+    int tag = get_constructor_index(sum_type, pattern);
 
     // Find constructor info and write both pattern and body
     for (size_t j = 0; j < num_constructors; j++) {
@@ -229,7 +255,7 @@ LLVMValueRef test_list_cons_pattern(Ast *pattern, LLVMValueRef val,
                                     LLVMBuilderRef builder) {
 
   if (is_generic(val_type)) {
-    val_type = resolve_type_in_env(deep_copy_type(val_type), ctx->env);
+    val_type = specialize_type_for_codegen(val_type, ctx);
   }
 
   Type *list_el_type = val_type->data.T_CONS.args[0];
@@ -401,13 +427,13 @@ LLVMValueRef test_pattern(Ast *pattern,
 // given a partitioned list of Ast nodes for patterns that match a sum type
 // if the current pattern fails the tag comparison, skip the same few tags in
 // the current group and move on to the next tag match
-int next_tag_group_idx(int pidx, int num_branches, Ast *cur_pattern,
-                       Ast *sorted_patterns) {
-  int cur_cons_idx = get_constructor_index(cur_pattern);
+int next_tag_group_idx(Type *sum_type, int pidx, int num_branches,
+                       Ast *cur_pattern, Ast *sorted_patterns) {
+  int cur_cons_idx = get_constructor_index(sum_type, cur_pattern);
 
   for (int i = pidx + 1; i < num_branches; i++) {
     Ast *next = sorted_patterns + 2 * i;
-    int ncons_idx = get_constructor_index(next);
+    int ncons_idx = get_constructor_index(sum_type, next);
     if (ncons_idx != cur_cons_idx) {
       return i;
     }
@@ -455,20 +481,16 @@ void test_sum_type_pattern(int pidx, int num_branches,
     tag = val;
   }
 
-  int ptag_idx;
-  Type *subtype;
-  if (p->tag == AST_IDENTIFIER) {
-    subtype = extract_member_from_sum_type_idx(val_type, p, &ptag_idx);
-  } else if (p->tag == AST_APPLICATION) {
-    Ast *id = p->data.AST_APPLICATION.function;
+  if (!val_type || val_type->kind != T_SUM) {
+    fprintf(stderr, "Error: sum-type match lowering requires T_SUM scrutinee\n");
+    return;
+  }
 
-    subtype = extract_member_from_sum_type_idx(
-        val_type, p->data.AST_APPLICATION.function, &ptag_idx);
-    // print_ast(pattern);
-    // print_type(subtype);
-
-  } else {
-    fprintf(stderr, "Error could not handle tag match\n");
+  int ptag_idx = -1;
+  Type *subtype = resolve_sum_constructor(val_type, p, &ptag_idx);
+  if (!subtype || ptag_idx < 0) {
+    fprintf(stderr, "Error: could not resolve sum constructor for match pattern\n");
+    print_ast_err(pattern);
     return;
   }
 
@@ -482,7 +504,8 @@ void test_sum_type_pattern(int pidx, int num_branches,
 
   if (p->tag == AST_IDENTIFIER) {
     tag_fail =
-        tag_blocks[next_tag_group_idx(pidx, num_branches, p, sorted_patterns)];
+        tag_blocks[next_tag_group_idx(val_type, pidx, num_branches, p,
+                                      sorted_patterns)];
     tag_succ = body_blocks[pidx];
 
   } else if (p->tag == AST_APPLICATION) {
@@ -494,7 +517,7 @@ void test_sum_type_pattern(int pidx, int num_branches,
           LLVMAppendBasicBlock(parent_func, "match.exhausted");
       tag_fail = unreachable_block;
     } else {
-      tag_fail = tag_blocks[next_tag_group_idx(pidx, num_branches, p,
+      tag_fail = tag_blocks[next_tag_group_idx(val_type, pidx, num_branches, p,
                                                sorted_patterns)];
     }
 
@@ -592,10 +615,10 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Ast *branches = ast->data.AST_MATCH.branches;
   Ast sorted_branches_storage[num_branches * 2];
 
-  int is_match_over_sum = is_sum_type(branches->type);
+  int is_match_over_sum = is_sum_type(val_type);
 
   if (num_branches > 0 && is_match_over_sum) {
-    stable_partition_match_over_sum_type(branches, num_branches,
+    stable_partition_match_over_sum_type(val_type, branches, num_branches,
                                          sorted_branches_storage);
     branches = sorted_branches_storage;
   }

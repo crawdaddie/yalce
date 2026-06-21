@@ -53,6 +53,8 @@ SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
 TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
                                    Type *specific_type);
 
+Subst *create_subst_for_generic_fn(Type *generic_type, Type *specific_type);
+
 TypeEnv *create_env_from_subst(TypeEnv *env, Subst *subst);
 
 void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,

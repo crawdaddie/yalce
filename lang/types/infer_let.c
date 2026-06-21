@@ -1,4 +1,13 @@
 #include "./infer_let.h"
+#include "type_ser.h"
+#include <string.h>
+static int typelist_len(TypeList *list) {
+  int n = 0;
+  for (; list; list = list->next) {
+    n++;
+  }
+  return n;
+}
 
 static Predicate *predicate_filter_generic(Predicate *preds) {
   Predicate *result = NULL;
@@ -62,7 +71,7 @@ int checkpoint_generalizable_slice(TypeEnv *slice_head, TypeEnv *boundary,
   Predicate *remaining_preds = NULL;
   if (ctx->predicates) {
     Predicate *resolved = predicate_apply_subst(step_subst, ctx->predicates);
-    if (resolve_predicates(&step_subst, resolved, ctx->err_stream) != 0) {
+    if (resolve_predicates(&step_subst, resolved) != 0) {
       return 1;
     }
     remaining_preds = predicate_filter_generic(resolved);
@@ -70,6 +79,7 @@ int checkpoint_generalizable_slice(TypeEnv *slice_head, TypeEnv *boundary,
 
   ctx->subst = compose_subst(step_subst, ctx->subst);
   apply_subst_env(ctx->subst, ctx->env);
+
   for (TypeEnv *e = slice_head; e != boundary; e = e->next) {
     if (e->can_generalize) {
       e->predicates = predicate_duplicate(remaining_preds);

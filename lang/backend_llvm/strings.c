@@ -530,7 +530,7 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
     return _codegen_string("", 0, ctx, module, builder);
   }
 
-  val_type = resolve_type_in_env(val_type, ctx->env);
+  val_type = specialize_type_for_codegen(val_type, ctx);
 
   if (val_type->kind == T_STRING) {
     return val;

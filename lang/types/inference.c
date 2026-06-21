@@ -41,6 +41,8 @@ static void open_module_env_into_scope(TypeEnv *mod_env, TICtx *ctx);
 static void import_module_binops_into_ctx(custom_binops_t *binops, TICtx *ctx);
 static Type *create_module_type_from_env(TypeEnv *mod_env, int mod_size);
 
+static FILE *err_stream;
+
 static bool is_recursive_self_reference(Ast *ast, TICtx *ctx) {
   if (!ast || !ctx || !ctx->current_fn_ast) {
     return false;
@@ -254,7 +256,7 @@ Type *infer_inline_module(Ast *ast, TICtx *ctx) {
   Subst *step_subst = sol.subst;
   if (ctx->predicates) {
     Predicate *resolved = predicate_apply_subst(step_subst, ctx->predicates);
-    if (resolve_predicates(&step_subst, resolved, ctx->err_stream) != 0) {
+    if (resolve_predicates(&step_subst, resolved) != 0) {
       ctx->env = saved_env;
       return NULL;
     }
@@ -358,6 +360,7 @@ Type *apply_solution(Type *raw, Solution *solved) {
 // 4. Apply substitution to the result type
 // 5. Finalize AST annotations
 Type *infer(Ast *ast, TICtx *ctx) {
+  err_stream = stderr;
   Type *raw = infer_expr(ast, ctx);
   if (!raw) {
     return type_error(ast, "failed to infer type");
@@ -380,7 +383,7 @@ Type *infer(Ast *ast, TICtx *ctx) {
   Subst *step_subst = sol.subst;
   if (ctx->predicates) {
     Predicate *resolved = predicate_apply_subst(step_subst, ctx->predicates);
-    if (resolve_predicates(&step_subst, resolved, ctx->err_stream) != 0) {
+    if (resolve_predicates(&step_subst, resolved) != 0) {
       return type_error(ast, "failed to resolve predicates");
     }
     ctx->predicates = resolved;
@@ -1214,7 +1217,7 @@ void print_predicates(Predicate *predicates) {
   }
 }
 
-int resolve_predicates(Subst **subst_ptr, Predicate *preds, FILE *err_stream) {
+int resolve_predicates(Subst **subst_ptr, Predicate *preds) {
   Subst *subst = subst_ptr ? *subst_ptr : NULL;
   bool changed = true;
   while (changed) {
@@ -1239,7 +1242,8 @@ int resolve_predicates(Subst **subst_ptr, Predicate *preds, FILE *err_stream) {
         }
 
         // Check the trait
-        if (!get_typeclass_instance(t, p->trait->name, params)) {
+        if ((strcmp(p->trait->name, "Eq") != 0) &&
+            !get_typeclass_instance(t, p->trait->name, params)) {
           if (err_stream) {
             fprintf(err_stream, "Type Error: ");
             print_type_to_stream(t, err_stream);
@@ -1802,11 +1806,81 @@ int bind_type_in_ctx(Ast *binding, Type *type, binding_md binding_type,
   return 0;
 }
 
-bool is_list_cons_operator(Ast *ast) { return false; }
+bool is_list_cons_operator(Ast *ast) {
+  if (!ast || ast->tag != AST_APPLICATION) {
+    return false;
+  }
 
-void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {}
+  Ast *fn = ast->data.AST_APPLICATION.function;
+  while (fn && fn->tag == AST_APPLICATION) {
+    fn = fn->data.AST_APPLICATION.function;
+  }
 
-Type *resolve_type_in_env(Type *r, TypeEnv *env) { return r; }
+  return fn && fn->tag == AST_IDENTIFIER &&
+         CHARS_EQ(fn->data.AST_IDENTIFIER.value, TYPE_NAME_OP_LIST_PREPEND);
+}
+
+void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
+  finalize_ast_types(ast, subst);
+}
+
+Type *resolve_type_in_env(Type *r, TypeEnv *env) {
+  if (!r) {
+    return NULL;
+  }
+
+  if (r->closure_meta) {
+    r->closure_meta = resolve_type_in_env(r->closure_meta, env);
+  }
+
+  switch (r->kind) {
+  case T_VAR: {
+    Type *saved_closure_meta = r->closure_meta;
+
+    if (r->is_recursive_type_ref) {
+      return r;
+    }
+
+    Type *resolved = env_lookup(env, r->data.T_VAR.name);
+    if (!resolved) {
+      return r;
+    }
+
+    if (resolved->kind == T_VAR && types_equal(resolved, r)) {
+      return r;
+    }
+
+    Type *copy = deep_copy_type(resolved);
+    copy = resolve_type_in_env(copy, env);
+    if (saved_closure_meta && !copy->closure_meta) {
+      copy->closure_meta = deep_copy_type(saved_closure_meta);
+    }
+    return copy;
+  }
+
+  case T_TYPECLASS_RESOLVE: {
+    return resolve_tc_rank_in_env(r, env);
+  }
+
+  case T_CONS:
+  case T_SUM: {
+    for (int i = 0; i < r->data.T_CONS.num_args; i++) {
+      r->data.T_CONS.args[i] = resolve_type_in_env(r->data.T_CONS.args[i], env);
+    }
+    return r;
+  }
+
+  case T_FN: {
+    r->data.T_FN.from = resolve_type_in_env(r->data.T_FN.from, env);
+    r->data.T_FN.to = resolve_type_in_env(r->data.T_FN.to, env);
+    return r;
+  }
+
+  default: {
+    return r;
+  }
+  }
+}
 
 Type *find_in_subst(Subst *subst, int var_id) {
   return lookup_subst(subst, var_id);

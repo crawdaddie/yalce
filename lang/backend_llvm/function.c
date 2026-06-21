@@ -18,6 +18,14 @@ LLVMTypeRef cor_inst_struct_type();
 
 LLVMTypeRef codegen_fn_type(LLVMTypeRef opt_ret_type, Type *fn_type, int fn_len,
                             JITLangCtx *ctx, LLVMModuleRef module) {
+  if (!fn_type || fn_type->kind != T_FN) {
+    fprintf(stderr, "Error: codegen_fn_type expected function type\n");
+    if (fn_type) {
+      print_type_err(fn_type);
+    }
+    print_codegen_location();
+    return NULL;
+  }
 
   LLVMTypeRef llvm_param_types[fn_len];
   LLVMTypeRef llvm_fn_type;
@@ -180,7 +188,7 @@ void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
   }
 
   if (param_type->kind == T_VAR) {
-    param_type = resolve_type_in_env(param_type, ctx->env);
+    param_type = specialize_type_for_codegen(param_type, ctx);
   }
 
   if (param_type->kind == T_FN && is_closure(param_type)) {
@@ -220,7 +228,7 @@ void bind_fn_param_with_storage(LLVMValueRef param_val, LLVMValueRef storage,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
 
   if (param_type->kind == T_VAR) {
-    param_type = resolve_type_in_env(param_type, ctx->env);
+    param_type = specialize_type_for_codegen(param_type, ctx);
   }
 
   if (param_type->kind == T_FN && is_closure(param_type)) {
@@ -392,25 +400,15 @@ TypeEnv *create_env_from_subst(TypeEnv *env, Subst *subst) {
 
 TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
                                    Type *specific_type) {
-
-  Subst *subst = NULL;
-
-  Constraint *constraints = NULL;
-
-  TICtx unify_ctx = {};
-  while (generic_type->kind == T_FN) {
-    Type *gen = generic_type->data.T_FN.from;
-    Type *spec = specific_type->data.T_FN.from;
-    unify(gen, spec, &unify_ctx);
-    specific_type = specific_type->data.T_FN.to;
-    generic_type = generic_type->data.T_FN.to;
-  }
-
-  subst = solve_constraints(unify_ctx.constraints);
-
+  Subst *subst = create_subst_for_generic_fn(generic_type, specific_type);
   env = create_env_from_subst(env, subst);
-
   return env;
+}
+
+Subst *create_subst_for_generic_fn(Type *generic_type, Type *specific_type) {
+  TICtx unify_ctx = {};
+  unify(generic_type, specific_type, &unify_ctx);
+  return solve_constraints(unify_ctx.constraints);
 }
 
 LLVMValueRef create_builtin_func_wrapper(Type *specific_type, JITSymbol *sym,
@@ -474,9 +472,10 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
   compilation_ctx.frame = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame;
 
   TypeEnv *env = sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env;
+  compilation_ctx.type_subst =
+      create_subst_for_generic_fn(generic_type, specific_type);
 
-  compilation_ctx.env =
-      create_env_for_generic_fn(env, generic_type, specific_type);
+  compilation_ctx.env = create_env_from_subst(env, compilation_ctx.type_subst);
 
   // printf("compile specific fn\n");
   // print_type(specific_type);
@@ -486,7 +485,7 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
   while (specific_type->kind == T_FN) {
     Type *f = specific_type->data.T_FN.from;
     if (is_generic(f)) {
-      Type *r = resolve_type_in_env(f, ctx->env);
+      Type *r = specialize_type_for_codegen(f, ctx);
       if (r) {
         compilation_ctx.env = codegen_bind_in_env(compilation_ctx.env, f, r);
       }

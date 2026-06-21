@@ -1,3 +1,4 @@
+#include "../types/builtins.h"
 #include "../ht.h"
 #include "../types/inference.h"
 #include "../types/type.h"
@@ -74,6 +75,8 @@ Type typeof_scheme = {0};
 Type cor_zip_scheme = {0};
 Type is_null_type = {0};
 
+BuiltinEnvRefs builtin_envs = {0};
+
 // Builtin hash table now stores TypeEnv* entries directly.
 // This eliminates the need for T_SCHEME wrappers.
 static ht builtin_env_ht;
@@ -90,6 +93,31 @@ TypeEnv *lookup_builtin_env(const char *name) {
 
 // Backward-compatible: callers that need a Type* get it from the env's type
 Type *lookup_builtin_type(const char *name) {
+  if (strcmp(name, TYPE_NAME_INT) == 0) {
+    return &t_int;
+  }
+  if (strcmp(name, TYPE_NAME_UINT64) == 0) {
+    return &t_uint64;
+  }
+  if (strcmp(name, TYPE_NAME_DOUBLE) == 0) {
+    return &t_num;
+  }
+  if (strcmp(name, TYPE_NAME_CHAR) == 0) {
+    return &t_char;
+  }
+  if (strcmp(name, TYPE_NAME_STRING) == 0) {
+    return &t_string;
+  }
+  if (strcmp(name, TYPE_NAME_BOOL) == 0) {
+    return &t_bool;
+  }
+  if (strcmp(name, TYPE_NAME_VOID) == 0) {
+    return &t_void;
+  }
+  if (strcmp(name, TYPE_NAME_PTR) == 0) {
+    return &t_ptr;
+  }
+
   TypeEnv *entry = lookup_builtin_env(name);
   return entry ? entry->type : NULL;
 }
@@ -281,6 +309,26 @@ static TypeEnv *make_monomorphic_env(const char *name, Type *type) {
   return entry;
 }
 
+static TypeEnv *make_from_constructor_env(const char *name, Type *target_type) {
+  Type *a = tvar("a");
+  Type *fn_type = type_fn(a, target_type);
+  TypeList *scheme_vars = vlist_of_typevar(a);
+  TypeList *from_params = t_alloc(sizeof(TypeList));
+  from_params->type = a;
+  from_params->next = NULL;
+
+  Predicate *preds =
+      predicate_append_applied(NULL, GenericFrom, target_type, from_params);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = name,
+                     .type = fn_type,
+                     .scheme_vars = scheme_vars,
+                     .predicates = preds,
+                     .next = NULL};
+  return entry;
+}
+
 static TypeEnv *make_id_env(void) {
   // id : a -> a
   Type *a = tvar("a");
@@ -459,12 +507,30 @@ static TypeEnv *make_array_fill_env(void) {
   return entry;
 }
 
+static TypeEnv *make_list_concat_env(void) {
+  // list_concat : List a -> List a -> List a
+  Type *a = tvar("a");
+  Type *list_a = create_list_type_of_type(a);
+  Type *fn_type = type_fn(list_a, type_fn(list_a, list_a));
+
+  TypeList *tl_a = vlist_of_typevar(a);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "list_concat",
+                     .type = fn_type,
+                     .scheme_vars = tl_a,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
 // ============================================================================
 // Initialization
 // ============================================================================
 
 void initialize_builtin_types() {
   ht_init(&builtin_env_ht);
+  builtin_envs = (BuiltinEnvRefs){0};
 
   // Typeclass ranks: Int = 0.0, Uint64 = 1.0, Double = 2.0
   static TypeClass tc_int_arith = {.name = TYPE_NAME_TYPECLASS_ARITHMETIC,
@@ -506,7 +572,7 @@ void initialize_builtin_types() {
   add_builtin_env(TYPE_NAME_UINT64,
                   make_monomorphic_env(TYPE_NAME_UINT64, &t_uint64));
   add_builtin_env(TYPE_NAME_DOUBLE,
-                  make_monomorphic_env(TYPE_NAME_DOUBLE, &t_num));
+                  make_from_constructor_env(TYPE_NAME_DOUBLE, &t_num));
   add_builtin_env(TYPE_NAME_CHAR,
                   make_monomorphic_env(TYPE_NAME_CHAR, &t_char));
   add_builtin_env(TYPE_NAME_STRING,
@@ -518,37 +584,62 @@ void initialize_builtin_types() {
   add_builtin_env(TYPE_NAME_PTR, make_monomorphic_env(TYPE_NAME_PTR, &t_ptr));
 
   // Register print: String -> Void (monomorphic)
-  add_builtin_env("print", make_monomorphic_env("print", &t_builtin_print));
-  add_builtin_env("str", make_str_env());
+  builtin_envs.print = make_monomorphic_env("print", &t_builtin_print);
+  add_builtin_env("print", builtin_envs.print);
+  builtin_envs.str = make_str_env();
+  add_builtin_env("str", builtin_envs.str);
   add_builtin_env("Option", make_option_env("Option"));
-  add_builtin_env("Some", make_some_env());
+  builtin_envs.some = make_some_env();
+  add_builtin_env("Some", builtin_envs.some);
   add_builtin_env("None", make_none_env());
 
   // Register id: polymorphic identity function
   add_builtin_env("id", make_id_env());
-  add_builtin_env("cor_map", make_cor_map_env());
-  add_builtin_env("cor_loop", make_cor_loop_env());
-  add_builtin_env("iter", make_iter_env());
-  add_builtin_env("array_size", make_array_size_env());
-  add_builtin_env("array_at", make_array_at_env());
-  add_builtin_env("array_set", make_array_set_env());
-  add_builtin_env("array_fill_const", make_array_fill_const_env());
-  add_builtin_env("array_fill", make_array_fill_env());
-  add_builtin_env("array_range", make_array_range_env());
+  builtin_envs.cor_map = make_cor_map_env();
+  add_builtin_env("cor_map", builtin_envs.cor_map);
+  builtin_envs.cor_loop = make_cor_loop_env();
+  add_builtin_env("cor_loop", builtin_envs.cor_loop);
+  builtin_envs.iter = make_iter_env();
+  add_builtin_env("iter", builtin_envs.iter);
+  builtin_envs.array_size = make_array_size_env();
+  add_builtin_env("array_size", builtin_envs.array_size);
+  builtin_envs.array_at = make_array_at_env();
+  add_builtin_env("array_at", builtin_envs.array_at);
+  builtin_envs.array_set = make_array_set_env();
+  add_builtin_env("array_set", builtin_envs.array_set);
+  builtin_envs.array_fill_const = make_array_fill_const_env();
+  add_builtin_env("array_fill_const", builtin_envs.array_fill_const);
+  builtin_envs.array_fill = make_array_fill_env();
+  add_builtin_env("array_fill", builtin_envs.array_fill);
+  builtin_envs.array_range = make_array_range_env();
+  add_builtin_env("array_range", builtin_envs.array_range);
+  builtin_envs.list_concat = make_list_concat_env();
+  add_builtin_env("list_concat", builtin_envs.list_concat);
 
   // Register arithmetic operators as polymorphic builtins
-  add_builtin_env("+", make_arithmetic_env("+"));
-  add_builtin_env("-", make_arithmetic_env("-"));
-  add_builtin_env("*", make_arithmetic_env("*"));
-  add_builtin_env("/", make_arithmetic_env("/"));
-  add_builtin_env("%", make_arithmetic_env("%"));
+  builtin_envs.arith_add = make_arithmetic_env("+");
+  add_builtin_env("+", builtin_envs.arith_add);
+  builtin_envs.arith_sub = make_arithmetic_env("-");
+  add_builtin_env("-", builtin_envs.arith_sub);
+  builtin_envs.arith_mul = make_arithmetic_env("*");
+  add_builtin_env("*", builtin_envs.arith_mul);
+  builtin_envs.arith_div = make_arithmetic_env("/");
+  add_builtin_env("/", builtin_envs.arith_div);
+  builtin_envs.arith_mod = make_arithmetic_env("%");
+  add_builtin_env("%", builtin_envs.arith_mod);
 
-  add_builtin_env("==", make_eq_env("=="));
-  add_builtin_env("!=", make_eq_env("!="));
-  add_builtin_env("<", make_ord_env("<"));
-  add_builtin_env("<=", make_ord_env("<="));
-  add_builtin_env(">", make_ord_env(">"));
-  add_builtin_env(">=", make_ord_env(">="));
+  builtin_envs.eq = make_eq_env("==");
+  add_builtin_env("==", builtin_envs.eq);
+  builtin_envs.neq = make_eq_env("!=");
+  add_builtin_env("!=", builtin_envs.neq);
+  builtin_envs.lt = make_ord_env("<");
+  add_builtin_env("<", builtin_envs.lt);
+  builtin_envs.lte = make_ord_env("<=");
+  add_builtin_env("<=", builtin_envs.lte);
+  builtin_envs.gt = make_ord_env(">");
+  add_builtin_env(">", builtin_envs.gt);
+  builtin_envs.gte = make_ord_env(">=");
+  add_builtin_env(">=", builtin_envs.gte);
 
   // Backend builtin symbol registration still expects these globals to exist.
   // Keep them as aliases of the underlying builtin function types rather than
@@ -560,5 +651,7 @@ void initialize_builtin_types() {
   array_set_scheme = *lookup_builtin_env("array_set")->type;
   array_fill_const_scheme = *lookup_builtin_env("array_fill_const")->type;
   array_fill_scheme = *lookup_builtin_env("array_fill")->type;
-
+  list_concat_scheme = *lookup_builtin_env("list_concat")->type;
 }
+
+void print_builtin_types() {}

@@ -3,6 +3,7 @@
 #include "adt.h"
 #include "backend_llvm/application.h"
 #include "backend_llvm/array.h"
+#include "backend_llvm/constructors.h"
 #include "backend_llvm/function.h"
 #include "backend_llvm/function_extern.h"
 #include "backend_llvm/list.h"
@@ -22,30 +23,6 @@
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
-
-LLVMValueRef GenericConsConstructorHandler(Ast *ast, JITLangCtx *ctx,
-                                           LLVMModuleRef module,
-                                           LLVMBuilderRef builder) {
-  Type *expected_type = ast->type;
-  if (expected_type->kind == T_CONS) {
-    LLVMTypeRef struct_type = named_struct_type(expected_type->data.T_CONS.name,
-                                                expected_type, ctx, module);
-
-    LLVMValueRef tuple = LLVMGetUndef(struct_type);
-    // LLVMConstNull(struct_type);
-    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-      Ast *arg = ast->data.AST_APPLICATION.args + i;
-      LLVMValueRef item_val = codegen(arg, ctx, module, builder);
-      tuple = LLVMBuildInsertValue(builder, tuple, item_val, i, "");
-    }
-
-    return tuple;
-  } else {
-    fprintf(stderr,
-            "Not Implemented error - constructor handler for non cons types\n");
-    return NULL;
-  }
-}
 
 LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -158,7 +135,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       Type *t = item->type;
 
       if (t->kind == T_VAR) {
-        t = env_lookup(ctx->env, t->data.T_VAR);
+        t = env_lookup(ctx->env, t->data.T_VAR.name);
       }
 
       LLVMValueRef str_val =
@@ -333,7 +310,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, t, NULL, NULL);
 
       sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler =
-          GenericConsConstructorHandler;
+          codegen_cons_type_constructor;
 
       ht *stack = (ctx->frame->table);
       ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
@@ -343,7 +320,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, t, NULL, NULL);
 
       sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler =
-          GenericConsConstructorHandler;
+          codegen_cons_type_constructor;
 
       ht *stack = (ctx->frame->table);
       ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
@@ -353,7 +330,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, t, NULL, NULL);
 
       sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler =
-          GenericConsConstructorHandler;
+          codegen_cons_type_constructor;
 
       ht *stack = (ctx->frame->table);
       ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);

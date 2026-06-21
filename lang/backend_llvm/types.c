@@ -70,6 +70,27 @@ LLVMTypeRef named_struct_type(const char *name, Type *tuple_type,
 LLVMTypeRef create_llvm_list_type(Type *list_el_type, JITLangCtx *ctx,
                                   LLVMModuleRef module);
 
+Type *specialize_type_for_codegen(Type *type, JITLangCtx *ctx) {
+  if (!type) {
+    return NULL;
+  }
+
+  if (!is_generic(type) && !type->closure_meta) {
+    return type;
+  }
+
+  Type *specialized = type;
+  if (ctx->type_subst) {
+    specialized = apply_subst_to_type(ctx->type_subst, deep_copy_type(type));
+  }
+
+  if (ctx->env) {
+    specialized = resolve_type_in_env(specialized, ctx->env);
+  }
+
+  return specialized;
+}
+
 LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
                               LLVMModuleRef module) {
   if (!type) {
@@ -111,34 +132,39 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
   }
 
   case T_VAR: {
-    if (ctx->env) {
-      Type *lu = env_lookup(ctx->env, type->data.T_VAR);
+    if (ctx->type_subst) {
+      Type *resolved = find_in_subst(ctx->type_subst, type->data.T_VAR.id);
+      if (resolved && !(resolved->kind == T_VAR && types_equal(resolved, type))) {
+        return type_to_llvm_type(resolved, ctx, module);
+      }
+    }
+
+    if (type->is_recursive_type_ref && ctx->env) {
+      Type *lu = env_lookup(ctx->env, type->data.T_VAR.name);
 
       if (!lu) {
-
-        // print_type_env(ctx->env);
         fprintf(stderr,
-                "Error type var %s not found in environment! [compiler source "
-                ": %s:%d]\n",
-                type->data.T_VAR, __FILE__, __LINE__);
-
-        // print_ast(__current_ast);
+                "Error recursive type var %s not found in environment! "
+                "[compiler source : %s:%d]\n",
+                type->data.T_VAR.name, __FILE__, __LINE__);
         print_location(__current_ast);
         return NULL;
-        // return type_to_llvm_type(&t_string, ctx, module);
       }
 
       if (lu->kind == T_VAR && types_equal(lu, type)) {
         fprintf(stderr,
                 "Error: (circular ref??) type %s not found in env! [compiler "
                 "source: [%s:%d]\n",
-                type->data.T_VAR, __FILE__, __LINE__);
+                type->data.T_VAR.name, __FILE__, __LINE__);
         print_location(__current_ast);
         return NULL;
       }
       return type_to_llvm_type(lu, ctx, module);
     }
-    return LLVMInt32Type();
+
+    // Ordinary HM type variables are specialization-time placeholders, not
+    // lexical env-bound names. If one survives to codegen, treat it as opaque.
+    return GENERIC_PTR;
   }
 
   case T_TYPECLASS_RESOLVE: {
@@ -146,16 +172,20 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
     return type_to_llvm_type(type, ctx, module);
   }
 
-  case T_CONS: {
+  case T_SUM: {
     if (is_option_type(type)) {
       Type *opt_of = type_of_option(type);
       return codegen_option_struct_type(type_to_llvm_type(opt_of, ctx, module));
     }
 
-    if (is_coroutine_constructor_type(type)) {
-      return GENERIC_PTR;
+    if (is_simple_enum(type)) {
+      return LLVMInt8Type();
     }
 
+    return codegen_adt_type(type, ctx, module);
+  }
+
+  case T_CONS: {
     if (is_coroutine_type(type)) {
       return GENERIC_PTR;
     }
@@ -189,28 +219,6 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
     //   // this is maybe not legit???
     //   return type_to_llvm_type(type->data.T_CONS.args[0], ctx, module);
     // }
-
-    if (strcmp(type->data.T_CONS.name, TYPE_NAME_VARIANT) == 0) {
-
-      if (is_simple_enum(type)) {
-        return LLVMInt8Type();
-      }
-      // Type *member_type = type->data.T_CONS.names[0];
-      const char *member_type_name = type->data.T_CONS.names[0];
-
-      JITSymbol *sym =
-          find_in_ctx(member_type_name, strlen(member_type_name), ctx);
-
-      if (sym && sym->type == STYPE_VARIANT_TYPE) {
-        // printf("variant type\n");
-        // print_type(sym->symbol_type);
-        // LLVMDumpType(sym->llvm_type);
-        // printf("\n");
-        return sym->llvm_type;
-      }
-
-      return codegen_adt_type(type, ctx, module);
-    }
 
     // if (type->data.T_CONS.num_args == 0) {
     //   return NULL;

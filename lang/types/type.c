@@ -580,6 +580,7 @@ Type *create_array_type(Type *of) {
   gen_array->data.T_CONS.args = t_alloc(sizeof(Type *));
   gen_array->data.T_CONS.num_args = 1;
   gen_array->data.T_CONS.args[0] = of;
+  typeclasses_extend(gen_array, &_GenericEq);
   return gen_array;
 }
 
@@ -590,7 +591,7 @@ Type *create_list_type_of_type(Type *of) {
   gen_list->data.T_CONS.args = t_alloc(sizeof(Type *));
   gen_list->data.T_CONS.num_args = 1;
   gen_list->data.T_CONS.args[0] = of;
-  // typeclasses_extend(gen_list, &GenericEq);
+  typeclasses_extend(gen_list, &_GenericEq);
   return gen_list;
 }
 

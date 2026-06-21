@@ -2,7 +2,7 @@
 #   let idx = rand_int (array_size arr); arr @ idx 
 # ;;
 
-let print_arr = fn a: (Array of T) ->
+let print_arr = fn a ->
   print "[|"; 
   for i = 0 .. array_size a in (
     print `{a[i]}, `
@@ -10,7 +10,7 @@ let print_arr = fn a: (Array of T) ->
   print "|]\n" 
 ;;
 
-let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->
+let fold = fn f res a ->
   match array_size a with
   | 0 -> res
   | _ -> (
@@ -18,7 +18,7 @@ let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->
   )
 ;;
 
-let foldi__ = fn idx: (Int) f: (Int -> R -> T -> R) res: (R) a: (Array of T) ->
+let foldi__ = fn idx f res a ->
   match array_size a with
   | 0 -> res
   | _ -> (
@@ -121,7 +121,7 @@ let filter = fn f a ->
 #
 
 
-let last = fn x: (Array of T) ->
+let last = fn x ->
   let len = array_size x in
   x [len - 1]
 ;;

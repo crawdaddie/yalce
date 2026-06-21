@@ -336,10 +336,8 @@ Ast *ast_test_module(Ast *expr) {
     // don't parse this unless in test context
     return NULL;
   }
-  Ast *node = Ast_new(AST_LET);
   Ast *id = ast_identifier((ObjString){"test", 4});
-  node->data.AST_LET.binding = id;
-  node->data.AST_LET.expr = expr;
+  Ast *node = ast_let(id, expr, NULL);
   ast_copy_loc(node, expr);
   return node;
 }

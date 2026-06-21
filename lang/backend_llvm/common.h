@@ -34,6 +34,7 @@ typedef struct {
   int stack_ptr;
   StackFrame *frame;
   TypeEnv *env;
+  Subst *type_subst;
   int *num_globals;
   void **global_storage_array;
   int *global_storage_capacity;

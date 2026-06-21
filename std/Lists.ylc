@@ -1,16 +1,22 @@
-let _print_list = fn l ->
-  match l with
-  | [] -> ()
-  | x::rest -> (print `{x}, `; _print_list rest)
-;;
+# let _print_list = fn l ->
+#   match l with
+#   | [] -> ()
+#   | x::rest -> (print `{x}, `; _print_list rest)
+# ;;
+#
+# let print_list = fn l ->
+#   print "[";
+#   _print_list l;
+#   print "]\n"
+# ;;
 
-let print_list = fn l ->
-  print "[";
-  _print_list l;
-  print "]\n"
-;;
-
-let fold = fn f: (R -> T -> R) res: (R) a: (List of T) ->
+# let fold = fn f: (R -> T -> R) res: (R) a: (List of T) ->
+#   match a with
+#   | [] -> res
+#   | x::rest -> fold f (f res x) rest
+# ;;
+#
+let fold = fn f res a ->
   match a with
   | [] -> res
   | x::rest -> fold f (f res x) rest
@@ -23,7 +29,7 @@ let fold = fn f: (R -> T -> R) res: (R) a: (List of T) ->
 #   | [] -> res
 #   | x::rest -> fold f (f res x) rest
 # ;;
-let foldi__ = fn idx: (Int) f: (Int -> R -> T -> R) res: (R) a: (List of T) ->
+let foldi__ = fn idx f res a ->
   match a with
   | [] -> res
   | x::rest -> foldi__ (idx + 1) f (f idx res x) rest
@@ -95,5 +101,6 @@ let test = module () ->
   let test_sum_ints = fold (+) 0 [1, 2, 3] == 6;
   let _ = print `map to double: {map (fn x -> Double x) [0,1,2,3]}\n`;
   let test_map_to_double = map (fn x -> Double x) [0,1,2,3] == [0.,1.,2.,3.];
+  let test_map_to_double2 = map Double [0,1,2,3] == [0.,1.,2.,3.];
   # let test_foldi = foldi (fn i s x -> i + s + x) 0 [0,0,0] == 3
 ;

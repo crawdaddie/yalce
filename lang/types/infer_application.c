@@ -1,5 +1,7 @@
 #include "./infer_application.h"
+#include "type_ser.h"
 #include "types/builtins.h"
+#include <string.h>
 
 Type *callable_view(Type *type) {
   if (type && is_coroutine_type(type)) {
@@ -33,6 +35,7 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   Type *current = fn_type;
   for (size_t i = 0; i < nargs; i++) {
     current = callable_view(current);
+
     Type *arg_type = infer_expr(ast->data.AST_APPLICATION.args + i, ctx);
     if (!arg_type)
       return NULL;

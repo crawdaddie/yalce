@@ -111,7 +111,7 @@ Predicate *predicate_append_comparable(Predicate *list, TypeClass *trait,
                                        Type *witness, Type **args);
 Predicate *predicate_apply_subst(Subst *subst, Predicate *preds);
 Predicate *predicate_duplicate(Predicate *preds);
-int resolve_predicates(Subst **subst, Predicate *preds, FILE *err_stream);
+int resolve_predicates(Subst **subst, Predicate *preds);
 
 void print_predicates(Predicate *predicates);
 

@@ -247,14 +247,21 @@ static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
         sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
     compilation_ctx.frame = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame;
 
-    compilation_ctx.env = create_env_for_generic_fn(
-        sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env, generic_type,
-        expected_fn_type);
+    compilation_ctx.type_subst =
+        create_subst_for_generic_fn(generic_type, expected_fn_type);
+    compilation_ctx.env = create_env_from_subst(
+        sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env,
+        compilation_ctx.type_subst);
 
     Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
 
-    Type exp = TCONS(TYPE_NAME_COROUTINE_CONSTRUCTOR, 1, expected_fn_type);
-    fn_ast.type = &exp;
+    Type *compiled_type = deep_copy_type(expected_fn_type);
+    if (compiled_type->kind == T_FN) {
+      compiled_type->data.T_FN.attributes =
+          set_attr(compiled_type->data.T_FN.attributes,
+                   FN_ATTR_COROUTINE_CONSTRUCTOR);
+    }
+    fn_ast.type = compiled_type;
 
     LLVMValueRef specific_fn =
         compile_coroutine(&fn_ast, &compilation_ctx, module, builder);
@@ -627,7 +634,7 @@ LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // 2. Handle nested coroutine chaining (if yielded value is a coroutine)
   Type *yield_val_type = ast->data.AST_YIELD.expr->type;
   if (is_generic(yield_val_type)) {
-    yield_val_type = resolve_type_in_env(yield_val_type, ctx->env);
+    yield_val_type = specialize_type_for_codegen(yield_val_type, ctx);
   }
 
   if (is_coroutine_type(yield_val_type)) {
@@ -898,7 +905,7 @@ LLVMValueRef __handle_yield_boundary_crossing_binding(Ast *binding, Ast *expr,
 
   Type *storage_type = expr->type;
   if (is_generic(storage_type)) {
-    storage_type = resolve_type_in_env(storage_type, ctx->env);
+    storage_type = specialize_type_for_codegen(storage_type, ctx);
   }
 
   LLVMTypeRef llvm_storage_type = type_to_llvm_type(storage_type, ctx, module);
@@ -944,8 +951,6 @@ LLVMValueRef compile_coroutine(Ast *expr, JITLangCtx *ctx, LLVMModuleRef module,
     fprintf(stderr, "Error: invalid coroutine constructor type\n");
     return NULL;
   }
-
-  fn_type = fn_type->data.T_CONS.args[0];
 
   Type *yield_type = fn_return_type(fn_type);
 

@@ -19,6 +19,35 @@ extern Type t_none;
 
 extern Type t_builtin_print;
 
+typedef struct BuiltinEnvRefs {
+  TypeEnv *print;
+  TypeEnv *str;
+  TypeEnv *some;
+  TypeEnv *list_concat;
+  TypeEnv *array_at;
+  TypeEnv *array_size;
+  TypeEnv *array_set;
+  TypeEnv *array_fill_const;
+  TypeEnv *array_fill;
+  TypeEnv *array_range;
+  TypeEnv *cor_map;
+  TypeEnv *cor_loop;
+  TypeEnv *iter;
+  TypeEnv *arith_add;
+  TypeEnv *arith_sub;
+  TypeEnv *arith_mul;
+  TypeEnv *arith_div;
+  TypeEnv *arith_mod;
+  TypeEnv *eq;
+  TypeEnv *neq;
+  TypeEnv *lt;
+  TypeEnv *lte;
+  TypeEnv *gt;
+  TypeEnv *gte;
+} BuiltinEnvRefs;
+
+extern BuiltinEnvRefs builtin_envs;
+
 void initialize_builtin_types();
 
 // Deprecated: old API returning Type* (uses T_SCHEME internally).
@@ -84,4 +113,5 @@ extern Type asbytes_scheme;
 extern Type typeof_scheme;
 extern Type cor_zip_scheme;
 extern Type is_null_type;
+void print_builtin_types(void);
 #endif

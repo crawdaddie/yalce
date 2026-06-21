@@ -1,4 +1,5 @@
 #include "backend_llvm/list.h"
+#include "backend_llvm/symbols.h"
 #include "backend_llvm/types.h"
 #include "backend_llvm/util.h"
 #include "types/inference.h"
@@ -6,6 +7,27 @@
 
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
+
+static Type *list_operand_type(Ast *operand_ast, JITLangCtx *ctx) {
+  if (!operand_ast) {
+    return NULL;
+  }
+
+  JITSymbol *sym = lookup_id_ast(operand_ast, ctx);
+  if (sym && sym->symbol_type) {
+    return specialize_type_for_codegen(sym->symbol_type, ctx);
+  }
+
+  return specialize_type_for_codegen(operand_ast->type, ctx);
+}
+
+static Type *list_element_type_from_operand(Ast *operand_ast, JITLangCtx *ctx) {
+  Type *list_type = list_operand_type(operand_ast, ctx);
+  if (!list_type || !is_list_type(list_type)) {
+    return NULL;
+  }
+  return list_type->data.T_CONS.args[0];
+}
 
 LLVMTypeRef llnode_type(LLVMTypeRef llvm_el_type) {
   LLVMTypeRef node_types[2];
@@ -276,14 +298,8 @@ LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef ListRefSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
-  Type *list_type = ast->data.AST_APPLICATION.args->type;
-
-  Type *list_el_type = *list_type->data.T_CONS.args;
-  if (list_el_type->kind == T_VAR) {
-    while (list_el_type->kind == T_VAR) {
-      list_el_type = env_lookup(ctx->env, list_el_type->data.T_VAR);
-    }
-  }
+  Type *list_el_type =
+      list_element_type_from_operand(ast->data.AST_APPLICATION.args, ctx);
 
   LLVMValueRef list =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
@@ -291,7 +307,11 @@ LLVMValueRef ListRefSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef next =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
-  LLVMTypeRef llvm_list_el_type = type_to_llvm_type(list_el_type, ctx, module);
+  LLVMTypeRef llvm_list_el_type =
+      (!list_el_type || list_el_type->kind == T_VAR ||
+       list_el_type->kind == T_FN)
+          ? GENERIC_PTR
+          : type_to_llvm_type(list_el_type, ctx, module);
 
   LLVMTypeRef node_type = llnode_type(llvm_list_el_type);
 
@@ -307,18 +327,13 @@ LLVMValueRef ListTailHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef list =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
-  Type *list_type = ast->type;
-
-  Type *list_el_type = *list_type->data.T_CONS.args;
-  if (list_el_type->kind == T_VAR) {
-    while (list_el_type->kind == T_VAR) {
-      list_el_type = env_lookup(ctx->env, list_el_type->data.T_VAR);
-    }
-  }
+  Type *list_el_type =
+      list_element_type_from_operand(ast->data.AST_APPLICATION.args, ctx);
 
   LLVMTypeRef llvm_el_type;
 
-  if (list_el_type->kind == T_FN) {
+  if (!list_el_type || list_el_type->kind == T_VAR ||
+      list_el_type->kind == T_FN) {
     llvm_el_type = GENERIC_PTR;
   } else {
     llvm_el_type = type_to_llvm_type(list_el_type, ctx, module);
@@ -386,11 +401,12 @@ LLVMValueRef ListPrependHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef list =
       codegen(ast->data.AST_APPLICATION.args + 1, ctx, module, builder);
 
-  Type *list_type = (ast->data.AST_APPLICATION.args + 1)->type;
-
-  // Get the element type from the list type, not from the value
-  Type *el_type = list_type->data.T_CONS.args[0];
-  LLVMTypeRef llvm_el_type = type_to_llvm_type(el_type, ctx, module);
+  Type *el_type =
+      list_element_type_from_operand(ast->data.AST_APPLICATION.args + 1, ctx);
+  LLVMTypeRef llvm_el_type =
+      (!el_type || el_type->kind == T_VAR || el_type->kind == T_FN)
+          ? GENERIC_PTR
+          : type_to_llvm_type(el_type, ctx, module);
   LLVMTypeRef llvm_list_node_type = llnode_type(llvm_el_type);
 
   LLVMValueRef val =
@@ -425,9 +441,13 @@ LLVMValueRef codegen_list_to_string(LLVMValueRef val, Type *val_type,
 
 LLVMValueRef ListEmptyHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
-  Type *ltype = ast->data.AST_APPLICATION.args->type;
-  Type *el_type = ltype->data.T_CONS.args[0];
+  Type *el_type =
+      list_element_type_from_operand(ast->data.AST_APPLICATION.args, ctx);
   LLVMValueRef l =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-  return ll_is_null(l, type_to_llvm_type(el_type, ctx, module), builder);
+  LLVMTypeRef llvm_el_type =
+      (!el_type || el_type->kind == T_VAR || el_type->kind == T_FN)
+          ? GENERIC_PTR
+          : type_to_llvm_type(el_type, ctx, module);
+  return ll_is_null(l, llvm_el_type, builder);
 }
