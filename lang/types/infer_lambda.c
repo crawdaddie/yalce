@@ -56,6 +56,19 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     fn_type = type_fn(param_types[i - 1], fn_type);
   }
 
+  if (ast->data.AST_LAMBDA.num_closed_vals > 0) {
+    int closed_len = ast->data.AST_LAMBDA.num_closed_vals;
+    Type **closed_types = t_alloc(sizeof(Type *) * (size_t)closed_len);
+    int i = 0;
+    for (AstList *closed_vals = ast->data.AST_LAMBDA.closed_vals; closed_vals;
+         closed_vals = closed_vals->next, i++) {
+      closed_types[i] = closed_vals->ast->type;
+    }
+    Type *closure_env_type = create_tuple_type(closed_len, closed_types);
+    fn_type->closure_meta = closure_env_type;
+    ast->type = fn_type;
+  }
+
   if (ast->data.AST_LAMBDA.is_coroutine && fn_type->kind == T_FN) {
     fn_type->data.T_FN.attributes =
         set_attr(fn_type->data.T_FN.attributes,
