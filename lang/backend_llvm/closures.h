@@ -28,6 +28,12 @@ LLVMValueRef create_closure_symbol(Ast *binding, Ast *expr, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder);
 
+LLVMValueRef materialize_generic_closure_value(JITSymbol *sym,
+                                               Type *expected_fn_type,
+                                               JITLangCtx *ctx,
+                                               LLVMModuleRef module,
+                                               LLVMBuilderRef builder);
+
 LLVMTypeRef closure_fn_type(Type *clos_type, LLVMTypeRef rec_type,
                             JITLangCtx *ctx, LLVMModuleRef module);
 

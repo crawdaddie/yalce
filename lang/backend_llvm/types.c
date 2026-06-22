@@ -34,7 +34,8 @@ LLVMTypeRef tuple_type(Type *tuple_type, JITLangCtx *ctx,
 
   for (int i = 0; i < len; i++) {
 
-    if (tuple_type->data.T_CONS.args[i]->kind == T_FN) {
+    if (tuple_type->data.T_CONS.args[i]->kind == T_FN &&
+        !is_closure(tuple_type->data.T_CONS.args[i])) {
       element_types[i] = GENERIC_PTR;
     } else {
       element_types[i] =
@@ -55,7 +56,8 @@ LLVMTypeRef named_struct_type(const char *name, Type *tuple_type,
   LLVMTypeRef element_types[len];
   for (int i = 0; i < len; i++) {
 
-    if (tuple_type->data.T_CONS.args[i]->kind == T_FN) {
+    if (tuple_type->data.T_CONS.args[i]->kind == T_FN &&
+        !is_closure(tuple_type->data.T_CONS.args[i])) {
       element_types[i] = GENERIC_PTR;
     } else {
       element_types[i] =

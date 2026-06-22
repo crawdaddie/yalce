@@ -107,6 +107,8 @@ typedef struct {
 
     struct {
       bool recursive_ref;
+      Type *closure_env_type;
+      LLVMValueRef closure_rec;
     } STYPE_FUNCTION;
 
     struct {
@@ -120,6 +122,8 @@ typedef struct {
       TypeEnv *type_env;
       SpecificFns *specific_fns;
       BuiltinHandler builtin_handler;
+      Type *closure_env_type;
+      LLVMValueRef closure_rec;
     } STYPE_GENERIC_FUNCTION;
 
     struct {

@@ -37,6 +37,16 @@ LLVMValueRef create_lazy_extern_fn_binding(Ast *binding, Ast *expr,
                                            LLVMModuleRef module,
                                            LLVMBuilderRef builder);
 
+static JITSymbol *clone_symbol(JITSymbol *sym) {
+  if (!sym) {
+    return NULL;
+  }
+
+  JITSymbol *copy = malloc(sizeof(JITSymbol));
+  memcpy(copy, sym, sizeof(JITSymbol));
+  return copy;
+}
+
 typedef enum BindingKind {
   BIND_ARRAY_FN,
   BIND_PARTIAL_CLOSURE,
@@ -65,8 +75,8 @@ static Type *resolve_binding_type(Ast *binding, Ast *expr, JITLangCtx *ctx) {
 }
 
 // Rebind one identifier name to another existing symbol in the current scope.
-static LLVMValueRef bind_alias_if_possible(Ast *binding, Ast *expr,
-                                           JITLangCtx *ctx) {
+static JITSymbol *bind_alias_if_possible(Ast *binding, Ast *expr,
+                                         JITLangCtx *ctx) {
   if (binding->tag != AST_IDENTIFIER || expr->tag != AST_IDENTIFIER) {
     return NULL;
   }
@@ -76,10 +86,15 @@ static LLVMValueRef bind_alias_if_possible(Ast *binding, Ast *expr,
     return NULL;
   }
 
+  sym = clone_symbol(sym);
+  if (!sym) {
+    return NULL;
+  }
+
   const char *chars = binding->data.AST_IDENTIFIER.value;
   int len = binding->data.AST_IDENTIFIER.length;
   ht_set_hash(ctx->frame->table, chars, hash_string(chars, len), sym);
-  return sym->val;
+  return sym;
 }
 
 // Detect the special array accessor closure shape produced by `array_at`.
@@ -430,9 +445,9 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, JITLangCtx *ctx,
   Type *expr_type = expr->type;
   Type *binding_type = resolve_binding_type(binding, expr, ctx);
 
-  LLVMValueRef alias_val = bind_alias_if_possible(binding, expr, ctx);
-  if (alias_val) {
-    return alias_val;
+  JITSymbol *alias_sym = bind_alias_if_possible(binding, expr, ctx);
+  if (alias_sym) {
+    return alias_sym->val;
   }
 
   switch (classify_binding(expr, expr_type, binding_type)) {

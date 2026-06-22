@@ -92,17 +92,24 @@ static JITSymbol *lookup_application_symbol(Ast *app, JITLangCtx *ctx) {
   return NULL;
 }
 
-static void attach_symbol_closure_meta(Type *callable_type, JITSymbol *sym) {
-  if (!callable_type || !sym || sym->type != STYPE_FUNCTION ||
-      is_closure(callable_type) || !is_closure(sym->symbol_type)) {
-    return;
-  }
-
-  callable_type->closure_meta = sym->symbol_type->closure_meta;
-}
+// static void attach_symbol_closure_meta(Type *callable_type, JITSymbol *sym) {
+//   if (!callable_type || !sym || sym->type != STYPE_FUNCTION ||
+//       is_closure(callable_type) || !is_closure(sym->symbol_type)) {
+//     return;
+//   }
+//
+//   callable_type->closure_meta = sym->symbol_type->closure_meta;
+// }
 
 static bool is_closure_symbol(JITSymbol *sym) {
-  return sym->symbol_type && is_closure(sym->symbol_type);
+  if (sym->type == STYPE_FUNCTION) {
+    return sym->symbol_data.STYPE_FUNCTION.closure_env_type != NULL;
+  }
+
+  if (sym->type == STYPE_GENERIC_FUNCTION) {
+    return sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_env_type != NULL;
+  }
+  return false;
 }
 
 static Type *resolve_sym_type(Type *exp, Type *sym_type, JITLangCtx *ctx) {
@@ -241,8 +248,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   if (!sym) {
     return NULL;
   }
-
-  attach_symbol_closure_meta(callable_type, sym);
 
   if (is_closure_symbol(sym)) {
     return call_closure_sym(ast, callable_type, sym, ctx, module, builder);

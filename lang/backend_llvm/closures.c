@@ -1,4 +1,5 @@
 #include "./closures.h"
+#include "call_lowering.h"
 #include "application.h"
 #include "binding.h"
 #include "function.h"
@@ -18,7 +19,92 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef compile_closure_fn(Ast *lambda, JITLangCtx *ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {}
 
-static Type *curried_closure_env_type(Ast *expr) {
+LLVMValueRef materialize_generic_closure_value(JITSymbol *sym,
+                                               Type *expected_fn_type,
+                                               JITLangCtx *ctx,
+                                               LLVMModuleRef module,
+                                               LLVMBuilderRef builder);
+
+static JITSymbol *lookup_application_callable_symbol(Ast *expr,
+                                                     JITLangCtx *ctx);
+
+static Type *resolve_application_callable_type(Ast *expr, JITLangCtx *ctx) {
+  if (!expr || expr->tag != AST_APPLICATION ||
+      !expr->data.AST_APPLICATION.function) {
+    return NULL;
+  }
+
+  JITSymbol *sym = lookup_application_callable_symbol(expr, ctx);
+  Type *callable_type = expr->data.AST_APPLICATION.function->type;
+
+  if (sym && sym->symbol_type) {
+    bool is_captured_closure =
+        (sym->type == STYPE_FUNCTION &&
+         sym->symbol_data.STYPE_FUNCTION.closure_env_type != NULL) ||
+        (sym->type == STYPE_GENERIC_FUNCTION &&
+         sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_env_type != NULL);
+    if (is_captured_closure) {
+      callable_type = sym->symbol_type;
+    }
+  }
+  if (!callable_type) {
+    return NULL;
+  }
+
+  return specialize_type_for_codegen(callable_type, ctx);
+}
+
+static JITSymbol *lookup_application_callable_symbol(Ast *expr, JITLangCtx *ctx) {
+  if (!expr || expr->tag != AST_APPLICATION || !expr->data.AST_APPLICATION.function ||
+      !ctx) {
+    return NULL;
+  }
+
+  return lookup_id_ast(expr->data.AST_APPLICATION.function, ctx);
+}
+
+static bool application_function_needs_capture(Ast *expr, JITLangCtx *ctx) {
+  JITSymbol *sym = lookup_application_callable_symbol(expr, ctx);
+  if (!sym) {
+    return false;
+  }
+
+  if (sym->type == STYPE_FUNCTION) {
+    return sym->symbol_data.STYPE_FUNCTION.closure_env_type != NULL;
+  }
+
+  if (sym->type == STYPE_GENERIC_FUNCTION) {
+    return sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_env_type != NULL;
+  }
+
+  return false;
+}
+
+static Type *application_function_capture_type(Ast *expr, JITLangCtx *ctx) {
+  Type *capture_type = resolve_application_callable_type(expr, ctx);
+  JITSymbol *sym = lookup_application_callable_symbol(expr, ctx);
+
+  if (!capture_type || !sym) {
+    return capture_type;
+  }
+
+  Type *closure_env_type = NULL;
+  if (sym->type == STYPE_FUNCTION) {
+    closure_env_type = sym->symbol_data.STYPE_FUNCTION.closure_env_type;
+  } else if (sym->type == STYPE_GENERIC_FUNCTION) {
+    closure_env_type = sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_env_type;
+  }
+
+  if (!closure_env_type) {
+    return capture_type;
+  }
+
+  capture_type = deep_copy_type(capture_type);
+  capture_type->closure_meta = closure_env_type;
+  return capture_type;
+}
+
+static Type *curried_closure_env_type(Ast *expr, JITLangCtx *ctx) {
   if (!expr || expr->tag != AST_APPLICATION || expr->type->kind != T_FN) {
     return NULL;
   }
@@ -28,17 +114,23 @@ static Type *curried_closure_env_type(Ast *expr) {
     return NULL;
   }
 
-  Type **cl_vals = t_alloc(sizeof(Type *) * (size_t)len);
-  Type *ftype = expr->data.AST_APPLICATION.function->type;
+  bool capture_callable = application_function_needs_capture(expr, ctx);
+  int env_len = len + (capture_callable ? 1 : 0);
+  Type **cl_vals = t_alloc(sizeof(Type *) * (size_t)env_len);
+  Type *ftype = resolve_application_callable_type(expr, ctx);
+  int dst_idx = 0;
+  if (capture_callable) {
+    cl_vals[dst_idx++] = application_function_capture_type(expr, ctx);
+  }
   for (int i = 0; i < len; i++) {
     if (!ftype || ftype->kind != T_FN) {
       return NULL;
     }
-    cl_vals[i] = ftype->data.T_FN.from;
+    cl_vals[dst_idx++] = ftype->data.T_FN.from;
     ftype = ftype->data.T_FN.to;
   }
 
-  return create_tuple_type(len, cl_vals);
+  return create_tuple_type(env_len, cl_vals);
 }
 
 static Type *lambda_closure_env_type(Ast *expr) {
@@ -60,12 +152,12 @@ static Type *lambda_closure_env_type(Ast *expr) {
   return create_tuple_type(len, closed_types);
 }
 
-static Type *closure_env_type_from_expr(Ast *expr) {
+static Type *closure_env_type_from_expr(Ast *expr, JITLangCtx *ctx) {
   if (!expr) {
     return NULL;
   }
   if (expr->tag == AST_APPLICATION) {
-    return curried_closure_env_type(expr);
+    return curried_closure_env_type(expr, ctx);
   }
   if (expr->tag == AST_LAMBDA) {
     return lambda_closure_env_type(expr);
@@ -84,7 +176,7 @@ static LLVMTypeRef closure_record_type_from_env(Type *obj_type, JITLangCtx *ctx,
 
   for (int i = 0; i < len; i++) {
     Type *mtype = obj_type->data.T_CONS.args[i];
-    rec_members[i] = mtype->kind == T_FN
+    rec_members[i] = mtype->kind == T_FN && !is_closure(mtype)
                          ? GENERIC_PTR
                          : type_to_llvm_type(mtype, ctx, module);
   }
@@ -109,13 +201,12 @@ LLVMValueRef find_callable_from_generic(Ast *expr, Type *callable_type,
 }
 
 LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
-                                Type *recordt,
-                                LLVMTypeRef closure_rec_type,
+                                Type *recordt, LLVMTypeRef closure_rec_type,
                                 LLVMTypeRef clos_fn_type, JITLangCtx *ctx,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
-
   Type *clos_type = expr->type;
   clos_type = resolve_type_in_env(clos_type, ctx->env);
+  bool capture_callable = application_function_needs_capture(expr, ctx);
 
   Type *callable_type;
   LLVMTypeRef llvm_callable_type;
@@ -141,13 +232,16 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
       return NULL;
     }
 
-    Type *ftype = deep_copy_type(expr->data.AST_APPLICATION.function->type);
-    ftype = resolve_type_in_env(ftype, ctx->env);
+    Type *ftype = resolve_application_callable_type(expr, ctx);
     callable_type = ftype;
     llvm_callable_type = type_to_llvm_type(callable_type, ctx, module);
 
-    if (is_generic(callable_sym->symbol_type) ||
-        callable_sym->symbol_type->kind == T_SCHEME) {
+    if (callable_sym->type == STYPE_GENERIC_FUNCTION &&
+        callable_sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_env_type) {
+      callable_val = materialize_generic_closure_value(
+          callable_sym, callable_type, ctx, module, builder);
+    } else if (is_generic(callable_sym->symbol_type) ||
+               callable_sym->symbol_type->kind == T_SCHEME) {
       callable_val = find_callable_from_generic(expr, callable_type, ftype, ctx,
                                                 module, builder);
     } else {
@@ -170,25 +264,33 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
   START_FUNC(module, name, clos_fn_type);
 
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx);
+  Type *captured_callable_type = NULL;
+  if (capture_callable) {
+    captured_callable_type = application_function_capture_type(expr, ctx);
+    LLVMTypeRef llvm_captured_callable_type =
+        type_to_llvm_type(captured_callable_type, &fn_ctx, module);
+    callable_val = LLVMBuildLoad2(
+        builder, llvm_captured_callable_type,
+        LLVMBuildStructGEP2(builder, closure_rec_type, LLVMGetParam(func, 0), 0,
+                            "captured_callable_ptr"),
+        "captured_callable");
+  }
   int len = fn_type_args_len(callable_type);
   LLVMValueRef args[len];
   LLVMValueRef record = LLVMGetParam(func, 0);
 
   int i;
   int record_len = recordt ? recordt->data.T_CONS.num_args : 0;
-  for (i = 0; i < record_len; i++) {
-    Type *rt = recordt->data.T_CONS.args[i];
+  int record_arg_start = capture_callable ? 1 : 0;
+  for (i = 0; i < record_len - record_arg_start; i++) {
+    Type *rt = recordt->data.T_CONS.args[i + record_arg_start];
 
-    // printf("record arg %d: ", i);
     LLVMTypeRef lt = type_to_llvm_type(rt, &fn_ctx, module);
-
-    // print_type(recordt->data.T_CONS.args[i]);
-    // LLVMDumpType(lt);
-    // printf("\n");
 
     args[i] = LLVMBuildLoad2(
         builder, rt->kind == T_FN && (!is_closure(rt)) ? GENERIC_PTR : lt,
-        LLVMBuildStructGEP2(builder, closure_rec_type, record, i,
+        LLVMBuildStructGEP2(builder, closure_rec_type, record,
+                            i + record_arg_start,
                             "closure_record_val_ptr"),
         "closure_record_val");
   }
@@ -204,8 +306,24 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
                                       f->data.T_FN.from, ctx, module, builder);
   }
 
-  LLVMValueRef body = LLVMBuildCall2(builder, llvm_callable_type, callable_val,
-                                     args, len, "curried_fn_call");
+  Type *lowered_type = capture_callable ? captured_callable_type : callable_type;
+  LoweredCallable lowered =
+      lower_callable_value(callable_val, lowered_type, ctx, module, builder);
+  LLVMTypeRef lowered_callable_type =
+      lowered_callable_llvm_type(lowered, lowered_type, ctx, module);
+  LLVMValueRef call_args[len + (lowered.has_env ? 1 : 0)];
+  unsigned arg_offset = 0;
+  if (lowered.has_env) {
+    call_args[0] = lowered.env;
+    arg_offset = 1;
+  }
+  for (int j = 0; j < len; j++) {
+    call_args[arg_offset + j] = args[j];
+  }
+
+  LLVMValueRef body = LLVMBuildCall2(
+      builder, lowered_callable_type, lowered.fn, call_args, len + arg_offset,
+      "curried_fn_call");
 
   if (fn_return_type(callable_type)->kind == T_VOID) {
     LLVMBuildRetVoid(builder);
@@ -324,12 +442,33 @@ LLVMValueRef store_closure_record_values(LLVMValueRef rec_alloc, Ast *expr,
   // LLVMBuildStore(builder, fn_ptr, fn_ptr_slot);
 
   if (expr->tag == AST_APPLICATION) {
+    int field_idx = 0;
+    if (application_function_needs_capture(expr, ctx)) {
+      LLVMValueRef callable_val = NULL;
+      JITSymbol *callable_sym = lookup_application_callable_symbol(expr, ctx);
+      Type *captured_callable_type =
+          application_function_capture_type(expr, ctx);
+
+      if (callable_sym && callable_sym->type == STYPE_GENERIC_FUNCTION &&
+          callable_sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_env_type) {
+        callable_val = materialize_generic_closure_value(
+            callable_sym, captured_callable_type, ctx, module, builder);
+      } else {
+        callable_val =
+            codegen(expr->data.AST_APPLICATION.function, ctx, module, builder);
+      }
+
+      LLVMValueRef callable_slot = LLVMBuildStructGEP2(
+          builder, llvm_rec_type, rec_alloc, field_idx++, "captured_fn_slot");
+      LLVMBuildStore(builder, callable_val, callable_slot);
+    }
+
     for (int i = 0; i < expr->data.AST_APPLICATION.len; i++) {
       LLVMValueRef arg_val =
           codegen(expr->data.AST_APPLICATION.args + i, ctx, module, builder);
 
       LLVMValueRef field_slot = LLVMBuildStructGEP2(
-          builder, llvm_rec_type, rec_alloc, i, "app_arg_slot");
+          builder, llvm_rec_type, rec_alloc, field_idx + i, "app_arg_slot");
       LLVMBuildStore(builder, arg_val, field_slot);
     }
 
@@ -377,9 +516,9 @@ static LLVMValueRef expr_to_closure_rec_with_env(Ast *expr, Type *clos_type,
   }
 
   if (expr->tag == AST_APPLICATION) {
-    LLVMValueRef closure_fn = compile_curried_fn(
-        expr, clos_type, env_type, rec_type, clos_fn_type, ctx, module,
-        builder);
+    LLVMValueRef closure_fn =
+        compile_curried_fn(expr, clos_type, env_type, rec_type, clos_fn_type,
+                           ctx, module, builder);
 
     rec_storage = store_closure_record_values(rec_storage, expr, env_type,
                                               closure_fn, ctx, module, builder);
@@ -395,9 +534,9 @@ static LLVMValueRef expr_to_closure_rec_with_env(Ast *expr, Type *clos_type,
 
   if (expr->tag == AST_LAMBDA) {
 
-    LLVMValueRef closure_fn = compile_lambda_as_closure(
-        expr, clos_type, env_type, rec_type, clos_fn_type, ctx, module,
-        builder);
+    LLVMValueRef closure_fn =
+        compile_lambda_as_closure(expr, clos_type, env_type, rec_type,
+                                  clos_fn_type, ctx, module, builder);
 
     rec_storage = store_closure_record_values(rec_storage, expr, env_type,
                                               closure_fn, ctx, module, builder);
@@ -414,9 +553,9 @@ static LLVMValueRef expr_to_closure_rec_with_env(Ast *expr, Type *clos_type,
 
 LLVMValueRef expr_to_closure_rec(Ast *expr, Type *clos_type, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
-  return expr_to_closure_rec_with_env(expr, clos_type,
-                                      closure_env_type_from_expr(expr), ctx,
-                                      module, builder);
+  return expr_to_closure_rec_with_env(
+      expr, clos_type, closure_env_type_from_expr(expr, ctx), ctx, module,
+      builder);
 }
 
 LLVMValueRef curried_fn_closure() {}
@@ -434,11 +573,11 @@ static LLVMValueRef create_closure_rec(Ast *expr, Type *rec_type,
 
   LLVMValueRef rec_storage;
   if (closure_env_should_stack_alloc(expr, ctx)) {
-    rec_storage = LLVMBuildAlloca(builder, llvm_rec_type,
-                                  "closure_env_alloc_stack");
+    rec_storage =
+        LLVMBuildAlloca(builder, llvm_rec_type, "closure_env_alloc_stack");
   } else {
-    rec_storage = LLVMBuildMalloc(builder, llvm_rec_type,
-                                  "closure_env_alloc_heap");
+    rec_storage =
+        LLVMBuildMalloc(builder, llvm_rec_type, "closure_env_alloc_heap");
     LLVMBuildMemSet(builder, rec_storage, LLVMConstInt(LLVMInt8Type(), 0, 0),
                     LLVMSizeOf(llvm_rec_type), 0);
   }
@@ -447,10 +586,89 @@ static LLVMValueRef create_closure_rec(Ast *expr, Type *rec_type,
                                      module, builder);
 }
 
+static LLVMValueRef build_closure_value(LLVMValueRef closure_fn,
+                                        LLVMValueRef closure_env,
+                                        LLVMBuilderRef builder) {
+  LLVMValueRef closure = LLVMGetUndef(
+      LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR}, 2, 0));
+  closure =
+      LLVMBuildInsertValue(builder, closure, closure_fn, 0, "store_closure_fn");
+  closure = LLVMBuildInsertValue(builder, closure, closure_env, 1,
+                                 "store_closure_env");
+  return closure;
+}
+
+static Type *strip_top_level_closure_meta(Type *type) {
+  if (!type || !type->closure_meta) {
+    return type;
+  }
+
+  Type *copy = deep_copy_type(type);
+  copy->closure_meta = NULL;
+  return copy;
+}
+
+LLVMValueRef materialize_generic_closure_value(JITSymbol *sym,
+                                               Type *expected_fn_type,
+                                               JITLangCtx *ctx,
+                                               LLVMModuleRef module,
+                                               LLVMBuilderRef builder) {
+  Type *compiled_type = strip_top_level_closure_meta(expected_fn_type);
+  LLVMValueRef closure = specific_fns_lookup(
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, compiled_type);
+
+  if (closure) {
+    return closure;
+  }
+
+  Ast expr = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
+  TICtx _ctx = {};
+
+  unify(sym->symbol_type, compiled_type, &_ctx);
+  Subst *subst = solve_constraints(_ctx.constraints);
+  Type *closure_type = compiled_type;
+
+  JITLangCtx compilation_ctx = *ctx;
+  compilation_ctx.stack_ptr = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
+  compilation_ctx.frame =
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame;
+  TypeEnv *env = sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env;
+  env = create_env_from_subst(env, subst);
+  compilation_ctx.env = env;
+  Type *env_type =
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_env_type
+          ? sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_env_type
+          : closure_env_type_from_expr(&expr, &compilation_ctx);
+
+  if (sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_rec) {
+    LLVMTypeRef rec_type =
+        closure_record_type_from_env(env_type, &compilation_ctx, module);
+    LLVMTypeRef clos_fn_type =
+        closure_fn_type(closure_type, rec_type, &compilation_ctx, module);
+    LLVMValueRef closure_fn =
+        compile_curried_fn(&expr, closure_type, env_type, rec_type,
+                           clos_fn_type, &compilation_ctx, module, builder);
+    closure = build_closure_value(
+        closure_fn, sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_rec,
+        builder);
+  } else {
+    closure = expr_to_closure_rec_with_env(&expr, closure_type, env_type,
+                                           &compilation_ctx, module, builder);
+  }
+
+  if (!closure) {
+    return NULL;
+  }
+
+  sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns = specific_fns_extend(
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, compiled_type,
+      closure);
+  return closure;
+}
+
 LLVMValueRef create_curried_generic_closure_binding(
     Ast *binding, Type *closure_type, Ast *closure, JITLangCtx *ctx,
     LLVMModuleRef module, LLVMBuilderRef builder) {
-  (void)closure_type;
   return create_closure_symbol(binding, closure, ctx, module, builder);
 }
 
@@ -465,36 +683,34 @@ LLVMValueRef create_curried_closure_binding(Ast *binding, Type *closure_type,
 LLVMValueRef create_closure_symbol(Ast *binding, Ast *expr, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
-
   Type *clos_type = expr->type;
-  Type *cl_env = closure_env_type_from_expr(expr);
+  Type *cl_env = closure_env_type_from_expr(expr, ctx);
 
   if (expr->tag == AST_APPLICATION && is_generic(clos_type)) {
+
     JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, clos_type, NULL, NULL);
     sym->symbol_data.STYPE_GENERIC_FUNCTION.ast = expr;
     sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = ctx->stack_ptr;
     sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame = ctx->frame;
     sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env = ctx->env;
-    sym->closure_env_type = cl_env;
-    sym->closure_env_type = cl_env;
+    sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_env_type = cl_env;
+
+    if (expr->tag == AST_APPLICATION && clos_type->kind == T_FN && cl_env) {
+      LLVMValueRef closure_rec =
+          create_closure_rec(expr, cl_env, ctx, module, builder);
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_rec = closure_rec;
+    }
 
     const char *id_chars = binding->data.AST_IDENTIFIER.value;
     int id_len = binding->data.AST_IDENTIFIER.length;
 
     ht_set_hash(ctx->frame->table, id_chars, hash_string(id_chars, id_len),
                 sym);
-
-    if (expr->tag == AST_APPLICATION && clos_type->kind == T_FN && cl_env) {
-      LLVMValueRef closure_rec =
-          create_closure_rec(expr, cl_env, ctx, module, builder);
-      (void)closure_rec;
-    }
     return NULL;
   }
 
-  LLVMValueRef closure =
-      expr_to_closure_rec_with_env(expr, clos_type, cl_env, ctx, module,
-                                   builder);
+  LLVMValueRef closure = expr_to_closure_rec_with_env(expr, clos_type, cl_env,
+                                                      ctx, module, builder);
 
   if (!closure) {
     fprintf(stderr, "Error: could not compile closure obj\n");
@@ -506,8 +722,11 @@ LLVMValueRef create_closure_symbol(Ast *binding, Ast *expr, JITLangCtx *ctx,
 
   JITSymbol *sym = new_symbol(STYPE_FUNCTION, clos_type, closure,
                               LLVMPointerType(llvm_closure_rec_type, 0));
-  sym->closure_env_type = cl_env;
-  sym->closure_env_type = cl_env;
+  sym->symbol_data.STYPE_FUNCTION.closure_env_type = cl_env;
+  if (expr->tag == AST_APPLICATION && clos_type->kind == T_FN && cl_env) {
+    sym->symbol_data.STYPE_FUNCTION.closure_rec =
+        create_closure_rec(expr, cl_env, ctx, module, builder);
+  }
 
   const char *id_chars = binding->data.AST_IDENTIFIER.value;
   int id_len = binding->data.AST_IDENTIFIER.length;
@@ -519,8 +738,8 @@ LLVMValueRef create_closure_symbol(Ast *binding, Ast *expr, JITLangCtx *ctx,
 
 LLVMTypeRef closure_record_type(Type *clos_type, JITLangCtx *ctx,
                                 LLVMModuleRef module) {
-  return closure_record_type_from_env(clos_type ? clos_type->closure_meta : NULL,
-                                      ctx, module);
+  return closure_record_type_from_env(
+      clos_type ? clos_type->closure_meta : NULL, ctx, module);
 }
 
 LLVMTypeRef closure_fn_type(Type *clos_type, LLVMTypeRef closure_rec_type,
@@ -805,44 +1024,14 @@ LLVMValueRef call_generic_closure_sym(Ast *app, Type *expected_fn_type,
                                       JITSymbol *sym, JITLangCtx *ctx,
                                       LLVMModuleRef module,
                                       LLVMBuilderRef builder) {
-
-  LLVMValueRef closure = specific_fns_lookup(
-      sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
+  LLVMValueRef closure = materialize_generic_closure_value(
+      sym, expected_fn_type, ctx, module, builder);
 
   if (!closure) {
-
-    Ast expr = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
-
-    // no closure found, create new
-    TICtx _ctx = {};
-
-    unify(sym->symbol_type, expected_fn_type, &_ctx);
-    Subst *subst = solve_constraints(_ctx.constraints);
-    Type *closure_type = expected_fn_type;
-    Type *env_type =
-        sym->closure_env_type ? sym->closure_env_type : closure_env_type_from_expr(&expr);
-
-    JITLangCtx compilation_ctx = *ctx;
-    compilation_ctx.stack_ptr =
-        sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
-    compilation_ctx.frame = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame;
-    TypeEnv *env = sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env;
-    env = create_env_from_subst(env, subst);
-    compilation_ctx.env = env;
-    closure = expr_to_closure_rec_with_env(&expr, closure_type, env_type,
-                                           &compilation_ctx, module, builder);
-
-    if (!closure) {
-      fprintf(
-          stderr,
-          "Error: could not compile specific instance of generic closure\n");
-      print_ast_err(app);
-      return NULL;
-    }
-
-    sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns = specific_fns_extend(
-        sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type,
-        closure);
+    fprintf(stderr, "Error: could not compile specific instance of generic "
+                    "closure\n");
+    print_ast_err(app);
+    return NULL;
   }
 
   return call_callable(app, expected_fn_type, closure, ctx, module, builder);
@@ -851,16 +1040,23 @@ LLVMValueRef call_generic_closure_sym(Ast *app, Type *expected_fn_type,
 LLVMValueRef call_closure_sym(Ast *app, Type *expected_fn_type, JITSymbol *sym,
                               JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
-
   Type *call_type = expected_fn_type;
-  if (sym->closure_env_type && !expected_fn_type->closure_meta) {
+
+  if (sym->type == STYPE_GENERIC_FUNCTION &&
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_env_type) {
     call_type = deep_copy_type(expected_fn_type);
-    call_type->closure_meta = sym->closure_env_type;
+    call_type->closure_meta =
+        sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_env_type;
+  }
+
+  if (sym->type == STYPE_FUNCTION &&
+      sym->symbol_data.STYPE_FUNCTION.closure_env_type) {
+    call_type = deep_copy_type(call_type);
+    call_type->closure_meta = sym->symbol_data.STYPE_FUNCTION.closure_env_type;
   }
 
   if (sym->type == STYPE_GENERIC_FUNCTION) {
-    return call_generic_closure_sym(app, call_type, sym, ctx, module,
-                                    builder);
+    return call_generic_closure_sym(app, call_type, sym, ctx, module, builder);
   }
 
   return call_callable(app, call_type, sym->val, ctx, module, builder);
