@@ -392,6 +392,8 @@ static bool astlist_contains_closed_val(AstList *closed_vals, const char *name,
                                         Type *type) {
   for (AstList *l = closed_vals; l; l = l->next) {
     Ast *ast = l->ast;
+    printf("ast list: ");
+    print_ast(ast);
     if (!ast || ast->tag != AST_IDENTIFIER) {
       continue;
     }
@@ -413,6 +415,27 @@ static bool assert_lambda_closed_vals(Ast *lambda, int expected_count,
     ok &= astlist_contains_closed_val(lambda->data.AST_LAMBDA.closed_vals,
                                       names[i], types[i]);
   }
+  if (ok) {
+    fprintf(stderr, "✅ %s\n", msg);
+  } else {
+    add_failure(msg, file, line);
+  }
+  return ok;
+}
+
+static bool assert_lambda_coroutine_state_vals(Ast *lambda, int expected_count,
+                                               const char **names, Type **types,
+                                               const char *msg,
+                                               const char *file, int line) {
+  bool ok =
+      lambda && lambda->tag == AST_LAMBDA &&
+      lambda->data.AST_LAMBDA.num_yield_boundary_crossers == expected_count;
+
+  for (int i = 0; ok && i < expected_count; i++) {
+    ok &= astlist_contains_closed_val(
+        lambda->data.AST_LAMBDA.yield_boundary_crossers, names[i], types[i]);
+  }
+
   if (ok) {
     fprintf(stderr, "✅ %s\n", msg);
   } else {
@@ -1441,8 +1464,9 @@ int test_funcs() {
                "t4;\n",
                &t_bool);
 
-    status &= TASSERT("first-class sum/proc mixed numeric specializations typecheck",
-                      b && b->type && types_equal(b->type, &t_bool));
+    status &=
+        TASSERT("first-class sum/proc mixed numeric specializations typecheck",
+                b && b->type && types_equal(b->type, &t_bool));
     TypeEnv *t1_entry = lookup_test_env_binding("t1");
     TypeEnv *t2_entry = lookup_test_env_binding("t2");
     TypeEnv *t3_entry = lookup_test_env_binding("t3");
@@ -1933,9 +1957,9 @@ int test_coroutines() {
     Ast *lambda = AST_LIST_NTH(l->data.AST_BODY.stmts, 0)->data.AST_LET.expr;
     const char *names[] = {"x"};
     Type *types[] = {&t_int};
-    status &= assert_lambda_closed_vals(lambda, 1, names, types,
-                                        "coroutine closes over x across yield",
-                                        __FILE__, __LINE__);
+    status &= assert_lambda_coroutine_state_vals(
+        lambda, 1, names, types, "coroutine closes over x across yield",
+        __FILE__, __LINE__);
   });
 
   ({
@@ -1953,7 +1977,7 @@ int test_coroutines() {
     Ast *lambda = AST_LIST_NTH(l->data.AST_BODY.stmts, 0)->data.AST_LET.expr;
     const char *names[] = {"x", "y"};
     Type *types[] = {&t_int, &t_int};
-    status &= assert_lambda_closed_vals(
+    status &= assert_lambda_coroutine_state_vals(
         lambda, 2, names, types, "coroutine closes over x and y across yields",
         __FILE__, __LINE__);
   });
@@ -1972,7 +1996,7 @@ int test_coroutines() {
     Ast *lambda = AST_LIST_NTH(l->data.AST_BODY.stmts, 0)->data.AST_LET.expr;
     const char *names[] = {"x", "y"};
     Type *types[] = {&t_int, &t_int};
-    status &= assert_lambda_closed_vals(
+    status &= assert_lambda_coroutine_state_vals(
         lambda, 2, names, types,
         "coroutine closes over x and y after later yield use", __FILE__,
         __LINE__);

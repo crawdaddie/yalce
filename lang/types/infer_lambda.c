@@ -71,8 +71,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   if (ast->data.AST_LAMBDA.is_coroutine && fn_type->kind == T_FN) {
     fn_type->data.T_FN.attributes =
-        set_attr(fn_type->data.T_FN.attributes,
-                 FN_ATTR_COROUTINE_CONSTRUCTOR);
+        set_attr(fn_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
   }
 
   if (self_type) {

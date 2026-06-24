@@ -1057,6 +1057,7 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
       ctx->current_fn_ast->data.AST_LAMBDA.is_coroutine = true;
       ctx->current_fn_ast->data.AST_LAMBDA.num_yields++;
     }
+
     Type *yield = infer_expr(ast->data.AST_YIELD.expr, ctx);
     if (yield && ctx->yielded_type == NULL) {
       ctx->yielded_type = next_tvar();

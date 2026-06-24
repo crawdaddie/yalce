@@ -64,6 +64,33 @@ void extend_closed_vals(Ast *fn, Ast *ref, Type *ref_type) {
   fn->data.AST_LAMBDA.num_closed_vals++;
 }
 
+void extend_coroutine_state_vals(Ast *fn, Ast *ref, Type *ref_type) {
+
+  for (AstList *l = fn->data.AST_LAMBDA.params; l; l = l->next) {
+
+    if (l->ast->tag == AST_IDENTIFIER &&
+        CHARS_EQ(ref->data.AST_IDENTIFIER.value,
+                 l->ast->data.AST_IDENTIFIER.value)) {
+      // avoid closing this function's existing params
+      return;
+    }
+  }
+
+  for (AstList *l = fn->data.AST_LAMBDA.yield_boundary_crossers; l;
+       l = l->next) {
+    if (CHARS_EQ(ref->data.AST_IDENTIFIER.value,
+                 l->ast->data.AST_IDENTIFIER.value)) {
+      // avoid adding closure variable twice
+      return;
+    }
+  }
+
+  ref->type = ref_type;
+  fn->data.AST_LAMBDA.yield_boundary_crossers =
+      ast_list_extend_left(fn->data.AST_LAMBDA.yield_boundary_crossers, ref);
+  fn->data.AST_LAMBDA.num_yield_boundary_crossers++;
+}
+
 static void propagate_closed_val_through_scopes(Ast *ast, Type *ref_type,
                                                 int binding_scope, TICtx *ctx) {
   if (!ctx || !ctx->current_scope || !ast) {
@@ -113,8 +140,9 @@ void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx) {
 
   if (ctx->current_fn_ast &&
       ctx->current_fn_ast->data.AST_LAMBDA.num_yields > yield_boundary_scope) {
+
     ast->data.AST_IDENTIFIER.crosses_yield_boundary = true;
-    extend_closed_vals(ctx->current_fn_ast, ast, ast->type);
+    extend_coroutine_state_vals(ctx->current_fn_ast, ast, ast->type);
   }
 
   if (scope > 0 && scope < ctx->current_fn_base_scope) {

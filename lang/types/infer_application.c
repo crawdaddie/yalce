@@ -29,14 +29,19 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   size_t nargs = ast->data.AST_APPLICATION.len;
 
   Type *fn_type = infer_expr(fn_ast, ctx);
-  if (!fn_type)
+  int expected_args_len = fn_type_args_len(fn_type);
+  if (!fn_type) {
     return NULL;
+  }
 
   Type *current = fn_type;
+
+  Type *arg_types[nargs];
   for (size_t i = 0; i < nargs; i++) {
     current = callable_view(current);
 
     Type *arg_type = infer_expr(ast->data.AST_APPLICATION.args + i, ctx);
+    arg_types[i] = arg_type;
     if (!arg_type)
       return NULL;
 
@@ -51,6 +56,14 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
       add_constraint(ctx, current, expected);
       current = result;
     }
+  }
+  if (expected_args_len > nargs) {
+    // printf("curried???\n");
+    // print_type(func_type);
+    Type **_arg_types = t_alloc(sizeof(Type *) * nargs);
+    memcpy(_arg_types, arg_types, sizeof(Type *) * nargs);
+    Type *closure_meta = create_tuple_type(nargs, _arg_types);
+    current->closure_meta = closure_meta;
   }
 
   return current;
