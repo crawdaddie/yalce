@@ -842,8 +842,7 @@ bool application_is_partial(Ast *app) {
 
 bool is_coroutine_constructor_type(Type *fn_type) {
   return fn_type && fn_type->kind == T_FN &&
-         has_attr(fn_type->data.T_FN.attributes,
-                  FN_ATTR_COROUTINE_CONSTRUCTOR);
+         has_attr(fn_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
 }
 
 bool is_coroutine_type(Type *fn_type) {
@@ -918,4 +917,38 @@ FnAttributes set_attr(FnAttributes attrs, FnAttributes flag) {
 
 FnAttributes clear_attr(FnAttributes attrs, FnAttributes flag) {
   return attrs & ~flag;
+}
+
+void print_fn_type_attrs(FnAttributes attrs) {
+  printf("FnAttributes(0x%016llx):\n", (unsigned long long)attrs);
+  if (attrs == FN_ATTR_NONE) {
+    printf("  FN_ATTR_NONE\n");
+    return;
+  }
+  struct {
+    FnAttributes bit;
+    const char *name;
+  } table[] = {
+      {FN_ATTR_PURE, "FN_ATTR_PURE"},
+      {FN_ATTR_INLINE, "FN_ATTR_INLINE"},
+      {FN_ATTR_NOINLINE, "FN_ATTR_NOINLINE"},
+      {FN_ATTR_REALTIME_SAFE, "FN_ATTR_REALTIME_SAFE"},
+      {FN_ATTR_ALLOCATES, "FN_ATTR_ALLOCATES"},
+      {FN_ATTR_RECURSIVE, "FN_ATTR_RECURSIVE"},
+      {FN_ATTR_COROUTINE_CONSTRUCTOR, "FN_ATTR_COROUTINE_CONSTRUCTOR"},
+  };
+  for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
+    if (attrs & table[i].bit) {
+      printf("  %s\n", table[i].name);
+    }
+  }
+  // Warn about any unknown bits
+  uint64_t known = 0;
+  for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
+    known |= table[i].bit;
+  }
+  uint64_t unknown = attrs & ~known;
+  if (unknown) {
+    printf("  unknown bits: 0x%016llx\n", (unsigned long long)unknown);
+  }
 }

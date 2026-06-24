@@ -1,4 +1,5 @@
 #include "./infer_application.h"
+#include "serde.h"
 #include "type_ser.h"
 #include "types/builtins.h"
 #include <string.h>
@@ -30,6 +31,7 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
   Type *fn_type = infer_expr(fn_ast, ctx);
   int expected_args_len = fn_type_args_len(fn_type);
+
   if (!fn_type) {
     return NULL;
   }
@@ -63,6 +65,7 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
     Type **_arg_types = t_alloc(sizeof(Type *) * nargs);
     memcpy(_arg_types, arg_types, sizeof(Type *) * nargs);
     Type *closure_meta = create_tuple_type(nargs, _arg_types);
+    current = deep_copy_type(current);
     current->closure_meta = closure_meta;
   }
 

@@ -71,6 +71,7 @@ Type *freshen_map_apply_to_type(FreshenMap *map, Type *t) {
     }
     Type *result = t_alloc(sizeof(Type));
     *result = (Type){T_FN, {.T_FN = {from, to}}};
+    result->data.T_FN.attributes = t->data.T_FN.attributes;
     return result;
   }
   case T_CONS:

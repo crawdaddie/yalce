@@ -51,6 +51,7 @@ typedef enum BindingKind {
   BIND_ARRAY_FN,
   BIND_PARTIAL_CLOSURE,
   BIND_COROUTINE,
+  BIND_COROUTINE_CONSTRUCTOR,
   BIND_GENERIC_FN,
   BIND_CONCRETE_FN,
   BIND_MODULE,
@@ -97,45 +98,13 @@ static JITSymbol *bind_alias_if_possible(Ast *binding, Ast *expr,
   return sym;
 }
 
-// Detect the special array accessor closure shape produced by `array_at`.
-static Type *classify_array_accessor_type(Ast *expr) {
-  if (expr->tag != AST_APPLICATION) {
-    return NULL;
-  }
-
-  if (expr->data.AST_APPLICATION.function->tag != AST_IDENTIFIER) {
-    return NULL;
-  }
-
-  if (strcmp("array_at",
-             expr->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value) !=
-      0) {
-    return NULL;
-  }
-
-  Type *arr = expr->data.AST_APPLICATION.args->type;
-  if (arr->kind == T_CONS && is_array_type(arr) &&
-      arr->data.T_CONS.args[0]->kind == T_FN) {
-    return arr->data.T_CONS.args[0];
-  }
-
-  return NULL;
-}
-
 // Classify a let-binding before dispatching to the concrete emission path.
 static BindingKind classify_binding(Ast *expr, Type *expr_type,
                                     Type *binding_type) {
-  Type *array_fn_type = classify_array_accessor_type(expr);
-  if (array_fn_type) {
-    return is_generic(array_fn_type) ? BIND_GENERIC_FN : BIND_ARRAY_FN;
+  if (is_coroutine_constructor_type(expr_type)) {
+    return BIND_COROUTINE_CONSTRUCTOR;
   }
-
-  if (expr->tag == AST_APPLICATION && expr->type->kind == T_FN) {
-
-    return BIND_PARTIAL_CLOSURE;
-  }
-
-  if (is_coroutine_constructor_type(binding_type)) {
+  if (is_coroutine_type(binding_type)) {
     return BIND_COROUTINE;
   }
 
@@ -143,7 +112,7 @@ static BindingKind classify_binding(Ast *expr, Type *expr_type,
     return BIND_GENERIC_FN;
   }
 
-  if (binding_type->kind == T_FN && !is_coroutine_type(binding_type)) {
+  if (binding_type->kind == T_FN) {
     return BIND_CONCRETE_FN;
   }
 
@@ -179,7 +148,7 @@ static LLVMValueRef emit_function_binding(Ast *binding, Ast *expr,
   }
 
   if (is_closure(binding_type)) {
-    LLVMValueRef expr_val = codegen(expr, ctx, module, builder);
+    LLVMValueRef expr_val = codegen_create_closure(expr, ctx, module, builder);
     create_fn_binding(binding, binding_type, expr_val, ctx, module, builder);
     return expr_val;
   }
@@ -382,6 +351,7 @@ JITSymbol *create_generic_fn_symbol(Ast *fn_ast, JITLangCtx *ctx) {
   sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr = ctx->stack_ptr;
   sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_frame = ctx->frame;
   sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env = ctx->env;
+
   return sym;
 }
 
@@ -430,6 +400,18 @@ LLVMValueRef create_lazy_extern_fn_binding(Ast *binding, Ast *expr,
   return fn;
 }
 
+LLVMValueRef create_closure_symbol(Ast *binding, Ast *expr, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+
+  printf("create closure symbol\n");
+  print_ast(expr);
+  print_type(expr->type);
+  JITSymbol *sym = create_generic_fn_symbol(expr, ctx);
+  install_identifier_symbol(binding, sym, ctx);
+  return NULL;
+}
+
 LLVMValueRef __handle_yield_boundary_crossing_binding(Ast *binding, Ast *expr,
                                                       JITLangCtx *ctx,
                                                       LLVMModuleRef module,
@@ -454,9 +436,9 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, JITLangCtx *ctx,
   case BIND_ARRAY_FN:
     return emit_array_fn_binding(binding, expr, expr_type, ctx, module,
                                  builder);
-  case BIND_PARTIAL_CLOSURE:
-    return create_closure_symbol(binding, expr, ctx, module, builder);
-
+  case BIND_COROUTINE_CONSTRUCTOR:
+    return create_coroutine_constructor_symbol(binding, expr, binding_type, ctx,
+                                               module, builder);
   case BIND_COROUTINE:
     return create_coroutine_symbol(binding, expr, binding_type, ctx, module,
                                    builder);

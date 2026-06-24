@@ -1,4 +1,5 @@
 #include "./infer_lambda.h"
+#include "type_ser.h"
 
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
   size_t len = ast->data.AST_LAMBDA.len;

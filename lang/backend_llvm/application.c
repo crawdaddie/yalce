@@ -102,14 +102,7 @@ static JITSymbol *lookup_application_symbol(Ast *app, JITLangCtx *ctx) {
 // }
 
 static bool is_closure_symbol(JITSymbol *sym) {
-  if (sym->type == STYPE_FUNCTION) {
-    return sym->symbol_data.STYPE_FUNCTION.closure_env_type != NULL;
-  }
-
-  if (sym->type == STYPE_GENERIC_FUNCTION) {
-    return sym->symbol_data.STYPE_GENERIC_FUNCTION.closure_env_type != NULL;
-  }
-  return false;
+  return sym->symbol_type->closure_meta != NULL;
 }
 
 static Type *resolve_sym_type(Type *exp, Type *sym_type, JITLangCtx *ctx) {

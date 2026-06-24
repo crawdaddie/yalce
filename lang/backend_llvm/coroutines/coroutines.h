@@ -22,16 +22,16 @@ typedef struct {
   // const char *name;
 
   // Fields for LLVM intrinsics implementation
-  LLVMValueRef coro_id;         // Result of coro.id
-  LLVMValueRef coro_handle;     // Result of coro.begin
-  LLVMValueRef promise_alloca;  // Alloca for promise storage
+  LLVMValueRef coro_id;             // Result of coro.id
+  LLVMValueRef coro_handle;         // Result of coro.begin
+  LLVMValueRef promise_alloca;      // Alloca for promise storage
   LLVMValueRef frame_alloca_anchor; // Insert lazy frame allocas before this
-  LLVMBasicBlockRef cleanup_bb; // Basic block for cleanup
-  LLVMBasicBlockRef suspend_bb; // Basic block for final suspend
-  LLVMBasicBlockRef start_bb;   // Basic block for start
-  Type *yield_type;             // Type of yielded values
-  LLVMTypeRef llvm_yield_type;  // Type of yielded values
-  int yield_count;              // Number of yields encountered
+  LLVMBasicBlockRef cleanup_bb;     // Basic block for cleanup
+  LLVMBasicBlockRef suspend_bb;     // Basic block for final suspend
+  LLVMBasicBlockRef start_bb;       // Basic block for start
+  Type *yield_type;                 // Type of yielded values
+  LLVMTypeRef llvm_yield_type;      // Type of yielded values
+  int yield_count;                  // Number of yields encountered
   const char *coro_name;
   int num_param_allocas;
   LLVMValueRef *param_allocas;
@@ -59,8 +59,7 @@ LLVMValueRef coro_symbol_resume(JITSymbol *sym, JITLangCtx *ctx,
 LLVMValueRef codegen_yield(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder);
 
-LLVMBuilderRef coro_create_frame_builder(JITLangCtx *ctx,
-                                         LLVMModuleRef module);
+LLVMBuilderRef coro_create_frame_builder(JITLangCtx *ctx, LLVMModuleRef module);
 
 #define PTR_ID_FUNC_TYPE(obj)                                                  \
   LLVMFunctionType(LLVMPointerType(obj, 0),                                    \
@@ -69,6 +68,12 @@ LLVMBuilderRef coro_create_frame_builder(JITLangCtx *ctx,
 LLVMValueRef create_coroutine_symbol(Ast *binding, Ast *expr, Type *expr_type,
                                      JITLangCtx *ctx, LLVMModuleRef module,
                                      LLVMBuilderRef builder);
+
+LLVMValueRef create_coroutine_constructor_symbol(Ast *binding, Ast *expr,
+                                                 Type *expr_type,
+                                                 JITLangCtx *ctx,
+                                                 LLVMModuleRef module,
+                                                 LLVMBuilderRef builder);
 // intrinsic declarations
 LLVMValueRef get_coro_id_intrinsic(LLVMModuleRef module);
 /**

@@ -249,17 +249,16 @@ static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
 
     compilation_ctx.type_subst =
         create_subst_for_generic_fn(generic_type, expected_fn_type);
-    compilation_ctx.env = create_env_from_subst(
-        sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env,
-        compilation_ctx.type_subst);
+    compilation_ctx.env =
+        create_env_from_subst(sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env,
+                              compilation_ctx.type_subst);
 
     Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
 
     Type *compiled_type = deep_copy_type(expected_fn_type);
     if (compiled_type->kind == T_FN) {
-      compiled_type->data.T_FN.attributes =
-          set_attr(compiled_type->data.T_FN.attributes,
-                   FN_ATTR_COROUTINE_CONSTRUCTOR);
+      compiled_type->data.T_FN.attributes = set_attr(
+          compiled_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
     }
     fn_ast.type = compiled_type;
 
@@ -508,9 +507,9 @@ LLVMValueRef coro_create_with_reset_closure(JITSymbol *sym,
 // Coroutine Symbol Creation
 // ============================================================================
 
-LLVMValueRef create_coroutine_symbol(Ast *binding, Ast *expr, Type *expr_type,
-                                     JITLangCtx *ctx, LLVMModuleRef module,
-                                     LLVMBuilderRef builder) {
+LLVMValueRef __create_coroutine_symbol(Ast *binding, Ast *expr, Type *expr_type,
+                                       JITLangCtx *ctx, LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
   LLVMValueRef expr_val;
 
   if (is_generic(expr_type)) {
@@ -522,6 +521,25 @@ LLVMValueRef create_coroutine_symbol(Ast *binding, Ast *expr, Type *expr_type,
   }
 
   return expr_val;
+}
+
+LLVMValueRef create_coroutine_symbol(Ast *binding, Ast *expr, Type *expr_type,
+                                     JITLangCtx *ctx, LLVMModuleRef module,
+                                     LLVMBuilderRef builder) {
+
+  print_ast(binding);
+  print_type(expr_type);
+  return NULL;
+}
+
+LLVMValueRef create_coroutine_constructor_symbol(Ast *binding, Ast *expr,
+                                                 Type *expr_type,
+                                                 JITLangCtx *ctx,
+                                                 LLVMModuleRef module,
+                                                 LLVMBuilderRef builder) {
+  print_ast(binding);
+  print_type(expr_type);
+  return NULL;
 }
 bool is_recursive_yield(Ast *expr, CoroutineCtx *coro_ctx) {
   if (expr->tag == AST_APPLICATION &&

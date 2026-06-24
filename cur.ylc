@@ -1,0 +1,3 @@
+let sum3 = fn a b c -> a + b + c;;
+let c = sum3 1 2;
+let test_curry = c 3 == 6;

@@ -312,7 +312,7 @@ uint64_t clear_attr(uint64_t attrs, uint64_t flag);
 
 // Pretty printing
 const char* fn_attr_to_string(FnAttributes attr);
-void print_fn_attrs(FnAttributes attrs);
+void print_fn_type_attrs(FnAttributes attrs);
 
 
 typedef struct Type {

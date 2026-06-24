@@ -653,9 +653,20 @@ Type *instantiate_env(TypeEnv *entry, TICtx *ctx) {
     }
   }
 
-  if (!base.len)
+  if (!base.len) {
     return entry->type;
+  }
   return freshen_map_apply_to_type(&base, entry->type);
+}
+
+// Short-circuit instantiation for entries that are truly monomorphic and have
+// no predicates to copy.  Keeps predicate-copying centralized in
+// instantiate_env when it is needed.
+static Type *instantiate_ref(TypeEnv *ref, TICtx *ctx) {
+  if (!ref->scheme_vars && !ref->predicates) {
+    return ref->type;
+  }
+  return instantiate_env(ref, ctx);
 }
 
 Type *instantiate_type_in_env(Type *sch, TypeEnv *env) {
@@ -709,7 +720,7 @@ static Type *infer_identifier(Ast *ast, TICtx *ctx) {
       return create_type_multi_param_fn(ref->type->data.T_CONS.num_args,
                                         ref->type->data.T_CONS.args, ref->type);
     }
-    Type *inst = instantiate_env(ref, ctx);
+    Type *inst = instantiate_ref(ref, ctx);
     ast->type = inst;
 
     if (ref->md.type == BT_VAR || ref->md.type == BT_FN_PARAM) {
@@ -1687,6 +1698,7 @@ Type *apply_subst_to_type(Subst *subst, Type *t) {
     }
     Type *result = t_alloc(sizeof(Type));
     *result = (Type){T_FN, {.T_FN = {from, to}}};
+    result->data.T_FN.attributes = t->data.T_FN.attributes;
     return result;
   }
   case T_CONS:
