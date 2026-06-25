@@ -269,7 +269,7 @@ enum TypeKind {
   T_EMPTY_LIST,
   T_TYPECLASS_RESOLVE,
   T_MODULE,
-  T_SCHEME,
+  // T_SCHEME,
 };
 #define TYPE_FLAGS_PRIMITIVE ((1 << T_STRING) | ((1 << T_STRING) - 1))
 
@@ -344,11 +344,6 @@ typedef struct Type {
       FnAttributes attributes;
     } T_FN;
 
-    struct {
-      TypeList *vars;
-      int num_vars;
-      Type *type;
-    } T_SCHEME;
     struct {
       TypeEnv *env;
       int size;
@@ -465,7 +460,7 @@ bool is_module(Type *t);
 Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2);
 
 
-#define MSCHEME(n, vlist, t) ((Type){T_SCHEME, {.T_SCHEME = {.vars = vlist, .num_vars = n, .type = t}}})
+// #define MSCHEME(n, vlist, t) ((Type){T_SCHEME, {.T_SCHEME = {.vars = vlist, .num_vars = n, .type = t}}})
 
 // Recursive macro helpers for building TypeList chains
 #define _TYPELIST_1(t1) \

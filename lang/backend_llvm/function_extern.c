@@ -26,10 +26,6 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int name_len = strlen(name);
   Type *fn_type = ast->type;
 
-  if (fn_type->kind == T_SCHEME) {
-    TICtx _c = {.env = ctx->env};
-    fn_type = instantiate(fn_type, &_c);
-  }
   int params_count = fn_type_args_len(fn_type);
 
   if (params_count == 1 && fn_type->data.T_FN.from->kind == T_VOID) {

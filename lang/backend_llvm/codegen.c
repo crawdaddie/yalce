@@ -304,7 +304,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       break;
     }
 
-    if (is_generic(t) && t->kind == T_SCHEME) {
+    if (is_generic(t)) {
       const char *id = ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
 
       JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, t, NULL, NULL);

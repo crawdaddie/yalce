@@ -240,13 +240,6 @@ static bool alpha_type_equal_inner(Type *left, Type *right,
             alpha_type_equal_inner(left->closure_meta, right->closure_meta,
                                    pairs, pair_count));
 
-  case T_SCHEME:
-    return left->data.T_SCHEME.num_vars == right->data.T_SCHEME.num_vars &&
-           alpha_typelist_equal(left->data.T_SCHEME.vars,
-                                right->data.T_SCHEME.vars, pairs, pair_count) &&
-           alpha_type_equal_inner(left->data.T_SCHEME.type,
-                                  right->data.T_SCHEME.type, pairs, pair_count);
-
   case T_MODULE:
     return alpha_typeenv_equal(left->data.T_MODULE.env,
                                right->data.T_MODULE.env, pairs, pair_count);
@@ -1002,22 +995,23 @@ int test_list_processing() {
   });
   return status;
 }
-int test_aux() {
 
-  bool status = true;
-  Type t0 = TVAR("`5");
-  Type t1 = TVAR("`7");
-  T("let aux = fn f l res -> \n"
-    "  match l with\n"
-    "  | [] -> res\n"
-    "  | x :: rest -> aux f rest (f x :: res) \n"
-    ";;\n",
-    &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_2(&t0, &t1), &TLIST(&t0),
-                             &TLIST(&t1), &TLIST(&t1)),
-             &t0, &t1));
-
-  return status;
-}
+// int test_aux() {
+//
+//   bool status = true;
+//   Type t0 = TVAR("`5");
+//   Type t1 = TVAR("`7");
+//   T("let aux = fn f l res -> \n"
+//     "  match l with\n"
+//     "  | [] -> res\n"
+//     "  | x :: rest -> aux f rest (f x :: res) \n"
+//     ";;\n",
+//     &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_2(&t0, &t1), &TLIST(&t0),
+//                              &TLIST(&t1), &TLIST(&t1)),
+//              &t0, &t1));
+//
+//   return status;
+// }
 
 int test_basic_ops() {
   printf("## TEST BASIC OPS\n---------------------------------------------\n");

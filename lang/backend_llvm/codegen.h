@@ -16,6 +16,5 @@ LLVMValueRef codegen_repl_top_level(Ast *ast, LLVMTypeRef *ret_type,
                                     JITLangCtx *ctx, LLVMModuleRef module,
                                     LLVMBuilderRef builder);
 #define VALUE_IS_PRINTABLE(t)                                                  \
-  (t->kind != T_VOID) && (t->kind != T_FN) && (t->kind != T_SCHEME) &&         \
-      (!is_module(t))
+  (t->kind != T_VOID) && (t->kind != T_FN) && (!is_module(t))
 #endif

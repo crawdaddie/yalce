@@ -97,9 +97,6 @@ LLVMValueRef create_constructor_module(Ast *trait, JITLangCtx *ctx,
   Type *module_type = module->type;
   Type *underlying = module_type->data.T_CONS.args[0];
 
-  if (underlying->kind == T_SCHEME) {
-    underlying = underlying->data.T_SCHEME.type;
-  }
   underlying = fn_return_type(underlying);
 
   module_symbol =
@@ -123,9 +120,6 @@ LLVMValueRef create_constructor_module(Ast *trait, JITLangCtx *ctx,
     out_type = lookup_builtin_type(type_name.chars);
   }
 
-  if (out_type->kind == T_SCHEME) {
-    out_type = out_type->data.T_SCHEME.type;
-  }
   return LLVMConstInt(LLVMInt32Type(), 0, 0);
 }
 

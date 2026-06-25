@@ -1651,7 +1651,8 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   GENERIC_FN_SYMBOL("Char", NULL, CharConstructorHandler);
   GENERIC_FN_SYMBOL("Int", NULL, int_constructor_handler);
-  GENERIC_FN_SYMBOL("Double", NULL, double_constructor_handler);
+  GENERIC_FN_SYMBOL("Double", lookup_builtin_env("Double")->type,
+                    double_constructor_handler);
   GENERIC_FN_SYMBOL("Uint64", NULL, uint64_constructor_handler);
   GENERIC_FN_SYMBOL("Array", &array_scheme, ArrayConstructorHandler);
   GENERIC_FN_SYMBOL("String", NULL, ArrayConstructorHandler);

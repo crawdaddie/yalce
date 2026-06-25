@@ -245,18 +245,6 @@ void print_type_to_stream(Type *t, FILE *stream) {
     fprintf(stream, ")");
     break;
   }
-  case T_SCHEME: {
-    fprintf(stream, "∀ ");
-    for (TypeList *v = t->data.T_SCHEME.vars; v; v = v->next) {
-      Type *n = v->type;
-      print_type_to_stream(n, stream);
-      fprintf(stream, ", ");
-    }
-
-    fprintf(stream, ": ");
-    print_type_to_stream(t->data.T_SCHEME.type, stream);
-    break;
-  }
   case T_MODULE: {
     fprintf(stream, "%s", TYPE_NAME_MODULE);
     if (t->data.T_MODULE.size > 0) {

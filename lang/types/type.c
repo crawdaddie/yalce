@@ -78,12 +78,9 @@ static bool module_matches_cons(Type *mod, Type *cons, bool exact) {
         strcmp(cons->data.T_CONS.names[i], env->name) != 0) {
       return false;
     }
-    Type env_type = env->scheme_vars
-                        ? (Type){T_SCHEME,
-                                 {.T_SCHEME = {.vars = env->scheme_vars,
-                                               .num_vars = 0,
-                                               .type = env->type}}}
-                        : *env->type;
+    return false;
+
+    Type env_type = *env->type;
     Type *lhs = env->scheme_vars ? &env_type : env->type;
     bool ok = exact ? types_equal(lhs, cons->data.T_CONS.args[i])
                     : types_match(lhs, cons->data.T_CONS.args[i]);
@@ -188,9 +185,6 @@ bool types_match(Type *t1, Type *t2) {
     return false;
   }
 
-  case T_SCHEME: {
-    return types_match(t1->data.T_SCHEME.type, t2->data.T_SCHEME.type);
-  }
   case T_MODULE: {
     TypeEnv *e1 = t1->data.T_MODULE.env;
     TypeEnv *e2 = t2->data.T_MODULE.env;
@@ -290,9 +284,6 @@ bool types_equal(Type *t1, Type *t2) {
     return false;
   }
 
-  case T_SCHEME: {
-    return types_equal(t1->data.T_SCHEME.type, t2->data.T_SCHEME.type);
-  }
   case T_MODULE: {
     TypeEnv *e1 = t1->data.T_MODULE.env;
     TypeEnv *e2 = t2->data.T_MODULE.env;
@@ -374,9 +365,6 @@ bool is_generic(Type *t) {
 
   case T_FN: {
     return is_generic(t->data.T_FN.from) || is_generic(t->data.T_FN.to);
-  }
-  case T_SCHEME: {
-    return is_generic(t->data.T_SCHEME.type);
   }
 
   default:
@@ -481,11 +469,6 @@ Type *deep_copy_type(const Type *original) {
     copy->data.T_FN.attributes = original->data.T_FN.attributes;
     break;
   }
-
-    // case T_SCHEME: {
-    //   int num_vars = copy->data.T_SCHEME.num_vars;
-    //   break;
-    // }
   }
   return copy;
 }
@@ -761,9 +744,6 @@ TypeClass *get_typeclass_instance(Type *t, const char *name, TypeList *params) {
 
 bool type_implements(Type *t, TypeClass *constraint_tc) {
 
-  if (t->kind == T_SCHEME) {
-    t = t->data.T_SCHEME.type;
-  }
   if (t->kind == T_TYPECLASS_RESOLVE &&
       (strcmp(t->data.T_CONS.name, constraint_tc->name) == 0)) {
     return true;

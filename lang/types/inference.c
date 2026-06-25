@@ -546,9 +546,6 @@ TypeList *free_vars_type(TypeList *acc, Type *t) {
       acc = free_vars_type(acc, t->data.T_CONS.args[i]);
     }
     return acc;
-  case T_SCHEME:
-    // During transition: some places still use T_SCHEME
-    return free_vars_type(acc, t->data.T_SCHEME.type);
   default:
     return acc;
   }
@@ -669,42 +666,7 @@ static Type *instantiate_ref(TypeEnv *ref, TICtx *ctx) {
   return instantiate_env(ref, ctx);
 }
 
-Type *instantiate_type_in_env(Type *sch, TypeEnv *env) {
-  // Stub for external callers still using T_SCHEME
-  return sch;
-}
-
-// ============================================================================
-// Backward-compatible wrappers (transitionary - external callers use T_SCHEME)
-// ============================================================================
-
-// generalize: create a T_SCHEME wrapper from a type.
-Type *generalize(Type *t, TICtx *ctx) {
-  (void)ctx;
-  if (!is_generic(t))
-    return t;
-
-  Type *scheme = t_alloc(sizeof(Type));
-  TypeList *vars = free_vars_type(NULL, t);
-  int n = 0;
-  for (TypeList *vl = vars; vl; vl = vl->next)
-    n++;
-
-  *scheme =
-      (Type){T_SCHEME, {.T_SCHEME = {.vars = vars, .num_vars = n, .type = t}}};
-  return scheme;
-}
-
-// instantiate: unwrap T_SCHEME and freshen its vars.
-Type *instantiate(Type *t, TICtx *ctx) {
-  if (!t || t->kind != T_SCHEME)
-    return t;
-
-  TypeEnv stub = {.name = "",
-                  .type = t->data.T_SCHEME.type,
-                  .scheme_vars = t->data.T_SCHEME.vars};
-  return instantiate_env(&stub, ctx);
-}
+Type *instantiate_type_in_env(Type *sch, TypeEnv *env) { return sch; }
 
 // ============================================================================
 // Expression inference - HM core dispatcher
@@ -1732,40 +1694,6 @@ Type *apply_subst_to_type(Subst *subst, Type *t) {
   default:
     return t;
   }
-}
-
-// ============================================================================
-// Backward-compatible wrappers (transitionary - external callers use
-// T_SCHEME)
-// ============================================================================
-
-// generalize_type: create a T_SCHEME wrapper from a type.
-// Used during transition by type_expressions.c and modules.c.
-Type *generalize_type(Type *t, TICtx *ctx) {
-  if (!is_generic(t))
-    return t;
-
-  Type *scheme = t_alloc(sizeof(Type));
-  TypeList *vars = free_vars_type(NULL, t);
-  int n = 0;
-  for (TypeList *vl = vars; vl; vl = vl->next)
-    n++;
-
-  *scheme =
-      (Type){T_SCHEME, {.T_SCHEME = {.vars = vars, .num_vars = n, .type = t}}};
-  return scheme;
-}
-
-// instantiate_type: unwrap T_SCHEME and freshen its vars.
-// Used during transition by type_expressions.c and modules.c.
-Type *instantiate_type(Type *t, TICtx *ctx) {
-  if (t->kind != T_SCHEME)
-    return t;
-
-  TypeEnv stub = {.name = "",
-                  .type = t->data.T_SCHEME.type,
-                  .scheme_vars = t->data.T_SCHEME.vars};
-  return instantiate_env(&stub, ctx);
 }
 
 // ============================================================================

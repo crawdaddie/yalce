@@ -24,6 +24,10 @@ LLVMValueRef codegen_create_closure(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder);
 
+LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
+                                      LLVMModuleRef module,
+                                      LLVMBuilderRef builder);
+
 LLVMValueRef create_closure_symbol(Ast *binding, Ast *expr, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder);

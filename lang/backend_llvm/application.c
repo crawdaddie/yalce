@@ -102,7 +102,7 @@ static JITSymbol *lookup_application_symbol(Ast *app, JITLangCtx *ctx) {
 // }
 
 static bool is_closure_symbol(JITSymbol *sym) {
-  return sym->symbol_type->closure_meta != NULL;
+  return sym->symbol_type && sym->symbol_type->closure_meta != NULL;
 }
 
 static Type *resolve_sym_type(Type *exp, Type *sym_type, JITLangCtx *ctx) {
@@ -256,16 +256,17 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                     builder);
   }
 
-  if (is_coroutine_constructor_type(sym->symbol_type)) {
+  if (sym->symbol_type && is_coroutine_constructor_type(sym->symbol_type)) {
     return coro_create_with_reset_closure(sym, callable_type, ast, ctx, module,
                                           builder);
   }
 
-  if (is_coroutine_type(sym->symbol_type)) {
+  if (sym->symbol_type && is_coroutine_type(sym->symbol_type)) {
     return coro_symbol_resume(sym, ctx, module, builder);
   }
 
-  if (sym->type == STYPE_GENERIC_FUNCTION && !is_closure(sym->symbol_type)) {
+  if (sym->type == STYPE_GENERIC_FUNCTION &&
+      !(sym->symbol_type && is_closure(sym->symbol_type))) {
     return call_generic_function(ast, callable_type, sym, ctx, module, builder);
   }
 
