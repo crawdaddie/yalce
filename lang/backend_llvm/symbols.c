@@ -304,6 +304,10 @@ static LLVMValueRef load_identifier_symbol(Ast *ast, const char *chars,
 
   case STYPE_GENERIC_FUNCTION: {
     Type *expected_type = specialize_type_for_codegen(ast->type, ctx);
+    // printf("load generic fn id: ");
+    // print_ast(ast);
+    // print_type(expected_type);
+    // print_type(sym->symbol_type);
     return get_specific_callable(sym, expected_type, ctx, module, builder);
   }
 

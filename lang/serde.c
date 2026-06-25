@@ -4,16 +4,14 @@
 #include <string.h>
 
 void print_ast(Ast *ast) {
-  char *buf = malloc(sizeof(char) * 500);
+  char *buf = calloc(500, sizeof(char));
   printf("%s\n", ast_to_sexpr(ast, buf));
-  // printf(COLOR_RESET);
   free(buf);
 }
 
 void print_ast_err(Ast *ast) {
-  char *buf = malloc(sizeof(char) * 500);
+  char *buf = calloc(500, sizeof(char));
   fprintf(stderr, "%s\n", ast_to_sexpr(ast, buf));
-  // fprintf(stderr, COLOR_RESET);
   free(buf);
 }
 
@@ -118,7 +116,8 @@ char *ast_to_sexpr(Ast *ast, char *buffer) {
     break;
   }
   case AST_IDENTIFIER: {
-    buffer = strcat(buffer, ast->data.AST_IDENTIFIER.value);
+    buffer = strncat(buffer, ast->data.AST_IDENTIFIER.value,
+                     ast->data.AST_IDENTIFIER.length);
     break;
   }
 

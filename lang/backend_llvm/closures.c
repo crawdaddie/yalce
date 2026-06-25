@@ -86,6 +86,50 @@ LLVMValueRef call_closure_obj(LLVMValueRef rec, Type *closure_type, Ast *app,
   return call;
 }
 
+static LLVMValueRef emit_closure_call(LLVMValueRef closure, Type *callable_type,
+                                     LLVMValueRef *args, int num_args,
+                                     JITLangCtx *ctx, LLVMModuleRef module,
+                                     LLVMBuilderRef builder) {
+  LLVMTypeRef ret_type =
+      type_to_llvm_type(fn_return_type(callable_type), ctx, module);
+
+  LLVMTypeRef param_types[num_args + 1];
+  param_types[0] = GENERIC_PTR;
+  for (int i = 0; i < num_args; i++) {
+    Type *arg_type = callable_arg_type(callable_type, i);
+    param_types[i + 1] = type_to_llvm_type(arg_type, ctx, module);
+  }
+
+  LLVMTypeRef fn_type =
+      LLVMFunctionType(ret_type, param_types, num_args + 1, 0);
+
+  LLVMValueRef fn = LLVMBuildExtractValue(builder, closure, 0, "inner_fn");
+  LLVMValueRef env = LLVMBuildExtractValue(builder, closure, 1, "inner_env");
+
+  LLVMValueRef call_args[num_args + 1];
+  call_args[0] = env;
+  for (int i = 0; i < num_args; i++) {
+    call_args[i + 1] = args[i];
+  }
+
+  return LLVMBuildCall2(builder, fn_type, fn, call_args, num_args + 1,
+                        "curried_closure_call");
+}
+
+static bool value_is_closure(LLVMValueRef val) {
+  if (!val)
+    return false;
+  LLVMTypeRef type = LLVMTypeOf(val);
+  return LLVMGetTypeKind(type) == LLVMStructTypeKind;
+}
+
+static LLVMValueRef build_generic_closure_value(JITSymbol *sym,
+                                                Type *expected_fn_type,
+                                                JITLangCtx *ctx,
+                                                LLVMModuleRef module,
+                                                LLVMBuilderRef builder,
+                                                Type **out_clos_type);
+
 LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
                                 LLVMTypeRef closure_rec_type,
                                 LLVMTypeRef clos_fn_type, JITLangCtx *ctx,
@@ -96,22 +140,13 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
 
   Type *callable_type;
   LLVMTypeRef llvm_callable_type;
-  LLVMValueRef callable_val;
+  JITSymbol *callable_sym = NULL;
   const char *fname;
 
   if (expr->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
     fname = expr->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
 
-    JITSymbol *callable_sym =
-        lookup_id_ast(expr->data.AST_APPLICATION.function, ctx);
-
-    // if (callable_sym->type == STYPE_GENERIC_FUNCTION &&
-    //     callable_sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler) {
-    //
-    //   return
-    //   callable_sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler(
-    //       expr, ctx, module, builder);
-    // }
+    callable_sym = lookup_id_ast(expr->data.AST_APPLICATION.function, ctx);
 
     if (!callable_sym) {
       fprintf(stderr, "Symbol to curry not found\n");
@@ -123,20 +158,11 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
     callable_type = ftype;
     llvm_callable_type = type_to_llvm_type(callable_type, ctx, module);
 
-    if (is_generic(callable_sym->symbol_type)) {
-
-      callable_val = find_callable_from_generic(expr, callable_type, ftype, ctx,
-                                                module, builder);
-    } else {
-      callable_val = callable_sym->val;
-    }
-
   } else if (expr->data.AST_APPLICATION.function->tag == AST_LAMBDA) {
 
     fname = expr->data.AST_APPLICATION.function->data.AST_LAMBDA.fn_name.chars;
     callable_type = expr->data.AST_APPLICATION.function->type;
     llvm_callable_type = type_to_llvm_type(callable_type, ctx, module);
-    callable_val = codegen(expr, ctx, module, builder);
   } else {
     fprintf(stderr, "Could not find callable val\n");
     return NULL;
@@ -156,12 +182,7 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
   for (i = 0; i < recordt->data.T_CONS.num_args; i++) {
     Type *rt = recordt->data.T_CONS.args[i];
 
-    // printf("record arg %d: ", i);
     LLVMTypeRef lt = type_to_llvm_type(rt, &fn_ctx, module);
-
-    // print_type(recordt->data.T_CONS.args[i]);
-    // LLVMDumpType(lt);
-    // printf("\n");
 
     args[i] = LLVMBuildLoad2(
         builder, rt->kind == T_FN && (!is_closure(rt)) ? GENERIC_PTR : lt,
@@ -181,8 +202,39 @@ LLVMValueRef compile_curried_fn(Ast *expr, Type *expected_clos_type,
                                       f->data.T_FN.from, ctx, module, builder);
   }
 
-  LLVMValueRef body = LLVMBuildCall2(builder, llvm_callable_type, callable_val,
-                                     args, len, "curried_fn_call");
+  LLVMValueRef callable_val;
+  bool callable_is_closure = false;
+
+  if (expr->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
+    if (is_generic(callable_sym->symbol_type)) {
+      if (callable_sym->symbol_data.STYPE_GENERIC_FUNCTION.ast &&
+          callable_sym->symbol_data.STYPE_GENERIC_FUNCTION.ast->tag ==
+              AST_APPLICATION) {
+        callable_val = build_generic_closure_value(callable_sym, callable_type,
+                                                   ctx, module, builder, NULL);
+        callable_is_closure = true;
+      } else {
+        callable_val = find_callable_from_generic(expr, callable_type,
+                                                  callable_type, ctx, module,
+                                                  builder);
+        callable_is_closure = value_is_closure(callable_val);
+      }
+    } else {
+      callable_val = callable_sym->val;
+    }
+  } else {
+    callable_val = codegen(expr, ctx, module, builder);
+    callable_is_closure = value_is_closure(callable_val);
+  }
+
+  LLVMValueRef body;
+  if (callable_is_closure) {
+    body = emit_closure_call(callable_val, callable_type, args, len, &fn_ctx,
+                             module, builder);
+  } else {
+    body = LLVMBuildCall2(builder, llvm_callable_type, callable_val, args, len,
+                          "curried_fn_call");
+  }
 
   if (fn_return_type(callable_type)->kind == T_VOID) {
     LLVMBuildRetVoid(builder);
@@ -236,11 +288,12 @@ static LLVMValueRef build_curried_env(Ast *expr, Type *clos_type,
   return env;
 }
 
-LLVMValueRef call_generic_closure_sym(Ast *app, Type *expected_fn_type,
-                                      JITSymbol *sym, JITLangCtx *ctx,
-                                      LLVMModuleRef module,
-                                      LLVMBuilderRef builder) {
-  LLVMValueRef closure = NULL;
+static LLVMValueRef build_generic_closure_value(JITSymbol *sym,
+                                                Type *expected_fn_type,
+                                                JITLangCtx *ctx,
+                                                LLVMModuleRef module,
+                                                LLVMBuilderRef builder,
+                                                Type **out_clos_type) {
   Type *original_type = deep_copy_type(sym->symbol_type);
   Type *expected_type = deep_copy_type(expected_fn_type);
 
@@ -253,6 +306,7 @@ LLVMValueRef call_generic_closure_sym(Ast *app, Type *expected_fn_type,
   compilation_ctx.env = create_env_from_subst(env, compilation_ctx.type_subst);
 
   Type *clos_type = NULL;
+  LLVMValueRef closure = NULL;
 
   if (sym->symbol_data.STYPE_GENERIC_FUNCTION.ast->tag == AST_APPLICATION) {
 
@@ -300,6 +354,21 @@ LLVMValueRef call_generic_closure_sym(Ast *app, Type *expected_fn_type,
     closure = LLVMBuildInsertValue(builder, closure, fn_ptr, 0, "closure_fn");
     closure = LLVMBuildInsertValue(builder, closure, env_val, 1, "closure_env");
   }
+
+  if (out_clos_type) {
+    *out_clos_type = clos_type;
+  }
+
+  return closure;
+}
+
+LLVMValueRef call_generic_closure_sym(Ast *app, Type *expected_fn_type,
+                                      JITSymbol *sym, JITLangCtx *ctx,
+                                      LLVMModuleRef module,
+                                      LLVMBuilderRef builder) {
+  Type *clos_type = NULL;
+  LLVMValueRef closure = build_generic_closure_value(
+      sym, expected_fn_type, ctx, module, builder, &clos_type);
 
   if (!closure) {
     fprintf(stderr, "Error: could not compile specific instance of generic "
