@@ -227,6 +227,11 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   ast = maybe_optimise_application(ast);
 
+  if (ast->tag == AST_APPLICATION &&
+      ast->data.AST_APPLICATION.is_curried_with_constants) {
+    return codegen_const_curried_fn(ast, ctx, module, builder);
+  }
+
   if (is_closure(ast->type) && application_is_partial(ast)) {
     return codegen_create_closure(ast, ctx, module, builder);
   }

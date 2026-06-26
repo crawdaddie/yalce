@@ -231,8 +231,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
 
   case T_FN: {
     if (is_closure(type)) {
-      LLVMTypeRef clos_env_type = closure_record_type(type, ctx, module);
-      return STRUCT_TY(2, GENERIC_PTR, LLVMPointerType(clos_env_type, 0));
+      return get_named_closure_type(module);
     }
 
     int fn_len = 0;

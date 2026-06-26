@@ -155,7 +155,10 @@ LLVMValueRef emit_lowered_call(Ast *app, LoweredCallable callable,
 
   size_t arg_offset = 0;
   if (callable.has_env) {
-    arg_vals[0] = callable.env;
+    LLVMTypeRef llvm_rec_type =
+        closure_record_type(original_callable_type, ctx, module);
+    arg_vals[0] = LLVMBuildBitCast(builder, callable.env,
+                                   LLVMPointerType(llvm_rec_type, 0), "env");
     arg_offset = 1;
   }
 

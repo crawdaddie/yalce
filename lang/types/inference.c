@@ -341,6 +341,7 @@ void infer_final(Ast *ast, const Solution *solved, TICtx *ctx) {
   }
   Subst *subst = solved ? solved->subst : NULL;
   finalize_env_generalization(ctx->env, subst);
+
   if (subst) {
     finalize_ast_types(ast, subst);
   }
@@ -365,9 +366,12 @@ Type *infer(Ast *ast, TICtx *ctx) {
   if (!raw) {
     return type_error(ast, "failed to infer type");
   }
+  // aux = ast->data.AST_BODY.stmts->ast->data.AST_LAMBDA.body->data.AST_BODY
+  //           .stmts->next->ast;
+
   // printf("[Constraints]\n");
   // print_constraints(ctx->constraints);
-
+  //
   // printf("[Predicates]\n");
   // print_predicates(ctx->predicates);
   //
@@ -394,7 +398,9 @@ Type *infer(Ast *ast, TICtx *ctx) {
 
   Solution final_sol = {.subst = ctx->subst};
   Type *final = apply_solution(raw, &final_sol);
+
   infer_final(ast, &final_sol, ctx);
+
   return final;
 }
 
@@ -1640,8 +1646,9 @@ Type *apply_substitution(Subst *subst, Type *t) {
 static bool is_empty_subst(Subst *subst) { return subst_table_is_empty(subst); }
 
 Type *apply_subst_to_type(Subst *subst, Type *t) {
-  if (!t)
+  if (!t) {
     return NULL;
+  }
 
   switch (t->kind) {
   case T_VAR: {
@@ -1661,6 +1668,7 @@ Type *apply_subst_to_type(Subst *subst, Type *t) {
     Type *result = t_alloc(sizeof(Type));
     *result = (Type){T_FN, {.T_FN = {from, to}}};
     result->data.T_FN.attributes = t->data.T_FN.attributes;
+    result->closure_meta = apply_subst_to_type(subst, t->closure_meta);
     return result;
   }
   case T_CONS:
@@ -1880,7 +1888,32 @@ Type *extract_member_from_sum_type_idx(Type *cons, Ast *id, int *idx) {
   return NULL;
 }
 
-bool is_constant_expr(Ast *expr, TICtx *ctx) { return false; }
+bool is_constant_expr(Ast *expr, TICtx *ctx) {
+  if (!expr) {
+    return false;
+  }
+
+  switch (expr->tag) {
+  case AST_INT:
+  case AST_FLOAT:
+  case AST_DOUBLE:
+  case AST_CHAR:
+  case AST_BOOL:
+    return true;
+
+  case AST_APPLICATION: {
+    for (int i = 0; i < expr->data.AST_APPLICATION.len; i++) {
+      if (!is_constant_expr(expr->data.AST_APPLICATION.args + i, ctx)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  default:
+    return false;
+  }
+}
 
 Type *empty_type() {
   Type *t = t_alloc(sizeof(Type));
@@ -1914,6 +1947,7 @@ static void finalize_ast_types(Ast *ast, Subst *subst) {
     return;
 
   if (ast->type) {
+
     ast->type = apply_subst_to_type(subst, ast->type);
   }
 

@@ -112,8 +112,10 @@ void add_recursive_closure_fn_ref(ObjString fn_name, LLVMValueRef func,
 
   LLVMValueRef closure = LLVMGetUndef(llvm_closure_type);
   closure = LLVMBuildInsertValue(builder, closure, func, 0, "self_closure_fn");
-  closure = LLVMBuildInsertValue(builder, closure, closure_env, 1,
-                                 "self_closure_env");
+  LLVMValueRef env_ptr =
+      LLVMBuildBitCast(builder, closure_env, GENERIC_PTR, "self_closure_env");
+  closure =
+      LLVMBuildInsertValue(builder, closure, env_ptr, 1, "self_closure_env");
 
   JITSymbol *sym =
       new_symbol(STYPE_FUNCTION, closure_type, closure, llvm_closure_type);
@@ -196,8 +198,7 @@ void bind_fn_param(LLVMValueRef param_val, Type *param_type, Ast *param_ast,
     const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
     int id_len = param_ast->data.AST_IDENTIFIER.length;
 
-    LLVMTypeRef rec_type =
-        LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR}, 2, 0);
+    LLVMTypeRef rec_type = get_named_closure_type(module);
 
     JITSymbol *sym =
         new_symbol(STYPE_FUNCTION, param_type, param_val, rec_type);
@@ -236,8 +237,7 @@ void bind_fn_param_with_storage(LLVMValueRef param_val, LLVMValueRef storage,
     const char *id_chars = param_ast->data.AST_IDENTIFIER.value;
     int id_len = param_ast->data.AST_IDENTIFIER.length;
 
-    LLVMTypeRef rec_type =
-        LLVMStructType((LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR}, 2, 0);
+    LLVMTypeRef rec_type = get_named_closure_type(module);
 
     JITSymbol *sym =
         new_symbol(STYPE_FUNCTION, param_type, param_val, rec_type);

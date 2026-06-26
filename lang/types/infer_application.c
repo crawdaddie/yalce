@@ -24,6 +24,25 @@ static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
   ctx->predicates = predicate_append_applied(ctx->predicates, GenericFrom,
                                              param_type, from_params);
 }
+Type *handle_closure_constants(Ast *ast, Type *type, TICtx *ctx) {
+  if (!is_constant_expr(ast, ctx)) {
+    return type;
+  }
+
+  int i = 0;
+  Type *f = ast->data.AST_APPLICATION.function->type;
+  for (; f->kind == T_FN && !is_closure(f); f = f->data.T_FN.to) {
+    i++;
+  }
+
+  if (ast->data.AST_APPLICATION.len == i) {
+    return type;
+  }
+
+  ast->data.AST_APPLICATION.is_curried_with_constants = true;
+  type->closure_meta = NULL;
+  return type;
+}
 
 Type *infer_application(Ast *ast, TICtx *ctx) {
   Ast *fn_ast = ast->data.AST_APPLICATION.function;
@@ -68,6 +87,9 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
     current = deep_copy_type(current);
     current->closure_meta = closure_meta;
   }
-
-  return current;
+  if (current->kind == T_FN) {
+    return handle_closure_constants(ast, current, ctx);
+  } else {
+    return current;
+  }
 }

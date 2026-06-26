@@ -1,4 +1,5 @@
 #include "./infer_lambda.h"
+#include "serde.h"
 #include "type_ser.h"
 
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
@@ -63,6 +64,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
     int i = 0;
     for (AstList *closed_vals = ast->data.AST_LAMBDA.closed_vals; closed_vals;
          closed_vals = closed_vals->next, i++) {
+
       closed_types[i] = closed_vals->ast->type;
     }
     Type *closure_env_type = create_tuple_type(closed_len, closed_types);

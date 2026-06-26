@@ -38,6 +38,8 @@ LLVMTypeRef closure_fn_type(Type *clos_type, LLVMTypeRef rec_type,
 LLVMTypeRef closure_record_type(Type *clos_type, JITLangCtx *ctx,
                                 LLVMModuleRef module);
 
+LLVMTypeRef get_named_closure_type(LLVMModuleRef module);
+
 LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder);

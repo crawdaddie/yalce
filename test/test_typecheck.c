@@ -385,8 +385,6 @@ static bool astlist_contains_closed_val(AstList *closed_vals, const char *name,
                                         Type *type) {
   for (AstList *l = closed_vals; l; l = l->next) {
     Ast *ast = l->ast;
-    printf("ast list: ");
-    print_ast(ast);
     if (!ast || ast->tag != AST_IDENTIFIER) {
       continue;
     }
@@ -402,6 +400,7 @@ static bool assert_lambda_closed_vals(Ast *lambda, int expected_count,
                                       const char **names, Type **types,
                                       const char *msg, const char *file,
                                       int line) {
+
   bool ok = lambda && lambda->tag == AST_LAMBDA &&
             lambda->data.AST_LAMBDA.num_closed_vals == expected_count;
   for (int i = 0; ok && i < expected_count; i++) {
@@ -2284,6 +2283,7 @@ int test_closures() {
 
   ({
     Type f = MAKE_FN_TYPE_3(&t_void, &t_void, &t_int);
+    f.data.T_FN.to->closure_meta = &TTUPLE(1, {&t_int});
     Ast *b = T("fn () ->\n"
                "let z = 2;\n"
                "(fn () -> z + 2);\n"
@@ -2318,6 +2318,7 @@ int test_closures() {
 
   ({
     Type f = MAKE_FN_TYPE_3(&t_void, &t_void, &t_num);
+
     Ast *b = T("fn () ->\n"
                "let z = 2;\n"
                "let x = 3.;\n"
@@ -2331,6 +2332,8 @@ int test_closures() {
     Type *closure_type = closure->type;
 
     Type ex = MAKE_FN_TYPE_2(&t_void, &t_num);
+
+    ex.closure_meta = &TTUPLE(2, {&t_num, &t_int});
     bool res = types_equal(closure_type, &ex);
 
     const char *msg =
@@ -2359,6 +2362,28 @@ int test_closures() {
   //   f.data.T_FN.to->closure_meta = &TTUPLE(2, &t_num, &t_int);
   //   Ast *b = T("let x = 1; let y = 2.; \\(x + y)", &f);
   // });
+  ({
+    Ast *b = T("fn () ->\n"
+               "  let z = 2.;\n"
+               "  let aux = fn () ->\n"
+               "    z + 3.\n"
+               "  ;;\n"
+               "  aux ()\n"
+               ";;\n",
+               &MAKE_FN_TYPE_2(&t_void, &t_num));
+    Ast *aux = AST_LIST_NTH(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+                                ->data.AST_LAMBDA.body->data.AST_BODY.stmts,
+                            1)
+                   ->data.AST_LET.expr;
+
+    const char *closed_names[] = {"z"};
+    Type *closed_types[] = {&t_num};
+    status &= assert_lambda_closed_vals(aux, 1, closed_names, closed_types,
+                                        "inner closure closes over z : Double",
+                                        __FILE__, __LINE__);
+    // printf("[AUX TYPE]: ");
+    // print_type(aux->type);
+  });
   return status;
 }
 
@@ -3240,7 +3265,6 @@ int main() {
   status &= test_type_declarations();
   status &= test_record_types();
   status &= test_refs();
-  status &= test_closures();
   status &= test_list_processing();
   status &= test_math_funcs();
   status &= test_funcs();
@@ -3253,6 +3277,7 @@ int main() {
   status &= test_coroutines();
   status &= test_rec_coroutines();
   //
+  status &= test_closures();
   print_all_failures();
   return status == true ? 0 : 1;
 }
