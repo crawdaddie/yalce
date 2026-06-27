@@ -1,6 +1,8 @@
 #include "./infer_lambda.h"
 #include "serde.h"
+#include "type_expressions.h"
 #include "type_ser.h"
+#include <string.h>
 
 Type *infer_lambda(Ast *ast, TICtx *ctx) {
   size_t len = ast->data.AST_LAMBDA.len;
@@ -27,8 +29,19 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   }
 
   AstList *param = ast->data.AST_LAMBDA.params;
+
+  Type *annotated_param_types[len];
+  memset(annotated_param_types, 0, sizeof(Type *) * len);
+  if (ast->data.AST_LAMBDA.type_annotations) {
+    compute_lambda_param_types(ast->data.AST_LAMBDA.type_annotations, len,
+                               annotated_param_types, &child);
+  }
+
   for (size_t i = 0; i < len && param; i++, param = param->next) {
-    Type *pt = next_tvar();
+    Type *pt = annotated_param_types[i];
+    if (!pt) {
+      pt = next_tvar();
+    }
     param_types[i] = pt;
     TypeEnv *param_boundary = child.env;
     if (bind_pattern(param->ast, pt, &child) != 0) {

@@ -6,5 +6,8 @@
 Type *compute_type_expression(Ast *expr, TICtx *ctx);
 Type *infer_type_declaration(Ast *ast, TICtx *ctx);
 
+void compute_lambda_param_types(AstList *annotations, size_t len, Type **out,
+                                TICtx *ctx);
+
 Type *compute_fn_type(Ast *expr, TICtx *ctx);
 #endif

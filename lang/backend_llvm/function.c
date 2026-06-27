@@ -11,6 +11,7 @@
 #include "llvm-c/Core.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 

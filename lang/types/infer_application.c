@@ -39,9 +39,17 @@ Type *handle_closure_constants(Ast *ast, Type *type, TICtx *ctx) {
     return type;
   }
 
+  // The remaining callable after consuming the constant arguments is itself a
+  // closure. We cannot turn it into a plain curried function because it still
+  // needs its closure environment at runtime.
+  if (is_closure(f)) {
+    return type;
+  }
+
   ast->data.AST_APPLICATION.is_curried_with_constants = true;
-  type->closure_meta = NULL;
-  return type;
+  Type *result = deep_copy_type(type);
+  result->closure_meta = NULL;
+  return result;
 }
 
 Type *infer_application(Ast *ast, TICtx *ctx) {

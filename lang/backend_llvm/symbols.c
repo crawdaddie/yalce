@@ -149,6 +149,9 @@ static LLVMValueRef emit_function_binding(Ast *binding, Ast *expr,
 
   if (is_closure(binding_type)) {
     LLVMValueRef expr_val = codegen_create_closure(expr, ctx, module, builder);
+    if (!expr_val) {
+      expr_val = codegen(expr, ctx, module, builder);
+    }
     create_fn_binding(binding, binding_type, expr_val, ctx, module, builder);
     return expr_val;
   }

@@ -105,30 +105,6 @@ static void propagate_closed_val_through_scopes(Ast *ast, Type *ref_type,
   }
 }
 
-void handle_closed_over_ref(Ast *ast, TypeEnv *ref, TICtx *ctx) {
-
-  int this_scope = ctx->current_fn_base_scope;
-  int ref_scope = ref->type->scope;
-  // TODO: sort this out
-  // let K = fn () ->
-  //   let z = 2;
-  //   (fn a: (Int) -> z + 2 + a)
-  // ;;
-  // if a is typed suddenly the ref to z gets the wrong scope and is not
-  // registered as being closed-over
-
-  // if ((!is_rec_fn_ref) && (ref_scope > 0) && (this_scope > ref_scope)) {
-  //   // printf("closure stufff???? this scope %d ref_scope %d is_fn_param %d
-  //   // "
-  //   //        "is_rec fn ref %d\n",
-  //   //        this_scope, ref_scope, is_fn_param, ref->is_recursive_fn_ref);
-  //   // print_ast(ctx->current_fn_ast);
-  //   // print_ast(ast);
-  //   // extend_closure_free_vars(ctx->current_fn_ast, ast, ref->type);
-  //   extend_closed_vals(ctx->current_fn_ast, ast, ref->type);
-  // }
-}
-
 void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx) {
 
   if (!ctx || !ctx->current_scope) {

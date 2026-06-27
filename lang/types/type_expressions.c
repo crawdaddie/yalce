@@ -143,8 +143,8 @@ static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
           name = item->data.AST_BINOP.left->data.AST_IDENTIFIER.value;
         }
 
-        Type *sch = compute_type_expression_inner(expr->data.AST_LIST.items + i,
-                                                  ctx);
+        Type *sch =
+            compute_type_expression_inner(expr->data.AST_LIST.items + i, ctx);
         if (!sch) {
           return NULL;
         }
@@ -234,6 +234,21 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
   Type *result = compute_type_expression_inner(expr, ctx);
   current_type_var_env = saved_type_var_env;
   return result;
+}
+
+void compute_lambda_param_types(AstList *annotations, size_t len, Type **out,
+                                TICtx *ctx) {
+  TypeEnv *saved_type_var_env = current_type_var_env;
+  current_type_var_env = NULL;
+  for (size_t i = 0; i < len && annotations;
+       i++, annotations = annotations->next) {
+    if (annotations->ast) {
+      out[i] = compute_type_expression_inner(annotations->ast, ctx);
+    } else {
+      out[i] = NULL;
+    }
+  }
+  current_type_var_env = saved_type_var_env;
 }
 
 int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx);

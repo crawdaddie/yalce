@@ -417,7 +417,11 @@ LLVMTypeRef closure_fn_type(Type *clos_type, LLVMTypeRef rec_type,
     return NULL;
   }
 
-  int num_params = fn_type_args_len(clos_type);
+  int num_params = 0;
+  for (Type *t = clos_type; t->kind == T_FN && t->data.T_FN.from->kind != T_VOID;
+       t = t->data.T_FN.to) {
+    num_params++;
+  }
 
   LLVMTypeRef param_types[num_params + 1];
   param_types[0] = LLVMPointerType(rec_type, 0);
@@ -433,6 +437,11 @@ LLVMTypeRef closure_fn_type(Type *clos_type, LLVMTypeRef rec_type,
     } else {
       param_types[i + 1] = type_to_llvm_type(param_type, ctx, module);
     }
+  }
+
+  // Skip past any void parameter layer to reach the return type.
+  if (f->kind == T_FN && f->data.T_FN.from->kind == T_VOID) {
+    f = f->data.T_FN.to;
   }
 
   Type *return_type = f;
@@ -531,11 +540,129 @@ LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef compile_closure(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMBuilderRef builder) {
-  printf("compile this: ");
-  print_ast(ast);
-  print_type(ast->type);
+  Type *clos_type = ast->type;
+  Type *recordt = clos_type->closure_meta;
 
-  return NULL;
+  if (!recordt) {
+    fprintf(stderr, "Error: closure has no closure metadata\n");
+    print_ast_err(ast);
+    return NULL;
+  }
+
+  LLVMTypeRef closure_rec_type = closure_record_type(clos_type, ctx, module);
+  LLVMTypeRef clos_fn_type =
+      closure_fn_type(clos_type, closure_rec_type, ctx, module);
+
+  if (!clos_fn_type) {
+    return NULL;
+  }
+
+  const char *fn_name = ast->data.AST_LAMBDA.fn_name.chars;
+  char name_buf[64];
+  if (!fn_name || !fn_name[0]) {
+    static int anon_closure_count = 0;
+    snprintf(name_buf, sizeof(name_buf), "closure.%d", anon_closure_count++);
+    fn_name = name_buf;
+  }
+
+  START_FUNC(module, fn_name, clos_fn_type);
+
+  STACK_ALLOC_CTX_PUSH(fn_ctx, ctx);
+
+  // Bind closed values from the environment parameter.
+  LLVMValueRef env_param = LLVMGetParam(func, 0);
+  int closed_len = ast->data.AST_LAMBDA.num_closed_vals;
+  AstList *cv = ast->data.AST_LAMBDA.closed_vals;
+  for (int i = 0; i < closed_len && cv; i++, cv = cv->next) {
+    Type *field_type = recordt->data.T_CONS.args[i];
+    Ast *ref_ast = cv->ast;
+
+    LLVMTypeRef llvm_field_type = type_to_llvm_type(field_type, &fn_ctx, module);
+    LLVMValueRef field_ptr = LLVMBuildStructGEP2(
+        builder, closure_rec_type, env_param, i, "closure_field_ptr");
+    LLVMValueRef field_val = LLVMBuildLoad2(
+        builder,
+        field_type->kind == T_FN && !is_closure(field_type) ? GENERIC_PTR
+                                                            : llvm_field_type,
+        field_ptr, "closure_field");
+
+    bind_fn_param(field_val, field_type, ref_ast, &fn_ctx, &fn_ctx, module,
+                  builder);
+  }
+
+  // Bind lambda parameters (after the env parameter).
+  AstList *param = ast->data.AST_LAMBDA.params;
+  Type *f = clos_type;
+  int llvm_param_idx = 1;
+  while (param) {
+    Ast *param_ast = param->ast;
+    if (param_ast->tag == AST_VOID) {
+      f = f->data.T_FN.to;
+      param = param->next;
+      continue;
+    }
+
+    LLVMValueRef param_val = LLVMGetParam(func, llvm_param_idx++);
+    Type *param_type = f->data.T_FN.from;
+    bind_fn_param(param_val, param_type, param_ast, &fn_ctx, &fn_ctx, module,
+                  builder);
+    f = f->data.T_FN.to;
+    param = param->next;
+  }
+
+  set_tail_call_expressions(ast->data.AST_LAMBDA.body);
+
+  LLVMValueRef body = codegen_lambda_body(ast, &fn_ctx, module, builder);
+
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  if (current_block && !LLVMGetBasicBlockTerminator(current_block)) {
+    if (LLVMIsACallInst(body)) {
+      LLVMSetTailCall(body, true);
+    }
+    build_ret(body, f, builder);
+  }
+
+  END_FUNC;
+  destroy_ctx(&fn_ctx);
+
+  // Build the closure environment in the caller's context.
+  LLVMValueRef env_val =
+      LLVMBuildMalloc(builder, closure_rec_type, "closure_env");
+
+  cv = ast->data.AST_LAMBDA.closed_vals;
+  for (int i = 0; i < closed_len && cv; i++, cv = cv->next) {
+    Type *field_type = recordt->data.T_CONS.args[i];
+    Ast *ref_ast = cv->ast;
+
+    LLVMValueRef val = codegen(ref_ast, ctx, module, builder);
+    if (!val) {
+      fprintf(stderr, "Error: could not codegen closed value %d for closure\n",
+              i);
+      print_ast_err(ref_ast);
+      return NULL;
+    }
+
+    Type *arg_type = specialize_type_for_codegen(ref_ast->type, ctx);
+    Type *expected_field_type = specialize_type_for_codegen(field_type, ctx);
+    val = handle_type_conversions(val, arg_type, expected_field_type, ctx,
+                                  module, builder);
+
+    LLVMValueRef field_ptr = LLVMBuildStructGEP2(
+        builder, closure_rec_type, env_val, i, "closure_env_field_ptr");
+    LLVMBuildStore(builder, val, field_ptr);
+  }
+
+  LLVMTypeRef closure_struct_type = type_to_llvm_type(clos_type, ctx, module);
+  LLVMValueRef fn_ptr =
+      LLVMBuildBitCast(builder, func, GENERIC_PTR, "closure_fn_ptr");
+  LLVMValueRef env_ptr =
+      LLVMBuildBitCast(builder, env_val, GENERIC_PTR, "closure_env_ptr");
+
+  LLVMValueRef closure = LLVMGetUndef(closure_struct_type);
+  closure = LLVMBuildInsertValue(builder, closure, fn_ptr, 0, "closure_fn");
+  closure = LLVMBuildInsertValue(builder, closure, env_ptr, 1, "closure_env");
+
+  return closure;
 }
 
 LLVMValueRef codegen_create_closure(Ast *ast, JITLangCtx *ctx,

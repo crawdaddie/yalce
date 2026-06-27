@@ -66,12 +66,16 @@ Type *freshen_map_apply_to_type(FreshenMap *map, Type *t) {
   case T_FN: {
     Type *from = freshen_map_apply_to_type(map, t->data.T_FN.from);
     Type *to = freshen_map_apply_to_type(map, t->data.T_FN.to);
-    if (from == t->data.T_FN.from && to == t->data.T_FN.to) {
+    if (from == t->data.T_FN.from && to == t->data.T_FN.to &&
+        !t->closure_meta) {
       return t;
     }
     Type *result = t_alloc(sizeof(Type));
     *result = (Type){T_FN, {.T_FN = {from, to}}};
     result->data.T_FN.attributes = t->data.T_FN.attributes;
+    if (t->closure_meta) {
+      result->closure_meta = freshen_map_apply_to_type(map, t->closure_meta);
+    }
     return result;
   }
   case T_CONS:

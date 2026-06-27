@@ -632,6 +632,13 @@ void initialize_builtin_types() {
   add_builtin_env("==", builtin_envs.eq);
   builtin_envs.neq = make_eq_env("!=");
   add_builtin_env("!=", builtin_envs.neq);
+
+  // Logical operators are monomorphic Bool -> Bool -> Bool.
+  logical_op_scheme = (Type){
+      T_FN, {.T_FN = {.from = &t_bool, .to = type_fn(&t_bool, &t_bool)}}};
+  add_builtin_env("&&", make_monomorphic_env("&&", &logical_op_scheme));
+  add_builtin_env("||", make_monomorphic_env("||", &logical_op_scheme));
+
   builtin_envs.lt = make_ord_env("<");
   add_builtin_env("<", builtin_envs.lt);
   builtin_envs.lte = make_ord_env("<=");
