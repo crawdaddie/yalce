@@ -1629,11 +1629,11 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_ENV(builtin_envs.array_fill_const, ArrayFillConstHandler);
   GENERIC_FN_ENV(builtin_envs.array_fill, ArrayFillHandler);
   GENERIC_FN_ENV(builtin_envs.array_range, ArrayRangeHandler);
-  GENERIC_FN_SYMBOL("array_offset", &array_offset_scheme, ArrayOffsetHandler);
+  GENERIC_FN_ENV(builtin_envs.array_offset, ArrayOffsetHandler);
 
   GENERIC_FN_ENV(builtin_envs.some, SomeConsHandler);
 
-  GENERIC_FN_SYMBOL("::", &list_prepend_scheme, ListPrependHandler);
+  GENERIC_FN_ENV(builtin_envs.list_prepend, ListPrependHandler);
   GENERIC_FN_ENV(builtin_envs.list_concat, ListConcatHandler);
 
   GENERIC_FN_ENV(builtin_envs.str, StringFmtHandler);
@@ -1642,10 +1642,10 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   GENERIC_FN_SYMBOL("list_empty", NULL, ListEmptyHandler);
 
-  GENERIC_FN_SYMBOL("dlopen", &dlopen_type, DlOpenHandler);
+  GENERIC_FN_ENV(builtin_envs.dlopen_env, DlOpenHandler);
 
-  GENERIC_FN_SYMBOL("cstr", &cstr_scheme, CStrHandler);
-  GENERIC_FN_SYMBOL("sizeof", &sizeof_scheme, SizeOfHandler);
+  GENERIC_FN_ENV(builtin_envs.cstr, CStrHandler);
+  GENERIC_FN_ENV(builtin_envs.sizeof_env, SizeOfHandler);
 
   GENERIC_FN_SYMBOL("Char", NULL, CharConstructorHandler);
   GENERIC_FN_SYMBOL("Int", NULL, int_constructor_handler);
@@ -1680,25 +1680,24 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   // CorOfArrayHandler);
   GENERIC_FN_ENV(builtin_envs.iter, IterHandler);
 
-  GENERIC_FN_SYMBOL("play_routine", &play_routine_scheme, PlayRoutineHandler);
-  GENERIC_FN_SYMBOL("play_routine_quant", &play_routine_quant_scheme,
-                    PlayRoutineQuantHandler);
+  GENERIC_FN_ENV(builtin_envs.play_routine, PlayRoutineHandler);
+  GENERIC_FN_ENV(builtin_envs.play_routine_quant, PlayRoutineQuantHandler);
 
-  GENERIC_FN_SYMBOL("cor_current", &cor_current_scheme, CurrentCorHandler);
-  GENERIC_FN_SYMBOL("cor_try_opt", &cor_try_opt_scheme, CorUnwrapOrEndHandler);
+  GENERIC_FN_ENV(builtin_envs.cor_current, CurrentCorHandler);
+  GENERIC_FN_ENV(builtin_envs.cor_try_opt, CorUnwrapOrEndHandler);
 
-  GENERIC_FN_SYMBOL("cor_zip_struct", &cor_zip_scheme, CorZipStructHandler);
+  GENERIC_FN_ENV(builtin_envs.cor_zip_struct, CorZipStructHandler);
 
   GENERIC_FN_SYMBOL("fn_composition", NULL, HandleFnComposition);
 
-  GENERIC_FN_SYMBOL("is_null", &is_null_type, HandleIsNullPtr);
+  GENERIC_FN_ENV(builtin_envs.is_null, HandleIsNullPtr);
 
   // GENERIC_FN_SYMBOL("null_coroutine", &null_coroutine,
   //                   codegen_dummy_coroutine_ref);
 
-  GENERIC_FN_SYMBOL("asbytes", &asbytes_scheme, AsBytesHandler);
+  GENERIC_FN_ENV(builtin_envs.asbytes, AsBytesHandler);
 
-  GENERIC_FN_SYMBOL("typeof", &typeof_scheme, TypeOfHandler);
+  GENERIC_FN_ENV(builtin_envs.typeof_env, TypeOfHandler);
 
   return ctx->env;
 }

@@ -569,6 +569,231 @@ static TypeEnv *make_list_concat_env(void) {
   return entry;
 }
 
+static Type *make_ptr_type(Type *v) {
+  Type **r = t_alloc(sizeof(Type *));
+  r[0] = v;
+  Type *ptr_t = empty_type();
+  *ptr_t = (Type){T_CONS,
+                  {.T_CONS = {.name = TYPE_NAME_PTR, .num_args = 1, .args = r}},
+                  .alias = TYPE_NAME_PTR};
+  return ptr_t;
+}
+
+static TypeEnv *make_array_offset_env(void) {
+  // array_offset : Int -> Array a -> Array a
+  Type *a = tvar("a");
+  Type *arr = create_array_type(a);
+
+  Type *f = type_fn(arr, arr);
+  f = type_fn(&t_int, f);
+  f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, FN_ATTR_PURE);
+
+  TypeList *tl_a = vlist_of_typevar(a);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "array_offset",
+                     .type = f,
+                     .scheme_vars = tl_a,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
+static TypeEnv *make_list_prepend_env(void) {
+  // (::) : a -> List a -> List a
+  Type *a = tvar("a");
+  Type *l = create_list_type_of_type(a);
+
+  Type *f = type_fn(l, l);
+  f = type_fn(a, f);
+
+  TypeList *tl_a = vlist_of_typevar(a);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "::",
+                     .type = f,
+                     .scheme_vars = tl_a,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
+static TypeEnv *make_cstr_env(void) {
+  // cstr : Array a -> Ptr a
+  Type *a = tvar("a");
+  Type *arr = create_array_type(a);
+  Type *p = make_ptr_type(a);
+  Type *f = type_fn(arr, p);
+
+  TypeList *tl_a = vlist_of_typevar(a);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "cstr",
+                     .type = f,
+                     .scheme_vars = tl_a,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
+static TypeEnv *make_sizeof_env(void) {
+  // sizeof : a -> Int
+  Type *a = tvar("a");
+  Type *f = type_fn(a, &t_int);
+
+  TypeList *tl_a = vlist_of_typevar(a);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "sizeof",
+                     .type = f,
+                     .scheme_vars = tl_a,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
+static TypeEnv *make_cor_current_env(void) {
+  // cor_current : Void -> Ptr
+  Type *fn_type = type_fn(&t_void, &t_ptr);
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "cor_current",
+                     .type = fn_type,
+                     .next = NULL,
+                     .predicates = NULL};
+  return entry;
+}
+
+static TypeEnv *make_cor_try_opt_env(void) {
+  // cor_try_opt : Option a -> a
+  Type *a = tvar("a");
+  Type *opta = create_option_type(a);
+  Type *f = type_fn(opta, a);
+
+  TypeList *tl_a = vlist_of_typevar(a);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "cor_try_opt",
+                     .type = f,
+                     .scheme_vars = tl_a,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
+static TypeEnv *make_cor_zip_struct_env(void) {
+  // cor_zip_struct : {Coroutine a, ...} -> Coroutine <tuple of yielded values>
+  // Reuses the cor_zip function type shape; the struct-handling code reads the
+  // yield type from the result Coroutine, so a plain polymorphic env entry
+  // suffices for name resolution and codegen dispatch.
+  Type *a = tvar("a");
+  Type *b = tvar("b");
+  Type *cor_a = create_coroutine_instance_type(a);
+  Type *cor_b = create_coroutine_instance_type(b);
+  Type **tup = t_alloc(sizeof(Type *) * 2);
+  tup[0] = a;
+  tup[1] = b;
+  Type *cor_res = create_coroutine_instance_type(create_tuple_type(2, tup));
+  Type *fn_type = type_fn(cor_b, cor_res);
+  fn_type = type_fn(cor_a, fn_type);
+
+  TypeList *tl_a = vlist_of_typevar(a);
+  TypeList *tl_b = vlist_of_typevar(b);
+  tl_b->next = tl_a;
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "cor_zip_struct",
+                     .type = fn_type,
+                     .scheme_vars = tl_b,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
+static TypeEnv *make_play_routine_env(void) {
+  // play_routine : Uint64 -> Ptr -> Coroutine Num -> Coroutine Num
+  Type *cor_from = create_coroutine_instance_type(&t_num);
+  Type *f = type_fn(cor_from, cor_from);
+  f = type_fn(&t_ptr, f);
+  f = type_fn(&t_uint64, f);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "play_routine",
+                     .type = f,
+                     .next = NULL,
+                     .predicates = NULL};
+  return entry;
+}
+
+static TypeEnv *make_play_routine_quant_env(void) {
+  // play_routine_quant : Num -> Ptr -> Coroutine Num -> Coroutine Num
+  Type *cor_from = create_coroutine_instance_type(&t_num);
+  Type *f = type_fn(cor_from, cor_from);
+  f = type_fn(&t_ptr, f);
+  f = type_fn(&t_num, f);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "play_routine_quant",
+                     .type = f,
+                     .next = NULL,
+                     .predicates = NULL};
+  return entry;
+}
+
+static TypeEnv *make_dlopen_env(void) {
+  // dlopen : String -> Void
+  Type *fn_type = type_fn(&t_string, &t_void);
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "dlopen",
+                     .type = fn_type,
+                     .next = NULL,
+                     .predicates = NULL};
+  return entry;
+}
+
+static TypeEnv *make_is_null_env(void) {
+  // is_null : Ptr -> Bool
+  Type *fn_type = type_fn(&t_ptr, &t_bool);
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "is_null",
+                     .type = fn_type,
+                     .next = NULL,
+                     .predicates = NULL};
+  return entry;
+}
+
+static TypeEnv *make_asbytes_env(void) {
+  // asbytes : a -> String
+  Type *a = tvar("a");
+  Type *f = type_fn(a, &t_string);
+  f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, FN_ATTR_ALLOCATES);
+
+  TypeList *tl_a = vlist_of_typevar(a);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "asbytes",
+                     .type = f,
+                     .scheme_vars = tl_a,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
+static TypeEnv *make_typeof_env(void) {
+  // typeof : a -> String
+  Type *a = tvar("a");
+  Type *f = type_fn(a, &t_string);
+
+  TypeList *tl_a = vlist_of_typevar(a);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "typeof",
+                     .type = f,
+                     .scheme_vars = tl_a,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
 // ============================================================================
 // Initialization
 // ============================================================================
@@ -716,6 +941,33 @@ void initialize_builtin_types() {
   builtin_envs.gte = make_ord_env(">=");
   add_builtin_env(">=", builtin_envs.gte);
 
+  builtin_envs.array_offset = make_array_offset_env();
+  add_builtin_env("array_offset", builtin_envs.array_offset);
+  builtin_envs.list_prepend = make_list_prepend_env();
+  add_builtin_env("::", builtin_envs.list_prepend);
+  builtin_envs.cstr = make_cstr_env();
+  add_builtin_env("cstr", builtin_envs.cstr);
+  builtin_envs.sizeof_env = make_sizeof_env();
+  add_builtin_env("sizeof", builtin_envs.sizeof_env);
+  builtin_envs.cor_current = make_cor_current_env();
+  add_builtin_env("cor_current", builtin_envs.cor_current);
+  builtin_envs.cor_try_opt = make_cor_try_opt_env();
+  add_builtin_env("cor_try_opt", builtin_envs.cor_try_opt);
+  builtin_envs.cor_zip_struct = make_cor_zip_struct_env();
+  add_builtin_env("cor_zip_struct", builtin_envs.cor_zip_struct);
+  builtin_envs.play_routine = make_play_routine_env();
+  add_builtin_env("play_routine", builtin_envs.play_routine);
+  builtin_envs.play_routine_quant = make_play_routine_quant_env();
+  add_builtin_env("play_routine_quant", builtin_envs.play_routine_quant);
+  builtin_envs.dlopen_env = make_dlopen_env();
+  add_builtin_env("dlopen", builtin_envs.dlopen_env);
+  builtin_envs.is_null = make_is_null_env();
+  add_builtin_env("is_null", builtin_envs.is_null);
+  builtin_envs.asbytes = make_asbytes_env();
+  add_builtin_env("asbytes", builtin_envs.asbytes);
+  builtin_envs.typeof_env = make_typeof_env();
+  add_builtin_env("typeof", builtin_envs.typeof_env);
+
   // Backend builtin symbol registration still expects these globals to exist.
   // Keep them as aliases of the underlying builtin function types rather than
   // constructing separate T_SCHEME wrappers.
@@ -728,6 +980,19 @@ void initialize_builtin_types() {
   array_fill_scheme = *lookup_builtin_env("array_fill")->type;
   array_id_scheme = *lookup_builtin_env("array_succ")->type;
   list_concat_scheme = *lookup_builtin_env("list_concat")->type;
+  array_offset_scheme = *lookup_builtin_env("array_offset")->type;
+  list_prepend_scheme = *lookup_builtin_env("::")->type;
+  cstr_scheme = *lookup_builtin_env("cstr")->type;
+  sizeof_scheme = *lookup_builtin_env("sizeof")->type;
+  cor_current_scheme = *lookup_builtin_env("cor_current")->type;
+  cor_try_opt_scheme = *lookup_builtin_env("cor_try_opt")->type;
+  cor_zip_scheme = *lookup_builtin_env("cor_zip_struct")->type;
+  play_routine_scheme = *lookup_builtin_env("play_routine")->type;
+  play_routine_quant_scheme = *lookup_builtin_env("play_routine_quant")->type;
+  dlopen_type = *lookup_builtin_env("dlopen")->type;
+  is_null_type = *lookup_builtin_env("is_null")->type;
+  asbytes_scheme = *lookup_builtin_env("asbytes")->type;
+  typeof_scheme = *lookup_builtin_env("typeof")->type;
 }
 
 void print_builtin_types() {}
