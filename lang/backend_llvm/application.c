@@ -247,6 +247,15 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
     return NULL;
   }
 
+  if (sym->symbol_type && is_coroutine_constructor_type(sym->symbol_type)) {
+    return coro_create_with_reset_closure(sym, callable_type, ast, ctx, module,
+                                          builder);
+  }
+
+  if (sym->symbol_type && is_coroutine_type(sym->symbol_type)) {
+    return coro_symbol_resume(sym, ctx, module, builder);
+  }
+
   if (is_closure_symbol(sym)) {
     return call_closure_sym(ast, callable_type, sym, ctx, module, builder);
   }
@@ -259,15 +268,6 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   if (sym->type == STYPE_VARIANT_TYPE) {
     return call_variant_constructor(ast, callable_type, sym, ctx, module,
                                     builder);
-  }
-
-  if (sym->symbol_type && is_coroutine_constructor_type(sym->symbol_type)) {
-    return coro_create_with_reset_closure(sym, callable_type, ast, ctx, module,
-                                          builder);
-  }
-
-  if (sym->symbol_type && is_coroutine_type(sym->symbol_type)) {
-    return coro_symbol_resume(sym, ctx, module, builder);
   }
 
   if (sym->type == STYPE_GENERIC_FUNCTION &&

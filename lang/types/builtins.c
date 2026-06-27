@@ -361,6 +361,33 @@ static TypeEnv *make_cor_loop_env(void) {
   return entry;
 }
 
+static TypeEnv *make_cor_zip_env(void) {
+  Type *a = tvar("a");
+  Type *b = tvar("b");
+  Type *cor = create_coroutine_instance_type(a);
+  Type *cor2 = create_coroutine_instance_type(b);
+  Type **l = t_alloc(sizeof(Type *) * 2);
+  l[0] = a;
+  l[1] = b;
+
+  Type *cor_res = create_coroutine_instance_type(create_tuple_type(2, l));
+  Type *fn_type = type_fn(cor2, cor_res);
+  fn_type = type_fn(cor, fn_type);
+
+  TypeList *tl_a = vlist_of_typevar(a);
+  TypeList *tl_b = vlist_of_typevar(b);
+
+  tl_b->next = tl_a;
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "cor_zip",
+                     .type = fn_type,
+                     .scheme_vars = tl_b,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
 static TypeEnv *make_iter_env(void) {
   TypeEnv *entry = make_cor_loop_env();
   entry->name = "iter";
@@ -434,6 +461,24 @@ static TypeEnv *make_array_range_env(void) {
 
   TypeEnv *entry = t_alloc(sizeof(TypeEnv));
   *entry = (TypeEnv){.name = "array_range",
+                     .type = fn_type,
+                     .scheme_vars = tl_a,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
+static TypeEnv *make_array_succ_env(void) {
+  // array_succ : Array a -> Array a
+  Type *a = tvar("a");
+  Type *arr = create_array_type(a);
+
+  Type *fn_type = type_fn(arr, arr);
+
+  TypeList *tl_a = vlist_of_typevar(a);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "array_succ",
                      .type = fn_type,
                      .scheme_vars = tl_a,
                      .predicates = NULL,
@@ -553,14 +598,26 @@ void initialize_builtin_types() {
                                       .rank = 2.0,
                                       .params = &tc_num_from_int_params};
 
+  static TypeList tc_uint64_from_int_params = {.type = &t_int, .next = NULL};
+  static TypeClass tc_uint64_from_int = {.name = TYPE_NAME_TYPECLASS_FROM,
+                                         .rank = 2.0,
+                                         .params = &tc_uint64_from_int_params};
+
+  static TypeList tc_int_from_bool_params = {.type = &t_int, .next = NULL};
+  static TypeClass tc_int_from_bool = {.name = TYPE_NAME_TYPECLASS_FROM,
+                                       .rank = 2.0,
+                                       .params = &tc_int_from_bool_params};
+
   // Attach typeclasses to primitive types
   typeclasses_extend(&t_int, &tc_int_arith);
   typeclasses_extend(&t_int, &tc_int_ord);
   typeclasses_extend(&t_int, &tc_int_eq);
+  typeclasses_extend(&t_int, &tc_int_from_bool);
 
   typeclasses_extend(&t_uint64, &tc_uint64_arith);
   typeclasses_extend(&t_uint64, &tc_uint64_ord);
   typeclasses_extend(&t_uint64, &tc_uint64_eq);
+  typeclasses_extend(&t_uint64, &tc_uint64_from_int);
 
   typeclasses_extend(&t_num, &tc_num_arith);
   typeclasses_extend(&t_num, &tc_num_ord);
@@ -599,8 +656,13 @@ void initialize_builtin_types() {
   add_builtin_env("cor_map", builtin_envs.cor_map);
   builtin_envs.cor_loop = make_cor_loop_env();
   add_builtin_env("cor_loop", builtin_envs.cor_loop);
+
+  builtin_envs.cor_zip = make_cor_zip_env();
+  add_builtin_env("cor_zip", builtin_envs.cor_zip);
+
   builtin_envs.iter = make_iter_env();
   add_builtin_env("iter", builtin_envs.iter);
+
   builtin_envs.array_size = make_array_size_env();
   add_builtin_env("array_size", builtin_envs.array_size);
   builtin_envs.array_at = make_array_at_env();
@@ -613,6 +675,8 @@ void initialize_builtin_types() {
   add_builtin_env("array_fill", builtin_envs.array_fill);
   builtin_envs.array_range = make_array_range_env();
   add_builtin_env("array_range", builtin_envs.array_range);
+  builtin_envs.array_succ = make_array_succ_env();
+  add_builtin_env("array_succ", builtin_envs.array_succ);
   builtin_envs.list_concat = make_list_concat_env();
   add_builtin_env("list_concat", builtin_envs.list_concat);
 
@@ -636,8 +700,12 @@ void initialize_builtin_types() {
   // Logical operators are monomorphic Bool -> Bool -> Bool.
   logical_op_scheme = (Type){
       T_FN, {.T_FN = {.from = &t_bool, .to = type_fn(&t_bool, &t_bool)}}};
-  add_builtin_env("&&", make_monomorphic_env("&&", &logical_op_scheme));
-  add_builtin_env("||", make_monomorphic_env("||", &logical_op_scheme));
+  builtin_envs.logical_and =
+      make_monomorphic_env("&&", &logical_op_scheme);
+  add_builtin_env("&&", builtin_envs.logical_and);
+  builtin_envs.logical_or =
+      make_monomorphic_env("||", &logical_op_scheme);
+  add_builtin_env("||", builtin_envs.logical_or);
 
   builtin_envs.lt = make_ord_env("<");
   add_builtin_env("<", builtin_envs.lt);
@@ -658,6 +726,7 @@ void initialize_builtin_types() {
   array_set_scheme = *lookup_builtin_env("array_set")->type;
   array_fill_const_scheme = *lookup_builtin_env("array_fill_const")->type;
   array_fill_scheme = *lookup_builtin_env("array_fill")->type;
+  array_id_scheme = *lookup_builtin_env("array_succ")->type;
   list_concat_scheme = *lookup_builtin_env("list_concat")->type;
 }
 

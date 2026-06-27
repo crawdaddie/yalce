@@ -30,8 +30,10 @@ typedef struct BuiltinEnvRefs {
   TypeEnv *array_fill_const;
   TypeEnv *array_fill;
   TypeEnv *array_range;
+  TypeEnv *array_succ;
   TypeEnv *cor_map;
   TypeEnv *cor_loop;
+  TypeEnv *cor_zip;
   TypeEnv *iter;
   TypeEnv *arith_add;
   TypeEnv *arith_sub;
@@ -44,6 +46,8 @@ typedef struct BuiltinEnvRefs {
   TypeEnv *lte;
   TypeEnv *gt;
   TypeEnv *gte;
+  TypeEnv *logical_and;
+  TypeEnv *logical_or;
 } BuiltinEnvRefs;
 
 extern BuiltinEnvRefs builtin_envs;

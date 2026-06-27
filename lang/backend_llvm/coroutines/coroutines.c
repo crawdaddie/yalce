@@ -241,7 +241,6 @@ static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
     JITLangCtx compilation_ctx = *ctx;
 
     Type *generic_type = sym->symbol_type;
-    generic_type = generic_type->data.T_CONS.args[0];
 
     compilation_ctx.stack_ptr =
         sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
@@ -261,6 +260,19 @@ static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
           compiled_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
     }
     fn_ast.type = compiled_type;
+
+    Type *cursor = compiled_type;
+    while (cursor && cursor->kind == T_FN) {
+      Type *from = cursor->data.T_FN.from;
+      if (is_generic(from)) {
+        Type *resolved = specialize_type_for_codegen(from, &compilation_ctx);
+        if (resolved) {
+          compilation_ctx.env =
+              codegen_bind_in_env(compilation_ctx.env, from, resolved);
+        }
+      }
+      cursor = cursor->data.T_FN.to;
+    }
 
     LLVMValueRef specific_fn =
         compile_coroutine(&fn_ast, &compilation_ctx, module, builder);
@@ -526,21 +538,26 @@ LLVMValueRef __create_coroutine_symbol(Ast *binding, Ast *expr, Type *expr_type,
 LLVMValueRef create_coroutine_symbol(Ast *binding, Ast *expr, Type *expr_type,
                                      JITLangCtx *ctx, LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
-
-  print_ast(binding);
-  print_type(expr_type);
-  return NULL;
+  LLVMValueRef handle = codegen(expr, ctx, module, builder);
+  if (!handle) {
+    return NULL;
+  }
+  return create_fn_binding(binding, expr_type, handle, ctx, module, builder);
 }
 
 LLVMValueRef create_coroutine_constructor_symbol(Ast *binding, Ast *expr,
-                                                 Type *expr_type,
-                                                 JITLangCtx *ctx,
-                                                 LLVMModuleRef module,
-                                                 LLVMBuilderRef builder) {
-  print_ast(binding);
-  print_type(expr_type);
-  return NULL;
+                                                  Type *expr_type,
+                                                  JITLangCtx *ctx,
+                                                  LLVMModuleRef module,
+                                                  LLVMBuilderRef builder) {
+  if (is_generic(expr_type)) {
+    return create_generic_fn_binding(binding, expr, ctx);
+  }
+
+  LLVMValueRef coro_fn = compile_coroutine(expr, ctx, module, builder);
+  return create_fn_binding(binding, expr_type, coro_fn, ctx, module, builder);
 }
+
 bool is_recursive_yield(Ast *expr, CoroutineCtx *coro_ctx) {
   if (expr->tag == AST_APPLICATION &&
       expr->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&

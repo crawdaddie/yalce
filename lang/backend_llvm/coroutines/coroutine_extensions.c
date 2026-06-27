@@ -2089,6 +2089,22 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return coro_handle;
 }
 
+LLVMValueRef IterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                         LLVMBuilderRef builder) {
+  if (is_array_type(ast->data.AST_APPLICATION.args->type)) {
+    return CorOfArrayHandler(ast, ctx, module, builder);
+  }
+
+  if (is_list_type(ast->data.AST_APPLICATION.args->type)) {
+    return CorOfListHandler(ast, ctx, module, builder);
+  }
+  char buf[200];
+  fprintf(stderr, "Error: Into<Coroutine<%s>> not implemented for type %s",
+          type_to_string(ast->data.AST_APPLICATION.args->type, buf));
+
+  return NULL;
+}
+
 LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
   // Get the array expression

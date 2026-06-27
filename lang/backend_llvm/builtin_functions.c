@@ -622,8 +622,6 @@ LLVMValueRef list_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
   Type *el_type = type->data.T_CONS.args[0];
 
   LLVMTypeRef llvm_el_type = type_to_llvm_type(el_type, ctx, module);
-  LLVMDumpType(llvm_el_type);
-  printf("\n");
   LLVMTypeRef llvm_list_node_type = llnode_type(llvm_el_type);
 
   LLVMValueRef current_function =
@@ -1585,10 +1583,10 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
         _builtin_handler;                                                      \
     ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);                  \
   })
-#define GENERIC_FN_ENV(entry, _builtin_handler)                                 \
+#define GENERIC_FN_ENV(entry, _builtin_handler)                                \
   ({                                                                           \
-    JITSymbol *sym =                                                          \
-        new_symbol(STYPE_GENERIC_FUNCTION, (entry)->type, NULL, NULL);        \
+    JITSymbol *sym =                                                           \
+        new_symbol(STYPE_GENERIC_FUNCTION, (entry)->type, NULL, NULL);         \
     sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler =                  \
         _builtin_handler;                                                      \
     ht_set_hash(stack, (entry)->name,                                          \
@@ -1621,12 +1619,12 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_ENV(builtin_envs.lte, LteHandler);
   GENERIC_FN_ENV(builtin_envs.eq, EqAppHandler);
   GENERIC_FN_ENV(builtin_envs.neq, NeqHandler);
-  GENERIC_FN_SYMBOL("&&", &logical_op_scheme, LogicalAndHandler);
-  GENERIC_FN_SYMBOL("||", &logical_op_scheme, LogicalOrHandler);
+  GENERIC_FN_ENV(builtin_envs.logical_and, LogicalAndHandler);
+  GENERIC_FN_ENV(builtin_envs.logical_or, LogicalOrHandler);
 
   GENERIC_FN_ENV(builtin_envs.array_at, ArrayAtHandler);
   GENERIC_FN_ENV(builtin_envs.array_size, ArraySizeHandler);
-  GENERIC_FN_SYMBOL("array_succ", &array_id_scheme, ArraySuccHandler);
+  GENERIC_FN_ENV(builtin_envs.array_succ, ArraySuccHandler);
   GENERIC_FN_ENV(builtin_envs.array_set, ArraySetHandler);
   GENERIC_FN_ENV(builtin_envs.array_fill_const, ArrayFillConstHandler);
   GENERIC_FN_ENV(builtin_envs.array_fill, ArrayFillHandler);
@@ -1662,23 +1660,33 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   // GENERIC_FN_SYMBOL("cor_counter", &t_cor_counter_fn_sig, CorCounterHandler);
   // GENERIC_FN_SYMBOL("cor_status", &t_cor_status_fn_sig, CorStatusHandler);
   // GENERIC_FN_SYMBOL("cor_promise", NULL, CorGetPromiseValHandler);
-  GENERIC_FN_SYMBOL("cor_last_val", NULL, CorGetLastValHandler);
-  GENERIC_FN_SYMBOL("cor_loop", &cor_loop_scheme, CorLoopHandler);
-  GENERIC_FN_SYMBOL("cor_take", &cor_take_scheme, CorTakeHandler);
+  // GENERIC_FN_SYMBOL("cor_last_val", NULL, CorGetLastValHandler);
+  // GENERIC_FN_SYMBOL("cor_loop", &cor_loop_scheme, CorLoopHandler);
+  // GENERIC_FN_SYMBOL("cor_take", &cor_take_scheme, CorTakeHandler);
   // GENERIC_FN_SYMBOL("loop_cor", &loop_cor_scheme, LoopCorHandler);
+  //
+  GENERIC_FN_ENV(builtin_envs.cor_loop, CorLoopHandler);
   GENERIC_FN_ENV(builtin_envs.cor_map, CorMapHandler);
-  GENERIC_FN_SYMBOL("cor_filter", &cor_filter_scheme, CorFilterHandler);
-  GENERIC_FN_SYMBOL("cor_stop", &cor_stop_scheme, CorStopHandler);
-  GENERIC_FN_SYMBOL("iter_of_list", &iter_of_list_scheme, CorOfListHandler);
-  GENERIC_FN_SYMBOL("iter_cor_list", &iter_cor_list_scheme,
-                    CorOfCorListHandler);
-  GENERIC_FN_SYMBOL("iter_of_array", &iter_of_array_scheme, CorOfArrayHandler);
+  GENERIC_FN_ENV(builtin_envs.cor_zip, CorZipHandler);
+
+  // GENERIC_FN_SYMBOL("cor_filter", &cor_filter_scheme, CorFilterHandler);
+  // GENERIC_FN_SYMBOL("cor_stop", &cor_stop_scheme, CorStopHandler);
+
+  // GENERIC_FN_SYMBOL("iter_of_list", &iter_of_list_scheme, CorOfListHandler);
+  // GENERIC_FN_SYMBOL("iter_cor_list", &iter_cor_list_scheme,
+  //                   CorOfCorListHandler);
+  // GENERIC_FN_SYMBOL("iter_of_array", &iter_of_array_scheme,
+  // CorOfArrayHandler); GENERIC_FN_SYMBOL("iter", &iter_of_array_scheme,
+  // CorOfArrayHandler);
+  GENERIC_FN_ENV(builtin_envs.iter, IterHandler);
+
   GENERIC_FN_SYMBOL("play_routine", &play_routine_scheme, PlayRoutineHandler);
   GENERIC_FN_SYMBOL("play_routine_quant", &play_routine_quant_scheme,
                     PlayRoutineQuantHandler);
+
   GENERIC_FN_SYMBOL("cor_current", &cor_current_scheme, CurrentCorHandler);
   GENERIC_FN_SYMBOL("cor_try_opt", &cor_try_opt_scheme, CorUnwrapOrEndHandler);
-  GENERIC_FN_SYMBOL("cor_zip", &cor_zip_scheme, CorZipHandler);
+
   GENERIC_FN_SYMBOL("cor_zip_struct", &cor_zip_scheme, CorZipStructHandler);
 
   GENERIC_FN_SYMBOL("fn_composition", NULL, HandleFnComposition);
