@@ -546,10 +546,10 @@ LLVMValueRef create_coroutine_symbol(Ast *binding, Ast *expr, Type *expr_type,
 }
 
 LLVMValueRef create_coroutine_constructor_symbol(Ast *binding, Ast *expr,
-                                                  Type *expr_type,
-                                                  JITLangCtx *ctx,
-                                                  LLVMModuleRef module,
-                                                  LLVMBuilderRef builder) {
+                                                 Type *expr_type,
+                                                 JITLangCtx *ctx,
+                                                 LLVMModuleRef module,
+                                                 LLVMBuilderRef builder) {
   if (is_generic(expr_type)) {
     return create_generic_fn_binding(binding, expr, ctx);
   }

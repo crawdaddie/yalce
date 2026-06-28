@@ -1054,11 +1054,46 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
     break;
   }
 
+  case AST_TRAIT_IMPL: {
+    Ast *impl = ast->data.AST_TRAIT_IMPL.impl;
+    Type *impl_type = infer_expr(impl, ctx);
+    if (!impl_type) {
+      return NULL;
+    }
+
+    const char *trait_name = ast->data.AST_TRAIT_IMPL.trait_name.chars;
+    const char *type_name = ast->data.AST_TRAIT_IMPL.type.chars;
+
+    Type *target = env_lookup(ctx->env, type_name);
+
+    if (!target) {
+      target = lookup_builtin_type(type_name);
+    }
+
+    if (!target) {
+      type_error(ast, "cannot register trait %s: type %s not in scope",
+                 trait_name, type_name);
+      return NULL;
+    }
+
+    TypeClass *tc = t_alloc(sizeof(TypeClass));
+    *tc = (TypeClass){.name = trait_name, .module = impl_type};
+    typeclasses_extend(target, tc);
+
+    ast->type = impl_type;
+    type = impl_type;
+    break;
+  }
+
   default:
     break;
   }
 
   ast->type = type;
+  if (type == NULL) {
+    fprintf(stderr, "Error: could not infer type for ");
+    print_ast_err(ast);
+  }
   return type;
 }
 

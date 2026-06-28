@@ -72,7 +72,7 @@ let play_into_idx = extern fn Ptr -> Int -> Ptr -> Ptr;
 #   ;;
 # ;
 #
-# # TODO: add impls for Ord and Eq??
+# TODO: add impls for Ord and Eq??
 let Synth : Arithmetic = module () ->
   let rank = 5.; # rank must be a literal
   let add = sum2_node;

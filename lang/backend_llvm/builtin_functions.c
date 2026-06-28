@@ -1647,14 +1647,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_ENV(builtin_envs.cstr, CStrHandler);
   GENERIC_FN_ENV(builtin_envs.sizeof_env, SizeOfHandler);
 
-  GENERIC_FN_SYMBOL("Char", NULL, CharConstructorHandler);
-  GENERIC_FN_SYMBOL("Int", NULL, int_constructor_handler);
-  GENERIC_FN_SYMBOL("Double", lookup_builtin_env("Double")->type,
-                    double_constructor_handler);
-  GENERIC_FN_SYMBOL("Uint64", NULL, uint64_constructor_handler);
-  GENERIC_FN_SYMBOL("Array", &array_scheme, ArrayConstructorHandler);
-  GENERIC_FN_SYMBOL("String", NULL, ArrayConstructorHandler);
-
   // FN_SYMBOL()
 
   // GENERIC_FN_SYMBOL("cor_counter", &t_cor_counter_fn_sig, CorCounterHandler);
@@ -1688,8 +1680,6 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   GENERIC_FN_ENV(builtin_envs.cor_zip_struct, CorZipStructHandler);
 
-  GENERIC_FN_SYMBOL("fn_composition", NULL, HandleFnComposition);
-
   GENERIC_FN_ENV(builtin_envs.is_null, HandleIsNullPtr);
 
   // GENERIC_FN_SYMBOL("null_coroutine", &null_coroutine,
@@ -1698,6 +1688,15 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_ENV(builtin_envs.asbytes, AsBytesHandler);
 
   GENERIC_FN_ENV(builtin_envs.typeof_env, TypeOfHandler);
+
+  GENERIC_FN_SYMBOL("Char", NULL, CharConstructorHandler);
+  GENERIC_FN_SYMBOL("Int", NULL, int_constructor_handler);
+  GENERIC_FN_SYMBOL("Double", lookup_builtin_env("Double")->type,
+                    double_constructor_handler);
+  GENERIC_FN_SYMBOL("Uint64", NULL, uint64_constructor_handler);
+  GENERIC_FN_SYMBOL("Array", &array_scheme, ArrayConstructorHandler);
+  GENERIC_FN_SYMBOL("String", NULL, ArrayConstructorHandler);
+  GENERIC_FN_SYMBOL("fn_composition", NULL, HandleFnComposition);
 
   return ctx->env;
 }

@@ -47,8 +47,8 @@ let test = module () ->
 
   import std/Lists;
   let test11 = (
-    let K = new_clos ()
-    in Lists.fold (&&) true [
+    let K = new_clos () in
+    Lists.fold (&&) true [
       K () == 1,
       K () == 2,
       K () == 3

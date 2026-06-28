@@ -656,10 +656,8 @@ static TypeEnv *make_cor_current_env(void) {
   // cor_current : Void -> Ptr
   Type *fn_type = type_fn(&t_void, &t_ptr);
   TypeEnv *entry = t_alloc(sizeof(TypeEnv));
-  *entry = (TypeEnv){.name = "cor_current",
-                     .type = fn_type,
-                     .next = NULL,
-                     .predicates = NULL};
+  *entry = (TypeEnv){
+      .name = "cor_current", .type = fn_type, .next = NULL, .predicates = NULL};
   return entry;
 }
 
@@ -717,10 +715,8 @@ static TypeEnv *make_play_routine_env(void) {
   f = type_fn(&t_uint64, f);
 
   TypeEnv *entry = t_alloc(sizeof(TypeEnv));
-  *entry = (TypeEnv){.name = "play_routine",
-                     .type = f,
-                     .next = NULL,
-                     .predicates = NULL};
+  *entry = (TypeEnv){
+      .name = "play_routine", .type = f, .next = NULL, .predicates = NULL};
   return entry;
 }
 
@@ -743,10 +739,8 @@ static TypeEnv *make_dlopen_env(void) {
   // dlopen : String -> Void
   Type *fn_type = type_fn(&t_string, &t_void);
   TypeEnv *entry = t_alloc(sizeof(TypeEnv));
-  *entry = (TypeEnv){.name = "dlopen",
-                     .type = fn_type,
-                     .next = NULL,
-                     .predicates = NULL};
+  *entry = (TypeEnv){
+      .name = "dlopen", .type = fn_type, .next = NULL, .predicates = NULL};
   return entry;
 }
 
@@ -754,10 +748,8 @@ static TypeEnv *make_is_null_env(void) {
   // is_null : Ptr -> Bool
   Type *fn_type = type_fn(&t_ptr, &t_bool);
   TypeEnv *entry = t_alloc(sizeof(TypeEnv));
-  *entry = (TypeEnv){.name = "is_null",
-                     .type = fn_type,
-                     .next = NULL,
-                     .predicates = NULL};
+  *entry = (TypeEnv){
+      .name = "is_null", .type = fn_type, .next = NULL, .predicates = NULL};
   return entry;
 }
 
@@ -765,7 +757,8 @@ static TypeEnv *make_asbytes_env(void) {
   // asbytes : a -> String
   Type *a = tvar("a");
   Type *f = type_fn(a, &t_string);
-  f->data.T_FN.attributes = set_attr(f->data.T_FN.attributes, FN_ATTR_ALLOCATES);
+  f->data.T_FN.attributes =
+      set_attr(f->data.T_FN.attributes, FN_ATTR_ALLOCATES);
 
   TypeList *tl_a = vlist_of_typevar(a);
 
@@ -925,11 +918,9 @@ void initialize_builtin_types() {
   // Logical operators are monomorphic Bool -> Bool -> Bool.
   logical_op_scheme = (Type){
       T_FN, {.T_FN = {.from = &t_bool, .to = type_fn(&t_bool, &t_bool)}}};
-  builtin_envs.logical_and =
-      make_monomorphic_env("&&", &logical_op_scheme);
+  builtin_envs.logical_and = make_monomorphic_env("&&", &logical_op_scheme);
   add_builtin_env("&&", builtin_envs.logical_and);
-  builtin_envs.logical_or =
-      make_monomorphic_env("||", &logical_op_scheme);
+  builtin_envs.logical_or = make_monomorphic_env("||", &logical_op_scheme);
   add_builtin_env("||", builtin_envs.logical_or);
 
   builtin_envs.lt = make_ord_env("<");

@@ -1,4 +1,5 @@
 #include "./infer_let.h"
+#include "serde.h"
 #include "type_ser.h"
 #include <string.h>
 static int typelist_len(TypeList *list) {
@@ -145,8 +146,18 @@ Type *infer_let_expr(Ast *ast, TICtx *ctx) {
   TypeEnv *outer_env = ctx->env;
 
   Type *expr_type = infer_expr(expr, ctx);
+
   if (!expr_type) {
+
     return NULL;
+  }
+  if (ast_is_placeholder_id(binding)) {
+    if (body) {
+      Type *body_type = infer_expr(body, ctx);
+      ctx->env = outer_env;
+      return body_type;
+    }
+    return expr_type;
   }
 
   if (bind_pattern(binding, expr_type, ctx) != 0) {

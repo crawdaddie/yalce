@@ -1,4 +1,4 @@
-open engine/bindings/Synth;
+open engine/bindings/SynthEngine;
 open engine/bindings/Sched;
 
 let sample_rate = 48000;

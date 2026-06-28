@@ -134,11 +134,16 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
     data_ptr =
         __allocate_coroutine_array(ctx, builder, element_type, size_const);
   } else if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
-    data_ptr = LLVMBuildArrayAlloca(builder, element_type, size_const,
-                                    "array_data_alloc");
+
+    data_ptr = LLVMBuildAlloca(builder, LLVMArrayType(element_type, array_size),
+                               "array_data_alloc");
+
   } else {
-    data_ptr = LLVMBuildArrayMalloc(builder, element_type, size_const,
-                                    "array_data_alloc");
+    // data_ptr = LLVMBuildArrayMalloc(builder, element_type, size_const,
+    //                                 "array_data_alloc");
+
+    data_ptr = LLVMBuildMalloc(builder, LLVMArrayType(element_type, array_size),
+                               "array_data_alloc");
   }
 
   array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 0,
@@ -205,25 +210,44 @@ LLVMValueRef ArrayFillHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef element_type = type_to_llvm_type(el_type, ctx, module);
 
   LLVMTypeRef array_type = codegen_array_type(element_type);
-  LLVMValueRef size_const =
+
+  LLVMValueRef size =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  bool is_const_size;
+  long long size_const;
+  if (LLVMIsConstant(size)) {
+    is_const_size = true;
+    size_const = LLVMConstIntGetZExtValue(size);
+  }
+
   LLVMValueRef array_struct = LLVMGetUndef(array_type);
 
   LLVMValueRef data_ptr;
-  // =
-  //     LLVMBuildArrayMalloc(builder, element_type, size_const, "element_ptr");
-  // TODO: use proper allocation strategy
   if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC &&
       ctx->coro_ctx == NULL) {
-    data_ptr =
-        LLVMBuildArrayAlloca(builder, element_type, size_const, "element_ptr");
+    if (is_const_size) {
+
+      data_ptr = LLVMBuildAlloca(
+          builder, LLVMArrayType(element_type, size_const), "element_ptr");
+    } else {
+      data_ptr =
+          LLVMBuildArrayAlloca(builder, element_type, size, "element_ptr");
+    }
+
   } else {
-    data_ptr =
-        LLVMBuildArrayMalloc(builder, element_type, size_const, "element_ptr");
+
+    if (is_const_size) {
+
+      data_ptr = LLVMBuildMalloc(
+          builder, LLVMArrayType(element_type, size_const), "element_ptr");
+    } else {
+      data_ptr =
+          LLVMBuildArrayMalloc(builder, element_type, size, "element_ptr");
+    }
   }
 
-  array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 0,
-                                      "insert_array_size");
+  array_struct =
+      LLVMBuildInsertValue(builder, array_struct, size, 0, "insert_array_size");
 
   Type *ftype = ast->data.AST_APPLICATION.function->type;
   Type *fill_func_type = ftype->data.T_FN.to->data.T_FN.from;
@@ -265,7 +289,7 @@ LLVMValueRef ArrayFillHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildStore(builder, next_idx, counter);
 
   LLVMValueRef end_cond =
-      LLVMBuildICmp(builder, LLVMIntSLT, next_idx, size_const, "end_cond");
+      LLVMBuildICmp(builder, LLVMIntSLT, next_idx, size, "end_cond");
 
   LLVMBuildCondBr(builder, end_cond, loop_block, after_block);
 
