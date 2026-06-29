@@ -74,7 +74,7 @@ let chance2 = fn thresh f g ->
 ;;
 
 
-let shuffle = fn n: (Int) -> 
+let shuffle = fn n -> 
   # `
   # Fisher-Yates shuffle
   # return an array of numbers 0 to n-1 shuffled in random order

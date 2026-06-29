@@ -3248,6 +3248,8 @@ bool test_rec_coroutines() {
   return status;
 }
 
+bool test_variadic_templates();
+
 int main() {
   // initialize_builtin_schemes();
   reset_type_var_counter();
@@ -3278,8 +3280,58 @@ int main() {
   status &= test_rec_coroutines();
   //
   status &= test_closures();
+  status &= test_variadic_templates();
   print_all_failures();
   return status == true ? 0 : 1;
+}
+
+bool test_variadic_templates() {
+  printf("\n=== Variadic Templates ===\n");
+  bool status = true;
+
+  // @Audio fn a -> a : Double -> Double
+  T("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+    "let f = @Audio fn a -> a;;\n"
+    "f;",
+    &MAKE_FN_TYPE_2(&t_num, &t_num));
+
+  // @Audio fn a b -> a + b : Double -> Double -> Double
+  T("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+    "let f = @Audio fn a b -> a + b;;\n"
+    "f 1. 2.;",
+    &t_num);
+
+  // @Audio fn a b c -> a + b + c : three Double args → Double
+  T("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+    "let f = @Audio fn a b c -> a + b + c;;\n"
+    "f 1. 2. 3.;",
+    &t_num);
+
+  // Int args coerce to Double via From
+  T("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+    "let f = @Audio fn a b -> a + b;;\n"
+    "f 1 2;",
+    &t_num);
+
+  // String arg fails — String is not coercible to Double
+  TFAIL("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+        "let f = @Audio fn a -> a;;\n"
+        "f \"hello\";;");
+
+  // Non-function arg fails — Audio expects a function
+  TFAIL("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+        "let f = @Audio 1.;;");
+
+  ({
+    // @Audio fn a b -> a + b : Double -> Double -> Double
+    Ast *b = T("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+               "let f = @Audio fn a b -> a + b;;\n"
+               "f 1. 2.;",
+               &t_num);
+    print_ast(b);
+  });
+
+  return status;
 }
 
 // (Array of `5 [Arithmetic, ] -> tc resolve Arithmetic [ `5 [Arithmetic, ] :

@@ -4786,7 +4786,8 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
     Ast *args = ast->data.AST_APPLICATION.args;
     Type *arg_type = args->type;
 
-    if (!has_attr(arg_type->attr, ATTR_COMPILE_TIME_CONST)) {
+    if (args->tag != AST_INT &&
+        !has_attr(arg_type->attr, ATTR_COMPILE_TIME_CONST)) {
       fprintf(stderr, "Error: not implemented- emit non-constant / computed "
                       "array length instructions\n");
       print_ast_err(ast);

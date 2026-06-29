@@ -401,6 +401,10 @@ Type *create_type_multi_param_fn(int len, Type **from, Type *to) {
 
 int fn_type_args_len(Type *fn_type) {
 
+  if (!fn_type || fn_type->kind != T_FN) {
+    return 0;
+  }
+
   if (fn_type->data.T_FN.from->kind == T_VOID) {
     return 1;
   }
@@ -457,7 +461,7 @@ Type *deep_copy_type(const Type *original) {
     }
     copy->data.T_CONS.names = original->data.T_CONS.names;
 
-    if (is_coroutine_type(copy)) {
+    if (is_coroutine_type(copy) && copy->data.T_CONS.num_args > 0) {
       copy->implements = NULL;
       extend_coroutine_from_instances(copy, copy->data.T_CONS.args[0]);
     }
@@ -492,6 +496,10 @@ bool is_pointer_type(Type *type) {
 bool is_array_type(Type *type) {
   return type->kind == T_CONS &&
          (strcmp(type->data.T_CONS.name, TYPE_NAME_ARRAY) == 0);
+}
+bool is_variadic_type(Type *type) {
+  return type && type->kind == T_CONS &&
+         strcmp(type->data.T_CONS.name, "Variadic") == 0;
 }
 bool is_tuple_type(Type *type) {
   return type->kind == T_CONS &&

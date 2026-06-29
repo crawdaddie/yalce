@@ -740,6 +740,7 @@ int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx) {
   case AST_IDENTIFIER: {
     const char *name = pattern->data.AST_IDENTIFIER.value;
     if (strcmp(name, "_") == 0) {
+      pattern->type = value_type;
       return 0;
     }
     TypeEnv *ref = lookup_type_ref(ctx->env, name);
@@ -1080,6 +1081,47 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
     *tc = (TypeClass){.name = trait_name, .module = impl_type};
     typeclasses_extend(target, tc);
 
+    if (strcmp(trait_name, TYPE_NAME_TYPECLASS_FROM) == 0) {
+      if (impl_type->kind == T_MODULE) {
+        for (TypeEnv *te = impl_type->data.T_MODULE.env; te; te = te->next) {
+          const char *mname = te->name;
+          if (strncmp(mname, "from_", 5) != 0) {
+            continue;
+          }
+          Type *mtype = te->type;
+          if (!mtype || mtype->kind != T_FN) {
+            continue;
+          }
+          Type *src = mtype->data.T_FN.from;
+          if (!src || is_generic(src)) {
+            continue;
+          }
+          TypeList *src_params = t_alloc(sizeof(TypeList));
+          src_params->type = src;
+          src_params->next = NULL;
+          TypeClass *src_tc = t_alloc(sizeof(TypeClass));
+          *src_tc = (TypeClass){
+              .name = trait_name, .module = impl_type, .params = src_params};
+          typeclasses_extend(target, src_tc);
+        }
+      }
+
+      Type *a = tvar("a");
+      Type *ctor_fn = type_fn(a, target);
+      TypeList *scheme_vars = t_alloc(sizeof(TypeList));
+      scheme_vars->type = a;
+      scheme_vars->next = NULL;
+      TypeList *from_params = t_alloc(sizeof(TypeList));
+      from_params->type = a;
+      from_params->next = NULL;
+      Predicate *preds =
+          predicate_append_applied(NULL, GenericFrom, target, from_params);
+      ctx->env = env_extend_with_preds(ctx->env, type_name, ctor_fn, preds);
+      ctx->env->scheme_vars = scheme_vars;
+      ctx->env->can_generalize = true;
+      ctx->env->needs_generalization = true;
+    }
+
     ast->type = impl_type;
     type = impl_type;
     break;
@@ -1091,8 +1133,9 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
 
   ast->type = type;
   if (type == NULL) {
-    fprintf(stderr, "Error: could not infer type for ");
-    print_ast_err(ast);
+    fprintf(stderr, "Error: could not infer type at");
+    print_location(ast);
+    // print_ast_err(ast);
   }
   return type;
 }
@@ -1531,6 +1574,8 @@ static Type *find_root_var(Subst *subst, Type *t) {
     return apply_subst_to_type(subst, next);
   return find_root_var(subst, next);
 }
+
+static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out);
 
 static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out) {
   t1 = apply_subst_to_type(subst, t1);
@@ -1992,7 +2037,8 @@ static void finalize_ast_types(Ast *ast, Subst *subst) {
                   ({ finalize_ast_types(l->ast, subst); }));
     break;
   }
-  case AST_LET: {
+  case AST_LET:
+  case AST_LOOP: {
     finalize_ast_types(ast->data.AST_LET.binding, subst);
     finalize_ast_types(ast->data.AST_LET.expr, subst);
     finalize_ast_types(ast->data.AST_LET.in_expr, subst);

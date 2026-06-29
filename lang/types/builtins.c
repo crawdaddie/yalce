@@ -619,11 +619,11 @@ static TypeEnv *make_list_prepend_env(void) {
 }
 
 static TypeEnv *make_cstr_env(void) {
-  // cstr : Array a -> Ptr a
+  // cstr : Array a -> Ptr   (opaque pointer; element type not carried on the
+  // result, matching the monomorphic `Ptr` used by extern declarations)
   Type *a = tvar("a");
   Type *arr = create_array_type(a);
-  Type *p = make_ptr_type(a);
-  Type *f = type_fn(arr, p);
+  Type *f = type_fn(arr, &t_ptr);
 
   TypeList *tl_a = vlist_of_typevar(a);
 

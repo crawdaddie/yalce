@@ -59,7 +59,16 @@ Type *freshen_map_apply_to_type(FreshenMap *map, Type *t) {
   switch (t->kind) {
   case T_VAR: {
     Type *found = freshen_map_lookup(map, t->data.T_VAR.id);
-    return found ? found : t;
+    if (found) {
+      if (t->closure_meta && !found->closure_meta) {
+        found->closure_meta = freshen_map_apply_to_type(map, t->closure_meta);
+      }
+      if (t->meta && !found->meta) {
+        found->meta = t->meta;
+      }
+      return found;
+    }
+    return t;
   }
   case T_RECURSIVE_REF:
     return t;

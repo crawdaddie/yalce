@@ -10,8 +10,68 @@ Type *callable_view(Type *type) {
   }
   return type;
 }
+
+// Expand a Variadic template to match a target function type's arity.
+// variadic = Variadic(Double -> Double), target = a -> b -> R (arity 2)
+// → produces Double -> Double -> Double (repeating the last param).
+static Type *extend_variadic_template(Type *variadic, Type *target) {
+  Type *variadic_fn = variadic->data.T_CONS.args[0];
+  int target_arity = fn_type_args_len(target);
+  int template_arity = fn_type_args_len(variadic_fn);
+
+  if (!variadic_fn || variadic_fn->kind != T_FN || target->kind != T_FN ||
+      template_arity <= 0 || target_arity < template_arity) {
+    return NULL;
+  }
+
+  Type **param_types = t_alloc(sizeof(Type *) * target_arity);
+  Type *last_param_type = NULL;
+  int fixed_prefix_arity = template_arity - 1;
+  int i = 0;
+
+  for (Type *v = variadic_fn; v && v->kind == T_FN; v = v->data.T_FN.to, i++) {
+    last_param_type = v->data.T_FN.from;
+    if (i < fixed_prefix_arity) {
+      param_types[i] = deep_copy_type(v->data.T_FN.from);
+    }
+  }
+
+  for (i = fixed_prefix_arity; i < target_arity; i++) {
+    param_types[i] = deep_copy_type(last_param_type);
+  }
+
+  return create_type_multi_param_fn(
+      target_arity, param_types, deep_copy_type(fn_return_type(variadic_fn)));
+}
+
+// Check if a type carries a Variadic constraint (stored on meta).
+// Returns the Variadic T_CONS if present, NULL otherwise.
+static Type *get_variadic_constraint(Type *t) {
+  if (t && t->meta) {
+    Type *constraint = (Type *)t->meta;
+    if (constraint->kind == T_CONS &&
+        strcmp(constraint->data.T_CONS.name, "Variadic") == 0) {
+      return constraint;
+    }
+  }
+  return NULL;
+}
+
 static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
-                                             Type *param_type) {
+                                              Type *param_type) {
+  // Variadic structural constraint: if the parameter type carries a Variadic
+  // template (stored on meta), expand it to match the argument's arity and
+  // add a constraint.  This constrains each lambda arg to the template's last
+  // param type (e.g. Double) and the result to the template's return type.
+  Type *variadic = get_variadic_constraint(param_type);
+  if (variadic && arg_type && arg_type->kind == T_FN) {
+    Type *expanded = extend_variadic_template(variadic, arg_type);
+    if (expanded) {
+      add_constraint(ctx, arg_type, expanded);
+      return;
+    }
+  }
+
   if (is_generic(arg_type) || is_generic(param_type) ||
       types_equal(arg_type, param_type)) {
     add_constraint(ctx, arg_type, param_type);
@@ -57,11 +117,12 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
   size_t nargs = ast->data.AST_APPLICATION.len;
 
   Type *fn_type = infer_expr(fn_ast, ctx);
-  int expected_args_len = fn_type_args_len(fn_type);
 
   if (!fn_type) {
     return NULL;
   }
+
+  int expected_args_len = fn_type_args_len(fn_type);
 
   Type *current = fn_type;
 
@@ -87,14 +148,13 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
     }
   }
   if (expected_args_len > nargs) {
-    // printf("curried???\n");
-    // print_type(func_type);
     Type **_arg_types = t_alloc(sizeof(Type *) * nargs);
     memcpy(_arg_types, arg_types, sizeof(Type *) * nargs);
     Type *closure_meta = create_tuple_type(nargs, _arg_types);
     current = deep_copy_type(current);
     current->closure_meta = closure_meta;
   }
+
   if (current->kind == T_FN) {
     return handle_closure_constants(ast, current, ctx);
   } else {

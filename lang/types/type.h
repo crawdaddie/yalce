@@ -394,6 +394,7 @@ bool is_pointer_type(Type *type);
 bool is_closure(Type *type);
 
 bool is_array_type(Type *type);
+bool is_variadic_type(Type *type);
 
 
 Type *replace_in(Type *type, Type *tvar, Type *replacement);

@@ -46,15 +46,28 @@ Type *compute_fn_type(Ast *expr, TICtx *ctx) {
   }
   sig = expr;
 
+  int is_variadic = false;
   Type *param_types[num_params];
   for (int i = 0; i < num_params; i++) {
     Ast *p = sig->data.AST_LIST.items;
     Type *t = compute_type_expression_inner(p, ctx);
+    if (t && t->kind == T_CONS &&
+        strcmp(t->data.T_CONS.name, "Variadic") == 0) {
+      is_variadic = true;
+      t = t->data.T_CONS.args[0];
+    }
     param_types[i] = t;
     sig = sig->data.AST_LIST.items + 1;
   }
   Type *ret = compute_type_expression_inner(sig, ctx);
   Type *f = create_type_multi_param_fn(num_params, param_types, ret);
+
+  if (is_variadic) {
+    Type **x = t_alloc(sizeof(Type *));
+    x[0] = f;
+    f = create_cons_type("Variadic", 1, x);
+  }
+
   return f;
 }
 
@@ -63,6 +76,28 @@ static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
   case AST_FN_SIGNATURE: {
     return compute_fn_type(expr, ctx);
     break;
+  }
+  case AST_LET: {
+    // Handle constrained type annotations like T: (Double ... -> Double).
+    // ast_assoc builds an AST_LET with binding=identifier, expr=constraint.
+    // The constraint type (e.g. Variadic(Double -> Double)) is stored on the
+    // type variable's meta field.  During application inference, when a lambda
+    // is constrained against this tvar, the variadic template is expanded to
+    // match the lambda's arity and a constraint is added.
+    Ast *binding = expr->data.AST_LET.binding;
+    Ast *constraint_expr = expr->data.AST_LET.expr;
+    if (binding && binding->tag == AST_IDENTIFIER) {
+      const char *name = binding->data.AST_IDENTIFIER.value;
+      Type *tvar_type = lookup_or_bind_type_var(name);
+      if (constraint_expr) {
+        Type *constraint = compute_type_expression_inner(constraint_expr, ctx);
+        if (constraint) {
+          tvar_type->meta = constraint;
+        }
+      }
+      return tvar_type;
+    }
+    return NULL;
   }
   case AST_VOID: {
     return &t_void;
@@ -194,6 +229,7 @@ static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
         return container;
       }
 
+      container = deep_copy_type(container);
       container->data.T_CONS.args = t_alloc(sizeof(Type *));
       container->data.T_CONS.args[0] = contained;
       container->data.T_CONS.num_args = 1;
