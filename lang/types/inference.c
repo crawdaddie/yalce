@@ -564,6 +564,32 @@ TypeList *free_vars_env(TypeList *acc, TypeEnv *env) {
   return acc;
 }
 
+// Collect the free type variables appearing in a list of (deferred)
+// predicates. A type variable that is constrained by an unresolved
+// trait/comparable obligation must not be generalized: generalizing it
+// would freeze it as a polymorphic scheme variable, severing the link
+// between the binding's stored type and the freshened copies later use
+// sites resolve. This keeps the binding monomorphic in exactly those
+// constrained variables so a subsequent checkpoint (with more context)
+// can push a concrete witness back into the original variable.
+TypeList *free_vars_predicate(TypeList *acc, Predicate *preds) {
+  for (Predicate *p = preds; p; p = p->next) {
+    if (p->kind == PRED_TRAIT) {
+      acc = free_vars_type(acc, p->data.TRAIT.type);
+      for (TypeList *tl = p->data.TRAIT.params; tl; tl = tl->next) {
+        acc = free_vars_type(acc, tl->type);
+      }
+    } else if (p->kind == PRED_COMPARABLE) {
+      acc = free_vars_type(acc, p->data.COMPARABLE.witness);
+      for (int i = 0; p->data.COMPARABLE.args && p->data.COMPARABLE.args[i];
+           i++) {
+        acc = free_vars_type(acc, p->data.COMPARABLE.args[i]);
+      }
+    }
+  }
+  return acc;
+}
+
 static TypeList *set_diff(TypeList *a, TypeList *b) {
   TypeList *result = NULL;
   for (TypeList *la = a; la; la = la->next) {
@@ -584,7 +610,20 @@ static TypeList *set_diff(TypeList *a, TypeList *b) {
 void generalize_env(TypeEnv *entry, TypeEnv *env) {
   TypeList *fv_type = free_vars_type(NULL, entry->type);
   TypeList *fv_env = free_vars_env(NULL, env);
-  entry->scheme_vars = set_diff(fv_type, fv_env);
+  TypeList *scheme_vars = set_diff(fv_type, fv_env);
+  // A non-function value binding (e.g. `let x2 = x / 10`) whose type is a
+  // bare generic variable still constrained by a deferred trait predicate
+  // must not be generalized. Its value is codegen'd once at the binding
+  // site and needs a concrete type; generalizing the constrained variable
+  // would freeze it as a scheme var, so the freshened copies later use
+  // sites resolve never reach the binding's own type. Function bindings
+  // are codegen'd lazily per instantiation, so their constrained params
+  // generalize as usual.
+  if (entry->predicates && !(entry->type && entry->type->kind == T_FN)) {
+    TypeList *fv_preds = free_vars_predicate(NULL, entry->predicates);
+    scheme_vars = set_diff(scheme_vars, fv_preds);
+  }
+  entry->scheme_vars = scheme_vars;
 }
 
 // instantiate: replace scheme_vars with fresh type variables, and copy
@@ -754,6 +793,7 @@ int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx) {
       add_constraint(ctx, value_type, instantiate_env(builtin, ctx));
       return 0;
     }
+    pattern->type = value_type;
     ctx->env = env_extend(ctx->env, name, value_type);
     return 0;
   }
@@ -1340,6 +1380,21 @@ int resolve_predicates(Subst **subst_ptr, Predicate *preds) {
 
         if (!witness && !is_generic(resolved_result)) {
           witness = resolved_result;
+        }
+
+        // When the result is already concrete (forced by an outer context, e.g.
+        // a function argument type or a match-branch unification), prefer it as
+        // the witness over an operand-derived one, unless a concrete operand
+        // has strictly higher rank.  This prevents a partially-resolved
+        // expression like `w - sample_rate * dt` (result Double, operands Int
+        // and a still-generic nested result) from collapsing to the lower-rank
+        // concrete operand Int before the generic operand resolves.
+        if (!is_generic(resolved_result)) {
+          double result_rank = get_typeclass_rank(resolved_result, p->trait->name);
+          if (!witness || result_rank >= max_rank) {
+            witness = resolved_result;
+            max_rank = result_rank;
+          }
         }
 
         if (!witness) {

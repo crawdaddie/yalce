@@ -67,6 +67,11 @@ static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
   if (variadic && arg_type && arg_type->kind == T_FN) {
     Type *expanded = extend_variadic_template(variadic, arg_type);
     if (expanded) {
+      // Link the parameter (a tvar carrying the Variadic meta) to the
+      // argument so the function's result type tracks the argument. Then
+      // structurally constrain the argument to the expanded template, which
+      // fixes each lambda parameter and the result to the template's types.
+      add_constraint(ctx, param_type, arg_type);
       add_constraint(ctx, arg_type, expanded);
       return;
     }

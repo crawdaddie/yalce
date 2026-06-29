@@ -2333,7 +2333,7 @@ int test_closures() {
 
     Type ex = MAKE_FN_TYPE_2(&t_void, &t_num);
 
-    ex.closure_meta = &TTUPLE(2, {&t_num, &t_int});
+    ex.closure_meta = &TTUPLE(2, &t_num, &t_int);
     bool res = types_equal(closure_type, &ex);
 
     const char *msg =
@@ -3328,7 +3328,17 @@ bool test_variadic_templates() {
                "let f = @Audio fn a b -> a + b;;\n"
                "f 1. 2.;",
                &t_num);
-    print_ast(b);
+    // stmt[1] = `let f = Audio (fn a b -> a + b)`
+    Ast *let_f = AST_LIST_NTH(b->data.AST_BODY.stmts, 1);
+    // let_f->expr = Audio (fn ...) : AST_APPLICATION, .args[0] = the lambda
+    Ast *audio_app = let_f->data.AST_LET.expr;
+    Ast *lambda = audio_app->data.AST_APPLICATION.args;
+    // lambda->body = (a + b) : AST_APPLICATION{function: (+), args: [a, b]}
+    Ast *plus_a_b = lambda->data.AST_LAMBDA.body;
+    Ast *a_ref = plus_a_b->data.AST_APPLICATION.args;
+    Ast *b_ref = plus_a_b->data.AST_APPLICATION.args + 1;
+    TASSERT_EQ(a_ref->type, &t_num, "lambda param a has type Double");
+    TASSERT_EQ(b_ref->type, &t_num, "lambda param b has type Double");
   });
 
   return status;

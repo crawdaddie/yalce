@@ -132,7 +132,7 @@ let ilog10 = fn a ->
   let aux = fn d x -> 
     let x2 = x / 10;
     match x2 > 0 with
-    | true -> aux (d+1) x2 
+    | true -> aux (d + 1) x2 
     | _ -> d
   ;;
   aux 0 a
