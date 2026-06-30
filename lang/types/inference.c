@@ -29,7 +29,7 @@ static void finalize_env_generalization(TypeEnv *env, Subst *subst);
 static void finalize_ast_types(Ast *ast, Subst *subst);
 static TypeList *typelist_apply_subst(Subst *subst, TypeList *params);
 static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
-                                             Type *param_type);
+                                             Type *param_type, Ast *arg_ast);
 static Predicate *predicate_filter_generic(Predicate *preds);
 static bool is_empty_subst(Subst *subst);
 static Subst *clone_subst(Subst *subst);
@@ -228,6 +228,14 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
 Type *infer_inline_module(Ast *ast, TICtx *ctx) {
   TypeEnv *saved_env = ctx->env;
   int len;
+
+  AstList *params = ast->data.AST_LAMBDA.params;
+
+  for (AstList *p = params; p; p = p->next) {
+    printf("module type arg\n");
+    print_ast(p->ast);
+  }
+
   AstList *module_body;
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
     module_body = alloca(sizeof(AstList));
@@ -1326,8 +1334,9 @@ int resolve_predicates(Subst **subst_ptr, Predicate *preds) {
         TypeList *params = typelist_apply_subst(subst, p->data.TRAIT.params);
 
         // Still generic after substitution — skip (defer)
-        if (is_generic(t))
+        if (is_generic(t)) {
           continue;
+        }
         bool generic_params = false;
         for (TypeList *tl = params; tl; tl = tl->next) {
           if (is_generic(tl->type)) {
@@ -1390,7 +1399,8 @@ int resolve_predicates(Subst **subst_ptr, Predicate *preds) {
         // and a still-generic nested result) from collapsing to the lower-rank
         // concrete operand Int before the generic operand resolves.
         if (!is_generic(resolved_result)) {
-          double result_rank = get_typeclass_rank(resolved_result, p->trait->name);
+          double result_rank =
+              get_typeclass_rank(resolved_result, p->trait->name);
           if (!witness || result_rank >= max_rank) {
             witness = resolved_result;
             max_rank = result_rank;

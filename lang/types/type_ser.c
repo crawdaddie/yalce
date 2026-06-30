@@ -316,12 +316,10 @@ void print_type_env_stream(TypeEnv *env, FILE *stream) {
 }
 
 void print_type_env(TypeEnv *env) {
-  if (!env) {
-    return;
-  }
-  print_type_env_stream(env, stdout);
-  if (env->next) {
-    fprintf(stdout, "\n");
-    print_type_env_stream(env->next, stdout);
+  for (TypeEnv *e = env; e; e = e->next) {
+    print_type_env_stream(e, stdout);
+    if (e->next) {
+      fprintf(stdout, "\n");
+    }
   }
 }

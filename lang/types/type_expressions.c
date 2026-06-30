@@ -256,6 +256,18 @@ static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
     //   return inst;
     // }
   }
+  case AST_LAMBDA: {
+    for (AstList *ps = expr->data.AST_LAMBDA.params; ps; ps = ps->next) {
+      Ast *p = ps->ast;
+      current_type_decl_env =
+          env_extend(current_type_decl_env, p->data.AST_IDENTIFIER.value,
+                     tvar(p->data.AST_IDENTIFIER.value));
+    }
+    print_ast(expr);
+    printf("\n\n");
+    print_type_env(current_type_decl_env);
+    return NULL;
+  }
   default: {
     break;
   }
@@ -292,9 +304,15 @@ int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx);
 Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
   Ast *binding = ast->data.AST_LET.binding;
   Ast *expr = ast->data.AST_LET.expr;
+
+  // if (expr->tag == AST_LAMBDA) {
+  //   expr = expr->data.AST_LAMBDA.body;
+  // }
+
   const char *saved_type_decl_name = current_type_decl_name;
   TypeEnv *saved_type_decl_env = current_type_decl_env;
   TypeEnv *decl_env = NULL;
+
   if (binding->tag == AST_IDENTIFIER) {
     current_type_decl_name = binding->data.AST_IDENTIFIER.value;
     decl_env = t_alloc(sizeof(TypeEnv));
@@ -303,11 +321,14 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
     decl_env->md.type = BT_TYPE_DECL;
     current_type_decl_env = decl_env;
   }
+
   Type *computed = compute_type_expression(expr, ctx);
   current_type_decl_name = saved_type_decl_name;
   current_type_decl_env = saved_type_decl_env;
 
   if (!computed) {
+    fprintf(stderr, "Error: could not compute type expression");
+    print_ast_err(expr);
     return NULL;
   }
 

@@ -44,6 +44,20 @@ static Type *extend_variadic_template(Type *variadic, Type *target) {
       target_arity, param_types, deep_copy_type(fn_return_type(variadic_fn)));
 }
 
+// Like extend_variadic_template, but for a target whose first parameter is a
+// unit (void) argument — `fn () -> R`. Such a lambda has no real signal
+// argument, so matching `Variadic(Double ... -> Double)` should yield `() ->
+// R` (the void param preserved) rather than forcing the void arg to the
+// template's repeated Double.
+static Type *extend_variadic_template_void(Type *variadic, Type *target) {
+  Type *variadic_fn = variadic->data.T_CONS.args[0];
+  if (!variadic_fn || variadic_fn->kind != T_FN || target->kind != T_FN) {
+    return NULL;
+  }
+  // `() -> R`: one void param, result is the target's return type.
+  return type_fn(&t_void, deep_copy_type(fn_return_type(variadic_fn)));
+}
+
 // Check if a type carries a Variadic constraint (stored on meta).
 // Returns the Variadic T_CONS if present, NULL otherwise.
 static Type *get_variadic_constraint(Type *t) {
@@ -58,14 +72,26 @@ static Type *get_variadic_constraint(Type *t) {
 }
 
 static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
-                                              Type *param_type) {
+                                              Type *param_type, Ast *arg_ast) {
   // Variadic structural constraint: if the parameter type carries a Variadic
   // template (stored on meta), expand it to match the argument's arity and
   // add a constraint.  This constrains each lambda arg to the template's last
   // param type (e.g. Double) and the result to the template's return type.
   Type *variadic = get_variadic_constraint(param_type);
   if (variadic && arg_type && arg_type->kind == T_FN) {
-    Type *expanded = extend_variadic_template(variadic, arg_type);
+    // A lambda with a unit parameter — `fn () -> ...` — has no real signal
+    // argument. Match it against `Variadic(Double ... -> Double)` as `() ->
+    // R` (the void param preserved) rather than forcing the void arg to the
+    // template's repeated Double. The param is still a fresh tvar here (it is
+    // only constrained to void later), so detect it from the lambda's AST.
+    bool arg_has_void_param = arg_ast && arg_ast->tag == AST_LAMBDA &&
+                              arg_ast->data.AST_LAMBDA.params &&
+                              arg_ast->data.AST_LAMBDA.params->ast->tag ==
+                                  AST_VOID;
+    Type *expanded =
+        arg_has_void_param
+            ? extend_variadic_template_void(variadic, arg_type)
+            : extend_variadic_template(variadic, arg_type);
     if (expanded) {
       // Link the parameter (a tvar carrying the Variadic meta) to the
       // argument so the function's result type tracks the argument. Then
@@ -142,7 +168,15 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
     if (current->kind == T_FN) {
       Type *param_type = current->data.T_FN.from;
-      constrain_argument_for_parameter(ctx, arg_type, param_type);
+      // A void (unit) parameter — `fn () -> ...` — denotes a function that
+      // takes no real argument. When such a function is applied to an
+      // argument (a common trigger idiom like `trig 0`), the argument is
+      // ignored rather than constrained against `()`, which would otherwise
+      // spuriously require `From((), [arg])`.
+      if (param_type->kind != T_VOID) {
+        constrain_argument_for_parameter(ctx, arg_type, param_type,
+                                         ast->data.AST_APPLICATION.args + i);
+      }
       current = current->data.T_FN.to;
     } else {
       // function position has too few params / is not a function

@@ -340,6 +340,39 @@ LLVMValueRef dsp_consume_init_state(DspBuildCtx *dsp_ctx,
                                   align, name);
 }
 
+LLVMValueRef dsp_consume_first_run_flag(DspBuildCtx *dsp_ctx,
+                                        LLVMBuilderRef builder,
+                                        LLVMValueRef *out_flag_ptr,
+                                        const char *name) {
+  // One byte of state is enough to hold a 0/1 flag. The byte is zero on a
+  // freshly constructed node (calloc in ylc_create_audio_node), so the first
+  // sample the ugen ever runs sees is_first_run == true.
+  int off = (dsp_ctx->state_offset + 7) & ~7;
+  dsp_ctx->state_offset = off + 8;
+
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+
+  if (dsp_ctx->init_builder && dsp_ctx->init_state_ptr) {
+    LLVMValueRef init_base = dsp_consume_init_state(
+        dsp_ctx, dsp_ctx->init_builder, 8, 8, "firstrun.init.base");
+    LLVMBuildStore(dsp_ctx->init_builder, LLVMConstInt(i8_ty, 0, 0), init_base);
+  }
+
+  LLVMValueRef base =
+      dsp_consume_frame_state(dsp_ctx, builder, 8, 8, "firstrun.base");
+  LLVMValueRef flag_ptr =
+      LLVMBuildBitCast(builder, base, LLVMPointerType(i8_ty, 0), name);
+
+  LLVMValueRef flag = LLVMBuildLoad2(builder, i8_ty, flag_ptr, "firstrun.flag");
+  LLVMValueRef is_first_run = LLVMBuildICmp(
+      builder, LLVMIntEQ, flag, LLVMConstInt(i8_ty, 0, 0), "firstrun.is_first");
+
+  if (out_flag_ptr) {
+    *out_flag_ptr = flag_ptr;
+  }
+  return is_first_run;
+}
+
 LLVMValueRef builtin_phasor(LLVMValueRef freq, DspBuildCtx *dsp_ctx,
                             JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
@@ -2295,17 +2328,20 @@ LLVMValueRef build_lfnoise_lin(LLVMValueRef freq, LLVMValueRef lo,
                                LLVMValueRef hi, DspBuildCtx *dsp_ctx,
                                JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef i64_ty = LLVMInt64Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+  LLVMValueRef first_run_flag_ptr = NULL;
+  LLVMValueRef is_first_run = dsp_consume_first_run_flag(
+      dsp_ctx, builder, &first_run_flag_ptr, "lfnoise1.first_run_flag");
+
   // builtin_trig uses 8 bytes of state for phasor phase
   LLVMValueRef trig = builtin_trig(freq, false, dsp_ctx, ctx, module, builder);
 
   // State: cur_val(8) + slope(8) = 16 bytes
   int off = dsp_ctx->state_offset;
   dsp_ctx->state_offset += 16;
-
-  LLVMTypeRef i8_ty = LLVMInt8Type();
-  LLVMTypeRef i64_ty = LLVMInt64Type();
-  LLVMTypeRef f64_ty = LLVMDoubleType();
-  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
 
   LLVMValueRef base =
       dsp_consume_frame_state(dsp_ctx, builder, 16, 8, "lfnoise1.base");
@@ -2336,10 +2372,20 @@ LLVMValueRef build_lfnoise_lin(LLVMValueRef freq, LLVMValueRef lo,
         dsp_ctx, dsp_ctx->init_builder, 16, 8, "lfnoise1.init.base");
     LLVMValueRef init_val_ptr = LLVMBuildBitCast(
         dsp_ctx->init_builder, init_base, f64_ptr_ty, "lfnoise1.init.val_ptr");
-    LLVMValueRef init_new_rand =
-        LLVMBuildCall2(dsp_ctx->init_builder, rdr_ty, rdr_fn,
-                       (LLVMValueRef[]){lo, hi}, 2, "lfnoise1.init.new_rand");
-    LLVMBuildStore(dsp_ctx->init_builder, init_new_rand, init_val_ptr);
+    // The init function only has the state pointer in scope; it cannot
+    // reference frame-built SSA values like `lo`/`hi` (e.g. an inlet sample
+    // or a value computed in the frame body). Only seed a random initial
+    // value when both bounds are constants; otherwise start from 0 and let
+    // the first trig in the frame body pick a real target.
+    LLVMValueRef init_seed;
+    if (LLVMIsConstant(lo) && LLVMIsConstant(hi)) {
+      init_seed = LLVMBuildCall2(dsp_ctx->init_builder, rdr_ty, rdr_fn,
+                                 (LLVMValueRef[]){lo, hi}, 2,
+                                 "lfnoise1.init.new_rand");
+    } else {
+      init_seed = LLVMConstReal(f64_ty, 0.0);
+    }
+    LLVMBuildStore(dsp_ctx->init_builder, init_seed, init_val_ptr);
 
     LLVMValueRef init_slp_ptr_i8 =
         LLVMBuildGEP2(dsp_ctx->init_builder, i8_ty, init_base,
@@ -2356,6 +2402,23 @@ LLVMValueRef build_lfnoise_lin(LLVMValueRef freq, LLVMValueRef lo,
       LLVMValueRef new_target =
           LLVMBuildCall2(builder, rdr_ty, rdr_fn, (LLVMValueRef[]){lo, hi}, 2,
                          "lfnoise1.new_target");
+      LLVMValueRef fn_parent =
+          LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+      LLVMBasicBlockRef snap_bb =
+          LLVMAppendBasicBlock(fn_parent, "lfnoise1.first_trig_snap");
+      LLVMBasicBlockRef ramp_bb =
+          LLVMAppendBasicBlock(fn_parent, "lfnoise1.trig_ramp");
+      LLVMBasicBlockRef cont_bb =
+          LLVMAppendBasicBlock(fn_parent, "lfnoise1.trig_cont");
+      LLVMBuildCondBr(builder, is_first_run, snap_bb, ramp_bb);
+
+      LLVMPositionBuilderAtEnd(builder, snap_bb);
+      LLVMBuildStore(builder, new_target, val_ptr);
+      LLVMBuildStore(builder, LLVMConstReal(f64_ty, 0.0), slp_ptr);
+      LLVMBuildStore(builder, LLVMConstInt(i8_ty, 1, 0), first_run_flag_ptr);
+      LLVMBuildBr(builder, cont_bb);
+
+      LLVMPositionBuilderAtEnd(builder, ramp_bb);
       // new_slope = (new_target - cur_val) * freq * spf
       // = distance to travel, normalized to per-sample steps over one period
       LLVMValueRef dist =
@@ -2364,24 +2427,33 @@ LLVMValueRef build_lfnoise_lin(LLVMValueRef freq, LLVMValueRef lo,
           LLVMBuildFMul(builder, freq, dsp_ctx->spf, "lfnoise1.freq_spf");
       LLVMValueRef new_slope =
           LLVMBuildFMul(builder, dist, freq_spf, "lfnoise1.new_slope");
-      LLVMBuildStore(builder, new_slope, slp_ptr););
+      LLVMBuildStore(builder, new_slope, slp_ptr);
+      LLVMBuildBr(builder, cont_bb);
 
+      LLVMPositionBuilderAtEnd(builder, cont_bb););
+
+  LLVMValueRef out_val =
+      LLVMBuildLoad2(builder, f64_ty, val_ptr, "lfnoise1.out_val");
   LLVMValueRef slope =
       LLVMBuildLoad2(builder, f64_ty, slp_ptr, "lfnoise1.slope");
 
   // Advance cur_val by slope, store for next sample
   LLVMValueRef next_val =
-      LLVMBuildFAdd(builder, cur_val, slope, "lfnoise1.next_val");
+      LLVMBuildFAdd(builder, out_val, slope, "lfnoise1.next_val");
   LLVMBuildStore(builder, next_val, val_ptr);
 
-  return cur_val;
+  return out_val;
 }
 
 LLVMValueRef build_lfnoise_step(LLVMValueRef freq, LLVMValueRef lo,
                                 LLVMValueRef hi, DspBuildCtx *dsp_ctx,
                                 JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
+  LLVMTypeRef i8_ty = LLVMInt8Type();
   LLVMValueRef trig = builtin_trig(freq, false, dsp_ctx, ctx, module, builder);
+  LLVMValueRef first_run_flag_ptr = NULL;
+  (void)dsp_consume_first_run_flag(dsp_ctx, builder, &first_run_flag_ptr,
+                                   "lfnoise0.first_run_flag");
 
   // State: cur_val(8)
   int off = dsp_ctx->state_offset;
@@ -2408,16 +2480,27 @@ LLVMValueRef build_lfnoise_step(LLVMValueRef freq, LLVMValueRef lo,
         dsp_ctx, dsp_ctx->init_builder, 8, 8, "lfnoise0.init.base");
     LLVMValueRef init_val_ptr = LLVMBuildBitCast(
         dsp_ctx->init_builder, init_base, f64_ptr_ty, "lfnoise0.init.val_ptr");
-    LLVMValueRef init_new_rand =
-        LLVMBuildCall2(dsp_ctx->init_builder, rdr_ty, rdr_fn,
-                       (LLVMValueRef[]){lo, hi}, 2, "lfnoise0.init.new_rand");
-    LLVMBuildStore(dsp_ctx->init_builder, init_new_rand, init_val_ptr);
+    // The init function only has the state pointer in scope; it cannot
+    // reference frame-built SSA values like `lo`/`hi`. Only seed a random
+    // initial value when both bounds are constants; otherwise start from 0
+    // and let the first trig in the frame body pick a real value.
+    LLVMValueRef init_seed;
+    if (LLVMIsConstant(lo) && LLVMIsConstant(hi)) {
+      init_seed = LLVMBuildCall2(dsp_ctx->init_builder, rdr_ty, rdr_fn,
+                                 (LLVMValueRef[]){lo, hi}, 2,
+                                 "lfnoise0.init.new_rand");
+    } else {
+      init_seed = LLVMConstReal(f64_ty, 0.0);
+    }
+    LLVMBuildStore(dsp_ctx->init_builder, init_seed, init_val_ptr);
   }
-  BUILD_ON_TRIG(builder, trig, "lfnoise0",
-                LLVMValueRef new_rand = LLVMBuildCall2(builder, rdr_ty, rdr_fn,
-                                                       (LLVMValueRef[]){lo, hi},
-                                                       2, "lfnoise0.new_rand");
-                LLVMBuildStore(builder, new_rand, val_ptr););
+  BUILD_ON_TRIG(
+      builder, trig, "lfnoise0",
+      LLVMValueRef new_rand =
+          LLVMBuildCall2(builder, rdr_ty, rdr_fn, (LLVMValueRef[]){lo, hi}, 2,
+                         "lfnoise0.new_rand");
+      LLVMBuildStore(builder, new_rand, val_ptr);
+      LLVMBuildStore(builder, LLVMConstInt(i8_ty, 1, 0), first_run_flag_ptr););
 
   return LLVMBuildLoad2(builder, f64_ty, val_ptr, "lfnoise0.next_val");
 }
@@ -2634,14 +2717,18 @@ double lag_sample(double input, double lag_secs, double spf, double *y1_ptr,
 static LLVMValueRef build_lag(LLVMValueRef input, LLVMValueRef lag_secs,
                               DspBuildCtx *dsp_ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
+  LLVMTypeRef i8_ty = LLVMInt8Type();
+  LLVMTypeRef f64_ty = LLVMDoubleType();
+  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
+  LLVMValueRef first_run_flag_ptr = NULL;
+  LLVMValueRef is_first_run = dsp_consume_first_run_flag(
+      dsp_ctx, builder, &first_run_flag_ptr, "lag.first_run_flag");
+
   int off = (dsp_ctx->state_offset + 7) & ~7;
   int y1_off = off;
   int b1_off = off + 8;
   int lag_off = off + 16;
   dsp_ctx->state_offset = off + 24;
-
-  LLVMTypeRef f64_ty = LLVMDoubleType();
-  LLVMTypeRef f64_ptr_ty = LLVMPointerType(f64_ty, 0);
 
   (void)y1_off;
   (void)b1_off;
@@ -2690,6 +2777,21 @@ static LLVMValueRef build_lag(LLVMValueRef input, LLVMValueRef lag_secs,
     LLVMBuildStore(dsp_ctx->init_builder, LLVMConstReal(f64_ty, -1.0),
                    init_lag_ptr);
   }
+
+  LLVMValueRef fn_parent =
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+  LLVMBasicBlockRef snap_bb =
+      LLVMAppendBasicBlock(fn_parent, "lag.first_run_snap");
+  LLVMBasicBlockRef cont_bb =
+      LLVMAppendBasicBlock(fn_parent, "lag.first_run_cont");
+  LLVMBuildCondBr(builder, is_first_run, snap_bb, cont_bb);
+
+  LLVMPositionBuilderAtEnd(builder, snap_bb);
+  LLVMBuildStore(builder, input, y1_ptr);
+  LLVMBuildStore(builder, LLVMConstInt(i8_ty, 1, 0), first_run_flag_ptr);
+  LLVMBuildBr(builder, cont_bb);
+
+  LLVMPositionBuilderAtEnd(builder, cont_bb);
 
   LLVMTypeRef fn_ty =
       LLVMFunctionType(f64_ty,

@@ -49,6 +49,17 @@ LLVMValueRef dsp_consume_init_state(DspBuildCtx *dsp_ctx,
                                     LLVMBuilderRef builder, int size, int align,
                                     const char *name);
 
+// Reusable "first-run snap" mechanism for stateful ugens that otherwise ramp up
+// from their zero-initialized state on the first buffer (e.g. lfnoise, lag).
+// Allocates one byte of synth state (zeroed by the allocator / x.init), and
+// returns via `out_flag_ptr` a pointer the caller stores `1` into once it has
+// snapped its integrator to the target. Returns the frame-body `is_first_run`
+// (i1) value: true exactly once, on the first sample the ugen ever runs.
+LLVMValueRef dsp_consume_first_run_flag(DspBuildCtx *dsp_ctx,
+                                        LLVMBuilderRef builder,
+                                        LLVMValueRef *out_flag_ptr,
+                                        const char *name);
+
 int max(int a, int b);
 int min(int a, int b);
 #endif

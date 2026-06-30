@@ -86,3 +86,8 @@ let Synth : Arithmetic = module () ->
 # let init_audio = extern fn () -> () in
 #   init_audio ()
 # ;
+
+let Synth : From = module () ->
+  let from_int = extern fn Int -> Synth;
+  let from_num = extern fn Double -> Synth;
+;

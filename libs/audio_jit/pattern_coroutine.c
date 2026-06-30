@@ -2787,6 +2787,8 @@ LLVMValueRef play_pattern(Ast *binding, Ast *quant, JITLangCtx *ctx,
 LLVMValueRef play_pattern_handler(Ast *ast, JITLangCtx *ctx,
                                   LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
+  printf("play Pattern(s) handler\n");
+  print_ast(ast);
 
   Ast *quant_arg = ast->data.AST_APPLICATION.args;
   Ast *offset_arg = NULL;

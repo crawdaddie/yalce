@@ -1,7 +1,7 @@
-#include "../lang/modules.h"
-#include "../lang/parse.h"
 #include "../lang/config.h"
 #include "../lang/ht.h"
+#include "../lang/modules.h"
+#include "../lang/parse.h"
 #include "../lang/types/builtins.h"
 #include "../lang/types/inference.h"
 #include "../lang/types/type_ser.h"
@@ -55,8 +55,8 @@ typedef struct {
 } node_match;
 
 static const char *completion_keywords[] = {
-    "fn",   "let",  "in",     "and",   "extern", "true",  "false",
-    "match","with", "import", "open",  "yield",  "loop",
+    "fn",    "let",  "in",     "and",  "extern", "true", "false",
+    "match", "with", "import", "open", "yield",  "loop",
 };
 
 static const char *completion_trigger_chars[] = {
@@ -229,7 +229,8 @@ static bool range_for_node_offsets(const char *src, Ast *node,
   out_range->end_offset = end_offset;
   out_range->start_line = node->loc_info->line;
   out_range->start_col = node->loc_info->col;
-  line_col_for_offset(src, end_offset, &out_range->end_line, &out_range->end_col);
+  line_col_for_offset(src, end_offset, &out_range->end_line,
+                      &out_range->end_col);
   return true;
 }
 
@@ -343,7 +344,8 @@ static Ast *find_stmt_at_line(document *doc, int line, Ast **next_stmt_out) {
   }
 
   cursor_offset = 0;
-  for (int current_line = 1; doc->text[cursor_offset] != '\0' && current_line < line;
+  for (int current_line = 1;
+       doc->text[cursor_offset] != '\0' && current_line < line;
        cursor_offset++) {
     if (doc->text[cursor_offset] == '\n') {
       current_line++;
@@ -361,7 +363,8 @@ static Ast *find_stmt_at_line(document *doc, int line, Ast **next_stmt_out) {
       continue;
     }
 
-    if (cursor_offset >= range.start_offset && cursor_offset < range.end_offset) {
+    if (cursor_offset >= range.start_offset &&
+        cursor_offset < range.end_offset) {
       if (next_stmt_out) {
         *next_stmt_out = next_stmt;
       }
@@ -374,9 +377,10 @@ static Ast *find_stmt_at_line(document *doc, int line, Ast **next_stmt_out) {
   return NULL;
 }
 
-static Ast *find_selection_target_in_sequence(Ast *node, long long cursor_offset,
-                                              long long end_offset,
-                                              long long *target_end_offset_out) {
+static Ast *
+find_selection_target_in_sequence(Ast *node, long long cursor_offset,
+                                  long long end_offset,
+                                  long long *target_end_offset_out) {
   AstList *stmt;
 
   if (!node || !node->loc_info) {
@@ -412,9 +416,8 @@ static Ast *find_selection_target_in_sequence(Ast *node, long long cursor_offset
       continue;
     }
 
-    candidate = find_selection_target_in_sequence(current, cursor_offset,
-                                                  child_end,
-                                                  target_end_offset_out);
+    candidate = find_selection_target_in_sequence(
+        current, cursor_offset, child_end, target_end_offset_out);
     if (candidate) {
       return candidate;
     }
@@ -506,15 +509,11 @@ static Type *completion_item_type(Type *type) {
     return NULL;
   }
 
-  if (type->kind == T_SCHEME) {
-    return type->data.T_SCHEME.type;
-  }
-
   return type;
 }
 
-static int completion_kind_for_type(Type *type) {
-  type = completion_item_type(type);
+static int completion_kind_for_type(TypeEnv *type_env) {
+  Type *type = completion_item_type(type_env->type);
 
   if (!type) {
     return LSP_COMPLETION_KIND_TEXT;
@@ -575,7 +574,8 @@ static void add_completion_item_if_matches(struct json_object *items, ht *seen,
   add_completion_item(items, seen, label, kind, type);
 }
 
-static node_match choose_better_match(node_match current, node_match candidate) {
+static node_match choose_better_match(node_match current,
+                                      node_match candidate) {
   if (!candidate.node) {
     return current;
   }
@@ -600,7 +600,8 @@ static node_match choose_better_match(node_match current, node_match candidate) 
   return current;
 }
 
-static node_match find_smallest_node_in_subtree(Ast *node, long long cursor_offset,
+static node_match find_smallest_node_in_subtree(Ast *node,
+                                                long long cursor_offset,
                                                 long long end_offset);
 
 static node_match visit_ast_list(AstList *list, long long cursor_offset,
@@ -629,7 +630,8 @@ static node_match visit_ast_list(AstList *list, long long cursor_offset,
   return best;
 }
 
-static node_match visit_ast_array(Ast *items, size_t len, long long cursor_offset,
+static node_match visit_ast_array(Ast *items, size_t len,
+                                  long long cursor_offset,
                                   long long end_offset) {
   node_match best = {0};
 
@@ -655,7 +657,8 @@ static node_match visit_ast_array(Ast *items, size_t len, long long cursor_offse
   return best;
 }
 
-static node_match find_smallest_node_in_subtree(Ast *node, long long cursor_offset,
+static node_match find_smallest_node_in_subtree(Ast *node,
+                                                long long cursor_offset,
                                                 long long end_offset) {
   node_match best = {0};
   long long start_offset;
@@ -669,7 +672,8 @@ static node_match find_smallest_node_in_subtree(Ast *node, long long cursor_offs
 
   if (!node->loc_info) {
     if (node->tag == AST_BODY) {
-      return visit_ast_list(node->data.AST_BODY.stmts, cursor_offset, end_offset);
+      return visit_ast_list(node->data.AST_BODY.stmts, cursor_offset,
+                            end_offset);
     }
     return best;
   }
@@ -688,9 +692,8 @@ static node_match find_smallest_node_in_subtree(Ast *node, long long cursor_offs
 
   switch (node->tag) {
   case AST_BODY:
-    return choose_better_match(
-        best,
-        visit_ast_list(node->data.AST_BODY.stmts, cursor_offset, end_offset));
+    return choose_better_match(best, visit_ast_list(node->data.AST_BODY.stmts,
+                                                    cursor_offset, end_offset));
   case AST_APPLICATION:
     candidate = find_smallest_node_in_subtree(
         node->data.AST_APPLICATION.function, cursor_offset,
@@ -722,20 +725,17 @@ static node_match find_smallest_node_in_subtree(Ast *node, long long cursor_offs
     break;
   case AST_LAMBDA:
   case AST_MODULE:
-    candidate = visit_ast_list(node->data.AST_LAMBDA.params, cursor_offset,
-                               node->data.AST_LAMBDA.body &&
-                                       node->data.AST_LAMBDA.body->loc_info
-                                   ? node->data.AST_LAMBDA.body->loc_info
-                                         ->absolute_offset
-                                   : end_offset);
+    candidate = visit_ast_list(
+        node->data.AST_LAMBDA.params, cursor_offset,
+        node->data.AST_LAMBDA.body && node->data.AST_LAMBDA.body->loc_info
+            ? node->data.AST_LAMBDA.body->loc_info->absolute_offset
+            : end_offset);
     best = choose_better_match(best, candidate);
-    candidate = visit_ast_list(node->data.AST_LAMBDA.type_annotations,
-                               cursor_offset,
-                               node->data.AST_LAMBDA.body &&
-                                       node->data.AST_LAMBDA.body->loc_info
-                                   ? node->data.AST_LAMBDA.body->loc_info
-                                         ->absolute_offset
-                                   : end_offset);
+    candidate = visit_ast_list(
+        node->data.AST_LAMBDA.type_annotations, cursor_offset,
+        node->data.AST_LAMBDA.body && node->data.AST_LAMBDA.body->loc_info
+            ? node->data.AST_LAMBDA.body->loc_info->absolute_offset
+            : end_offset);
     best = choose_better_match(best, candidate);
     if (node->data.AST_LAMBDA.body) {
       candidate = find_smallest_node_in_subtree(node->data.AST_LAMBDA.body,
@@ -753,14 +753,16 @@ static node_match find_smallest_node_in_subtree(Ast *node, long long cursor_offs
   case AST_ARRAY:
   case AST_TUPLE:
   case AST_FMT_STRING:
-    candidate = visit_ast_array(node->data.AST_LIST.items, node->data.AST_LIST.len,
-                                cursor_offset, end_offset);
+    candidate =
+        visit_ast_array(node->data.AST_LIST.items, node->data.AST_LIST.len,
+                        cursor_offset, end_offset);
     return choose_better_match(best, candidate);
   case AST_MATCH:
     if (node->data.AST_MATCH.expr) {
       candidate = find_smallest_node_in_subtree(
           node->data.AST_MATCH.expr, cursor_offset,
-          node->data.AST_MATCH.len > 0 && node->data.AST_MATCH.branches[0].loc_info
+          node->data.AST_MATCH.len > 0 &&
+                  node->data.AST_MATCH.branches[0].loc_info
               ? node->data.AST_MATCH.branches[0].loc_info->absolute_offset
               : end_offset);
       best = choose_better_match(best, candidate);
@@ -836,7 +838,8 @@ static bool stmt_range(Ast *stmt, Ast *next_stmt, const char *src,
   }
 
   out_range->end_offset = end_offset;
-  line_col_for_offset(src, end_offset, &out_range->end_line, &out_range->end_col);
+  line_col_for_offset(src, end_offset, &out_range->end_line,
+                      &out_range->end_col);
   return true;
 }
 
@@ -899,9 +902,8 @@ static const char *symbol_name_for_stmt(Ast *stmt, char *buffer,
     }
     return stmt->tag == AST_TYPE_DECL ? "type" : "let";
   case AST_IMPORT:
-    return stmt->data.AST_IMPORT.identifier
-               ? stmt->data.AST_IMPORT.identifier
-               : "import";
+    return stmt->data.AST_IMPORT.identifier ? stmt->data.AST_IMPORT.identifier
+                                            : "import";
   case AST_TRAIT_IMPL:
     snprintf(buffer, buffer_size, "%s for %s",
              stmt->data.AST_TRAIT_IMPL.trait_name.chars
@@ -1007,7 +1009,8 @@ static int read_message(char **out_content) {
 }
 
 static void write_json_message(struct json_object *message) {
-  const char *json = json_object_to_json_string_ext(message, JSON_C_TO_STRING_PLAIN);
+  const char *json =
+      json_object_to_json_string_ext(message, JSON_C_TO_STRING_PLAIN);
   fprintf(stdout, "Content-Length: %zu\r\n\r\n%s", strlen(json), json);
   fflush(stdout);
 }
@@ -1099,8 +1102,8 @@ static void handle_initialize(lsp_server *server, int id) {
                          json_object_new_boolean(1));
   json_object_object_add(capabilities, "hoverProvider",
                          json_object_new_boolean(1));
-  for (size_t i = 0;
-       i < sizeof(completion_trigger_chars) / sizeof(completion_trigger_chars[0]);
+  for (size_t i = 0; i < sizeof(completion_trigger_chars) /
+                             sizeof(completion_trigger_chars[0]);
        i++) {
     json_object_array_add(trigger_characters,
                           json_object_new_string(completion_trigger_chars[i]));
@@ -1213,7 +1216,8 @@ static void handle_document_symbol(lsp_server *server, int id,
     return;
   }
 
-  for (AstList *stmt = doc->root->data.AST_BODY.stmts; stmt; stmt = stmt->next) {
+  for (AstList *stmt = doc->root->data.AST_BODY.stmts; stmt;
+       stmt = stmt->next) {
     Ast *next_stmt = stmt->next ? stmt->next->ast : NULL;
     source_range range;
     char name_buffer[256];
@@ -1230,8 +1234,8 @@ static void handle_document_symbol(lsp_server *server, int id,
     symbol = json_object_new_object();
 
     json_object_object_add(symbol, "name", json_object_new_string(name));
-    json_object_object_add(symbol, "kind",
-                           json_object_new_int(symbol_kind_for_stmt(stmt->ast)));
+    json_object_object_add(
+        symbol, "kind", json_object_new_int(symbol_kind_for_stmt(stmt->ast)));
     json_object_object_add(symbol, "range", json_range);
     json_object_object_add(symbol, "selectionRange", range_to_json(&range));
     json_object_array_add(symbols, symbol);
@@ -1279,9 +1283,8 @@ static void handle_selection_range(lsp_server *server, int id,
       Ast *target;
 
       cursor_offset = offset_for_position(doc->text, line - 1, character);
-      target = find_selection_target_in_sequence(stmt, cursor_offset,
-                                                 range.end_offset,
-                                                 &target_end_offset);
+      target = find_selection_target_in_sequence(
+          stmt, cursor_offset, range.end_offset, &target_end_offset);
       if (target && target->loc_info &&
           should_clamp_selection_end_with_scan(target)) {
         long long scanned_end = top_level_stmt_end_offset(
@@ -1291,8 +1294,8 @@ static void handle_selection_range(lsp_server *server, int id,
           target_end_offset = scanned_end;
         }
       }
-      if (target &&
-          range_for_node_offsets(doc->text, target, target_end_offset, &range)) {
+      if (target && range_for_node_offsets(doc->text, target, target_end_offset,
+                                           &range)) {
         json_object_object_add(selection, "range", range_to_json(&range));
       } else {
         json_object_object_add(selection, "range", range_to_json(&range));
@@ -1315,7 +1318,8 @@ static void handle_selection_range(lsp_server *server, int id,
   send_response_int(id, ranges);
 }
 
-static void handle_hover(lsp_server *server, int id, struct json_object *params) {
+static void handle_hover(lsp_server *server, int id,
+                         struct json_object *params) {
   struct json_object *text_document = NULL;
   struct json_object *position = NULL;
   struct json_object *result = json_object_new_object();
@@ -1352,7 +1356,8 @@ static void handle_hover(lsp_server *server, int id, struct json_object *params)
   line = json_get_int_default(position, "line", 0) + 1;
   character = json_get_int_default(position, "character", 0);
   stmt = find_stmt_at_line(doc, line, &next_stmt);
-  if (!stmt || !stmt->type || !stmt_range_for_doc(doc, stmt, next_stmt, &range)) {
+  if (!stmt || !stmt->type ||
+      !stmt_range_for_doc(doc, stmt, next_stmt, &range)) {
     json_object_put(result);
     send_response_int(id, json_object_new_null());
     return;
@@ -1405,8 +1410,8 @@ static void handle_hover(lsp_server *server, int id, struct json_object *params)
                        ? hover_node->loc_info->col_end + 1
                        : hover_node->loc_info->col + 1,
     };
-    line_col_for_offset(doc->text, hover_range.start_offset, &hover_range.start_line,
-                        &hover_range.start_col);
+    line_col_for_offset(doc->text, hover_range.start_offset,
+                        &hover_range.start_line, &hover_range.start_col);
     json_object_object_add(result, "range", range_to_json(&hover_range));
   } else {
     json_object_object_add(result, "range", range_to_json(&range));
@@ -1468,11 +1473,11 @@ static void handle_completion(lsp_server *server, int id,
     }
   }
 
-  it = ht_iterator(&builtin_types);
+  it = ht_iterator(&builtin_envs);
   while (ht_next(&it)) {
-    add_completion_item_if_matches(items, &seen, it.key,
-                                   completion_kind_for_type((Type *)it.value),
-                                   (Type *)it.value, prefix);
+    add_completion_item_if_matches(
+        items, &seen, it.key, completion_kind_for_type((TypeEnv *)it.value),
+        (Type *)it.value, prefix);
   }
 
   for (size_t i = 0;
