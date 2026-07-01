@@ -239,7 +239,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "<="            return LE;
 "=="            return EQ;
 "!="            return NE;
-"!"             return *yytext;
+"!"             return BANG;
 "::"            return DOUBLE_COLON;
 ":"             return *yytext;
 "->"            return ARROW;

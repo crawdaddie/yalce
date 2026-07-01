@@ -1459,7 +1459,7 @@ return NE;
 case 66:
 YY_RULE_SETUP
 #line 242 "lang/lex.l"
-return *yytext;
+return BANG;
 	YY_BREAK
 case 67:
 YY_RULE_SETUP

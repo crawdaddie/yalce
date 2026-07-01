@@ -102,6 +102,7 @@ extern char *yytext;
 %right '.' 
 
 %nonassoc UMINUS
+%nonassoc BANG
 
 %type <ast_node_ptr>
   expr
@@ -166,6 +167,7 @@ expr:
   | match_expr                        { $$ = $1; }
   | type_decl                         { $$ = $1; }
   | THUNK expr                        { $$ = ast_thunk_expr($2); }
+  | BANG expr %prec UMINUS             { $$ = ast_application(ast_identifier((ObjString){"!", 1}), $2); }
   // | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
   | IDENTIFIER_LIST                   { $$ = ast_typed_empty_list($1); }
   | FOR IDENTIFIER '=' expr IN expr   {

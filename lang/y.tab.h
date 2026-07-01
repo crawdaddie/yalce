@@ -111,7 +111,8 @@ extern int yydebug;
     NE = 312,                      /* NE  */
     MODULO = 313,                  /* MODULO  */
     APPLICATION = 314,             /* APPLICATION  */
-    UMINUS = 315                   /* UMINUS  */
+    UMINUS = 315,                  /* UMINUS  */
+    BANG = 316                     /* BANG  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -178,6 +179,7 @@ extern int yydebug;
 #define MODULO 313
 #define APPLICATION 314
 #define UMINUS 315
+#define BANG 316
 
 /* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
@@ -194,7 +196,7 @@ union YYSTYPE
     float vfloat;
     char vchar;
 
-#line 198 "lang/y.tab.h"
+#line 200 "lang/y.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
