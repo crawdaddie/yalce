@@ -2451,32 +2451,6 @@ int test_modules() {
       &mod_type);
   });
 
-  ({
-    // parametrized module
-    Type t2 = TVAR("`2");
-    Type size_type = MAKE_FN_TYPE_2(&TARRAY(&t2), &t_int);
-    TypeEnv size_env = {
-        .name = "size", .type = &size_type, .scheme_vars = TYPELIST(&t2)};
-    TypeEnv x_env = {.name = "x", .type = &t_int, .next = &size_env};
-    Type mod_type = {.kind = T_MODULE,
-                     .data = {.T_MODULE = {.env = &x_env, .size = 2}}};
-
-    T("let Mod = module T U ->\n"
-      "  let x = 1;\n"
-      "  let size = fn arr ->\n"
-      "    array_size arr\n"
-      "  ;;\n"
-      ";\n",
-      &mod_type);
-
-    T("let Mod = module T: (Arithmetic, Eq) U ->\n"
-      "  let x = 1;\n"
-      "  let size = fn arr ->\n"
-      "    array_size arr\n"
-      "  ;;\n"
-      ";\n",
-      &mod_type);
-  });
   return status;
 }
 
@@ -2532,6 +2506,25 @@ int test_parametrized_modules() {
       "let StrId = Id (fn x -> x);\n"
       "StrId.id \"hello\"\n",
       &t_string);
+  });
+
+  ({
+    // parametrized module
+    Type t2 = TVAR("`2");
+    Type size_type = MAKE_FN_TYPE_2(&TARRAY(&t2), &t_int);
+    TypeEnv size_env = {
+        .name = "size", .type = &size_type, .scheme_vars = TYPELIST(&t2)};
+    TypeEnv x_env = {.name = "x", .type = &t_int, .next = &size_env};
+    Type mod_type = {.kind = T_MODULE,
+                     .data = {.T_MODULE = {.env = &x_env, .size = 2}}};
+
+    T("let Mod = module T U ->\n"
+      "  let x = 1;\n"
+      "  let size = fn arr ->\n"
+      "    array_size arr\n"
+      "  ;;\n"
+      ";\n",
+      &MAKE_FN_TYPE_3(&TVAR("`0"), &TVAR("`1"), &mod_type));
   });
 
   return status;

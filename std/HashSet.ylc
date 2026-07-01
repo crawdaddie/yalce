@@ -50,3 +50,52 @@ let Set = module
     aux l @@ new ()
   ;;
 ;
+
+
+let Map = module 
+  hash: (K -> Uint64)
+  eq: (K -> K -> Bool)
+  default: (V)
+  ->
+
+  type M = (data: Array of List of (K, V), size: Int);
+
+  let empty = @EmptyInitializer extern fn () -> List of (K, V);
+
+  let new = fn () ->
+    M (empty () |> array_fill_const 256) 0
+  ;;
+
+  let list_contains = fn x l ->
+    match l with
+    | [] -> false
+    | (y,_)::rest -> if (eq x y) then true else (list_contains x rest)
+  ;;
+
+  let add = fn x: (K) v: (V) set: (M) ->                            
+  # x : a, set : Array of (List of a)
+    let key_idx = hash x |> u64_bit_and 0 |> u64_to_int;
+    let node_list = set.data[key_idx];
+    match node_list |> list_contains x with
+    | true -> set
+    | false ->  (
+      set.data[key_idx] := (x, v)::(set.data[key_idx]);
+      M (set.data) (1 + set.size)
+    )
+
+  ;;
+
+  let list_find = fn x l ->
+    match l with
+    | [] -> None
+    | (y,v)::rest -> if (eq x y) then (Some v) else (list_find x rest)
+  ;;
+
+  let get = fn x: (K) set: (M) ->
+    let key_idx = hash x |> u64_bit_and 0 |> u64_to_int;
+    let node_list = set.data[key_idx];
+    node_list |> list_find x
+  ;;
+
+
+;
