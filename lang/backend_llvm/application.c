@@ -187,14 +187,31 @@ static LLVMValueRef call_builtin_handler(Ast *app, JITSymbol *sym,
 }
 
 static LLVMValueRef call_generic_function(Ast *app, Type *expected_fn_type,
-                                          JITSymbol *sym, JITLangCtx *ctx,
-                                          LLVMModuleRef module,
-                                          LLVMBuilderRef builder) {
-  Type *callable_type =
-      resolve_sym_type(expected_fn_type, sym->symbol_type, ctx);
+                                           JITSymbol *sym, JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
+  // Unify the expected (application) type with the symbol's generic type to
+  // produce a substitution that resolves the generic tvars (e.g. the module's
+  // `a -> Int). The args must be codegen'd under this substitution so that
+  // an arg lambda whose param carries the module's tvar (e.g. `h : a ->
+  // Uint64` with `a = Int`) is compiled with concrete types — otherwise
+  // type-driven builtins like `asbytes` (which switch on T_INT) get an
+  // unresolved tvar and return NULL.
+  Type *exp_copy = deep_copy_type(expected_fn_type);
+  Type *sym_copy = deep_copy_type(sym->symbol_type);
+  TICtx ti_ctx = {};
+  unify(exp_copy, sym_copy, &ti_ctx);
+  Subst *subst = solve_constraints(ti_ctx.constraints);
+
+  JITLangCtx spec_ctx = *ctx;
+  spec_ctx.type_subst = subst;
+  spec_ctx.env = create_env_from_subst(ctx->env, spec_ctx.type_subst);
+  Type *callable_type = specialize_type_for_codegen(sym_copy, &spec_ctx);
+
   LLVMValueRef callable =
       get_specific_callable(sym, callable_type, ctx, module, builder);
-  return call_callable(app, callable_type, callable, ctx, module, builder);
+  return call_callable(app, callable_type, callable, &spec_ctx, module,
+                        builder);
 }
 
 static LLVMValueRef call_generic_constructor(Ast *app, Type *expected_fn_type,

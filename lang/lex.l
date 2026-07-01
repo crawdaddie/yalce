@@ -204,6 +204,11 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           yylval.vfloat = strtof(yytext, NULL);
                           return FLOAT;
                         }
+
+[0-9]+(\.[0-9]*)?u64   {
+                          yylval.vint64 = atoll(yytext);
+                          return UINT64;
+                        }
 -?[1-9][0-9]*           { 
                           yylval.vint = atoi(yytext);
                           return INTEGER;
@@ -234,6 +239,7 @@ CHAR            '([^'\\\n]|{ESCAPE})'
 "<="            return LE;
 "=="            return EQ;
 "!="            return NE;
+"!"             return *yytext;
 "::"            return DOUBLE_COLON;
 ":"             return *yytext;
 "->"            return ARROW;

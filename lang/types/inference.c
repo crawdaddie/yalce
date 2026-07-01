@@ -41,6 +41,8 @@ static void open_module_env_into_scope(TypeEnv *mod_env, TICtx *ctx);
 static void import_module_binops_into_ctx(custom_binops_t *binops, TICtx *ctx);
 static Type *create_module_type_from_env(TypeEnv *mod_env, int mod_size);
 
+static bool occurs_in(int var_id, Type *type);
+
 static FILE *err_stream;
 
 static bool is_recursive_self_reference(Ast *ast, TICtx *ctx) {
@@ -225,16 +227,187 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
   return result_type;
 }
 
+// Infer a parametrized (functor-like) module:
+//   module hash: (a -> Uint64) eq: (a -> a -> Bool) -> <body>
+// The result type is T_FN(param -> ... -> T_MODULE) so that application
+// `Set h e` flows through infer_application and unifies each argument
+// against the corresponding param type. The module value is built by the
+// same machinery infer_inline_module uses, but the module members are
+// generalized over the module's param type variables so each application
+// instantiates them fresh.
+Type *infer_parametrized_module(Ast *ast, TICtx *ctx) {
+  TypeEnv *saved_env = ctx->env;
+  size_t len = ast->data.AST_LAMBDA.len;
+
+  Type **param_types = t_alloc(sizeof(Type *) * len);
+
+  // Compute annotated param types. Use compute_module_param_types (not the
+  // lambda variant) so the tvars it introduces by name (e.g. `a`) remain in
+  // the type-var name env afterwards. We then seed that env for the body so
+  // body type annotations (e.g. `List of a`) resolve to the SAME tvar
+  // objects used here, without polluting ctx->env (which would cause
+  // generalize_env to subtract those tvars from members' scheme_vars).
+  Type *annotated[len];
+  memset(annotated, 0, sizeof(Type *) * len);
+  TypeEnv *saved_tvar_env = get_type_var_env();
+  if (ast->data.AST_LAMBDA.type_annotations) {
+    compute_module_param_types(ast->data.AST_LAMBDA.type_annotations, len,
+                               annotated, ctx);
+  }
+  // Seed the type-var name env: current_type_var_env now holds the tvars
+  // introduced above (named, e.g. `a -> `63). Mark it as a module seed so
+  // compute_type_expression preserves it across the body's per-annotation
+  // resets (type_expressions.c compute_type_expression).
+  set_type_var_env(get_type_var_env());
+
+  // Bind each param into the parent env (mirrors infer_lambda.c:40-53).
+  AstList *param = ast->data.AST_LAMBDA.params;
+  for (size_t i = 0; i < len && param; i++, param = param->next) {
+    Type *pt = annotated[i] ? annotated[i] : next_tvar();
+    param_types[i] = pt;
+    if (bind_pattern(param->ast, pt, ctx) != 0) {
+      set_type_var_env(saved_tvar_env);
+      ctx->env = saved_env;
+      return type_error(param->ast, "Unsupported module parameter");
+    }
+  }
+
+  // Env is a prepended stack: ctx->env is the newest entry, ->next goes
+  // toward older entries. After binding `len` params, the env head is the
+  // newest param binding. Member bindings introduced during body inference
+  // will be prepended above this point. Capture this head so we can later
+  // separate exported members (everything newer than `member_base`) from
+  // param bindings (the `len` entries at and below `member_base`).
+  TypeEnv *member_base = ctx->env;
+
+  // Defer to the existing body-inference + solve + finalize + module-env
+  // construction. The param bindings sit between saved_env and the member
+  // bindings.
+  // NOTE: infer_inline_module currently resets ctx->constraints/predicates
+  // and rebuilds env from saved_env; for the parametrized case we must
+  // keep the param bindings OUT of the module's exported env (they are
+  // arguments, not members) but IN scope while inferring the body.
+
+  // --- The body inference, solve, and finalize below is a near-copy of
+  // infer_inline_module, generalized to (a) keep param bindings in scope
+  // for the body, (b) exclude them from the exported member list, and
+  // (c) add module_tvars to each exported member's scheme_vars. ---
+
+  AstList *module_body;
+  if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
+    module_body = alloca(sizeof(AstList));
+    *module_body = (AstList){.ast = ast->data.AST_LAMBDA.body, .next = NULL};
+  } else {
+    module_body = ast->data.AST_LAMBDA.body->data.AST_BODY.stmts;
+  }
+
+  for (AstList *tll = module_body; tll; tll = tll->next) {
+    Type *t = infer_expr(tll->ast, ctx);
+    if (!t) {
+      ctx->env = saved_env;
+      return NULL;
+    }
+  }
+
+  Solution sol = {0};
+  if (infer_solve(ctx, &sol) != 0) {
+    ctx->env = saved_env;
+    return NULL;
+  }
+
+  Subst *step_subst = sol.subst;
+  if (ctx->predicates) {
+    Predicate *resolved = predicate_apply_subst(step_subst, ctx->predicates);
+    if (resolve_predicates(&step_subst, resolved) != 0) {
+      ctx->env = saved_env;
+      return NULL;
+    }
+    ctx->predicates = resolved;
+  }
+  ctx->subst = compose_subst(step_subst, ctx->subst);
+  apply_subst_env(ctx->subst, ctx->env);
+
+  // The param_types array is NOT part of ctx->env (it is a local array used
+  // to build the T_FN wrapper), so apply_subst_env does not update it. The
+  // module's solve pass may have unified the param tvars with the body's
+  // tvars (e.g. via `hash x` linking x's type to hash's domain). Apply the
+  // same substitution so the T_FN wrapper's param types stay consistent
+  // with the member env's resolved types.
+  for (size_t i = 0; i < len; i++) {
+    param_types[i] = apply_subst_to_type(ctx->subst, param_types[i]);
+  }
+
+  // Finalize only the member slice: entries newer than `member_base`.
+  // Param bindings (at and below member_base) are not finalized here and
+  // are not exported. Note: each member `let` already ran its own
+  // generalization via infer_let_expr -> checkpoint_generalizable_slice
+  // during body inference, but that subtracted the module's param tvars
+  // (the params are in scope), so members came out monomorphic in `63`.
+  // We re-add the module's tvars to each member's scheme_vars below so
+  // application can freshen them per instantiation.
+  finalize_env_slice(ctx->env, member_base, ctx->subst);
+
+  if (ctx->subst) {
+    finalize_ast_types(ast->data.AST_LAMBDA.body, ctx->subst);
+  }
+
+  // Build the exported member env: entries strictly newer than member_base.
+  int mlen = 0;
+  for (TypeEnv *e = ctx->env; e != member_base; e = e->next) {
+    mlen++;
+  }
+
+  TypeEnv **entries = mlen ? t_alloc(sizeof(TypeEnv *) * mlen) : NULL;
+  int j = mlen - 1;
+  for (TypeEnv *e = ctx->env; e != member_base; e = e->next, j--) {
+    entries[j] = e;
+  }
+
+  TypeEnv *mod_env = NULL;
+  TypeEnv *tail = NULL;
+  for (int i = 0; i < mlen; i++) {
+    TypeEnv *dst = t_alloc(sizeof(TypeEnv));
+    *dst = *entries[i];
+    dst->next = NULL;
+    // Members are kept MONOMORPHIC in the module's param tvars. They must
+    // NOT carry the param tvars in their own scheme_vars: doing so would
+    // cause double-freshening (Set's instantiation freshens `a once, then
+    // each member access freshens the stale `a scheme_var again, producing
+    // independent a's). Instead, only the `Set` let-binding generalizes over
+    // `a, and its instantiation freshens `a uniformly into the param type
+    // AND all member types in one pass.
+    if (!mod_env) {
+      mod_env = dst;
+    } else {
+      tail->next = dst;
+    }
+    tail = dst;
+  }
+
+  ctx->env = saved_env;
+  ctx->constraints = NULL;
+  ctx->predicates = NULL;
+
+  Type *mod = t_alloc(sizeof(Type));
+  *mod = (Type){.kind = T_MODULE,
+                .data = {.T_MODULE = {.env = mod_env, .size = mlen}}};
+
+  // Wrap the module in T_FN(param -> ... -> module) so application
+  // (infer_application.c:169) constrains arguments against param types.
+  for (size_t i = len; i > 0; i--) {
+    mod = type_fn(param_types[i - 1], mod);
+  }
+
+  // Restore the type-var name env; the module seed is no longer needed.
+  set_type_var_env(saved_tvar_env);
+  return mod;
+}
+
 Type *infer_inline_module(Ast *ast, TICtx *ctx) {
   TypeEnv *saved_env = ctx->env;
   int len;
 
   AstList *params = ast->data.AST_LAMBDA.params;
-
-  for (AstList *p = params; p; p = p->next) {
-    printf("module type arg\n");
-    print_ast(p->ast);
-  }
 
   AstList *module_body;
   if (ast->data.AST_LAMBDA.body->tag != AST_BODY) {
@@ -784,6 +957,10 @@ int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx) {
   case AST_VOID:
     add_constraint(ctx, value_type, &t_void);
     return 0;
+
+  case AST_UINT64:
+    add_constraint(ctx, value_type, &t_uint64);
+    return 0;
   case AST_IDENTIFIER: {
     const char *name = pattern->data.AST_IDENTIFIER.value;
     if (strcmp(name, "_") == 0) {
@@ -936,10 +1113,47 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
     type = &t_void;
     break;
 
+  case AST_UINT64:
+    type = &t_uint64;
+    break;
+
   case AST_ARRAY:
   case AST_LIST:
     type = infer_list_literal(ast, ctx);
     break;
+
+    // case AST_BINOP: {
+    //   // `[] of T` and `[||] of T`: an empty container annotated with its
+    //   // element type. The left side is an empty AST_LIST (list) or AST_ARRAY
+    //   // (array); the right side is a type expression computed via the type
+    //   // expression machinery, which already handles tuples, `of`, etc.
+    //   token_type op = ast->data.AST_BINOP.op;
+    //   if (op != TOKEN_OF) {
+    //     break;
+    //   }
+    //   Ast *container = ast->data.AST_BINOP.left;
+    //   if (container->tag != AST_LIST && container->tag != AST_ARRAY) {
+    //     break;
+    //   }
+    //   if (container->data.AST_LIST.len != 0) {
+    //     break;
+    //   }
+    //
+    //   Type *elem_type = compute_type_expression(ast->data.AST_BINOP.right,
+    //   ctx); if (!elem_type) {
+    //     return NULL;
+    //   }
+    //
+    //   if (container->tag == AST_LIST) {
+    //     type = create_list_type_of_type(elem_type);
+    //   } else {
+    //     type = create_array_type(elem_type);
+    //   }
+    //
+    //   container->type = type;
+    //   ast->type = type;
+    //   break;
+    // }
 
   case AST_TUPLE: {
     int len = ast->data.AST_LIST.len;
@@ -1005,7 +1219,11 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
   }
 
   case AST_MODULE: {
-    type = infer_inline_module(ast, ctx);
+    if (ast->data.AST_LAMBDA.len > 0) {
+      type = infer_parametrized_module(ast, ctx);
+    } else {
+      type = infer_inline_module(ast, ctx);
+    }
     break;
   }
   case AST_RECORD_ACCESS: {
@@ -1129,6 +1347,13 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
     *tc = (TypeClass){.name = trait_name, .module = impl_type};
     typeclasses_extend(target, tc);
 
+    if (strcmp(trait_name, "Zero") == 0) {
+      TypeEnv *imp = impl_type->data.T_MODULE.env;
+      imp->next = ctx->env;
+      ctx->env = imp;
+      return imp->type;
+    }
+
     if (strcmp(trait_name, TYPE_NAME_TYPECLASS_FROM) == 0) {
       if (impl_type->kind == T_MODULE) {
         for (TypeEnv *te = impl_type->data.T_MODULE.env; te; te = te->next) {
@@ -1181,9 +1406,9 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
 
   ast->type = type;
   if (type == NULL) {
-    fprintf(stderr, "Error: could not infer type at");
+    fprintf(stderr, "Error: could not infer type at ");
     print_location(ast);
-    // print_ast_err(ast);
+    // print_ast_err(astmak);
   }
   return type;
 }
@@ -1391,13 +1616,14 @@ int resolve_predicates(Subst **subst_ptr, Predicate *preds) {
           witness = resolved_result;
         }
 
-        // When the result is already concrete (forced by an outer context, e.g.
-        // a function argument type or a match-branch unification), prefer it as
-        // the witness over an operand-derived one, unless a concrete operand
-        // has strictly higher rank.  This prevents a partially-resolved
-        // expression like `w - sample_rate * dt` (result Double, operands Int
-        // and a still-generic nested result) from collapsing to the lower-rank
-        // concrete operand Int before the generic operand resolves.
+        // When the result is already concrete (forced by an outer context,
+        // e.g. a function argument type or a match-branch unification),
+        // prefer it as the witness over an operand-derived one, unless a
+        // concrete operand has strictly higher rank.  This prevents a
+        // partially-resolved expression like `w - sample_rate * dt` (result
+        // Double, operands Int and a still-generic nested result) from
+        // collapsing to the lower-rank concrete operand Int before the
+        // generic operand resolves.
         if (!is_generic(resolved_result)) {
           double result_rank =
               get_typeclass_rank(resolved_result, p->trait->name);
@@ -2044,6 +2270,7 @@ bool is_constant_expr(Ast *expr, TICtx *ctx) {
   case AST_DOUBLE:
   case AST_CHAR:
   case AST_BOOL:
+  case AST_UINT64:
     return true;
 
   case AST_APPLICATION: {

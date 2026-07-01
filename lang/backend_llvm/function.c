@@ -291,7 +291,7 @@ LLVMValueRef codegen_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return codegen_create_closure(ast, ctx, module, builder);
   }
 
-  Type *fn_type = ast->type;
+  Type *fn_type = specialize_type_for_codegen(ast->type, ctx);
 
   ObjString fn_name = ast->data.AST_LAMBDA.fn_name;
   bool is_anon = false;

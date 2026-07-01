@@ -1522,6 +1522,21 @@ Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
   }
   return NULL;
 }
+
+Ast *ast_decorated_signature(ObjString decorator, ObjString binding,
+                             Ast *signature_expression) {
+  if (signature_expression->tag != AST_LIST) {
+    return NULL;
+  }
+
+  Ast *dec_id = ast_identifier(decorator);
+  Ast *bind = ast_identifier(binding);
+  Ast *let = ast_let(
+      bind,
+      ast_application(dec_id, ast_extern_fn(binding, signature_expression)),
+      NULL);
+  return let;
+}
 // Ast *array_offset_expression(Ast *array, Ast *index_expr) {
 //   printf("Array offset expr\n");
 //   return ast_application(
@@ -1535,4 +1550,8 @@ Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
 Ast *ast_variadic_expr(Ast *ast) {
   return ast_cons_decl(TOKEN_OF, ast_identifier((ObjString){"Variadic", 8}),
                        ast);
+}
+
+Ast *ast_not(Ast *ast) {
+  return ast_application(ast_identifier((ObjString){"!", 1}), ast);
 }

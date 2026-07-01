@@ -118,6 +118,12 @@ static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
       return type_ref->type;
     }
 
+    // Resolve via the type-var name env (seeded by parametrized modules).
+    TypeEnv *tv_ref = lookup_type_ref(current_type_var_env, name);
+    if (tv_ref) {
+      return tv_ref->type;
+    }
+
     Type *builtin_type = lookup_builtin_type(name);
 
     if (builtin_type) {
@@ -259,14 +265,11 @@ static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
   case AST_LAMBDA: {
     for (AstList *ps = expr->data.AST_LAMBDA.params; ps; ps = ps->next) {
       Ast *p = ps->ast;
-      current_type_decl_env =
-          env_extend(current_type_decl_env, p->data.AST_IDENTIFIER.value,
+      current_type_var_env =
+          env_extend(current_type_var_env, p->data.AST_IDENTIFIER.value,
                      tvar(p->data.AST_IDENTIFIER.value));
     }
-    print_ast(expr);
-    printf("\n\n");
-    print_type_env(current_type_decl_env);
-    return NULL;
+    return compute_type_expression_inner(expr->data.AST_LAMBDA.body, ctx);
   }
   default: {
     break;
@@ -277,8 +280,14 @@ static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
 }
 
 Type *compute_type_expression(Ast *expr, TICtx *ctx) {
+  // Save and clear the type-var name env, UNLESS a caller has explicitly
+  // seeded it (parametrized-module inference). A seeded env must persist so
+  // the body's type annotations resolve the module's generic tvars by name.
   TypeEnv *saved_type_var_env = current_type_var_env;
-  current_type_var_env = NULL;
+  bool seeded = current_type_var_env && current_type_var_env->is_module_seed;
+  if (!seeded) {
+    current_type_var_env = NULL;
+  }
   Type *result = compute_type_expression_inner(expr, ctx);
   current_type_var_env = saved_type_var_env;
   return result;
@@ -287,7 +296,15 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
 void compute_lambda_param_types(AstList *annotations, size_t len, Type **out,
                                 TICtx *ctx) {
   TypeEnv *saved_type_var_env = current_type_var_env;
-  current_type_var_env = NULL;
+  // Preserve a module seed (set by parametrized-module inference) so that
+  // type annotations inside member lambda params (e.g. `fn x: (a) -> ...`
+  // within `add`) resolve `a` to the SAME module tvar as the body's other
+  // annotations. Without this, each lambda's param annotations would get a
+  // fresh tvar, breaking the shared-`a invariant across module members.
+  bool seeded = current_type_var_env && current_type_var_env->is_module_seed;
+  if (!seeded) {
+    current_type_var_env = NULL;
+  }
   for (size_t i = 0; i < len && annotations;
        i++, annotations = annotations->next) {
     if (annotations->ast) {
@@ -298,6 +315,33 @@ void compute_lambda_param_types(AstList *annotations, size_t len, Type **out,
   }
   current_type_var_env = saved_type_var_env;
 }
+
+void compute_module_param_types(AstList *annotations, size_t len, Type **out,
+                                TICtx *ctx) {
+  // Unlike compute_lambda_param_types, do NOT reset current_type_var_env to
+  // NULL. The caller (parametrized-module inference) seeds it with the
+  // module's generic tvars so they remain resolvable by name, and leaves
+  // the seeded env in place for the body's type-expression resolution to
+  // inherit.
+  for (size_t i = 0; i < len && annotations;
+       i++, annotations = annotations->next) {
+    if (annotations->ast) {
+      out[i] = compute_type_expression_inner(annotations->ast, ctx);
+    } else {
+      out[i] = NULL;
+    }
+  }
+}
+
+void set_type_var_env(TypeEnv *env) {
+  // Mark the head (and thus the whole chain) as a module seed so
+  // compute_type_expression preserves it across its per-call resets.
+  if (env) {
+    env->is_module_seed = true;
+  }
+  current_type_var_env = env;
+}
+TypeEnv *get_type_var_env(void) { return current_type_var_env; }
 
 int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx);
 

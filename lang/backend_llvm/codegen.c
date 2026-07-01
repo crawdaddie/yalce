@@ -359,6 +359,18 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_BINOP: {
+    // `[] of T` / `[||] of T`: the element type is resolved by inference and
+    // stored on the container node's type. Delegate to the existing list/array
+    // codegen, which emits an empty container (null pointer / undef array).
+    if (ast->data.AST_BINOP.op == TOKEN_OF) {
+      Ast *container = ast->data.AST_BINOP.left;
+      if ((container->tag == AST_LIST || container->tag == AST_ARRAY) &&
+          container->data.AST_LIST.len == 0 && container->type) {
+        container->tag = container->tag; // keep tag for codegen dispatch
+        res = codegen(container, ctx, module, builder);
+        break;
+      }
+    }
     break;
   }
 

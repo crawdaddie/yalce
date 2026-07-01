@@ -1,0 +1,52 @@
+let hash_string = extern fn Ptr -> Int -> Uint64 ;
+let u64_bit_and = extern fn Uint64 -> Uint64 -> Uint64;
+let u64_to_int = extern fn Uint64 -> Int;
+
+let Set = module
+  hash: (a -> Uint64)
+  eq: (a -> a -> Bool) ->
+
+  type S = (data: Array of List of a, size: Int);
+
+  let empty = @EmptyInitializer extern fn () -> List of a;
+
+  let new = fn () ->
+    S (empty () |> array_fill_const 256) 0
+  ;;
+
+  let list_contains = fn x l ->
+    match l with
+    | [] -> false
+    | y::rest -> if (eq x y) then true else (list_contains x rest)
+  ;;
+
+  let add = fn x set: (S) ->                            
+  # x : a, set : Array of (List of a)
+    let key_idx = hash x |> u64_bit_and 0 |> u64_to_int;
+    let node_list = set.data[key_idx];
+    match node_list |> list_contains x with
+    | true -> set
+    | false ->  (
+      set.data[key_idx] := x::(set.data[key_idx]);
+      S (set.data) (1 + set.size)
+    )
+
+  ;;
+
+
+  let contains = fn x set: (S) ->                            
+  # x : a, set : Array of (List of a)
+    let key_idx = hash x |> u64_bit_and 0 |> u64_to_int;
+    let node_list = set.data[key_idx];
+    node_list |> list_contains x
+  ;;
+  let of_list = fn l ->
+    let aux = fn l s ->
+      match l with
+      | [] -> s
+      | x::rest -> s |> add x |> aux rest
+      
+    ;;
+    aux l @@ new ()
+  ;;
+;

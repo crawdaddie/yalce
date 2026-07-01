@@ -72,7 +72,7 @@ static Type *get_variadic_constraint(Type *t) {
 }
 
 static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
-                                              Type *param_type, Ast *arg_ast) {
+                                             Type *param_type, Ast *arg_ast) {
   // Variadic structural constraint: if the parameter type carries a Variadic
   // template (stored on meta), expand it to match the argument's arity and
   // add a constraint.  This constrains each lambda arg to the template's last
@@ -84,14 +84,13 @@ static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
     // R` (the void param preserved) rather than forcing the void arg to the
     // template's repeated Double. The param is still a fresh tvar here (it is
     // only constrained to void later), so detect it from the lambda's AST.
-    bool arg_has_void_param = arg_ast && arg_ast->tag == AST_LAMBDA &&
-                              arg_ast->data.AST_LAMBDA.params &&
-                              arg_ast->data.AST_LAMBDA.params->ast->tag ==
-                                  AST_VOID;
-    Type *expanded =
-        arg_has_void_param
-            ? extend_variadic_template_void(variadic, arg_type)
-            : extend_variadic_template(variadic, arg_type);
+    bool arg_has_void_param =
+        arg_ast && arg_ast->tag == AST_LAMBDA &&
+        arg_ast->data.AST_LAMBDA.params &&
+        arg_ast->data.AST_LAMBDA.params->ast->tag == AST_VOID;
+    Type *expanded = arg_has_void_param
+                         ? extend_variadic_template_void(variadic, arg_type)
+                         : extend_variadic_template(variadic, arg_type);
     if (expanded) {
       // Link the parameter (a tvar carrying the Variadic meta) to the
       // argument so the function's result type tracks the argument. Then

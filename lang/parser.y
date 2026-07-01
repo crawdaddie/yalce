@@ -35,12 +35,14 @@ extern char *yytext;
     ObjString vident;           /* identifier */
     ObjString vstr;             /* string */
     int vint;                   /* int val */
+    uint64_t vint64;                   /* int val */
     double vdouble;
     float vfloat;
     char vchar;
 };
 
 %token <vint>    INTEGER
+%token <vint64>  UINT64
 %token <vdouble> DOUBLE 
 %token <vfloat>  FLOAT
 %token <vident>  IDENTIFIER
@@ -282,6 +284,7 @@ let_binding:
   | OPEN IDENTIFIER                   { $$ = ast_import_stmt($2, true); SET_AST_LOC($$, @$); }
   | LET IDENTIFIER ':' IDENTIFIER '=' lambda_expr { $$ = ast_trait_impl($4, $2, $6); SET_AST_LOC($$, @$); }
   | LET IDENTIFIER '=' AT IDENTIFIER lambda_expr  { $$ = ast_decorated_lambda($5, $2, $6); }
+  | LET IDENTIFIER '=' AT IDENTIFIER EXTERN FN fn_signature  { $$ = ast_decorated_signature($5, $2, $8); }
   ;
 
 

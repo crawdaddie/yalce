@@ -82,6 +82,12 @@ let filter = fn f l ->
   aux f l [] |> rev
 ;;
 
+let contains = fn x l ->
+  match l with
+  | [] -> false
+  | y::rest -> if x == y then true else (contains x rest)
+;;
+
 #
 # let foldi = fn f: (Int -> R -> T -> R) res: (R) a: (Array of T) ->
 #   let res_ref = [| res |];
@@ -102,5 +108,7 @@ let test = module () ->
   # let _ = print `map to double: {map (fn x -> Double x) [0,1,2,3]}\n`;
   let test_map_to_double = map (fn x -> Double x) [0,1,2,3] == [0.,1.,2.,3.];
   let test_map_to_double2 = map Double [0,1,2,3] == [0.,1.,2.,3.];
+  let test_contains = ([1,2,3] |> contains 2) == true;
+  let test_not_contains = contains 4 [1,2,3] == false;
   # let test_foldi = foldi (fn i s x -> i + s + x) 0 [0,0,0] == 3
 ;

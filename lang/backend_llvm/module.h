@@ -36,4 +36,9 @@ LLVMValueRef compile_module(JITSymbol *module_symbol, Ast *module_ast,
 LLVMValueRef create_constructor_module(Ast *trait, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder);
+
+LLVMValueRef specialize_and_bind_module(Ast *binding, Ast *app,
+                                        Type *binding_type, JITLangCtx *ctx,
+                                        LLVMModuleRef llvm_module_ref,
+                                        LLVMBuilderRef builder);
 #endif

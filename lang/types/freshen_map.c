@@ -113,6 +113,46 @@ Type *freshen_map_apply_to_type(FreshenMap *map, Type *t) {
   }
   default:
     return t;
+  case T_MODULE: {
+    // Freshen each member's type so a parametrized module's instantiation
+    // (e.g. reading `Set` whose scheme_vars include `a) substitutes the
+    // freshened tvar uniformly into the param type AND all member types,
+    // keeping one module instance consistent.
+    if (!t->data.T_MODULE.env) {
+      return t;
+    }
+    bool changed = false;
+    TypeEnv *new_env = NULL;
+    TypeEnv *tail = NULL;
+    for (TypeEnv *e = t->data.T_MODULE.env; e; e = e->next) {
+      TypeEnv *dst = t_alloc(sizeof(TypeEnv));
+      *dst = *e;
+      dst->next = NULL;
+      dst->type = freshen_map_apply_to_type(map, e->type);
+      if (dst->type != e->type) {
+        changed = true;
+      }
+      // Freshen scheme_vars too, so member instantiation later uses the
+      // freshened tvar ids consistent with the freshened type.
+      if (e->scheme_vars) {
+        dst->scheme_vars =
+            freshen_map_apply_to_typelist(map, e->scheme_vars);
+      }
+      if (!new_env) {
+        new_env = dst;
+      } else {
+        tail->next = dst;
+      }
+      tail = dst;
+    }
+    if (!changed) {
+      return t;
+    }
+    Type *result = t_alloc(sizeof(Type));
+    *result = *t;
+    result->data.T_MODULE.env = new_env;
+    return result;
+  }
   }
 }
 

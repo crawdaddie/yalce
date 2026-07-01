@@ -53,6 +53,8 @@ typedef enum BindingKind {
   BIND_COROUTINE,
   BIND_COROUTINE_CONSTRUCTOR,
   BIND_GENERIC_FN,
+  BIND_GENERIC_MODULE,
+  BIND_SPECIALIZED_MODULE,
   BIND_CONCRETE_FN,
   BIND_MODULE,
   BIND_IMPORT,
@@ -69,10 +71,10 @@ static Type *resolve_binding_type(Ast *binding, Ast *expr, JITLangCtx *ctx) {
   TypeEnv *entry =
       lookup_type_ref(ctx->env, binding->data.AST_IDENTIFIER.value);
   if (entry && entry->type) {
-    return entry->type;
+    return specialize_type_for_codegen(entry->type, ctx);
   }
 
-  return binding_type;
+  return specialize_type_for_codegen(binding_type, ctx);
 }
 
 // Rebind one identifier name to another existing symbol in the current scope.
@@ -108,6 +110,14 @@ static BindingKind classify_binding(Ast *expr, Type *expr_type,
     return BIND_COROUTINE;
   }
 
+  if (expr->tag == AST_MODULE && binding_type->kind == T_FN) {
+    return BIND_GENERIC_MODULE;
+  }
+
+  if (expr->tag == AST_APPLICATION && is_module(binding_type)) {
+    return BIND_SPECIALIZED_MODULE;
+  }
+
   if (binding_type->kind == T_FN && is_generic(binding_type)) {
     return BIND_GENERIC_FN;
   }
@@ -137,7 +147,7 @@ static LLVMValueRef emit_array_fn_binding(Ast *binding, Ast *expr,
                            builder);
 }
 
-// Emit concrete function-like bindings, including externs and closures.
+  // Emit concrete function-like bindings, including externs and closures.
 static LLVMValueRef emit_function_binding(Ast *binding, Ast *expr,
                                           Type *binding_type, JITLangCtx *ctx,
                                           LLVMModuleRef module,
@@ -160,6 +170,14 @@ static LLVMValueRef emit_function_binding(Ast *binding, Ast *expr,
       expr->data.AST_APPLICATION.args->tag == AST_LAMBDA) {
     // Special case: eg let s = @Audio fn () -> ... ;; -- decorated lambda
     return codegen(expr, ctx, module, builder);
+  }
+
+  if (expr->tag == AST_APPLICATION &&
+      expr->data.AST_APPLICATION.args->tag == AST_EXTERN_FN) {
+
+    LLVMValueRef func = codegen(expr, ctx, module, builder);
+    create_fn_binding(binding, binding_type, func, ctx, module, builder);
+    return func;
   }
 
   return create_fn_binding(binding, binding_type,
@@ -378,6 +396,19 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
   return NULL;
 }
 
+// Register a parametrized module binding without forcing specialization yet.
+LLVMValueRef create_generic_module_binding(Ast *binding, Ast *module_ast,
+                                           JITLangCtx *ctx) {
+  JITSymbol *sym = new_symbol(STYPE_GENERIC_MODULE, module_ast->type, NULL, NULL);
+  sym->symbol_data.STYPE_GENERIC_MODULE.ast = module_ast;
+  sym->symbol_data.STYPE_GENERIC_MODULE.stack_ptr = ctx->stack_ptr;
+  sym->symbol_data.STYPE_GENERIC_MODULE.stack_frame = ctx->frame;
+  sym->symbol_data.STYPE_GENERIC_MODULE.type_env = ctx->env;
+  sym->symbol_data.STYPE_GENERIC_MODULE.specific_fns = NULL;
+  install_identifier_symbol(binding, sym, ctx);
+  return NULL;
+}
+
 // Register a concrete function value in the current frame.
 LLVMValueRef create_fn_binding(Ast *binding, Type *fn_type, LLVMValueRef fn,
                                JITLangCtx *ctx, LLVMModuleRef module,
@@ -451,6 +482,11 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, JITLangCtx *ctx,
                                    builder);
   case BIND_GENERIC_FN:
     return create_generic_fn_binding(binding, expr, ctx);
+  case BIND_GENERIC_MODULE:
+    return create_generic_module_binding(binding, expr, ctx);
+  case BIND_SPECIALIZED_MODULE:
+    return specialize_and_bind_module(binding, expr, binding_type, ctx, module,
+                                      builder);
 
   case BIND_CONCRETE_FN:
     return emit_function_binding(binding, expr, binding_type, ctx, module,

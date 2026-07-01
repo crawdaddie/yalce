@@ -73,6 +73,7 @@ typedef enum symbol_type {
   STYPE_VARIANT_TYPE,
   STYPE_GENERIC_CONSTRUCTOR,
   STYPE_GENERIC_FUNCTION,
+  STYPE_GENERIC_MODULE,
 } symbol_type;
 
 extern int REGISTERED_JIT_SYMBOL_TYPE;
@@ -121,6 +122,14 @@ typedef struct {
       SpecificFns *specific_fns;
       BuiltinHandler builtin_handler;
     } STYPE_GENERIC_FUNCTION;
+
+    struct {
+      Ast *ast;
+      int stack_ptr;
+      StackFrame *stack_frame;
+      TypeEnv *type_env;
+      SpecificFns *specific_fns;
+    } STYPE_GENERIC_MODULE;
 
     struct {
       JITLangCtx *ctx;

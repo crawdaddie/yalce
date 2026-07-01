@@ -49,6 +49,7 @@ Type list_prepend_scheme = {0};
 Type str_fmt_scheme = {0};
 
 Type logical_op_scheme = {0};
+Type logical_unop_scheme = {0};
 
 Type cor_map_scheme = {0};
 Type cor_filter_scheme = {0};
@@ -870,7 +871,10 @@ void initialize_builtin_types() {
 
   // Register id: polymorphic identity function
   add_builtin_env("id", make_id_env());
+  add_builtin_env("EmptyInitializer", make_id_env());
+
   builtin_envs.cor_map = make_cor_map_env();
+
   add_builtin_env("cor_map", builtin_envs.cor_map);
   builtin_envs.cor_loop = make_cor_loop_env();
   add_builtin_env("cor_loop", builtin_envs.cor_loop);
@@ -919,6 +923,11 @@ void initialize_builtin_types() {
   logical_op_scheme = (Type){
       T_FN, {.T_FN = {.from = &t_bool, .to = type_fn(&t_bool, &t_bool)}}};
   builtin_envs.logical_and = make_monomorphic_env("&&", &logical_op_scheme);
+
+  logical_unop_scheme =
+      (Type){T_FN, {.T_FN = {.from = &t_bool, .to = &t_bool}}};
+  builtin_envs.logical_not = make_monomorphic_env("!", &logical_unop_scheme);
+
   add_builtin_env("&&", builtin_envs.logical_and);
   builtin_envs.logical_or = make_monomorphic_env("||", &logical_op_scheme);
   add_builtin_env("||", builtin_envs.logical_or);

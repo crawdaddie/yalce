@@ -285,6 +285,29 @@ LLVMValueRef curried_comparison_binop(Ast *saved_arg_ast,
   return func;
 }
 
+LLVMValueRef HandleCreateEmptyInitializer(Ast *ast, JITLangCtx *ctx,
+                                          LLVMModuleRef module,
+                                          LLVMBuilderRef builder) {
+
+  Type *fn_type = ast->type;
+  Type *t = fn_return_type(fn_type);
+  LLVMTypeRef lt = type_to_llvm_type(t, ctx, module);
+  LLVMValueRef n = LLVMConstNull(lt);
+  LLVMTypeRef llvm_ftype = LLVMFunctionType(lt, (LLVMTypeRef[]){}, 0, 0);
+  const char *name =
+      ast->data.AST_APPLICATION.args->data.AST_EXTERN_FN.fn_name.chars;
+  LLVMValueRef func = LLVMAddFunction(module, name, llvm_ftype);
+
+  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
+  LLVMPositionBuilderAtEnd(builder, block);
+  LLVMBuildRet(builder, LLVMConstNull(lt));
+
+  LLVMPositionBuilderAtEnd(builder, prev_block);
+
+  return func;
+}
+
 LLVMValueRef SumHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder) {
 
@@ -1101,6 +1124,14 @@ LLVMValueRef LogicalOrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return phi;
 }
 
+LLVMValueRef LogicalNotHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                               LLVMBuilderRef builder) {
+
+  LLVMValueRef arg1 =
+      codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
+  return LLVMBuildNot(builder, arg1, "logical_not");
+}
+
 Type *lookup_var_in_env(TypeEnv *env, Type *tvar) {
   if (tvar->kind == T_VAR) {
     while (tvar->kind == T_VAR) {
@@ -1437,7 +1468,6 @@ LLVMValueRef TypeOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef AsBytesHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
-
   bool on_stack = false;
   if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
     on_stack = true;
@@ -1448,6 +1478,7 @@ LLVMValueRef AsBytesHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef str = LLVMGetUndef(struct_type);
 
   Type *t = ast->data.AST_APPLICATION.args->type;
+  t = resolve_type_in_env(t, ctx->env);
 
   switch (t->kind) {
   case T_INT: {
@@ -1621,6 +1652,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_ENV(builtin_envs.neq, NeqHandler);
   GENERIC_FN_ENV(builtin_envs.logical_and, LogicalAndHandler);
   GENERIC_FN_ENV(builtin_envs.logical_or, LogicalOrHandler);
+  GENERIC_FN_ENV(builtin_envs.logical_not, LogicalNotHandler);
 
   GENERIC_FN_ENV(builtin_envs.array_at, ArrayAtHandler);
   GENERIC_FN_ENV(builtin_envs.array_size, ArraySizeHandler);
@@ -1697,6 +1729,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_SYMBOL("Array", &array_scheme, ArrayConstructorHandler);
   GENERIC_FN_SYMBOL("String", NULL, ArrayConstructorHandler);
   GENERIC_FN_SYMBOL("fn_composition", NULL, HandleFnComposition);
+  GENERIC_FN_SYMBOL("EmptyInitializer", NULL, HandleCreateEmptyInitializer);
 
   return ctx->env;
 }

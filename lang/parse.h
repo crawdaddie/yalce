@@ -159,6 +159,7 @@ typedef enum ast_tag {
   AST_STRING = 3,
   AST_CHAR = 4,
   AST_BOOL = 5,
+  AST_UINT64,
   AST_IDENTIFIER,
   AST_BODY,
   AST_LET,
@@ -190,6 +191,7 @@ typedef enum ast_tag {
   AST_LOOP,
   AST_GET_ARG,
   AST_TRAIT_IMPL,
+
 } ast_tag;
 
 struct Ast {
@@ -217,6 +219,10 @@ struct Ast {
     struct AST_INT {
       int value;
     } AST_INT;
+
+    struct AST_UINT64 {
+      uint64_t value;
+    } AST_UINT64;
 
     struct AST_FLOAT {
       float value;
@@ -500,6 +506,10 @@ bool find_top_level_range_at_line(Ast *root, const char *src, int line,
 Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
                           Ast *lambda_expr);
 
+Ast *ast_decorated_signature(ObjString decorator, ObjString binding,
+                             Ast *lambda_expr);
+
 Ast *ast_variadic_expr(Ast *ast);
+Ast *ast_not(Ast *ast);
 // Ast *array_offset_expression(Ast *array, Ast *index_expr);
 #endif

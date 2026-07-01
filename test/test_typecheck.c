@@ -2480,6 +2480,63 @@ int test_modules() {
   return status;
 }
 
+int test_parametrized_modules() {
+  printf("## PARAMETRIZED MODULES\n----------------------------\n");
+  bool status = true;
+
+  // Single-param module: the type variable in member types resolves to
+  // the argument's concrete type.
+  ({
+    Type g_type = MAKE_FN_TYPE_2(&t_int, &t_int);
+    TypeEnv g_env = {.name = "g", .type = &g_type};
+    Type mod_type = {.kind = T_MODULE,
+                     .data = {.T_MODULE = {.env = &g_env, .size = 1}}};
+
+    T("let Mod = module f: (a -> Int) ->\n"
+      "  let g = fn x -> f x\n"
+      ";;\n"
+      ";\n"
+      "let IntMod = Mod (fn x -> x + 1);\n",
+      &mod_type);
+  });
+
+  // Multi-param module: both type variables resolve from the application
+  // arguments.
+  ({
+    Type map_type = MAKE_FN_TYPE_3(&t_int, &t_int, &t_int);
+    TypeEnv map_env = {.name = "map", .type = &map_type};
+    Type mod_type = {.kind = T_MODULE,
+                     .data = {.T_MODULE = {.env = &map_env, .size = 1}}};
+
+    T("let Pair = module f: (a -> Int) g: (b -> Int) ->\n"
+      "  let map = fn x y -> f x + g y\n"
+      ";;\n"
+      ";\n"
+      "let M = Pair (fn x -> x + 1) (fn y -> y + 1);\n",
+      &mod_type);
+  });
+
+  // Module where the type variable resolves to a non-Int type. The module
+  // parameter `f` has type `a -> a` (identity-like), so applying with
+  // `fn x -> x` forces `a = String`.
+  ({
+    Type id_type = MAKE_FN_TYPE_2(&t_string, &t_string);
+    TypeEnv id_env = {.name = "id", .type = &id_type};
+    Type mod_type = {.kind = T_MODULE,
+                     .data = {.T_MODULE = {.env = &id_env, .size = 1}}};
+
+    T("let Id = module f: (a -> a) ->\n"
+      "  let id = fn x -> f x\n"
+      ";;\n"
+      ";\n"
+      "let StrId = Id (fn x -> x);\n"
+      "StrId.id \"hello\"\n",
+      &t_string);
+  });
+
+  return status;
+}
+
 int test_array_processing() {
   printf("## ARRAY PROCESSING\n----------------------------\n");
   bool status = true;
@@ -3262,6 +3319,7 @@ int main() {
   status &= test_first_class_funcs();
 
   status &= test_modules();
+  status &= test_parametrized_modules();
   status &= test_networking_funcs();
   status &= test_type_exprs();
   status &= test_type_declarations();

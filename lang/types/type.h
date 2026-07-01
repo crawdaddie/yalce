@@ -103,6 +103,7 @@ typedef struct TypeEnv {
   bool can_generalize;
   bool needs_generalization;
   bool is_opened_var;
+  bool is_module_seed;
 } TypeEnv;
 
 #define _TSTORAGE_SIZE_DEFAULT 200000
