@@ -2,6 +2,12 @@ let hash_string = extern fn Ptr -> Int -> Uint64 ;
 let u64_bit_and = extern fn Uint64 -> Uint64 -> Uint64;
 let u64_to_int = extern fn Uint64 -> Int;
 
+let bool_to_int = fn b ->
+  match b with
+  | true -> 1
+  | false -> 0
+;;
+
 let Set = module
   hash: (a -> Uint64)
   eq: (a -> a -> Bool) ->
@@ -42,6 +48,7 @@ let Set = module
     let node_list = set.data[key_idx];
     node_list |> list_contains x
   ;;
+
   let of_list = fn l ->
     let aux = fn l s ->
       match l with
@@ -73,18 +80,31 @@ let Map = module
     | (y,_)::rest -> if (eq x y) then true else (list_contains x rest)
   ;;
 
-  let get_key_idx = fn x d -> hash x |> u64_bit_and ((array_size d) - 1) |> u64_to_int;;
+  let get_key_idx = fn x d -> hash x |> u64_bit_and ((array_size d) - 1) |> u64_to_int
+  ;;
+
+  let list_upsert = fn x v l ->
+    match l with
+    | [] -> [(x, v)]
+    | (k, old)::rest -> (
+      if (eq x k) then (
+        (x, v)::rest
+      )
+      else (
+        (k, old)::(list_upsert x v rest)
+      )
+    )
+  ;;
 
   let set = fn x v m: (M) ->                            
   # x : K, v : V,  m : Array of (List of (K, V))
     let key_idx = get_key_idx x m.data;
-    let node_list = m.data[key_idx];
-    match node_list |> list_contains x with
-    | true -> m
-    | false ->  (
-      m.data[key_idx] := (x, v)::(m.data[key_idx]);
-      M (m.data) (1 + m.size)
-    )
+    let bucket = m.data[key_idx];
+    let bucket_contains = bucket |> list_contains x;
+    let new_bucket = list_upsert x v bucket ;
+    m.data[key_idx] := new_bucket;
+    M (m.data) ((if bucket_contains then 0 else 1) m.size)
+
 
   ;;
 
