@@ -285,7 +285,6 @@ struct Ast {
       int num_yield_boundary_crossers;
       AstList *closed_vals;
       int num_closed_vals;
-
     } AST_LAMBDA;
 
     struct AST_TRAIT_IMPL {

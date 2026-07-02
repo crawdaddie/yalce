@@ -502,9 +502,21 @@ LLVMValueRef array_eq(LLVMValueRef arr1, LLVMValueRef arr2, Type *arr_type,
   LLVMValueRef size1 = codegen_get_array_size(builder, arr1, element_type);
   LLVMValueRef size2 = codegen_get_array_size(builder, arr2, element_type);
 
-  // Compare sizes
+  // Compare sizes — if not equal, skip strncmp entirely.
   LLVMValueRef sizes_equal =
       LLVMBuildICmp(builder, LLVMIntEQ, size1, size2, "sizes_equal");
+
+  LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef parent_func = LLVMGetBasicBlockParent(entry_block);
+  LLVMBasicBlockRef cmp_block =
+      LLVMAppendBasicBlock(parent_func, "array_eq.cmp");
+  LLVMBasicBlockRef merge_block =
+      LLVMAppendBasicBlock(parent_func, "array_eq.merge");
+
+  LLVMBuildCondBr(builder, sizes_equal, cmp_block, merge_block);
+
+  // --- contents comparison block ---
+  LLVMPositionBuilderAtEnd(builder, cmp_block);
 
   // Get data pointers from both arrays
   LLVMValueRef data1 =
@@ -542,11 +554,19 @@ LLVMValueRef array_eq(LLVMValueRef arr1, LLVMValueRef arr2, Type *arr_type,
   LLVMValueRef contents_equal =
       LLVMBuildICmp(builder, LLVMIntEQ, strncmp_result, zero, "contents_equal");
 
-  // AND the size equality with content equality
-  LLVMValueRef final_result =
-      LLVMBuildAnd(builder, sizes_equal, contents_equal, "arrays_equal");
+  LLVMBasicBlockRef cmp_end_block = LLVMGetInsertBlock(builder);
+  LLVMBuildBr(builder, merge_block);
 
-  return final_result;
+  // --- merge block ---
+  LLVMPositionBuilderAtEnd(builder, merge_block);
+  LLVMValueRef result = LLVMBuildPhi(builder, LLVMInt1Type(), "arrays_equal");
+
+  LLVMValueRef false_val = LLVMConstInt(LLVMInt1Type(), 0, 0);
+  LLVMValueRef incoming_vals[] = {contents_equal, false_val};
+  LLVMBasicBlockRef incoming_blocks[] = {cmp_end_block, entry_block};
+  LLVMAddIncoming(result, incoming_vals, incoming_blocks, 2);
+
+  return result;
 }
 
 LLVMValueRef cons_equality(Type *type, LLVMValueRef tuple1, LLVMValueRef tuple2,
