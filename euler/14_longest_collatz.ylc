@@ -1,0 +1,47 @@
+open std/HashSet;
+let collatz = fn n: (Uint64) ->
+  # print `collatz {n}\n`;
+  match n % 2u64 with
+  | 0u64 -> n / 2u64
+  | _ -> 3u64 * n + 1u64
+  ;;
+
+
+let SeqLengthMap = Map 
+    (fn x: (Uint64) ->
+      let xb = x |> asbytes ;
+      # print xb;
+      hash_string xb
+    )
+
+    (==)
+    (fn () -> 0)
+
+    ;
+
+let get_collatz_length = fn i n cache ->
+  match SeqLengthMap.get n cache with
+  | Some l -> i + l
+  | None -> (
+    let coll = collatz n;
+    if coll == 1u64 then (
+      i
+    ) else (
+      get_collatz_length (i + 1) coll cache
+    )
+  )
+;;
+
+let get_lengths = fn longest n cache ->
+  match n with
+  | 0u64 -> longest
+  | _ -> (
+    let len = get_collatz_length 0 n cache;
+    # print `seq for #{n}:{len}\n`;
+    let c = SeqLengthMap.set n len cache;
+    let nl = if len >= longest then len else longest; 
+    get_lengths nl (n - 1u64) c
+  )
+;;
+
+print `{get_lengths 0 1000000u64 (SeqLengthMap.new_sized 1048576) }\n`;
