@@ -216,9 +216,6 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
 
       EscapeMeta *ea_meta = malloc(sizeof(EscapeMeta));
       if (alloc_crosses_yield_boundary(a, ast)) {
-        // values that cross yield boundary need to be allocated on the heap -
-        // this is because they would get recreated each time the coroutine
-        // resumes if they are on the stack
         *ea_meta = (EscapeMeta){
             .status = EA_HEAP_ALLOC,
             .id = a->id,
@@ -291,11 +288,18 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
         }
       }
 
-      if (has_attr(fn_ast->type->data.T_FN.attributes, FN_ATTR_ALLOCATES)) {
+      if (fn_ast->type && fn_ast->type->kind == T_FN &&
+          has_attr(fn_ast->type->data.T_FN.attributes, FN_ATTR_ALLOCATES)) {
         Allocation *arr_alloc = create_alloc(NULL, ast, ctx->scope);
         return allocations_extend(allocations, arr_alloc);
       }
     }
+
+    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      allocations = allocations_extend(allocations,
+          ea(ast->data.AST_APPLICATION.args + i, ctx));
+    }
+    ea(ast->data.AST_APPLICATION.function, ctx);
 
     break;
   }

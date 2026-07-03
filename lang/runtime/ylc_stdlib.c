@@ -714,7 +714,9 @@ int32_t rshift(int32_t x, int32_t n) { return x >> n; }
 int32_t lshift(int32_t x, int32_t n) { return x << n; }
 int32_t bit_and(int32_t x, int32_t y) { return x & y; }
 uint64_t u64_bit_and(uint64_t x, uint64_t y) { return x & y; }
+uint64_t u64_bit_xor(uint64_t x, uint64_t y) { return x ^ y; }
 int32_t u64_to_int(uint64_t x) { return (uint32_t)x; }
+uint64_t char_to_uint64(char c) { return (uint64_t)(unsigned char)c; }
 
 // Convert a byte to a 2-character hex string (e.g., 255 -> "ff", 16 -> "10")
 _String char_to_hex_string(char byte) {

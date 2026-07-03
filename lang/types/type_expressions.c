@@ -112,6 +112,12 @@ static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
     //   return deep_copy_type(&t_ptr);
     // }
 
+    Type *builtin_type = lookup_builtin_type(name);
+
+    if (builtin_type) {
+      return builtin_type;
+    }
+
     TypeEnv *type_ref = lookup_type_ref(ctx->env, name);
 
     if (type_ref) {
@@ -124,11 +130,6 @@ static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
       return tv_ref->type;
     }
 
-    Type *builtin_type = lookup_builtin_type(name);
-
-    if (builtin_type) {
-      return builtin_type;
-    }
     return lookup_or_bind_type_var(name);
   }
   case AST_TUPLE: {

@@ -135,7 +135,12 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
 
   if (to_type->constructor) {
     ConsMethod constructor = to_type->constructor;
-    return constructor(val, from_type, module, builder);
+    Type *resolved_from = from_type;
+    if (from_type && is_generic(from_type) && ctx->env) {
+      resolved_from = resolve_type_in_env(from_type, ctx->env);
+    }
+    return constructor(val, resolved_from ? resolved_from : from_type, module,
+                      builder);
   }
 
   return val;

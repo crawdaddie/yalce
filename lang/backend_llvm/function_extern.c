@@ -1,4 +1,5 @@
 #include "./function_extern.h"
+#include "strings.h"
 #include "types.h"
 #include "types/type_ser.h"
 #include "llvm-c/Core.h"
@@ -15,6 +16,13 @@ LLVMValueRef get_extern_fn(const char *name, LLVMTypeRef fn_type,
     // This ensures LLVM uses the platform's C ABI, including proper
     // struct return handling (sret) for large return values
     LLVMSetFunctionCallConv(fn, LLVMCCallConv);
+
+    // hash_string only reads its pointer argument; without this LLVM's
+    // dead-store elimination removes the stores feeding the buffer (since
+    // the extern is otherwise treated as not reading memory).
+    if (strcmp(name, "hash_string") == 0) {
+      set_memory_effects(fn, MEM_ARGMEM_REF);
+    }
   }
   return fn;
 }

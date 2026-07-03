@@ -35,4 +35,10 @@ LLVMValueRef stringify_value(LLVMValueRef val, Type *val_type, JITLangCtx *ctx,
 LLVMValueRef print_str(LLVMValueRef val, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMBuilderRef builder);
 
+// Memory effects encoding: 2 bits per location kind
+#define MEM_ARGMEM_REF (1)
+#define MEM_ARGMEM_MODREF (3)
+#define MEM_INACCESSIBLE_MODREF (3 << 2)
+void set_memory_effects(LLVMValueRef fn, uint64_t effects);
+
 #endif

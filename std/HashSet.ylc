@@ -1,12 +1,24 @@
-let hash_string = extern fn Ptr -> Int -> Uint64 ;
+# let hash_string = extern fn Ptr -> Int -> Uint64 ;
 let u64_bit_and = extern fn Uint64 -> Uint64 -> Uint64;
+let u64_bit_xor = extern fn Uint64 -> Uint64 -> Uint64;
 let u64_to_int = extern fn Uint64 -> Int;
+let char_to_uint64 = extern fn Char -> Uint64;
 
-let bool_to_int = fn b ->
-  match b with
-  | true -> 1
-  | false -> 0
+let FNV_OFFSET = 14695981039346656037u64;
+let FNV_PRIME = 1099511628211u64;
+
+let hash_string = fn str: (String) ->
+  let aux = fn h str: (String) ->
+    match (array_size str) with
+    | 0 -> h
+    | _ -> (
+      let c = str[0];
+      aux (h |> u64_bit_xor (char_to_uint64 c) |> (*) FNV_PRIME) (array_succ str)
+    )
+  ;;
+  aux FNV_OFFSET str
 ;;
+
 
 let Set = module
   hash: (a -> Uint64)
@@ -18,6 +30,10 @@ let Set = module
 
   let new = fn () ->
     S (empty () |> array_fill_const 256) 0
+  ;;
+
+  let new_sized = fn s ->
+    S (empty () |> array_fill_const s) 0
   ;;
 
   let list_contains = fn x l ->
@@ -74,6 +90,10 @@ let Map = module
     M (empty () |> array_fill_const 256) 0
   ;;
 
+  let new_sized = fn s ->
+    M (empty () |> array_fill_const s) 0
+  ;;
+
   let list_contains = fn x l ->
     match l with
     | [] -> false
@@ -96,14 +116,15 @@ let Map = module
     )
   ;;
 
-  let set = fn x v m: (M) ->                            
+  let set = fn x v m: (M) ->
   # x : K, v : V,  m : Array of (List of (K, V))
     let key_idx = get_key_idx x m.data;
     let bucket = m.data[key_idx];
+
     let bucket_contains = bucket |> list_contains x;
-    let new_bucket = list_upsert x v bucket ;
+    let new_bucket = if bucket_contains then (list_upsert x v bucket) else ((x, v)::bucket);
     m.data[key_idx] := new_bucket;
-    M (m.data) ((if bucket_contains then 0 else 1) m.size)
+    M (m.data) ((if bucket_contains then 0 else 1) + m.size)
 
 
   ;;
@@ -125,7 +146,7 @@ let test = module () ->
   let IntSet = Set
     (fn x ->
       let xb = x |> asbytes ;
-      hash_string (cstr xb) (array_size xb)
+      hash_string xb
     )
     (==)
   ;
@@ -150,7 +171,7 @@ let test = module () ->
 
   let IntMap = Map 
     (fn xb: (String) ->
-      hash_string (cstr xb) (array_size xb)
+      hash_string xb
     )
     (==)
     (fn () -> 0)

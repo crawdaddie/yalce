@@ -189,6 +189,7 @@ atom_expr:
 
 simple_expr:
     INTEGER               { $$ = AST_CONST(AST_INT, $1); SET_AST_LOC($$, @$); }
+  | UINT64                { $$ = AST_CONST(AST_UINT64, $1); SET_AST_LOC($$, @$); }
   | DOUBLE                { $$ = AST_CONST(AST_DOUBLE, $1); SET_AST_LOC($$, @$); }
   | FLOAT                 { $$ = AST_CONST(AST_FLOAT, $1); SET_AST_LOC($$, @$); }
   | TOK_STRING            { $$ = ast_string($1); SET_AST_LOC($$, @$); }

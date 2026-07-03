@@ -14,11 +14,8 @@
 // Memory effects encoding: 2 bits per location kind
 // Locations: ArgMem=bits[0:1], InaccessibleMem=bits[2:3], Other=bits[4:5]
 // Access: NoModRef=0, Ref=1, Mod=2, ModRef=3
-#define MEM_ARGMEM_REF (1)
-#define MEM_ARGMEM_MODREF (3)
-#define MEM_INACCESSIBLE_MODREF (3 << 2)
 
-static inline void set_memory_effects(LLVMValueRef fn, uint64_t effects) {
+void set_memory_effects(LLVMValueRef fn, uint64_t effects) {
   unsigned kind = LLVMGetEnumAttributeKindForName("memory", 6);
   LLVMAttributeRef attr =
       LLVMCreateEnumAttribute(LLVMGetGlobalContext(), kind, effects);

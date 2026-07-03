@@ -205,8 +205,8 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                           return FLOAT;
                         }
 
-[0-9]+(\.[0-9]*)?u64   {
-                          yylval.vint64 = atoll(yytext);
+ [0-9]+(\.[0-9]*)?u64   {
+                          yylval.vint64 = strtoull(yytext, NULL, 10);
                           return UINT64;
                         }
 -?[1-9][0-9]*           { 

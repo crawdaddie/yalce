@@ -827,16 +827,29 @@ void initialize_builtin_types() {
                                        .rank = 2.0,
                                        .params = &tc_int_from_bool_params};
 
+  static TypeList tc_uint64_from_char_params = {.type = &t_char, .next = NULL};
+  static TypeClass tc_uint64_from_char = {.name = TYPE_NAME_TYPECLASS_FROM,
+                                          .rank = 2.0,
+                                          .params =
+                                              &tc_uint64_from_char_params};
+
+  static TypeList tc_int_from_char_params = {.type = &t_char, .next = NULL};
+  static TypeClass tc_int_from_char = {.name = TYPE_NAME_TYPECLASS_FROM,
+                                       .rank = 2.0,
+                                       .params = &tc_int_from_char_params};
+
   // Attach typeclasses to primitive types
   typeclasses_extend(&t_int, &tc_int_arith);
   typeclasses_extend(&t_int, &tc_int_ord);
   typeclasses_extend(&t_int, &tc_int_eq);
   typeclasses_extend(&t_int, &tc_int_from_bool);
+  typeclasses_extend(&t_int, &tc_int_from_char);
 
   typeclasses_extend(&t_uint64, &tc_uint64_arith);
   typeclasses_extend(&t_uint64, &tc_uint64_ord);
   typeclasses_extend(&t_uint64, &tc_uint64_eq);
   typeclasses_extend(&t_uint64, &tc_uint64_from_int);
+  typeclasses_extend(&t_uint64, &tc_uint64_from_char);
 
   typeclasses_extend(&t_num, &tc_num_arith);
   typeclasses_extend(&t_num, &tc_num_ord);

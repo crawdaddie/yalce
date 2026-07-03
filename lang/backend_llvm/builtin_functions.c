@@ -904,6 +904,10 @@ LLVMValueRef int_constructor(LLVMValueRef val, Type *from_type,
     return LLVMBuildZExt(builder, val, LLVMInt32Type(), "cast_bool_to_int32");
   }
 
+  case T_CHAR: {
+    return LLVMBuildZExt(builder, val, LLVMInt32Type(), "cast_char_to_int32");
+  }
+
   case T_NUM: {
     return LLVMBuildFPToSI(builder, val, LLVMInt32Type(),
                            "cast_double_to_int32");
@@ -992,6 +996,11 @@ LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
     // Zero extension is appropriate for unsigned integers
     LLVMValueRef ext = LLVMBuildZExt(builder, val, uint64Type, "extended");
     return ext;
+  }
+
+  case T_CHAR: {
+    return LLVMBuildZExt(builder, val, LLVMInt64Type(),
+                         "cast_char_to_uint64");
   }
 
   default:
@@ -1501,89 +1510,19 @@ LLVMValueRef AsBytesHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   t = resolve_type_in_env(t, ctx->env);
 
   switch (t->kind) {
-  case T_INT: {
-    int width = 4;
-
-    LLVMValueRef value =
-        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-
-    LLVMTypeRef array_type = LLVMArrayType(char_type, width);
-
-    LLVMValueRef byte_array_ptr;
-    if (on_stack && ctx->coro_ctx == NULL) {
-      byte_array_ptr = LLVMBuildAlloca(builder, array_type, "int_bytes_stack");
-    } else {
-      byte_array_ptr = LLVMBuildMalloc(builder, array_type, "int_bytes_heap");
-    }
-
-    LLVMValueRef byte_ptr = LLVMBuildBitCast(
-        builder, byte_array_ptr, LLVMPointerType(char_type, 0), "byte_ptr");
-
-    for (int i = 0; i < width; i++) {
-      LLVMValueRef shift_amount = LLVMConstInt(LLVMInt32Type(), i * 8, 0);
-      LLVMValueRef shifted =
-          LLVMBuildLShr(builder, value, shift_amount, "shift");
-      LLVMValueRef byte = LLVMBuildTrunc(builder, shifted, char_type, "byte");
-
-      LLVMValueRef indices[] = {LLVMConstInt(LLVMInt32Type(), i, 0)};
-      LLVMValueRef elem_ptr =
-          LLVMBuildGEP2(builder, char_type, byte_ptr, indices, 1, "elem_ptr");
-      LLVMBuildStore(builder, byte, elem_ptr);
-    }
-
-    str = LLVMBuildInsertValue(builder, str, byte_ptr, 1, "insert_data");
-    str = LLVMBuildInsertValue(builder, str,
-                               LLVMConstInt(LLVMInt32Type(), width, 0), 0,
-                               "insert_size");
-    return str;
-  }
-
-  case T_UINT64: {
-    int width = 8;
-
-    LLVMTypeRef char_type = LLVMInt8Type();
-
-    LLVMValueRef value =
-        codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-
-    LLVMTypeRef array_type = LLVMArrayType(char_type, width);
-
-    LLVMValueRef byte_array_ptr;
-    if (on_stack && ctx->coro_ctx == NULL) {
-      byte_array_ptr = LLVMBuildAlloca(builder, array_type, "int_bytes_stack");
-    } else {
-      byte_array_ptr = LLVMBuildMalloc(builder, array_type, "int_bytes_heap");
-    }
-
-    LLVMValueRef byte_ptr = LLVMBuildBitCast(
-        builder, byte_array_ptr, LLVMPointerType(char_type, 0), "byte_ptr");
-
-    for (int i = 0; i < 8; i++) {
-      LLVMValueRef shift_amount = LLVMConstInt(LLVMInt32Type(), i * 8, 0);
-      LLVMValueRef shifted =
-          LLVMBuildLShr(builder, value, shift_amount, "shift");
-      LLVMValueRef byte = LLVMBuildTrunc(builder, shifted, char_type, "byte");
-
-      LLVMValueRef indices[] = {LLVMConstInt(LLVMInt32Type(), i, 0)};
-      LLVMValueRef elem_ptr =
-          LLVMBuildGEP2(builder, char_type, byte_ptr, indices, 1, "elem_ptr");
-      LLVMBuildStore(builder, byte, elem_ptr);
-    }
-
-    str = LLVMBuildInsertValue(builder, str, byte_ptr, 1, "insert_data");
-    str = LLVMBuildInsertValue(builder, str,
-                               LLVMConstInt(LLVMInt32Type(), width, 0), 0,
-                               "insert_size");
-    return str;
-  }
-
+  case T_INT:
+  case T_UINT64:
   case T_NUM: {
-
-    int width = 8;
-
     LLVMValueRef value =
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
-    value = LLVMBuildBitCast(builder, value, LLVMInt64Type(), "double_as_int");
+
+    if (t->kind == T_NUM) {
+      value = LLVMBuildBitCast(builder, value, LLVMInt64Type(), "double_as_int");
+    }
+
+    LLVMTypeRef value_llvm_type = type_to_llvm_type(t, ctx, module);
+    LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
+    unsigned width = LLVMStoreSizeOfType(target_data, value_llvm_type);
 
     LLVMTypeRef array_type = LLVMArrayType(char_type, width);
 
@@ -1594,20 +1533,13 @@ LLVMValueRef AsBytesHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       byte_array_ptr = LLVMBuildMalloc(builder, array_type, "int_bytes_heap");
     }
 
+    LLVMTypeRef value_ptr_type = LLVMPointerType(value_llvm_type, 0);
+    LLVMValueRef value_ptr = LLVMBuildBitCast(builder, byte_array_ptr,
+                                             value_ptr_type, "value_ptr");
+    LLVMBuildStore(builder, value, value_ptr);
+
     LLVMValueRef byte_ptr = LLVMBuildBitCast(
         builder, byte_array_ptr, LLVMPointerType(char_type, 0), "byte_ptr");
-
-    for (int i = 0; i < 8; i++) {
-      LLVMValueRef shift_amount = LLVMConstInt(LLVMInt64Type(), i * 8, 0);
-      LLVMValueRef shifted =
-          LLVMBuildLShr(builder, value, shift_amount, "shift");
-      LLVMValueRef byte = LLVMBuildTrunc(builder, shifted, char_type, "byte");
-
-      LLVMValueRef indices[] = {LLVMConstInt(LLVMInt32Type(), i, 0)};
-      LLVMValueRef elem_ptr =
-          LLVMBuildGEP2(builder, char_type, byte_ptr, indices, 1, "elem_ptr");
-      LLVMBuildStore(builder, byte, elem_ptr);
-    }
 
     str = LLVMBuildInsertValue(builder, str, byte_ptr, 1, "insert_data");
     str = LLVMBuildInsertValue(builder, str,

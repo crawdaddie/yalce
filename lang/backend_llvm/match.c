@@ -333,6 +333,7 @@ LLVMValueRef test_pattern(Ast *pattern,
   switch (pattern->tag) {
   case AST_BOOL:
   case AST_INT:
+  case AST_UINT64:
   case AST_DOUBLE:
   case AST_CHAR:
   case AST_STRING: {

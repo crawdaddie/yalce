@@ -108,6 +108,11 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     break;
   }
 
+  case AST_UINT64: {
+    res = LLVMConstInt(LLVMInt64Type(), ast->data.AST_UINT64.value, false);
+    break;
+  }
+
   case AST_DOUBLE: {
     res = LLVMConstReal(LLVMDoubleType(), ast->data.AST_DOUBLE.value);
     break;
