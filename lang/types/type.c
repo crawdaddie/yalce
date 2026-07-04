@@ -364,7 +364,8 @@ bool is_generic(Type *t) {
   }
 
   case T_FN: {
-    return is_generic(t->data.T_FN.from) || is_generic(t->data.T_FN.to);
+    return is_generic(t->data.T_FN.from) || is_generic(t->data.T_FN.to) ||
+           is_generic(t->closure_meta);
   }
 
   default:

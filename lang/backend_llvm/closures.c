@@ -540,7 +540,7 @@ LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
 
 LLVMValueRef compile_closure(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                              LLVMBuilderRef builder) {
-  Type *clos_type = ast->type;
+  Type *clos_type = specialize_type_for_codegen(ast->type, ctx);
   Type *recordt = clos_type->closure_meta;
 
   if (!recordt) {

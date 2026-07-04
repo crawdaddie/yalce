@@ -727,6 +727,7 @@ TypeList *free_vars_type(TypeList *acc, Type *t) {
   case T_FN:
     acc = free_vars_type(acc, t->data.T_FN.from);
     acc = free_vars_type(acc, t->data.T_FN.to);
+    acc = free_vars_type(acc, t->closure_meta);
     return acc;
   case T_CONS:
   case T_SUM:
@@ -1812,7 +1813,8 @@ static bool occurs_in(int var_id, Type *type) {
     return false;
   case T_FN:
     return occurs_in(var_id, type->data.T_FN.from) ||
-           occurs_in(var_id, type->data.T_FN.to);
+           occurs_in(var_id, type->data.T_FN.to) ||
+           occurs_in(var_id, type->closure_meta);
   case T_CONS:
   case T_SUM:
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
@@ -2017,13 +2019,15 @@ Type *apply_subst_to_type(Subst *subst, Type *t) {
   case T_FN: {
     Type *from = apply_subst_to_type(subst, t->data.T_FN.from);
     Type *to = apply_subst_to_type(subst, t->data.T_FN.to);
-    if (from == t->data.T_FN.from && to == t->data.T_FN.to) {
+    Type *closure_meta = apply_subst_to_type(subst, t->closure_meta);
+    if (from == t->data.T_FN.from && to == t->data.T_FN.to &&
+        closure_meta == t->closure_meta) {
       return t;
     }
     Type *result = t_alloc(sizeof(Type));
     *result = (Type){T_FN, {.T_FN = {from, to}}};
     result->data.T_FN.attributes = t->data.T_FN.attributes;
-    result->closure_meta = apply_subst_to_type(subst, t->closure_meta);
+    result->closure_meta = closure_meta;
     return result;
   }
   case T_CONS:

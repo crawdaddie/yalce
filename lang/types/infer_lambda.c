@@ -1,4 +1,5 @@
 #include "./infer_lambda.h"
+#include "builtins.h"
 #include "serde.h"
 #include "type_expressions.h"
 #include "type_ser.h"
@@ -40,7 +41,7 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   for (size_t i = 0; i < len && param; i++, param = param->next) {
     Type *pt = annotated_param_types[i];
     if (!pt) {
-      pt = next_tvar();
+      pt = param->ast && param->ast->tag == AST_VOID ? &t_void : next_tvar();
     }
     param_types[i] = pt;
     TypeEnv *param_boundary = child.env;

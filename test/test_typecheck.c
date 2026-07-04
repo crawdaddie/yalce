@@ -2317,6 +2317,18 @@ int test_closures() {
   });
 
   ({
+    Type inner = MAKE_FN_TYPE_2(&t_void, &t_int);
+    inner.closure_meta = &TTUPLE(3, &t_int, &t_int, &t_int);
+    T("let f = fn c ->\n"
+      "  let a = 1;\n"
+      "  let b = 2;\n"
+      "  (fn () -> a + b + c)\n"
+      ";;\n"
+      "f 2\n",
+      &inner);
+  });
+
+  ({
     Type f = MAKE_FN_TYPE_3(&t_void, &t_void, &t_num);
 
     Ast *b = T("fn () ->\n"
@@ -2506,6 +2518,21 @@ int test_parametrized_modules() {
       "let StrId = Id (fn x -> x);\n"
       "StrId.id \"hello\"\n",
       &t_string);
+  });
+
+  // A function-shaped witness parameter should constrain the witness return
+  // type, not make exported members expect the witness function itself.
+  ({
+    T("let Box = module _witness: (() -> V) ->\n"
+      "  type M = (value: V, );\n"
+      "  let new = fn v -> M v;;\n"
+      "  let set = fn v m: (M) -> M v;;\n"
+      "  let get = fn m: (M) -> m.value;;\n"
+      ";\n"
+      "let IntBox = Box (fn () -> 0);\n"
+      "let m = IntBox.new 1 |> IntBox.set 2;\n"
+      "IntBox.get m\n",
+      &t_int);
   });
 
   ({
