@@ -303,6 +303,22 @@ static TypeEnv *make_some_env(void) {
 }
 
 static TypeEnv *make_none_env(void) { return make_option_env(TYPE_NAME_NONE); }
+
+static TypeEnv *make_list_env(const char *name) {
+  Type *a = tvar("a");
+  Type *list = create_list_type_of_type(a);
+
+  TypeList *tl_a = vlist_of_typevar(a);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = name,
+                     .type = list,
+                     .scheme_vars = tl_a,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
 static TypeEnv *make_monomorphic_env(const char *name, Type *type) {
   TypeEnv *entry = t_alloc(sizeof(TypeEnv));
   *entry =
@@ -881,6 +897,8 @@ void initialize_builtin_types() {
   builtin_envs.some = make_some_env();
   add_builtin_env("Some", builtin_envs.some);
   add_builtin_env("None", make_none_env());
+  add_builtin_env(TYPE_NAME_LIST, make_list_env(TYPE_NAME_LIST));
+  add_builtin_env(TYPE_NAME_EMPTY_LIST, make_list_env(TYPE_NAME_EMPTY_LIST));
 
   // Register id: polymorphic identity function
   add_builtin_env("id", make_id_env());

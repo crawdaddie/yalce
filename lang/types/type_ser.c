@@ -104,7 +104,7 @@ void print_type_to_stream(Type *t, FILE *stream) {
     }
 
     if (is_list_type(t)) {
-      print_type_to_stream(t->data.T_CONS.args[0], stream);
+      print_type_to_stream(type_of_list(t), stream);
       fprintf(stream, "[]");
       break;
     }

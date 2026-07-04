@@ -89,6 +89,24 @@ static Type *resolve_sum_constructor(Type *sum_type, Ast *pattern, int *idx) {
     return NULL;
   }
 
+  if (pattern->tag == AST_MATCH_GUARD_CLAUSE) {
+    pattern = pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr;
+  }
+
+  if (pattern->tag == AST_LIST && pattern->data.AST_LIST.len == 0) {
+    for (int i = 0; i < sum_type->data.T_CONS.num_args; i++) {
+      Type *mem = sum_type->data.T_CONS.args[i];
+      if (mem && mem->kind == T_CONS &&
+          CHARS_EQ(mem->data.T_CONS.name, TYPE_NAME_EMPTY_LIST)) {
+        if (idx) {
+          *idx = i;
+        }
+        return mem;
+      }
+    }
+    return NULL;
+  }
+
   Ast *head = get_sum_constructor_head(pattern);
   if (!head) {
     return NULL;
@@ -258,7 +276,7 @@ LLVMValueRef test_list_cons_pattern(Ast *pattern, LLVMValueRef val,
     val_type = specialize_type_for_codegen(val_type, ctx);
   }
 
-  Type *list_el_type = val_type->data.T_CONS.args[0];
+  Type *list_el_type = type_of_list(val_type);
   LLVMTypeRef llvm_list_el_type = type_to_llvm_type(list_el_type, ctx, module);
 
   LLVMValueRef is_empty = ll_is_null(val, llvm_list_el_type, builder);
@@ -376,9 +394,8 @@ LLVMValueRef test_pattern(Ast *pattern,
   }
   case AST_LIST: {
     if (pattern->data.AST_LIST.len == 0) {
-      return ll_is_null(
-          val, type_to_llvm_type(val_type->data.T_CONS.args[0], ctx, module),
-          builder);
+      return ll_is_null(val, type_to_llvm_type(type_of_list(val_type), ctx, module),
+                        builder);
     }
     break;
   }
@@ -467,7 +484,8 @@ void test_sum_type_pattern(int pidx, int num_branches,
   // Check if this is a wildcard/catch-all pattern (identifier)
   // If it's the last branch with identifier pattern, just branch
   // unconditionally
-  if (p->tag == AST_IDENTIFIER && pidx == num_branches - 1) {
+  if (p->tag == AST_IDENTIFIER && ast_is_placeholder_id(p) &&
+      pidx == num_branches - 1) {
     // Last branch with identifier pattern - unconditional match (wildcard)
     LLVMBuildBr(builder, body_blocks[pidx]);
     return;
@@ -503,10 +521,19 @@ void test_sum_type_pattern(int pidx, int num_branches,
   LLVMBasicBlockRef tag_fail;
   LLVMBasicBlockRef tag_succ;
 
-  if (p->tag == AST_IDENTIFIER) {
-    tag_fail =
-        tag_blocks[next_tag_group_idx(val_type, pidx, num_branches, p,
-                                      sorted_patterns)];
+  if ((p->tag == AST_IDENTIFIER && !ast_is_placeholder_id(p)) ||
+      (p->tag == AST_LIST && p->data.AST_LIST.len == 0)) {
+    if (pidx == num_branches - 1) {
+      LLVMValueRef parent_func =
+          LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+      LLVMBasicBlockRef unreachable_block =
+          LLVMAppendBasicBlock(parent_func, "match.exhausted");
+      tag_fail = unreachable_block;
+    } else {
+      tag_fail =
+          tag_blocks[next_tag_group_idx(val_type, pidx, num_branches, p,
+                                        sorted_patterns)];
+    }
     tag_succ = body_blocks[pidx];
 
   } else if (p->tag == AST_APPLICATION) {
@@ -533,15 +560,21 @@ void test_sum_type_pattern(int pidx, int num_branches,
   // block
   if (pidx == num_branches - 1 && p->tag == AST_APPLICATION) {
     LLVMPositionBuilderAtEnd(builder, tag_fail);
-    LLVMBuildUnreachable(builder);
+      LLVMBuildUnreachable(builder);
+  }
+
+  if ((p->tag == AST_IDENTIFIER && !ast_is_placeholder_id(p)) ||
+      (p->tag == AST_LIST && p->data.AST_LIST.len == 0)) {
+    if (pidx == num_branches - 1) {
+      LLVMPositionBuilderAtEnd(builder, tag_fail);
+      LLVMBuildUnreachable(builder);
+    }
+    return;
   }
 
   LLVMBasicBlockRef test_fail;
   LLVMBasicBlockRef test_succ;
-  if (p->tag == AST_IDENTIFIER) {
-    test_fail = tag_blocks[pidx + 1];
-    test_succ = body_blocks[pidx];
-  } else if (p->tag == AST_APPLICATION) {
+  if (p->tag == AST_APPLICATION) {
     if (pidx == num_branches - 1) {
       // Last branch - if payload doesn't match, unreachable
       LLVMValueRef parent_func = LLVMGetBasicBlockParent(test_blocks[pidx]);
@@ -616,7 +649,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Ast *branches = ast->data.AST_MATCH.branches;
   Ast sorted_branches_storage[num_branches * 2];
 
-  int is_match_over_sum = is_sum_type(val_type);
+  int is_match_over_sum = is_sum_type(val_type) && !is_list_type(val_type);
 
   if (num_branches > 0 && is_match_over_sum) {
     stable_partition_match_over_sum_type(val_type, branches, num_branches,

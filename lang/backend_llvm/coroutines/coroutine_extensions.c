@@ -1437,7 +1437,7 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   Type *list_type = list_ast->type; // Type is List<Coroutine<T>>
 
   // Extract element type Coroutine<T> from List<Coroutine<T>>
-  Type *coro_type = list_type->data.T_CONS.args[0];
+  Type *coro_type = type_of_list(list_type);
 
   // Extract yield type T from Coroutine<T>
   Type *elem_type = coro_type->data.T_CONS.args[0];
@@ -1846,7 +1846,7 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *list_type = list_ast->type; // Type is List<T>
 
   // Extract element type T from List<T>
-  Type *elem_type = list_type->data.T_CONS.args[0];
+  Type *elem_type = type_of_list(list_type);
   LLVMTypeRef llvm_elem_type = type_to_llvm_type(elem_type, ctx, module);
   LLVMTypeRef llvm_list_type = type_to_llvm_type(list_type, ctx, module);
 

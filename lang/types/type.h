@@ -135,6 +135,7 @@ bool is_string_type(Type *type);
 #define TYPE_NAME_OPTION  "Option"
 #define TYPE_NAME_SOME    "Some"
 #define TYPE_NAME_NONE    "None"
+#define TYPE_NAME_EMPTY_LIST "[]"
 #define TYPE_NAME_QUEUE   "Queue"
 #define TYPE_NAME_MODULE  "Module"
 
@@ -220,8 +221,7 @@ bool is_string_type(Type *type);
 #define TCONS(name, num, ...)                                                  \
   ((Type){T_CONS, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}})
 
-#define TLIST(_t)                                                              \
-  ((Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type *[]){_t}, 1}}})
+#define TLIST(_t) (*create_list_type_of_type(_t))
 #define TARRAY(_t)                                                             \
   ((Type){T_CONS, {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){_t}, 1}}})
 
@@ -409,6 +409,7 @@ Type *create_option_type(Type *option_of);
 bool is_option_type(Type *t);
 
 Type *type_of_option(Type *option);
+Type *type_of_list(Type *list);
 
 Type *get_builtin_type(const char *id_chars);
 

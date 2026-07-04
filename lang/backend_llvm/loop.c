@@ -207,7 +207,7 @@ LLVMValueRef codegen_loop_iter_list(Ast *binding, Ast *iter_expr, Ast *body,
   LLVMValueRef list_val =
       codegen(iter_expr->data.AST_APPLICATION.args, ctx, module, builder);
 
-  Type *list_el_type = ltype->data.T_CONS.args[0];
+  Type *list_el_type = type_of_list(ltype);
   LLVMTypeRef llvm_list_el_type = type_to_llvm_type(list_el_type, ctx, module);
   LLVMTypeRef llvm_list_node_type = llnode_type(llvm_list_el_type);
 

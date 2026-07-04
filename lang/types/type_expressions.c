@@ -236,6 +236,10 @@ static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
         return container;
       }
 
+      if (is_list_type(container)) {
+        return create_list_type_of_type(contained);
+      }
+
       container = deep_copy_type(container);
       container->data.T_CONS.args = t_alloc(sizeof(Type *));
       container->data.T_CONS.args[0] = contained;

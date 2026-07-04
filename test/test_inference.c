@@ -572,7 +572,7 @@ static void test_resolve_predicates_from_succeeds_for_double_from_int() {
       predicate_append_applied(NULL, GenericFrom, &t_num, &params);
   Subst *subst = NULL;
 
-  int rc = resolve_predicates(&subst, preds, stderr);
+  int rc = resolve_predicates(&subst, preds);
   assert_true(rc == 0, "resolve_predicates accepts Double : From<Int>",
               "expected Double : From<Int> obligation to resolve");
 }
@@ -584,7 +584,7 @@ static void test_resolve_predicates_from_fails_for_int_from_double() {
       predicate_append_applied(NULL, GenericFrom, &t_int, &params);
   Subst *subst = NULL;
 
-  int rc = resolve_predicates(&subst, preds, stderr);
+  int rc = resolve_predicates(&subst, preds);
   assert_true(rc != 0, "resolve_predicates rejects Int : From<Double>",
               "expected Int : From<Double> obligation to fail");
 }
@@ -597,7 +597,7 @@ static void test_resolve_predicates_from_succeeds_for_coroutine_from_list() {
   Predicate *preds = predicate_append_applied(NULL, GenericFrom, cor, &params);
   Subst *subst = NULL;
 
-  int rc = resolve_predicates(&subst, preds, stderr);
+  int rc = resolve_predicates(&subst, preds);
   assert_true(
       rc == 0, "resolve_predicates accepts Coroutine<Int> : From<List<Int>>",
       "expected Coroutine<Int> : From<List<Int>> obligation to resolve");
@@ -611,7 +611,7 @@ static void test_resolve_predicates_from_succeeds_for_coroutine_from_array() {
   Predicate *preds = predicate_append_applied(NULL, GenericFrom, cor, &params);
   Subst *subst = NULL;
 
-  int rc = resolve_predicates(&subst, preds, stderr);
+  int rc = resolve_predicates(&subst, preds);
   assert_true(
       rc == 0, "resolve_predicates accepts Coroutine<Int> : From<Array<Int>>",
       "expected Coroutine<Int> : From<Array<Int>> obligation to resolve");
@@ -776,7 +776,7 @@ static void test_resolve_predicates_leaves_generic_trait_deferred() {
   Predicate *preds = predicate_append(NULL, GenericArithmetic, a);
   Subst *subst = NULL;
 
-  int rc = resolve_predicates(&subst, preds, stderr);
+  int rc = resolve_predicates(&subst, preds);
 
   assert_true(rc == 0, "generic trait obligation remains deferred",
               "expected generic trait obligation to remain deferred");

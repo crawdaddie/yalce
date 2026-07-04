@@ -1663,7 +1663,7 @@ int test_curried_funcs() {
     Type clos = MAKE_FN_TYPE_2(&t_int, &t_int);
     TASSERT("concrete func application type has closure\n",
             types_equal(f->data.T_FN.from, &clos));
-    status &= assert_bool(root->type != NULL && root->type->kind == T_CONS,
+    status &= assert_bool(root->type != NULL && is_list_type(root->type),
                           "list_map application returns a list-shaped result",
                           __FILE__, __LINE__);
   });
@@ -2892,7 +2892,7 @@ bool test_type_exprs() {
     status &= TASSERT("PatList payload is List of recursive Pat",
                       plist_payload && is_list_type(plist_payload) &&
                           type_is_named_recursive_ref(
-                              plist_payload->data.T_CONS.args[0], "Pat"));
+                              type_of_list(plist_payload), "Pat"));
   });
   return status;
 }

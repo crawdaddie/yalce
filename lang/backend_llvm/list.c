@@ -26,7 +26,7 @@ static Type *list_element_type_from_operand(Ast *operand_ast, JITLangCtx *ctx) {
   if (!list_type || !is_list_type(list_type)) {
     return NULL;
   }
-  return list_type->data.T_CONS.args[0];
+  return type_of_list(list_type);
 }
 
 LLVMTypeRef llnode_type(LLVMTypeRef llvm_el_type) {
@@ -129,7 +129,7 @@ LLVMValueRef ll_get_next(LLVMValueRef list, LLVMTypeRef list_el_type,
 LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
 
-  Type *list_el_type = *((Type *)ast->type)->data.T_CONS.args;
+  Type *list_el_type = type_of_list(ast->type);
   LLVMTypeRef llvm_el_type;
   if (list_el_type->kind == T_FN) {
     llvm_el_type = GENERIC_PTR;
@@ -246,7 +246,7 @@ LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   Type *list_type = ast->type;
   LLVMTypeRef llvm_list_node_type = llnode_type(
-      type_to_llvm_type(list_type->data.T_CONS.args[0], ctx, module));
+      type_to_llvm_type(type_of_list(list_type), ctx, module));
   if (!llvm_list_node_type) {
     // print_ast(ast);
     return NULL;

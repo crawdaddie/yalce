@@ -602,14 +602,15 @@ Type *infer_list_literal(Ast *ast, TICtx *ctx) {
     add_constraint(ctx, item_type, el_type);
   }
 
+  if (ast->tag == AST_LIST) {
+    return create_list_type_of_type(el_type);
+  }
+
   Type *type = t_alloc(sizeof(Type));
   Type **contained = t_alloc(sizeof(Type *));
   contained[0] = el_type;
 
-  *type = (Type){
-      T_CONS,
-      {.T_CONS = {ast->tag == AST_LIST ? TYPE_NAME_LIST : TYPE_NAME_ARRAY,
-                  contained, 1}}};
+  *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_ARRAY, contained, 1}}};
   return type;
 }
 
@@ -1023,23 +1024,6 @@ int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx) {
     return 0;
   }
   case AST_APPLICATION: {
-    if (pattern->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
-        strcmp(
-            pattern->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-            TYPE_NAME_OP_LIST_PREPEND) == 0 &&
-        pattern->data.AST_APPLICATION.len == 2) {
-      Type *item_type = next_tvar();
-      Type *rest_type = create_list_type_of_type(item_type);
-      add_constraint(ctx, value_type, rest_type);
-
-      if (bind_pattern(pattern->data.AST_APPLICATION.args, item_type, ctx) !=
-          0) {
-        return 1;
-      }
-      return bind_pattern(pattern->data.AST_APPLICATION.args + 1, rest_type,
-                          ctx);
-    }
-
     if (pattern->data.AST_APPLICATION.function->tag == AST_IDENTIFIER) {
       const char *ctor_name =
           pattern->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;

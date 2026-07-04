@@ -102,10 +102,26 @@ static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
     }
   }
 
-  if (is_generic(arg_type) || is_generic(param_type) ||
-      types_equal(arg_type, param_type)) {
+  bool structurally_compatible =
+      types_match(param_type, arg_type) || types_match(arg_type, param_type);
+
+  if (types_equal(arg_type, param_type) ||
+      ((is_generic(arg_type) || is_generic(param_type)) &&
+       structurally_compatible)) {
     add_constraint(ctx, arg_type, param_type);
     return;
+  }
+
+  if (is_coroutine_type(param_type)) {
+    Type *yielded = param_type->data.T_CONS.args[0];
+    if (is_list_type(arg_type)) {
+      Type *elem = type_of_list(arg_type);
+      if (elem) {
+        add_constraint(ctx, yielded, elem);
+      }
+    } else if (is_array_type(arg_type)) {
+      add_constraint(ctx, yielded, arg_type->data.T_CONS.args[0]);
+    }
   }
 
   TypeList *from_params = t_alloc(sizeof(TypeList));

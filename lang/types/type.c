@@ -478,7 +478,7 @@ Type *deep_copy_type(const Type *original) {
 }
 
 bool is_list_type(Type *type) {
-  return type->kind == T_CONS &&
+  return type && (type->kind == T_CONS || type->kind == T_SUM) &&
          (strcmp(type->data.T_CONS.name, TYPE_NAME_LIST) == 0);
 }
 
@@ -576,12 +576,22 @@ Type *create_array_type(Type *of) {
 }
 
 Type *create_list_type_of_type(Type *of) {
+  Type **variant_members = t_alloc(sizeof(Type *) * 2);
+  variant_members[0] = create_cons_type(TYPE_NAME_EMPTY_LIST, 0, NULL);
+
   Type *gen_list = empty_type();
-  gen_list->kind = T_CONS;
+  TypeEnv *decl = t_alloc(sizeof(TypeEnv));
+  gen_list->kind = T_SUM;
   gen_list->data.T_CONS.name = TYPE_NAME_LIST;
-  gen_list->data.T_CONS.args = t_alloc(sizeof(Type *));
-  gen_list->data.T_CONS.num_args = 1;
-  gen_list->data.T_CONS.args[0] = of;
+  gen_list->data.T_CONS.args = variant_members;
+  gen_list->data.T_CONS.num_args = 2;
+  *decl = (TypeEnv){.name = TYPE_NAME_LIST, .type = gen_list, .next = NULL};
+
+  Type **contained = t_alloc(sizeof(Type *) * 2);
+  contained[0] = of;
+  contained[1] = trec(TYPE_NAME_LIST, decl);
+  variant_members[1] = create_cons_type(TYPE_NAME_OP_LIST_PREPEND, 2, contained);
+
   typeclasses_extend(gen_list, &_GenericEq);
   return gen_list;
 }
@@ -872,6 +882,28 @@ Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env) {
 Type *type_of_option(Type *opt) {
   return opt->data.T_CONS.args[0]->data.T_CONS.args[0];
 }
+
+Type *type_of_list(Type *list) {
+  if (!is_list_type(list)) {
+    return NULL;
+  }
+
+  if (list->kind == T_CONS) {
+    return list->data.T_CONS.args[0];
+  }
+
+  if (list->data.T_CONS.num_args < 2) {
+    return NULL;
+  }
+
+  Type *cons = list->data.T_CONS.args[1];
+  if (!cons || cons->kind != T_CONS || cons->data.T_CONS.num_args < 1) {
+    return NULL;
+  }
+
+  return cons->data.T_CONS.args[0];
+}
+
 bool is_option_type(Type *type) {
   return type && type->kind == T_SUM &&
          (strcmp(type->data.T_CONS.name, TYPE_NAME_OPTION) == 0) &&

@@ -175,6 +175,10 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
   }
 
   case T_SUM: {
+    if (is_list_type(type)) {
+      return create_llvm_list_type(type_of_list(type), ctx, module);
+    }
+
     if (is_option_type(type)) {
       Type *opt_of = type_of_option(type);
       return codegen_option_struct_type(type_to_llvm_type(opt_of, ctx, module));
@@ -203,14 +207,6 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
     }
     if (is_tuple_type(type)) {
       return tuple_type(type, ctx, module);
-    }
-
-    if (is_list_type(type)) {
-      // if (type->data.T_CONS.args[0]->kind == T_CHAR) {
-      //   return LLVMPointerType(LLVMInt8Type(), 0);
-      // }
-
-      return create_llvm_list_type(type->data.T_CONS.args[0], ctx, module);
     }
 
     if (is_pointer_type(type)) {
