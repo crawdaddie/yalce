@@ -1,5 +1,6 @@
 #include "./coroutines.h"
 #include "../../types/builtins.h"
+#include "../../types/inference.h"
 #include "../../types/type.h"
 #include "../../types/type_ser.h"
 #include "../adt.h"
@@ -260,6 +261,7 @@ static LLVMValueRef coro_create_from_generic(JITSymbol *sym,
           compiled_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
     }
     fn_ast.type = compiled_type;
+    apply_substitution_to_lambda_body(&fn_ast, compilation_ctx.type_subst);
 
     Type *cursor = compiled_type;
     while (cursor && cursor->kind == T_FN) {

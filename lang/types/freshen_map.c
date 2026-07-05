@@ -151,6 +151,21 @@ Type *freshen_map_apply_to_type(FreshenMap *map, Type *t) {
     Type *result = t_alloc(sizeof(Type));
     *result = *t;
     result->data.T_MODULE.env = new_env;
+    if (t->meta) {
+      ModuleTypeMeta *src_meta = (ModuleTypeMeta *)t->meta;
+      ModuleTypeMeta *dst_meta = t_alloc(sizeof(ModuleTypeMeta));
+      *dst_meta = *src_meta;
+      if (src_meta->num_type_params > 0 && src_meta->type_params) {
+        Type **fresh_type_params =
+            t_alloc(sizeof(Type *) * (size_t)src_meta->num_type_params);
+        for (int i = 0; i < src_meta->num_type_params; i++) {
+          fresh_type_params[i] =
+              freshen_map_apply_to_type(map, src_meta->type_params[i]);
+        }
+        dst_meta->type_params = fresh_type_params;
+      }
+      result->meta = dst_meta;
+    }
     return result;
   }
   }

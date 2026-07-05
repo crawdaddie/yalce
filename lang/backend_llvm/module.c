@@ -13,6 +13,43 @@
 #include <stdlib.h>
 #include <string.h>
 
+static Type *module_result_type(Type *type) {
+  Type *cur = type;
+  while (cur && cur->kind == T_FN) {
+    cur = cur->data.T_FN.to;
+  }
+  return cur;
+}
+
+static ModuleTypeMeta *get_module_type_meta(Type *type) {
+  Type *mod = module_result_type(type);
+  if (!mod || mod->kind != T_MODULE) {
+    return NULL;
+  }
+  return (ModuleTypeMeta *)mod->meta;
+}
+
+static Type *resolve_module_type_arg(Ast *arg_ast, JITLangCtx *ctx) {
+  if (!arg_ast || arg_ast->tag != AST_IDENTIFIER) {
+    fprintf(stderr, "Error: expected type identifier as module type argument\n");
+    return NULL;
+  }
+
+  const char *name = arg_ast->data.AST_IDENTIFIER.value;
+  Type *builtin = lookup_builtin_type(name);
+  if (builtin) {
+    return builtin;
+  }
+
+  TypeEnv *ref = lookup_type_ref(ctx->env, name);
+  if (ref && ref->md.type == BT_TYPE_DECL) {
+    return ref->type;
+  }
+
+  fprintf(stderr, "Error: unknown module type argument '%s'\n", name);
+  return NULL;
+}
+
 void add_module_generic(Ast *stmt, JITLangCtx *ctx, ht *generic_storage) {
   Ast *fn_ast = stmt->data.AST_LET.expr;
   Ast *binding = stmt->data.AST_LET.binding;
@@ -292,35 +329,61 @@ LLVMValueRef specialize_and_bind_module(Ast *binding, Ast *app,
     return NULL;
   }
 
-  // Build the expected function type from the application: arg1_type ->
-  // arg2_type -> ... -> result_type. Unifying this with the module's generic
-  // type produces the substitution that resolves the module's type variables
-  // (e.g. a = Int).
   int nargs = app->data.AST_APPLICATION.len;
   if (nargs <= 0) {
     fprintf(stderr, "Error: module application has no arguments\n");
     return NULL;
   }
 
-  Type *exp_fn_type = deep_copy_type(app->type);
-  for (int i = nargs - 1; i >= 0; i--) {
-    Type *arg_t = deep_copy_type(app->data.AST_APPLICATION.args[i].type);
-    Type *fn = t_alloc(sizeof(Type));
-    *fn = (Type){T_FN, {.T_FN = {arg_t, exp_fn_type}}};
-    exp_fn_type = fn;
+  ModuleTypeMeta *module_meta = get_module_type_meta(gen_sym->symbol_type);
+  int num_type_params = module_meta ? module_meta->num_type_params : 0;
+  int num_value_params = module_meta ? module_meta->num_value_params : 0;
+
+  if (nargs < num_type_params) {
+    fprintf(stderr, "Error: not enough module type arguments\n");
+    return NULL;
   }
 
-  Type *exp_copy = deep_copy_type(exp_fn_type);
-  Type *sym_copy = deep_copy_type(gen_sym->symbol_type);
-  TICtx ti_ctx = {};
-  unify(exp_copy, sym_copy, &ti_ctx);
-  Subst *subst = solve_constraints(ti_ctx.constraints);
+  Subst *subst = NULL;
+  for (int i = 0; i < num_type_params; i++) {
+    Type *resolved_arg_type =
+        resolve_module_type_arg(app->data.AST_APPLICATION.args + i, ctx);
+    if (!resolved_arg_type) {
+      return NULL;
+    }
+    Type *param_type =
+        module_meta && module_meta->type_params ? module_meta->type_params[i]
+                                                : NULL;
+    if (!param_type || param_type->kind != T_VAR) {
+      fprintf(stderr, "Error: invalid module type parameter metadata\n");
+      return NULL;
+    }
+    subst =
+        subst_table_extend(subst, param_type->data.T_VAR.id, resolved_arg_type);
+  }
 
-  TypeEnv *spec_env =
-      create_env_from_subst(gen_sym->symbol_data.STYPE_GENERIC_MODULE.type_env,
-                           subst);
+  int runtime_nargs = nargs - num_type_params;
+  if (runtime_nargs > 0) {
+    Type *exp_fn_type = deep_copy_type(app->type);
+    for (int i = nargs - 1; i >= num_type_params; i--) {
+      Type *arg_t = deep_copy_type(app->data.AST_APPLICATION.args[i].type);
+      Type *fn = t_alloc(sizeof(Type));
+      *fn = (Type){T_FN, {.T_FN = {arg_t, exp_fn_type}}};
+      exp_fn_type = fn;
+    }
 
-  Type *module_type = fn_return_type(gen_sym->symbol_type);
+    Type *sym_copy = apply_subst_to_type(subst, deep_copy_type(gen_sym->symbol_type));
+    Type *exp_copy = deep_copy_type(exp_fn_type);
+    TICtx ti_ctx = {};
+    unify(exp_copy, sym_copy, &ti_ctx);
+    Subst *runtime_subst = solve_constraints(ti_ctx.constraints);
+    subst = compose_subst(runtime_subst, subst);
+  }
+
+  TypeEnv *spec_env = create_env_from_subst(
+      gen_sym->symbol_data.STYPE_GENERIC_MODULE.type_env, subst);
+
+  Type *module_type = module_result_type(gen_sym->symbol_type);
   module_type = apply_subst_to_type(subst, deep_copy_type(module_type));
 
   JITSymbol *module_symbol =
@@ -338,11 +401,21 @@ LLVMValueRef specialize_and_bind_module(Ast *binding, Ast *app,
   // substitution applied) so that type-driven builtins like `asbytes` resolve
   // the module's type variable (e.g. `a = Int`).
   Ast *module_ast = gen_sym->symbol_data.STYPE_GENERIC_MODULE.ast;
-  Type *param_type_cursor = gen_sym->symbol_type;
-  int arg_i = 0;
+  Type *param_type_cursor =
+      apply_subst_to_type(subst, deep_copy_type(gen_sym->symbol_type));
+  int arg_i = num_type_params;
+  int param_i = 0;
   AST_LIST_ITER(module_ast->data.AST_LAMBDA.params, ({
     if (arg_i >= app->data.AST_APPLICATION.len) break;
     if (param_type_cursor->kind != T_FN) break;
+    ModuleParamKind kind =
+        gen_sym->symbol_data.STYPE_GENERIC_MODULE.param_kinds
+            ? gen_sym->symbol_data.STYPE_GENERIC_MODULE.param_kinds[param_i]
+            : MODULE_PARAM_VALUE;
+    param_i++;
+    if (kind == MODULE_PARAM_TYPE) {
+      continue;
+    }
     Ast *param_ast = l->ast;
     Ast *arg_ast = app->data.AST_APPLICATION.args + arg_i;
 

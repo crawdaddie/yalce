@@ -403,6 +403,7 @@ TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
                                    Type *specific_type) {
   Subst *subst = create_subst_for_generic_fn(generic_type, specific_type);
   env = create_env_from_subst(env, subst);
+  env = codegen_bind_in_env(env, generic_type, specific_type);
   return env;
 }
 
@@ -467,6 +468,7 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
   Ast fn_ast = *sym->symbol_data.STYPE_GENERIC_FUNCTION.ast;
 
   fn_ast.type = specific_type;
+  apply_substitution_to_lambda_body(&fn_ast, compilation_ctx.type_subst);
 
   Type *generic_type = sym->symbol_type;
   compilation_ctx.stack_ptr = sym->symbol_data.STYPE_GENERIC_FUNCTION.stack_ptr;
@@ -477,6 +479,8 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
       create_subst_for_generic_fn(generic_type, specific_type);
 
   compilation_ctx.env = create_env_from_subst(env, compilation_ctx.type_subst);
+  compilation_ctx.env =
+      codegen_bind_in_env(compilation_ctx.env, generic_type, specific_type);
 
   // printf("compile specific fn\n");
   // print_type(specific_type);
@@ -495,7 +499,12 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
     specific_type = specific_type->data.T_FN.to;
   }
 
-  LLVMValueRef func = codegen_fn(&fn_ast, &compilation_ctx, module, builder);
+  LLVMValueRef func =
+      (fn_ast.tag == AST_LAMBDA || fn_ast.tag == AST_EXTERN_FN ||
+       (fn_ast.tag == AST_APPLICATION &&
+        fn_ast.data.AST_APPLICATION.is_curried_with_constants))
+          ? codegen_fn(&fn_ast, &compilation_ctx, module, builder)
+          : codegen(&fn_ast, &compilation_ctx, module, builder);
 
   return func;
 }

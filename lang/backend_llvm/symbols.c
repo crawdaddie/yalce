@@ -37,6 +37,76 @@ LLVMValueRef create_lazy_extern_fn_binding(Ast *binding, Ast *expr,
                                            LLVMModuleRef module,
                                            LLVMBuilderRef builder);
 
+static void specialize_ast_types_for_codegen(Ast *ast, JITLangCtx *ctx) {
+  if (!ast) {
+    return;
+  }
+
+  if (ast->type) {
+    ast->type = specialize_type_for_codegen(ast->type, ctx);
+  }
+
+  switch (ast->tag) {
+  case AST_BODY:
+    AST_LIST_ITER(ast->data.AST_BODY.stmts, ({
+                    specialize_ast_types_for_codegen(l->ast, ctx);
+                  }));
+    break;
+  case AST_LET:
+    specialize_ast_types_for_codegen(ast->data.AST_LET.binding, ctx);
+    specialize_ast_types_for_codegen(ast->data.AST_LET.expr, ctx);
+    specialize_ast_types_for_codegen(ast->data.AST_LET.in_expr, ctx);
+    break;
+  case AST_APPLICATION:
+    specialize_ast_types_for_codegen(ast->data.AST_APPLICATION.function, ctx);
+    for (size_t i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      specialize_ast_types_for_codegen(ast->data.AST_APPLICATION.args + i, ctx);
+    }
+    break;
+  case AST_LAMBDA:
+  case AST_MODULE:
+    AST_LIST_ITER(ast->data.AST_LAMBDA.params, ({
+                    specialize_ast_types_for_codegen(l->ast, ctx);
+                  }));
+    specialize_ast_types_for_codegen(ast->data.AST_LAMBDA.body, ctx);
+    break;
+  case AST_MATCH:
+    specialize_ast_types_for_codegen(ast->data.AST_MATCH.expr, ctx);
+    for (size_t i = 0; i < ast->data.AST_MATCH.len * 2; i++) {
+      specialize_ast_types_for_codegen(ast->data.AST_MATCH.branches + i, ctx);
+    }
+    break;
+  case AST_MATCH_GUARD_CLAUSE:
+    specialize_ast_types_for_codegen(ast->data.AST_MATCH_GUARD_CLAUSE.test_expr,
+                                     ctx);
+    specialize_ast_types_for_codegen(
+        ast->data.AST_MATCH_GUARD_CLAUSE.guard_expr, ctx);
+    break;
+  case AST_LIST:
+  case AST_TUPLE:
+    for (size_t i = 0; i < ast->data.AST_LIST.len; i++) {
+      specialize_ast_types_for_codegen(ast->data.AST_LIST.items + i, ctx);
+    }
+    break;
+  case AST_RECORD_ACCESS:
+    specialize_ast_types_for_codegen(ast->data.AST_RECORD_ACCESS.record, ctx);
+    specialize_ast_types_for_codegen(ast->data.AST_RECORD_ACCESS.member, ctx);
+    break;
+  case AST_YIELD:
+    specialize_ast_types_for_codegen(ast->data.AST_YIELD.expr, ctx);
+    break;
+  case AST_UNOP:
+    specialize_ast_types_for_codegen(ast->data.AST_UNOP.expr, ctx);
+    break;
+  case AST_RANGE_EXPRESSION:
+    specialize_ast_types_for_codegen(ast->data.AST_RANGE_EXPRESSION.from, ctx);
+    specialize_ast_types_for_codegen(ast->data.AST_RANGE_EXPRESSION.to, ctx);
+    break;
+  default:
+    break;
+  }
+}
+
 static JITSymbol *clone_symbol(JITSymbol *sym) {
   if (!sym) {
     return NULL;
@@ -45,6 +115,10 @@ static JITSymbol *clone_symbol(JITSymbol *sym) {
   JITSymbol *copy = malloc(sizeof(JITSymbol));
   memcpy(copy, sym, sizeof(JITSymbol));
   return copy;
+}
+
+static bool is_type_module_param(Ast *param, Ast *annotation) {
+  return param && param->tag == AST_IDENTIFIER && annotation == NULL;
 }
 
 typedef enum BindingKind {
@@ -63,7 +137,7 @@ typedef enum BindingKind {
 
 // Prefer the finalized env binding type when classifying a let-bound symbol.
 static Type *resolve_binding_type(Ast *binding, Ast *expr, JITLangCtx *ctx) {
-  Type *binding_type = expr->type;
+  Type *binding_type = specialize_type_for_codegen(expr->type, ctx);
   if (binding->tag != AST_IDENTIFIER) {
     return binding_type;
   }
@@ -71,10 +145,15 @@ static Type *resolve_binding_type(Ast *binding, Ast *expr, JITLangCtx *ctx) {
   TypeEnv *entry =
       lookup_type_ref(ctx->env, binding->data.AST_IDENTIFIER.value);
   if (entry && entry->type) {
-    return specialize_type_for_codegen(entry->type, ctx);
+    Type *env_type = specialize_type_for_codegen(entry->type, ctx);
+    if (binding_type && !is_generic(binding_type) &&
+        (!env_type || is_generic(env_type))) {
+      return binding_type;
+    }
+    return env_type;
   }
 
-  return specialize_type_for_codegen(binding_type, ctx);
+  return binding_type;
 }
 
 // Rebind one identifier name to another existing symbol in the current scope.
@@ -110,7 +189,7 @@ static BindingKind classify_binding(Ast *expr, Type *expr_type,
     return BIND_COROUTINE;
   }
 
-  if (expr->tag == AST_MODULE && binding_type->kind == T_FN) {
+  if (expr->tag == AST_MODULE && expr->data.AST_LAMBDA.len > 0) {
     return BIND_GENERIC_MODULE;
   }
 
@@ -180,6 +259,7 @@ static LLVMValueRef emit_function_binding(Ast *binding, Ast *expr,
     return func;
   }
 
+  specialize_ast_types_for_codegen(expr, ctx);
   return create_fn_binding(binding, binding_type,
                            codegen_fn(expr, ctx, module, builder), ctx, module,
                            builder);
@@ -405,6 +485,33 @@ LLVMValueRef create_generic_module_binding(Ast *binding, Ast *module_ast,
   sym->symbol_data.STYPE_GENERIC_MODULE.stack_frame = ctx->frame;
   sym->symbol_data.STYPE_GENERIC_MODULE.type_env = ctx->env;
   sym->symbol_data.STYPE_GENERIC_MODULE.specific_fns = NULL;
+  int len = module_ast->data.AST_LAMBDA.len;
+  ModuleParamKind *param_kinds =
+      len > 0 ? malloc(sizeof(ModuleParamKind) * len) : NULL;
+  int num_type_params = 0;
+  int num_value_params = 0;
+  AstList *param = module_ast->data.AST_LAMBDA.params;
+  AstList *annotation = module_ast->data.AST_LAMBDA.type_annotations;
+  for (int i = 0; i < len && param; i++, param = param->next) {
+    Ast *ann_ast = annotation ? annotation->ast : NULL;
+    ModuleParamKind kind = is_type_module_param(param->ast, ann_ast)
+                               ? MODULE_PARAM_TYPE
+                               : MODULE_PARAM_VALUE;
+    if (param_kinds) {
+      param_kinds[i] = kind;
+    }
+    if (kind == MODULE_PARAM_TYPE) {
+      num_type_params++;
+    } else {
+      num_value_params++;
+    }
+    if (annotation) {
+      annotation = annotation->next;
+    }
+  }
+  sym->symbol_data.STYPE_GENERIC_MODULE.param_kinds = param_kinds;
+  sym->symbol_data.STYPE_GENERIC_MODULE.num_type_params = num_type_params;
+  sym->symbol_data.STYPE_GENERIC_MODULE.num_value_params = num_value_params;
   install_identifier_symbol(binding, sym, ctx);
   return NULL;
 }

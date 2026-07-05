@@ -215,7 +215,6 @@ static bool alpha_type_equal_inner(Type *left, Type *right,
     return strcmp(left->data.T_RECURSIVE_REF.name,
                   right->data.T_RECURSIVE_REF.name) == 0;
 
-  case T_TYPECLASS_RESOLVE:
   case T_CONS:
   case T_SUM:
     if (strcmp(left->data.T_CONS.name, right->data.T_CONS.name) != 0 ||
@@ -2551,7 +2550,30 @@ int test_parametrized_modules() {
       "    array_size arr\n"
       "  ;;\n"
       ";\n",
-      &MAKE_FN_TYPE_3(&TVAR("`0"), &TVAR("`1"), &mod_type));
+      &mod_type);
+  });
+
+  ({
+    T("let Mod = module T ->\n"
+      "  let x = 1;\n"
+      "  let size = fn arr ->\n"
+      "    array_size arr\n"
+      "  ;;\n"
+      ";\n"
+      "let M = Mod Int;\n"
+      "M.x\n",
+      &t_int);
+  });
+
+  ({
+    T("let Map = module K V hash: (K -> Uint64) eq: (K -> K -> Bool) ->\n"
+      "  type M = (pair: (K, V), );\n"
+      "  let mk = fn k v -> M (k, v);;\n"
+      "  let fst = fn m: (M) -> let (k, _) = m.pair in k;;\n"
+      ";\n"
+      "let M = Map Uint64 Int (fn x: (Uint64) -> x) (==);\n"
+      "M.fst (M.mk 1u64 2)\n",
+      &t_uint64);
   });
 
   return status;
@@ -2840,13 +2862,6 @@ bool test_audio_funcs() {
     // print_ast(plus_app);
     // print_type(plus_app->type);
 
-    // status &= EXTRA_CONDITION(
-    //     types_equal(
-    //         plus_app->md,
-    //         &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num,
-    //         &t_num)),
-    //     "callback constraint passed down to lambda -> (arithmetic resolve "
-    //     "Double : Double)");
   });
   ({
     Type s = {T_CONS,

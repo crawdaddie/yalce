@@ -202,15 +202,38 @@ static LLVMValueRef call_generic_function(Ast *app, Type *expected_fn_type,
   // Uint64` with `a = Int`) is compiled with concrete types — otherwise
   // type-driven builtins like `asbytes` (which switch on T_INT) get an
   // unresolved tvar and return NULL.
-  Type *exp_copy = deep_copy_type(expected_fn_type);
   Type *sym_copy = deep_copy_type(sym->symbol_type);
   TICtx ti_ctx = {};
-  unify(exp_copy, sym_copy, &ti_ctx);
+  if (!expected_fn_type || is_generic(expected_fn_type)) {
+    Type *cursor = sym_copy;
+    for (int i = 0; cursor && cursor->kind == T_FN &&
+                    i < app->data.AST_APPLICATION.len;
+         i++, cursor = cursor->data.T_FN.to) {
+      Type *arg_t =
+          specialize_type_for_codegen(app->data.AST_APPLICATION.args[i].type,
+                                      ctx);
+      if (!arg_t) {
+        continue;
+      }
+      unify(cursor->data.T_FN.from, deep_copy_type(arg_t), &ti_ctx);
+    }
+
+    Type *result_t = specialize_type_for_codegen(app->type, ctx);
+    if (cursor && result_t && !is_generic(result_t)) {
+      unify(cursor, deep_copy_type(result_t), &ti_ctx);
+    }
+  } else {
+    Type *exp_copy = deep_copy_type(expected_fn_type);
+    unify(exp_copy, sym_copy, &ti_ctx);
+  }
   Subst *subst = solve_constraints(ti_ctx.constraints);
 
   JITLangCtx spec_ctx = *ctx;
   spec_ctx.type_subst = subst;
-  spec_ctx.env = create_env_from_subst(ctx->env, spec_ctx.type_subst);
+  TypeEnv *base_env = sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env
+                          ? sym->symbol_data.STYPE_GENERIC_FUNCTION.type_env
+                          : ctx->env;
+  spec_ctx.env = create_env_from_subst(base_env, spec_ctx.type_subst);
   Type *callable_type = specialize_type_for_codegen(sym_copy, &spec_ctx);
 
   LLVMValueRef callable =

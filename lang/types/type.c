@@ -145,7 +145,6 @@ bool types_match(Type *t1, Type *t2) {
                   t2->data.T_RECURSIVE_REF.name) == 0;
   }
 
-  case T_TYPECLASS_RESOLVE:
   case T_CONS:
   case T_SUM: {
 
@@ -244,7 +243,6 @@ bool types_equal(Type *t1, Type *t2) {
                   t2->data.T_RECURSIVE_REF.name) == 0;
   }
 
-  case T_TYPECLASS_RESOLVE:
   case T_CONS:
   case T_SUM: {
 
@@ -342,7 +340,6 @@ bool is_generic(Type *t) {
     return false;
   }
 
-  case T_TYPECLASS_RESOLVE:
   case T_CONS:
   case T_SUM: {
     if (t->data.T_CONS.num_args == 0) {
@@ -429,6 +426,23 @@ Type *create_tuple_type(int len, Type **contained_types) {
   return tuple;
 }
 
+static TypeEnv *copy_typeenv_chain_for_type(TypeEnv *src) {
+  TypeEnv *head = NULL;
+  TypeEnv *tail = NULL;
+  for (TypeEnv *cur = src; cur; cur = cur->next) {
+    TypeEnv *node = t_alloc(sizeof(TypeEnv));
+    *node = *cur;
+    node->next = NULL;
+    if (!head) {
+      head = node;
+    } else {
+      tail->next = node;
+    }
+    tail = node;
+  }
+  return head;
+}
+
 // Deep copy implementation (simplified)
 Type *deep_copy_type(const Type *original) {
   Type *copy = t_alloc(sizeof(Type));
@@ -448,7 +462,6 @@ Type *deep_copy_type(const Type *original) {
         strdup(original->data.T_RECURSIVE_REF.name);
     copy->data.T_RECURSIVE_REF.decl = original->data.T_RECURSIVE_REF.decl;
     break;
-  case T_TYPECLASS_RESOLVE:
   case T_CONS:
   case T_SUM:
     // Deep copy of name and args
@@ -472,6 +485,11 @@ Type *deep_copy_type(const Type *original) {
     copy->data.T_FN.from = deep_copy_type(original->data.T_FN.from);
     copy->data.T_FN.to = deep_copy_type(original->data.T_FN.to);
     copy->data.T_FN.attributes = original->data.T_FN.attributes;
+    break;
+  }
+  case T_MODULE: {
+    copy->data.T_MODULE.env =
+        copy_typeenv_chain_for_type(original->data.T_MODULE.env);
     break;
   }
   }
@@ -762,11 +780,6 @@ TypeClass *get_typeclass_instance(Type *t, const char *name, TypeList *params) {
 }
 
 bool type_implements(Type *t, TypeClass *constraint_tc) {
-
-  if (t->kind == T_TYPECLASS_RESOLVE &&
-      (strcmp(t->data.T_CONS.name, constraint_tc->name) == 0)) {
-    return true;
-  }
   if (!t->implements) {
     return false;
   }
@@ -872,14 +885,6 @@ bool is_module(Type *t) {
 
 bool is_closure(Type *type) { return type->closure_meta != NULL; }
 
-Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env) {
-
-  for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-    type->data.T_CONS.args[i] =
-        resolve_type_in_env(type->data.T_CONS.args[i], env);
-  }
-  return resolve_tc_rank(type);
-}
 Type *type_of_option(Type *opt) {
   return opt->data.T_CONS.args[0]->data.T_CONS.args[0];
 }
@@ -911,21 +916,6 @@ bool is_option_type(Type *type) {
          (type->data.T_CONS.num_args == 2) &&
          (strcmp(type->data.T_CONS.args[0]->data.T_CONS.name, "Some") == 0) &&
          (strcmp(type->data.T_CONS.args[1]->data.T_CONS.name, "None") == 0);
-}
-
-Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2) {
-  if (types_equal(t1, t2)) {
-    return t1;
-  }
-  Type **args = t_alloc(sizeof(Type *) * 2);
-  args[0] = t1;
-  args[1] = t2;
-  Type *resolution = t_alloc(sizeof(Type));
-  *resolution =
-      (Type){T_TYPECLASS_RESOLVE,
-             {.T_CONS = {.name = tc->name, .args = args, .num_args = 2}}};
-  resolution->implements = tc;
-  return resolution;
 }
 
 bool has_attr(FnAttributes attrs, FnAttributes flag) {

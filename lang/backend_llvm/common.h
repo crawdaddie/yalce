@@ -53,6 +53,11 @@ typedef struct SpecificFns {
   struct SpecificFns *next;
 } SpecificFns;
 
+typedef enum ModuleParamKind {
+  MODULE_PARAM_TYPE = 0,
+  MODULE_PARAM_VALUE = 1,
+} ModuleParamKind;
+
 typedef struct coroutine_generator_symbol_data_t {
   Ast *ast;
   int stack_ptr;
@@ -129,6 +134,9 @@ typedef struct {
       StackFrame *stack_frame;
       TypeEnv *type_env;
       SpecificFns *specific_fns;
+      ModuleParamKind *param_kinds;
+      int num_type_params;
+      int num_value_params;
     } STYPE_GENERIC_MODULE;
 
     struct {

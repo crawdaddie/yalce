@@ -7,6 +7,13 @@
 
 typedef struct Type Type;
 
+typedef struct ModuleTypeMeta {
+  int num_type_params;
+  int num_value_params;
+  Type **type_params;
+  const char **type_param_names;
+} ModuleTypeMeta;
+
 typedef struct TypeList {
   Type *type;
   struct TypeList *next;
@@ -190,10 +197,6 @@ bool is_string_type(Type *type);
                                    .rank = 1000.},                             \
   }
 
-#define MAKE_TC_RESOLVE_2(tc, a, b)                                            \
-  ((Type){T_TYPECLASS_RESOLVE,                                                 \
-          {.T_CONS = {.name = tc, .num_args = 2, .args = (Type *[]){a, b}}}})
-
 #define ord_var(n)                                                             \
   (Type) {                                                                     \
     T_VAR, {.T_VAR = {.name = n, .id = -1}},                                   \
@@ -233,13 +236,6 @@ bool is_string_type(Type *type);
 #define TSUM(num, name, ...) \
   ((Type){T_SUM, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}}) 
 
-// #define TYPECLASS_RESOLVE(tc_name, dep1, dep2, resolver)                       \
-//   ((Type){                                                                     \
-//       .kind = T_TYPECLASS_RESOLVE,                                             \
-//       .data = {.T_TYPECLASS_RESOLVE = {.comparison_tc = tc_name,               \
-//                                        .dependencies = (Type *[]){dep1, dep2}, \
-//                                        .resolve_dependencies = resolver}}})
-
 #define TVAR(n)                                                                \
   ((Type){                                                                     \
       T_VAR,                                                                   \
@@ -268,7 +264,6 @@ enum TypeKind {
   T_VAR,
   T_RECURSIVE_REF,
   T_EMPTY_LIST,
-  T_TYPECLASS_RESOLVE,
   T_MODULE,
   // T_SCHEME,
 };
@@ -459,9 +454,6 @@ bool is_void_func(Type *f);
 void typeclasses_extend(Type *t, TypeClass *tc);
 
 bool is_module(Type *t);
-
-Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2);
-
 
 // #define MSCHEME(n, vlist, t) ((Type){T_SCHEME, {.T_SCHEME = {.vars = vlist, .num_vars = n, .type = t}}})
 

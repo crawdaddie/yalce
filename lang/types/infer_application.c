@@ -4,6 +4,39 @@
 #include "types/builtins.h"
 #include <string.h>
 
+static ModuleTypeMeta *get_module_type_meta(Type *type) {
+  if (!type) {
+    return NULL;
+  }
+  Type *cur = type;
+  while (cur && cur->kind == T_FN) {
+    cur = cur->data.T_FN.to;
+  }
+  if (cur && cur->kind == T_MODULE) {
+    return (ModuleTypeMeta *)cur->meta;
+  }
+  return NULL;
+}
+
+static Type *infer_module_type_arg(Ast *arg_ast, TICtx *ctx) {
+  if (!arg_ast || arg_ast->tag != AST_IDENTIFIER) {
+    return type_error(arg_ast, "Expected a type identifier as module type argument");
+  }
+
+  const char *name = arg_ast->data.AST_IDENTIFIER.value;
+  Type *builtin = lookup_builtin_type(name);
+  if (builtin) {
+    return builtin;
+  }
+
+  TypeEnv *ref = lookup_type_ref(ctx->env, name);
+  if (ref && ref->md.type == BT_TYPE_DECL) {
+    return ref->type;
+  }
+
+  return type_error(arg_ast, "Unknown type argument '%s'", name);
+}
+
 Type *callable_view(Type *type) {
   if (type && is_coroutine_type(type)) {
     return type_fn(&t_void, create_option_type(type->data.T_CONS.args[0]));
@@ -168,16 +201,43 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
     return NULL;
   }
 
-  int expected_args_len = fn_type_args_len(fn_type);
-
+  size_t module_type_arg_count = 0;
   Type *current = fn_type;
+  ModuleTypeMeta *module_meta = get_module_type_meta(fn_type);
+  if (module_meta && module_meta->num_type_params > 0) {
+    module_type_arg_count = (size_t)module_meta->num_type_params;
+    if (nargs < module_type_arg_count) {
+      return type_error(ast, "Not enough module type arguments");
+    }
 
-  Type *arg_types[nargs];
-  for (size_t i = 0; i < nargs; i++) {
+    Subst *module_subst = NULL;
+    for (size_t i = 0; i < module_type_arg_count; i++) {
+      Type *resolved_arg_type =
+          infer_module_type_arg(ast->data.AST_APPLICATION.args + i, ctx);
+      if (!resolved_arg_type) {
+        return NULL;
+      }
+      Type *param_type = module_meta->type_params[i];
+      if (!param_type || param_type->kind != T_VAR) {
+        return type_error(ast->data.AST_APPLICATION.args + i,
+                          "Invalid module type parameter");
+      }
+      module_subst = subst_table_extend(module_subst,
+                                        param_type->data.T_VAR.id,
+                                        resolved_arg_type);
+    }
+    current = apply_subst_to_type(module_subst, deep_copy_type(fn_type));
+  }
+
+  int expected_args_len = fn_type_args_len(current);
+
+  size_t runtime_nargs = nargs - module_type_arg_count;
+  Type *arg_types[runtime_nargs > 0 ? runtime_nargs : 1];
+  for (size_t i = module_type_arg_count; i < nargs; i++) {
     current = callable_view(current);
 
     Type *arg_type = infer_expr(ast->data.AST_APPLICATION.args + i, ctx);
-    arg_types[i] = arg_type;
+    arg_types[i - module_type_arg_count] = arg_type;
     if (!arg_type)
       return NULL;
 
@@ -201,10 +261,14 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
       current = result;
     }
   }
-  if (expected_args_len > nargs) {
-    Type **_arg_types = t_alloc(sizeof(Type *) * nargs);
-    memcpy(_arg_types, arg_types, sizeof(Type *) * nargs);
-    Type *closure_meta = create_tuple_type(nargs, _arg_types);
+  if (current->kind == T_MODULE && runtime_nargs == 0 &&
+      module_type_arg_count > 0) {
+    return current;
+  }
+  if (expected_args_len > (int)runtime_nargs) {
+    Type **_arg_types = t_alloc(sizeof(Type *) * runtime_nargs);
+    memcpy(_arg_types, arg_types, sizeof(Type *) * runtime_nargs);
+    Type *closure_meta = create_tuple_type(runtime_nargs, _arg_types);
     current = deep_copy_type(current);
     current->closure_meta = closure_meta;
   }

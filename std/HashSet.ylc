@@ -76,10 +76,11 @@ let Set = module
   ;;
 ;
 
-let Map = module 
+let Map = module
+  _key_witness: (() -> K)
+  _value_witness: (() -> V)
   hash: (K -> Uint64)
   eq: (K -> K -> Bool)
-  _witness: (() -> V)
   ->
 
   type M = (data: Array of List of (K, V), size: Int);
@@ -170,11 +171,12 @@ let test = module () ->
 
 
   let IntMap = Map 
+    (fn () -> "")
+    (fn () -> 0)
     (fn xb: (String) ->
       hash_string xb
     )
     (==)
-    (fn () -> 0)
   ;
   let test_map_1 = (
     let m = IntMap.new () |> IntMap.set "h" 456 |> IntMap.set "hfadf" 783 in

@@ -96,9 +96,6 @@ void add_constraint(TICtx *result, Type *var, Type *type);
 
 Type *resolve_type_in_env(Type *r, TypeEnv *env);
 
-Type *resolve_tc_rank(Type *type);
-Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env);
-
 Type *find_in_subst(Subst *subst, int var_id);
 
 bool is_constant_expr(Ast *expr, TICtx *ctx);

@@ -235,11 +235,19 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
 // same machinery infer_inline_module uses, but the module members are
 // generalized over the module's param type variables so each application
 // instantiates them fresh.
+static bool is_type_module_param(Ast *param, Ast *annotation) {
+  return param && param->tag == AST_IDENTIFIER && annotation == NULL;
+}
+
 Type *infer_parametrized_module(Ast *ast, TICtx *ctx) {
   TypeEnv *saved_env = ctx->env;
   size_t len = ast->data.AST_LAMBDA.len;
-
   Type **param_types = t_alloc(sizeof(Type *) * len);
+  bool *param_is_type = t_alloc(sizeof(bool) * len);
+  size_t value_param_count = 0;
+  size_t type_param_count = 0;
+  Type **type_param_types = t_alloc(sizeof(Type *) * len);
+  const char **type_param_names = t_alloc(sizeof(const char *) * len);
 
   // Compute annotated param types. Use compute_module_param_types (not the
   // lambda variant) so the tvars it introduces by name (e.g. `a`) remain in
@@ -250,6 +258,28 @@ Type *infer_parametrized_module(Ast *ast, TICtx *ctx) {
   Type *annotated[len];
   memset(annotated, 0, sizeof(Type *) * len);
   TypeEnv *saved_tvar_env = get_type_var_env();
+  AstList *param = ast->data.AST_LAMBDA.params;
+  AstList *annotation = ast->data.AST_LAMBDA.type_annotations;
+  TypeEnv *module_tvar_env = saved_tvar_env;
+  for (size_t i = 0; i < len && param; i++, param = param->next) {
+    Ast *ann_ast = annotation ? annotation->ast : NULL;
+    bool is_type_param = is_type_module_param(param->ast, ann_ast);
+    param_is_type[i] = is_type_param;
+    if (is_type_param) {
+      const char *name = param->ast->data.AST_IDENTIFIER.value;
+      Type *tv = tvar(name);
+      module_tvar_env = env_extend(module_tvar_env, name, tv);
+      type_param_types[type_param_count] = tv;
+      type_param_names[type_param_count] = name;
+      type_param_count++;
+    } else {
+      value_param_count++;
+    }
+    if (annotation) {
+      annotation = annotation->next;
+    }
+  }
+  set_type_var_env(module_tvar_env);
   if (ast->data.AST_LAMBDA.type_annotations) {
     compute_module_param_types(ast->data.AST_LAMBDA.type_annotations, len,
                                annotated, ctx);
@@ -261,10 +291,14 @@ Type *infer_parametrized_module(Ast *ast, TICtx *ctx) {
   set_type_var_env(get_type_var_env());
 
   // Bind each param into the parent env (mirrors infer_lambda.c:40-53).
-  AstList *param = ast->data.AST_LAMBDA.params;
+  param = ast->data.AST_LAMBDA.params;
+  size_t value_param_i = 0;
   for (size_t i = 0; i < len && param; i++, param = param->next) {
+    if (param_is_type[i]) {
+      continue;
+    }
     Type *pt = annotated[i] ? annotated[i] : next_tvar();
-    param_types[i] = pt;
+    param_types[value_param_i++] = pt;
     if (bind_pattern(param->ast, pt, ctx) != 0) {
       set_type_var_env(saved_tvar_env);
       ctx->env = saved_env;
@@ -333,7 +367,7 @@ Type *infer_parametrized_module(Ast *ast, TICtx *ctx) {
   // tvars (e.g. via `hash x` linking x's type to hash's domain). Apply the
   // same substitution so the T_FN wrapper's param types stay consistent
   // with the member env's resolved types.
-  for (size_t i = 0; i < len; i++) {
+  for (size_t i = 0; i < value_param_count; i++) {
     param_types[i] = apply_subst_to_type(ctx->subst, param_types[i]);
   }
 
@@ -391,10 +425,24 @@ Type *infer_parametrized_module(Ast *ast, TICtx *ctx) {
   Type *mod = t_alloc(sizeof(Type));
   *mod = (Type){.kind = T_MODULE,
                 .data = {.T_MODULE = {.env = mod_env, .size = mlen}}};
+  ModuleTypeMeta *meta = t_alloc(sizeof(ModuleTypeMeta));
+  meta->num_type_params = (int)type_param_count;
+  meta->num_value_params = (int)value_param_count;
+  meta->type_params = NULL;
+  meta->type_param_names = NULL;
+  if (type_param_count > 0) {
+    meta->type_params = t_alloc(sizeof(Type *) * type_param_count);
+    meta->type_param_names = t_alloc(sizeof(const char *) * type_param_count);
+    for (size_t i = 0; i < type_param_count; i++) {
+      meta->type_params[i] = type_param_types[i];
+      meta->type_param_names[i] = type_param_names[i];
+    }
+  }
+  mod->meta = meta;
 
   // Wrap the module in T_FN(param -> ... -> module) so application
   // (infer_application.c:169) constrains arguments against param types.
-  for (size_t i = len; i > 0; i--) {
+  for (size_t i = value_param_count; i > 0; i--) {
     mod = type_fn(param_types[i - 1], mod);
   }
 
@@ -735,6 +783,8 @@ TypeList *free_vars_type(TypeList *acc, Type *t) {
       acc = free_vars_type(acc, t->data.T_CONS.args[i]);
     }
     return acc;
+  case T_MODULE:
+    return free_vars_env(acc, t->data.T_MODULE.env);
   default:
     return acc;
   }
@@ -2164,10 +2214,6 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) {
       copy->closure_meta = deep_copy_type(saved_closure_meta);
     }
     return copy;
-  }
-
-  case T_TYPECLASS_RESOLVE: {
-    return resolve_tc_rank_in_env(r, env);
   }
 
   case T_CONS:

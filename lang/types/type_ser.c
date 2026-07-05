@@ -81,20 +81,6 @@ void print_type_to_stream(Type *t, FILE *stream) {
     break;
   }
 
-  case T_TYPECLASS_RESOLVE: {
-    fprintf(stream, "tc resolve %s [ ", t->data.T_CONS.name);
-
-    int len = t->data.T_CONS.num_args;
-    for (int i = 0; i < len - 1; i++) {
-      print_type_to_stream(t->data.T_CONS.args[i], stream);
-    }
-
-    fprintf(stream, " : ");
-    print_type_to_stream(t->data.T_CONS.args[len - 1], stream);
-
-    fprintf(stream, "]");
-    break;
-  }
   case T_CONS:
   case T_SUM: {
 

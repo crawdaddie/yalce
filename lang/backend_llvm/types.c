@@ -99,13 +99,6 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
     return NULL;
   }
 
-  // if (type->kind == T_TYPECLASS_RESOLVE) {
-  //   print_ast(__current_ast);
-  //   print_type(type);
-  //   print_type_env(ctx->env);
-  //   // return NULL;
-  // }
-
   // LLVMTypeRef variant = variant_member_to_llvm_type(type, env, module);
   // if (variant) {
   //   return variant;
@@ -136,7 +129,8 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
   case T_VAR: {
     if (ctx->type_subst) {
       Type *resolved = find_in_subst(ctx->type_subst, type->data.T_VAR.id);
-      if (resolved && !(resolved->kind == T_VAR && types_equal(resolved, type))) {
+      if (resolved &&
+          !(resolved->kind == T_VAR && types_equal(resolved, type))) {
         return type_to_llvm_type(resolved, ctx, module);
       }
     }
@@ -167,11 +161,6 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
     // Ordinary HM type variables are specialization-time placeholders, not
     // lexical env-bound names. If one survives to codegen, treat it as opaque.
     return GENERIC_PTR;
-  }
-
-  case T_TYPECLASS_RESOLVE: {
-    type = resolve_tc_rank_in_env(type, ctx->env);
-    return type_to_llvm_type(type, ctx, module);
   }
 
   case T_SUM: {
