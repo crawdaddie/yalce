@@ -478,6 +478,57 @@ static bool env_binding_has_trait_predicate(TypeEnv *entry,
   return false;
 }
 
+static bool same_type_reference(Type *left, Type *right) {
+  if (left == right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  if (left->kind == T_VAR && right->kind == T_VAR) {
+    return left->data.T_VAR.id == right->data.T_VAR.id;
+  }
+  return test_types_equal(left, right);
+}
+
+static bool env_binding_has_trait_predicate_on_type(TypeEnv *entry,
+                                                    const char *trait_name,
+                                                    Type *type) {
+  if (!entry || !type) {
+    return false;
+  }
+  for (Predicate *p = entry->predicates; p; p = p->next) {
+    if (p->kind == PRED_TRAIT && p->trait &&
+        strcmp(p->trait->name, trait_name) == 0 &&
+        same_type_reference(p->data.TRAIT.type, type)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool env_binding_has_field_predicate(TypeEnv *entry,
+                                            const char *field_name,
+                                            Type **record_type,
+                                            Type **field_type) {
+  if (!entry) {
+    return false;
+  }
+  for (Predicate *p = entry->predicates; p; p = p->next) {
+    if (p->kind == PRED_HAS_FIELD && p->data.HAS_FIELD.field_name &&
+        strcmp(p->data.HAS_FIELD.field_name, field_name) == 0) {
+      if (record_type) {
+        *record_type = p->data.HAS_FIELD.record;
+      }
+      if (field_type) {
+        *field_type = p->data.HAS_FIELD.field_type;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool assert_env_binding_predicates(const char *name,
                                           const char *trait_name,
                                           int min_scheme_vars, const char *msg,
@@ -681,9 +732,9 @@ int test_list_processing() {
     Type int_list = TLIST(&t_int);
     Ast *ast = T("if true then [] else [1]", &int_list);
     Ast *match = AST_LIST_NTH(ast->data.AST_BODY.stmts, 0);
-    Ast *empty_branch =
-        match && match->tag == AST_MATCH ? match->data.AST_MATCH.branches + 1
-                                         : NULL;
+    Ast *empty_branch = match && match->tag == AST_MATCH
+                            ? match->data.AST_MATCH.branches + 1
+                            : NULL;
     status &= TASSERT("if branch result is an empty list literal",
                       empty_branch && empty_branch->tag == AST_LIST &&
                           empty_branch->data.AST_LIST.len == 0);
@@ -698,9 +749,9 @@ int test_list_processing() {
                  "id_int_list []",
                  &int_list);
     Ast *app = AST_LIST_NTH(ast->data.AST_BODY.stmts, 1);
-    Ast *empty_arg =
-        app && app->tag == AST_APPLICATION ? app->data.AST_APPLICATION.args
-                                           : NULL;
+    Ast *empty_arg = app && app->tag == AST_APPLICATION
+                         ? app->data.AST_APPLICATION.args
+                         : NULL;
     status &= TASSERT("function argument is an empty list literal",
                       empty_arg && empty_arg->tag == AST_LIST &&
                           empty_arg->data.AST_LIST.len == 0);
@@ -727,9 +778,9 @@ int test_list_processing() {
     Ast *match = body && body->tag == AST_BODY
                      ? AST_LIST_NTH(body->data.AST_BODY.stmts, 0)
                      : body;
-    Ast *empty_return =
-        match && match->tag == AST_MATCH ? match->data.AST_MATCH.branches + 1
-                                         : NULL;
+    Ast *empty_return = match && match->tag == AST_MATCH
+                            ? match->data.AST_MATCH.branches + 1
+                            : NULL;
     status &= TASSERT("match return is an empty list literal",
                       empty_return && empty_return->tag == AST_LIST &&
                           empty_return->data.AST_LIST.len == 0);
@@ -2685,9 +2736,9 @@ int test_parametrized_modules() {
        "let m = M String Int;\n");
 
     TypeEnv *m = lookup_test_env_binding("m");
-    TypeEnv *menv =
-        m && m->type && m->type->kind == T_MODULE ? m->type->data.T_MODULE.env
-                                                   : NULL;
+    TypeEnv *menv = m && m->type && m->type->kind == T_MODULE
+                        ? m->type->data.T_MODULE.env
+                        : NULL;
     Type head_type = MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int);
 
     status &= TASSERT("list aliases do not export []",
@@ -2695,9 +2746,9 @@ int test_parametrized_modules() {
     status &= TASSERT("list aliases do not export ::",
                       menv && lookup_type_ref(menv, "::") == NULL);
     TypeEnv *head = menv ? lookup_type_ref(menv, "head_int") : NULL;
-    status &= TASSERT("list aliases do not shadow builtin list constructors",
-                      head && head->type &&
-                          test_types_equal(head->type, &head_type));
+    status &=
+        TASSERT("list aliases do not shadow builtin list constructors",
+                head && head->type && test_types_equal(head->type, &head_type));
   });
 
   ({
@@ -3263,6 +3314,88 @@ bool test_record_types() {
   return status;
 }
 
+bool test_record_field_predicates() {
+  bool status = true;
+  printf("## TEST RECORD FIELD "
+         "PREDICATES\n---------------------------------------------\n");
+
+  ({
+    Ast *ast = _T("let f = fn x -> x.field + 2;;\n");
+    (void)ast;
+    TypeEnv *f = lookup_test_env_binding("f");
+    Type *field_record = NULL;
+    Type *field_type = NULL;
+    bool has_field =
+        env_binding_has_field_predicate(f, "field", &field_record, &field_type);
+    status &= TASSERT("f argument x has HasField(field) predicate",
+                      has_field && f && f->type && f->type->kind == T_FN &&
+                          same_type_reference(field_record,
+                                              f->type->data.T_FN.from));
+    status &= TASSERT(
+        "f field type has Arithmetic predicate",
+        has_field &&
+            env_binding_has_trait_predicate_on_type(
+                f, TYPE_NAME_TYPECLASS_ARITHMETIC, field_type));
+  });
+
+  ({
+    Ast *ast = _T("let f = fn x -> x.y.z + 2;;\n");
+    (void)ast;
+    TypeEnv *f = lookup_test_env_binding("f");
+    Type *y_record = NULL;
+    Type *y_type = NULL;
+    Type *z_record = NULL;
+    Type *z_type = NULL;
+    bool has_y = env_binding_has_field_predicate(f, "y", &y_record, &y_type);
+    bool has_z = env_binding_has_field_predicate(f, "z", &z_record, &z_type);
+    status &= TASSERT("f argument x has HasField(y) predicate",
+                      has_y && f && f->type && f->type->kind == T_FN &&
+                          same_type_reference(y_record,
+                                              f->type->data.T_FN.from));
+    status &= TASSERT("f y field has HasField(z) predicate",
+                      has_z && same_type_reference(z_record, y_type));
+    status &= TASSERT(
+        "f nested z field type has Arithmetic predicate",
+        has_z &&
+            env_binding_has_trait_predicate_on_type(
+                f, TYPE_NAME_TYPECLASS_ARITHMETIC, z_type));
+  });
+
+  T("let f = fn x -> x.field + 2;;\n"
+    "f (field: 3,)",
+    &t_int);
+
+  T("let f = fn x -> x.y.z + 2;;\n"
+    "f (y: (z: 3,),)",
+    &t_int);
+
+  T("let f = fn x -> x.field + 2.;;\n"
+    "f (field: 3.,)",
+    &t_num);
+
+  ({
+    Type expected = TTUPLE(2, &t_int, &t_bool);
+    T("let get_field = fn x -> x.field;;\n"
+      "(get_field (field: 1,), get_field (field: true,))",
+      &expected);
+  });
+
+  T("let get_field = fn x -> x.field;;\n"
+    "get_field (other: true, field: 1)",
+    &t_int);
+
+  TFAIL("let get_field = fn x -> x.field;;\n"
+        "get_field (other: 1,)");
+
+  TFAIL("let get_field = fn x -> x.field;;\n"
+        "get_field 1");
+
+  TFAIL("let f = fn x -> x.field + 2;;\n"
+        "f (field: \"no\",)");
+
+  return status;
+}
+
 bool test_math_funcs() {
   bool status = true;
 
@@ -3475,44 +3608,6 @@ bool test_rec_coroutines() {
   return status;
 }
 
-bool test_variadic_templates();
-
-int main() {
-  // initialize_builtin_schemes();
-  reset_type_var_counter();
-  initialize_builtin_types();
-
-  bool status = true;
-  status &= test_basic_ops();
-  status &= test_opts();
-  status &= test_match_exprs();
-  status &= test_first_class_funcs();
-
-  status &= test_modules();
-  status &= test_parametrized_modules();
-  status &= test_networking_funcs();
-  status &= test_type_exprs();
-  status &= test_type_declarations();
-  status &= test_record_types();
-  status &= test_refs();
-  status &= test_list_processing();
-  status &= test_math_funcs();
-  status &= test_funcs();
-  status &= test_curried_funcs();
-  status &= test_sum_types();
-  status &= test_array_processing();
-  // status &= test_audio_funcs();
-  // status &= test_parser_combinators();
-  status &= test_monads();
-  status &= test_coroutines();
-  status &= test_rec_coroutines();
-  //
-  status &= test_closures();
-  status &= test_variadic_templates();
-  print_all_failures();
-  return status == true ? 0 : 1;
-}
-
 bool test_variadic_templates() {
   printf("\n=== Variadic Templates ===\n");
   bool status = true;
@@ -3570,6 +3665,43 @@ bool test_variadic_templates() {
   });
 
   return status;
+}
+
+int main() {
+  // initialize_builtin_schemes();
+  reset_type_var_counter();
+  initialize_builtin_types();
+
+  bool status = true;
+  status &= test_basic_ops();
+  status &= test_opts();
+  status &= test_match_exprs();
+  status &= test_first_class_funcs();
+
+  status &= test_modules();
+  status &= test_parametrized_modules();
+  status &= test_networking_funcs();
+  status &= test_type_exprs();
+  status &= test_type_declarations();
+  status &= test_record_types();
+  status &= test_refs();
+  status &= test_list_processing();
+  status &= test_math_funcs();
+  status &= test_funcs();
+  status &= test_curried_funcs();
+  status &= test_sum_types();
+  status &= test_array_processing();
+  // status &= test_audio_funcs();
+  // status &= test_parser_combinators();
+  status &= test_monads();
+  status &= test_coroutines();
+  status &= test_rec_coroutines();
+  //
+  status &= test_closures();
+  status &= test_variadic_templates();
+  status &= test_record_field_predicates();
+  print_all_failures();
+  return status == true ? 0 : 1;
 }
 
 // (Array of `5 [Arithmetic, ] -> tc resolve Arithmetic [ `5 [Arithmetic, ] :

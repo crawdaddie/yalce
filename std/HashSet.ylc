@@ -42,7 +42,7 @@ let Set = module
 
   let get_key_idx = fn x d -> hash x |> u64_bit_and ((array_size d) - 1) |> u64_to_int;;
 
-  let add = fn x set: (S) ->                            
+  let add = fn x set ->                            
   # x : a, set : Array of (List of a)
     let key_idx = get_key_idx x set.data;
     let node_list = set.data[key_idx];
@@ -56,7 +56,7 @@ let Set = module
   ;;
 
 
-  let contains = fn x set: (S) ->                            
+  let contains = fn x set ->                            
   # x : a, set : Array of (List of a)
     let key_idx = get_key_idx x set.data;
     let node_list = set.data[key_idx];
@@ -113,7 +113,7 @@ let Map = module
     )
   ;;
 
-  let set = fn x v m: (M) ->
+  let set = fn x v m ->
   # x : K, v : V,  m : Array of (List of (K, V))
     let key_idx = get_key_idx x m.data;
     let bucket = m.data[key_idx];
@@ -132,7 +132,7 @@ let Map = module
     | (y,v)::rest -> if (eq x y) then (Some v) else (list_find x rest)
   ;;
 
-  let get = fn x m: (M) ->
+  let get = fn x m ->
     let key_idx = get_key_idx x m.data;
     let node_list = m.data[key_idx];
     node_list |> list_find x

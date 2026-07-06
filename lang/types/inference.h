@@ -106,6 +106,9 @@ Predicate *predicate_append_applied(Predicate *list, TypeClass *trait,
                                     Type *type, TypeList *params);
 Predicate *predicate_append_comparable(Predicate *list, TypeClass *trait,
                                        Type *witness, Type **args);
+Predicate *predicate_append_has_field(Predicate *list, Type *record,
+                                      const char *field_name,
+                                      Type *field_type);
 Predicate *predicate_apply_subst(Subst *subst, Predicate *preds);
 Predicate *predicate_duplicate(Predicate *preds);
 int resolve_predicates(Subst **subst, Predicate *preds);

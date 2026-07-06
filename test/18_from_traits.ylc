@@ -1,0 +1,9 @@
+type Pair = (Int, Int);
+
+let Pair : From = module () ->
+  let from_int = fn x: (Int) -> Pair x x;
+;
+
+Pair 2 3;
+
+

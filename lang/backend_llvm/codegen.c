@@ -224,11 +224,18 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_RECORD_ACCESS: {
     Ast *record = ast->data.AST_RECORD_ACCESS.record;
+    const char *member_name =
+        ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
 
-    Type *record_type = record->type;
-    JITSymbol *constructor_sym = lookup_id_ast(record, ctx);
-
-    if (constructor_sym) {
+    Type *record_type = specialize_type_for_codegen(record->type, ctx);
+    Type *member_type = specialize_type_for_codegen(ast->type, ctx);
+    JITSymbol *record_sym = lookup_id_ast(record, ctx);
+    if (record_sym && record_sym->symbol_type) {
+      Type *symbol_type =
+          specialize_type_for_codegen(record_sym->symbol_type, ctx);
+      if (symbol_type && (!record_type || is_generic(record_type))) {
+        record_type = symbol_type;
+      }
     }
 
     // printf("RECORD ACCESS cons: %p\n", record_type->constructor);
@@ -239,7 +246,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
       LLVMValueRef val = codegen_module_access(
           record, record_type, ast->data.AST_RECORD_ACCESS.index,
-          ast->data.AST_RECORD_ACCESS.member, ast->type, ctx, module, builder);
+          ast->data.AST_RECORD_ACCESS.member, member_type, ctx, module,
+          builder);
       res = val;
       break;
     }
@@ -249,10 +257,12 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // print_ast(record);
     // printf("rec %p\n", rec);
 
-    const char *member_name =
-        ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
-
-    int member_idx = ast->data.AST_RECORD_ACCESS.index;
+    bool has_named_fields = record_type && record_type->kind == T_CONS &&
+                            record_type->data.T_CONS.names;
+    int member_idx = get_struct_member_idx(member_name, record_type);
+    if (member_idx < 0 && !has_named_fields && !is_generic(record_type)) {
+      member_idx = ast->data.AST_RECORD_ACCESS.index;
+    }
 
     if (member_idx < 0) {
       fprintf(stderr, "Error: no member %s in obj\n", member_name);

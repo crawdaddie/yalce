@@ -76,6 +76,14 @@ static Predicate *freshen_map_apply_to_predicates(FreshenMap *map,
       fresh_args[n] = NULL;
       result = predicate_append_comparable(result, p->trait, fresh_witness,
                                            fresh_args);
+    } else if (p->kind == PRED_HAS_FIELD) {
+      Type *fresh_record =
+          freshen_map_apply_to_type(map, p->data.HAS_FIELD.record);
+      Type *fresh_field =
+          freshen_map_apply_to_type(map, p->data.HAS_FIELD.field_type);
+      result = predicate_append_has_field(result, fresh_record,
+                                          p->data.HAS_FIELD.field_name,
+                                          fresh_field);
     }
   }
   return result;

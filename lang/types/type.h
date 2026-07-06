@@ -48,6 +48,7 @@ typedef struct Constraint {
 typedef enum {
   PRED_TRAIT,      // type must implement a typeclass
   PRED_COMPARABLE, // operands compare at a common witness type under a tc
+  PRED_HAS_FIELD,  // record type must expose a named field type
 } PredicateKind;
 
 typedef struct Predicate {
@@ -62,6 +63,11 @@ typedef struct Predicate {
       Type *witness;
       Type **args;
     } COMPARABLE;
+    struct {
+      Type *record;
+      const char *field_name;
+      Type *field_type;
+    } HAS_FIELD;
   } data;
   struct Predicate *next;
 } Predicate;

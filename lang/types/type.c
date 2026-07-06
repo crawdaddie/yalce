@@ -616,9 +616,13 @@ Type *create_list_type_of_type(Type *of) {
 }
 
 int get_struct_member_idx(const char *member_name, Type *type) {
+  if (!member_name || !type || type->kind != T_CONS ||
+      !type->data.T_CONS.names) {
+    return -1;
+  }
   for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-    char *n = type->data.T_CONS.names[i];
-    if (strcmp(member_name, n) == 0) {
+    const char *n = type->data.T_CONS.names[i];
+    if (n && strcmp(member_name, n) == 0) {
       return i;
     }
   }
@@ -878,6 +882,9 @@ void typeclasses_extend(Type *t, TypeClass *tc) {
 }
 
 bool is_module(Type *t) {
+  if (!t) {
+    return false;
+  }
   return (t->kind == T_CONS &&
           (strcmp(t->data.T_CONS.name, TYPE_NAME_MODULE) == 0)) ||
          t->kind == T_MODULE;

@@ -31,6 +31,10 @@ static Predicate *predicate_filter_generic(Predicate *preds) {
       args[n] = NULL;
       result = predicate_append_comparable(result, p->trait,
                                            p->data.COMPARABLE.witness, args);
+    } else if (p->kind == PRED_HAS_FIELD) {
+      result = predicate_append_has_field(result, p->data.HAS_FIELD.record,
+                                          p->data.HAS_FIELD.field_name,
+                                          p->data.HAS_FIELD.field_type);
     }
   }
   return result;
