@@ -7,8 +7,8 @@ let char_to_uint64 = extern fn Char -> Uint64;
 let FNV_OFFSET = 14695981039346656037u64;
 let FNV_PRIME = 1099511628211u64;
 
-let hash_string = fn str: (String) ->
-  let aux = fn h str: (String) ->
+let hash_string = fn str ->
+  let aux = fn h str ->
     match (array_size str) with
     | 0 -> h
     | _ -> (
@@ -26,14 +26,12 @@ let Set = module
 
   type S = (data: Array of List of a, size: Int);
 
-  let empty = @EmptyInitializer extern fn () -> List of a;
-
   let new = fn () ->
-    S (empty () |> array_fill_const 256) 0
+    S (array_fill_const 256 []) 0
   ;;
 
   let new_sized = fn s ->
-    S (empty () |> array_fill_const s) 0
+    S (array_fill_const s []) 0
   ;;
 
   let list_contains = fn x l ->
@@ -85,14 +83,12 @@ let Map = module
 
   type M = (data: Array of List of (K, V), size: Int);
 
-  let empty = @EmptyInitializer extern fn () -> List of (K, V);
-
   let new = fn () ->
-    M (empty () |> array_fill_const 256) 0
+    M ([] |> array_fill_const 256) 0
   ;;
 
   let new_sized = fn s ->
-    M (empty () |> array_fill_const s) 0
+    M ([] |> array_fill_const s) 0
   ;;
 
   let list_contains = fn x l ->

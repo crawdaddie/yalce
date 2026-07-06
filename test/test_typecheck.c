@@ -371,6 +371,24 @@ static TICtx test_ctx;
     res;                                                                       \
   })
 
+static bool assert_inferred_type(const char *msg, Type *actual, Type *expected,
+                                 const char *file, int line) {
+  bool ok = actual && expected && test_types_equal(actual, expected);
+  if (ok) {
+    fprintf(stderr, "✅ %s\n", msg);
+  } else {
+    char *actual_s = type_to_string_dynamic(actual);
+    char *expected_s = type_to_string_dynamic(expected);
+    char fail_msg[MAX_FAILURE_MSG_LEN];
+    snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s\nExpected: %s\nGot: %s", msg,
+             expected_s, actual_s);
+    add_failure(fail_msg, file, line);
+    free(actual_s);
+    free(expected_s);
+  }
+  return ok;
+}
+
 static bool assert_bool(bool ok, const char *msg, const char *file, int line) {
   if (ok) {
     fprintf(stderr, "✅ %s\n", msg);
@@ -641,6 +659,85 @@ int test_list_processing() {
     "    | [] -> 0\n"
     ";;",
     &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
+
+  ({
+    Type int_list = TLIST(&t_int);
+    Ast *ast = T("1 :: []", &int_list);
+    Ast *expr = AST_LIST_NTH(ast->data.AST_BODY.stmts, 0);
+    Ast *empty_tail = expr && expr->tag == AST_APPLICATION &&
+                              expr->data.AST_APPLICATION.len > 0
+                          ? expr->data.AST_APPLICATION.args +
+                                (expr->data.AST_APPLICATION.len - 1)
+                          : NULL;
+    status &= TASSERT("cons tail is an empty list literal",
+                      empty_tail && empty_tail->tag == AST_LIST &&
+                          empty_tail->data.AST_LIST.len == 0);
+    status &= assert_inferred_type("empty cons tail specializes to List<Int>",
+                                   empty_tail ? empty_tail->type : NULL,
+                                   &int_list, __FILE__, __LINE__);
+  });
+
+  ({
+    Type int_list = TLIST(&t_int);
+    Ast *ast = T("if true then [] else [1]", &int_list);
+    Ast *match = AST_LIST_NTH(ast->data.AST_BODY.stmts, 0);
+    Ast *empty_branch =
+        match && match->tag == AST_MATCH ? match->data.AST_MATCH.branches + 1
+                                         : NULL;
+    status &= TASSERT("if branch result is an empty list literal",
+                      empty_branch && empty_branch->tag == AST_LIST &&
+                          empty_branch->data.AST_LIST.len == 0);
+    status &= assert_inferred_type("empty branch specializes to List<Int>",
+                                   empty_branch ? empty_branch->type : NULL,
+                                   &int_list, __FILE__, __LINE__);
+  });
+
+  ({
+    Type int_list = TLIST(&t_int);
+    Ast *ast = T("let id_int_list = fn xs: (List of Int) -> xs;;\n"
+                 "id_int_list []",
+                 &int_list);
+    Ast *app = AST_LIST_NTH(ast->data.AST_BODY.stmts, 1);
+    Ast *empty_arg =
+        app && app->tag == AST_APPLICATION ? app->data.AST_APPLICATION.args
+                                           : NULL;
+    status &= TASSERT("function argument is an empty list literal",
+                      empty_arg && empty_arg->tag == AST_LIST &&
+                          empty_arg->data.AST_LIST.len == 0);
+    status &= assert_inferred_type("empty argument specializes to List<Int>",
+                                   empty_arg ? empty_arg->type : NULL,
+                                   &int_list, __FILE__, __LINE__);
+  });
+
+  ({
+    Type item = TVAR("'item");
+    Type item_list = TLIST(&item);
+    Type expected = MAKE_FN_TYPE_2(&item_list, &item_list);
+    Ast *ast = T("let singleton_or_empty = fn xs ->\n"
+                 "  match xs with\n"
+                 "  | [] -> []\n"
+                 "  | x::rest -> [x]\n"
+                 ";;\n",
+                 &expected);
+    Ast *let = AST_LIST_NTH(ast->data.AST_BODY.stmts, 0);
+    Ast *lambda = let && let->tag == AST_LET ? let->data.AST_LET.expr : NULL;
+    Ast *body = lambda && lambda->tag == AST_LAMBDA
+                    ? lambda->data.AST_LAMBDA.body
+                    : NULL;
+    Ast *match = body && body->tag == AST_BODY
+                     ? AST_LIST_NTH(body->data.AST_BODY.stmts, 0)
+                     : body;
+    Ast *empty_return =
+        match && match->tag == AST_MATCH ? match->data.AST_MATCH.branches + 1
+                                         : NULL;
+    status &= TASSERT("match return is an empty list literal",
+                      empty_return && empty_return->tag == AST_LIST &&
+                          empty_return->data.AST_LIST.len == 0);
+    status &= assert_inferred_type(
+        "polymorphic empty branch specializes to List<'item>",
+        empty_return ? empty_return->type : NULL, &item_list, __FILE__,
+        __LINE__);
+  });
 
   ({
     Ast *ast = _T("let list_sum = fn s l ->\n"
@@ -2576,6 +2673,45 @@ int test_parametrized_modules() {
       &t_uint64);
   });
 
+  ({
+    _T("let M = module K V ->\n"
+       "  type T = List of (K, V);\n"
+       "  let head_int = fn xs: (List of Int) ->\n"
+       "    match xs with\n"
+       "    | x::rest -> x\n"
+       "    | [] -> 0\n"
+       "  ;;\n"
+       ";\n"
+       "let m = M String Int;\n");
+
+    TypeEnv *m = lookup_test_env_binding("m");
+    TypeEnv *menv =
+        m && m->type && m->type->kind == T_MODULE ? m->type->data.T_MODULE.env
+                                                   : NULL;
+    Type head_type = MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int);
+
+    status &= TASSERT("list aliases do not export []",
+                      menv && lookup_type_ref(menv, "[]") == NULL);
+    status &= TASSERT("list aliases do not export ::",
+                      menv && lookup_type_ref(menv, "::") == NULL);
+    TypeEnv *head = menv ? lookup_type_ref(menv, "head_int") : NULL;
+    status &= TASSERT("list aliases do not shadow builtin list constructors",
+                      head && head->type &&
+                          test_types_equal(head->type, &head_type));
+  });
+
+  ({
+    T("let M = module K V ->\n"
+      "  type T = List of (K, V);\n"
+      "  let z = fn a b ->\n"
+      "    a + b\n"
+      "  ;;\n"
+      ";\n"
+      "let m = M String Int;\n"
+      "m.z 1 2\n",
+      &t_int);
+  });
+
   return status;
 }
 
@@ -2861,7 +2997,6 @@ bool test_audio_funcs() {
 
     // print_ast(plus_app);
     // print_type(plus_app->type);
-
   });
   ({
     Type s = {T_CONS,
@@ -2931,10 +3066,10 @@ bool test_type_exprs() {
                           strcmp(pt->data.T_CONS.name, "Pat") == 0);
     status &= TASSERT("Pat has three constructors",
                       pt && pt->data.T_CONS.num_args == 3);
-    status &= TASSERT("PatList payload is List of recursive Pat",
-                      plist_payload && is_list_type(plist_payload) &&
-                          type_is_named_recursive_ref(
-                              type_of_list(plist_payload), "Pat"));
+    status &= TASSERT(
+        "PatList payload is List of recursive Pat",
+        plist_payload && is_list_type(plist_payload) &&
+            type_is_named_recursive_ref(type_of_list(plist_payload), "Pat"));
   });
   return status;
 }

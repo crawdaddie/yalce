@@ -51,6 +51,36 @@ void freshen_map_extend(FreshenMap *map, int src_id, Type *dst_type) {
   map->len++;
 }
 
+static Predicate *freshen_map_apply_to_predicates(FreshenMap *map,
+                                                  Predicate *preds) {
+  Predicate *result = NULL;
+  for (Predicate *p = preds; p; p = p->next) {
+    if (p->kind == PRED_TRAIT) {
+      Type *fresh_type = freshen_map_apply_to_type(map, p->data.TRAIT.type);
+      TypeList *fresh_params =
+          freshen_map_apply_to_typelist(map, p->data.TRAIT.params);
+      result =
+          predicate_append_applied(result, p->trait, fresh_type, fresh_params);
+    } else if (p->kind == PRED_COMPARABLE) {
+      Type *fresh_witness =
+          freshen_map_apply_to_type(map, p->data.COMPARABLE.witness);
+      int n = 0;
+      while (p->data.COMPARABLE.args && p->data.COMPARABLE.args[n]) {
+        n++;
+      }
+      Type **fresh_args = t_alloc(sizeof(Type *) * (n + 1));
+      for (int i = 0; i < n; i++) {
+        fresh_args[i] =
+            freshen_map_apply_to_type(map, p->data.COMPARABLE.args[i]);
+      }
+      fresh_args[n] = NULL;
+      result = predicate_append_comparable(result, p->trait, fresh_witness,
+                                           fresh_args);
+    }
+  }
+  return result;
+}
+
 Type *freshen_map_apply_to_type(FreshenMap *map, Type *t) {
   if (!map || !t) {
     return t;
@@ -137,6 +167,10 @@ Type *freshen_map_apply_to_type(FreshenMap *map, Type *t) {
       if (e->scheme_vars) {
         dst->scheme_vars =
             freshen_map_apply_to_typelist(map, e->scheme_vars);
+      }
+      if (e->predicates) {
+        dst->predicates = freshen_map_apply_to_predicates(map, e->predicates);
+        changed = true;
       }
       if (!new_env) {
         new_env = dst;

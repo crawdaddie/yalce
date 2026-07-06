@@ -298,6 +298,10 @@ Type *compute_type_expression(Ast *expr, TICtx *ctx) {
   return result;
 }
 
+static bool type_decl_introduces_constructors(Ast *expr) {
+  return expr && expr->tag == AST_LIST;
+}
+
 void compute_lambda_param_types(AstList *annotations, size_t len, Type **out,
                                 TICtx *ctx) {
   TypeEnv *saved_type_var_env = current_type_var_env;
@@ -385,6 +389,8 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
     decl_env->type = computed;
   }
 
+  bool introduces_constructors = type_decl_introduces_constructors(expr);
+
   if (binding->tag == AST_IDENTIFIER && computed->kind == T_CONS) {
     const char *type_name = binding->data.AST_IDENTIFIER.value;
     computed->alias = type_name;
@@ -393,7 +399,8 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
     }
   }
 
-  if (binding->tag == AST_IDENTIFIER && computed->kind == T_SUM) {
+  if (binding->tag == AST_IDENTIFIER && computed->kind == T_SUM &&
+      introduces_constructors) {
     const char *type_name = binding->data.AST_IDENTIFIER.value;
     computed->data.T_CONS.name = type_name;
   }
@@ -406,7 +413,7 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
       strcmp(ctx->env->name, binding->data.AST_IDENTIFIER.value) == 0) {
     ctx->env->md.type = BT_TYPE_DECL;
   }
-  if (is_sum_type(computed)) {
+  if (is_sum_type(computed) && introduces_constructors) {
     for (int i = 0; i < computed->data.T_CONS.num_args; i++) {
       Type *mem = computed->data.T_CONS.args[i];
       Type *ctor_type = computed;

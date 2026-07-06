@@ -81,8 +81,7 @@ void print_type_to_stream(Type *t, FILE *stream) {
     break;
   }
 
-  case T_CONS:
-  case T_SUM: {
+  case T_CONS: {
 
     if (is_string_type(t)) {
       fprintf(stream, "String");
@@ -131,43 +130,43 @@ void print_type_to_stream(Type *t, FILE *stream) {
       break;
     }
 
-    if (is_sum_type(t) && t->data.T_CONS.args[0]->kind == T_CONS &&
-        CHARS_EQ(t->data.T_CONS.args[0]->data.T_CONS.name, "Some")) {
+    // if (is_sum_type(t) && t->data.T_CONS.args[0]->kind == T_CONS &&
+    //     CHARS_EQ(t->data.T_CONS.args[0]->data.T_CONS.name, "Some")) {
+    //
+    //   fprintf(stream, "Option of ");
+    //   if (t->data.T_CONS.args[0]->kind == T_CONS) {
+    //     print_type_to_stream(t->data.T_CONS.args[0]->data.T_CONS.args[0],
+    //                          stream);
+    //   } else {
+    //     print_type_to_stream(t->data.T_CONS.args[0], stream);
+    //   }
+    //   break;
+    // }
 
-      fprintf(stream, "Option of ");
-      if (t->data.T_CONS.args[0]->kind == T_CONS) {
-        print_type_to_stream(t->data.T_CONS.args[0]->data.T_CONS.args[0],
-                             stream);
-      } else {
-        print_type_to_stream(t->data.T_CONS.args[0], stream);
-      }
-      break;
-    }
+    // if (t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_SOME)) {
+    //   fprintf(stream, "Option of ");
+    //
+    //   if (t->data.T_CONS.args[0]->kind == T_CONS) {
+    //     print_type_to_stream(t->data.T_CONS.args[0]->data.T_CONS.args[0],
+    //                          stream);
+    //   } else {
+    //     print_type_to_stream(t->data.T_CONS.args[0], stream);
+    //   }
+    //   break;
+    // }
 
-    if (t->kind == T_CONS && CHARS_EQ(t->data.T_CONS.name, TYPE_NAME_SOME)) {
-      fprintf(stream, "Option of ");
-
-      if (t->data.T_CONS.args[0]->kind == T_CONS) {
-        print_type_to_stream(t->data.T_CONS.args[0]->data.T_CONS.args[0],
-                             stream);
-      } else {
-        print_type_to_stream(t->data.T_CONS.args[0], stream);
-      }
-      break;
-    }
-
-    if (is_sum_type(t)) {
-      fprintf(stream, "%s { ", t->data.T_CONS.name);
-      for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-        print_type_to_stream(t->data.T_CONS.args[i], stream);
-        if (i < t->data.T_CONS.num_args - 1) {
-          fprintf(stream, " | ");
-        }
-      }
-
-      fprintf(stream, " }");
-      break;
-    }
+    // if (is_sum_type(t)) {
+    //   fprintf(stream, "%s { ", t->data.T_CONS.name);
+    //   for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+    //     print_type_to_stream(t->data.T_CONS.args[i], stream);
+    //     if (i < t->data.T_CONS.num_args - 1) {
+    //       fprintf(stream, " | ");
+    //     }
+    //   }
+    //
+    //   fprintf(stream, " }");
+    //   break;
+    // }
     if (t->alias) {
       fprintf(stream, "%s", t->alias);
       // print_tc_list_to_stream(t, stream);
@@ -190,6 +189,17 @@ void print_type_to_stream(Type *t, FILE *stream) {
       }
     }
     print_tc_list_to_stream(t, stream);
+    break;
+  }
+  case T_SUM: {
+    fprintf(stream, "%s\n", t->data.T_CONS.name);
+    for (int i = 0; i < t->data.T_CONS.num_args; i++) {
+      fprintf(stream, "  | ");
+      print_type_to_stream(t->data.T_CONS.args[i], stream);
+
+      fprintf(stream, "\n");
+    }
+
     break;
   }
   case T_VAR: {
@@ -286,7 +296,7 @@ void print_type_env_stream(TypeEnv *env, FILE *stream) {
   if (!env) {
     return;
   }
-  fprintf(stream, "%s : ", env->name);
+  // fprintf(stream, "'%s' : ", env->name);
   if (env->scheme_vars) {
     fprintf(stream, "∀ ");
     for (TypeList *v = env->scheme_vars; v; v = v->next) {

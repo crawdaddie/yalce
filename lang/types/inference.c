@@ -1,18 +1,16 @@
 #include "./inference.h"
-#include "../ht.h"
 #include "../modules.h"
 #include "../parse.h"
-#include "../serde.h"
 #include "./builtins.h"
 #include "./closures.h"
 #include "./freshen_map.h"
+#include "./infer_application.h"
+#include "./infer_lambda.h"
+#include "./infer_let.h"
 #include "./subst_table.h"
 #include "./type.h"
+#include "./type_expressions.h"
 #include "./type_ser.h"
-#include "infer_application.h"
-#include "infer_lambda.h"
-#include "infer_let.h"
-#include "type_expressions.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,7 +22,6 @@
 static Subst *extend_subst(Subst *subst, int var_id, Type *type);
 static Type *find_root_var(Subst *subst, Type *t);
 static int unify_types(Type *t1, Type *t2, Subst *subst, Subst **out);
-int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx);
 static void finalize_env_generalization(TypeEnv *env, Subst *subst);
 static void finalize_ast_types(Ast *ast, Subst *subst);
 static TypeList *typelist_apply_subst(Subst *subst, TypeList *params);
