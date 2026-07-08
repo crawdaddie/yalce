@@ -696,39 +696,37 @@ static TypeEnv *make_cor_try_opt_env(void) {
 }
 
 static TypeEnv *make_cor_zip_struct_env(void) {
-  // cor_zip_struct : {Coroutine a, ...} -> Coroutine <tuple of yielded values>
-  // Reuses the cor_zip function type shape; the struct-handling code reads the
-  // yield type from the result Coroutine, so a plain polymorphic env entry
-  // suffices for name resolution and codegen dispatch.
-  Type *a = tvar("a");
-  Type *b = tvar("b");
-  Type *cor_a = create_coroutine_instance_type(a);
-  Type *cor_b = create_coroutine_instance_type(b);
-  Type **tup = t_alloc(sizeof(Type *) * 2);
-  tup[0] = a;
-  tup[1] = b;
-  Type *cor_res = create_coroutine_instance_type(create_tuple_type(2, tup));
-  Type *fn_type = type_fn(cor_b, cor_res);
-  fn_type = type_fn(cor_a, fn_type);
+  // cor_zip_struct is structurally typed in infer_application.c. The builtin
+  // env only needs a loose unary shape for name resolution and first-class use.
+  Type *fields = tvar("fields");
+  Type *yield = tvar("yield");
+  Type *fn_type = type_fn(fields, create_coroutine_instance_type(yield));
 
-  TypeList *tl_a = vlist_of_typevar(a);
-  TypeList *tl_b = vlist_of_typevar(b);
-  tl_b->next = tl_a;
+  TypeList *tl_fields = vlist_of_typevar(fields);
+  TypeList *tl_yield = vlist_of_typevar(yield);
+  tl_fields->next = tl_yield;
 
   TypeEnv *entry = t_alloc(sizeof(TypeEnv));
   *entry = (TypeEnv){.name = "cor_zip_struct",
                      .type = fn_type,
-                     .scheme_vars = tl_b,
+                     .scheme_vars = tl_fields,
                      .predicates = NULL,
                      .next = NULL};
   return entry;
 }
 
 static TypeEnv *make_play_routine_env(void) {
-  // play_routine : Uint64 -> Ptr -> Coroutine Num -> Coroutine Num
+  // play_routine : Uint64 -> schedule_event -> Coroutine Num -> Coroutine Num
+  // schedule_event : Uint64 -> Double -> (Ptr -> Uint64 -> ()) -> Ptr -> Ptr
   Type *cor_from = create_coroutine_instance_type(&t_num);
+  Type *scheduler_callback = type_fn(&t_ptr, type_fn(&t_uint64, &t_void));
+  Type *schedule_event = type_fn(&t_ptr, &t_ptr);
+  schedule_event = type_fn(scheduler_callback, schedule_event);
+  schedule_event = type_fn(&t_num, schedule_event);
+  schedule_event = type_fn(&t_uint64, schedule_event);
+
   Type *f = type_fn(cor_from, cor_from);
-  f = type_fn(&t_ptr, f);
+  f = type_fn(schedule_event, f);
   f = type_fn(&t_uint64, f);
 
   TypeEnv *entry = t_alloc(sizeof(TypeEnv));
@@ -738,10 +736,18 @@ static TypeEnv *make_play_routine_env(void) {
 }
 
 static TypeEnv *make_play_routine_quant_env(void) {
-  // play_routine_quant : Num -> Ptr -> Coroutine Num -> Coroutine Num
+  // play_routine_quant : Num -> schedule_event -> Coroutine Num -> Coroutine
+  // Num schedule_event : Uint64 -> Double -> (Ptr -> Uint64 -> ()) -> Ptr ->
+  // Ptr
   Type *cor_from = create_coroutine_instance_type(&t_num);
+  Type *scheduler_callback = type_fn(&t_ptr, type_fn(&t_uint64, &t_void));
+  Type *schedule_event = type_fn(&t_ptr, &t_ptr);
+  schedule_event = type_fn(scheduler_callback, schedule_event);
+  schedule_event = type_fn(&t_num, schedule_event);
+  schedule_event = type_fn(&t_uint64, schedule_event);
+
   Type *f = type_fn(cor_from, cor_from);
-  f = type_fn(&t_ptr, f);
+  f = type_fn(schedule_event, f);
   f = type_fn(&t_num, f);
 
   TypeEnv *entry = t_alloc(sizeof(TypeEnv));
@@ -924,6 +930,10 @@ void initialize_builtin_types() {
   add_builtin_env("array_set", builtin_envs.array_set);
   builtin_envs.array_fill_const = make_array_fill_const_env();
   add_builtin_env("array_fill_const", builtin_envs.array_fill_const);
+
+  // builtin_envs.array_uninit = make_array_fill_const_env();
+  // add_builtin_env("array_uninit", builtin_envs.array_uninit);
+
   builtin_envs.array_fill = make_array_fill_env();
   add_builtin_env("array_fill", builtin_envs.array_fill);
   builtin_envs.array_range = make_array_range_env();

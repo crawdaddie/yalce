@@ -5,10 +5,10 @@
 #include "modules.h"
 #include "serde.h"
 #include "symbols.h"
+#include "types.h"
 #include "types/builtins.h"
 #include "types/inference.h"
 #include "types/type_ser.h"
-#include "types.h"
 #include "llvm-c/Core.h"
 #include <stdlib.h>
 #include <string.h>
@@ -31,7 +31,8 @@ static ModuleTypeMeta *get_module_type_meta(Type *type) {
 
 static Type *resolve_module_type_arg(Ast *arg_ast, JITLangCtx *ctx) {
   if (!arg_ast || arg_ast->tag != AST_IDENTIFIER) {
-    fprintf(stderr, "Error: expected type identifier as module type argument\n");
+    fprintf(stderr,
+            "Error: expected type identifier as module type argument\n");
     return NULL;
   }
 
@@ -322,8 +323,11 @@ LLVMValueRef specialize_and_bind_module(Ast *binding, Ast *app,
                                         Type *binding_type, JITLangCtx *ctx,
                                         LLVMModuleRef llvm_module_ref,
                                         LLVMBuilderRef builder) {
+
   Ast *fn = app->data.AST_APPLICATION.function;
+
   JITSymbol *gen_sym = lookup_id_ast(fn, ctx);
+
   if (!gen_sym || gen_sym->type != STYPE_GENERIC_MODULE) {
     fprintf(stderr, "Error: expected generic module for specialization\n");
     return NULL;
@@ -351,9 +355,9 @@ LLVMValueRef specialize_and_bind_module(Ast *binding, Ast *app,
     if (!resolved_arg_type) {
       return NULL;
     }
-    Type *param_type =
-        module_meta && module_meta->type_params ? module_meta->type_params[i]
-                                                : NULL;
+    Type *param_type = module_meta && module_meta->type_params
+                           ? module_meta->type_params[i]
+                           : NULL;
     if (!param_type || param_type->kind != T_VAR) {
       fprintf(stderr, "Error: invalid module type parameter metadata\n");
       return NULL;
@@ -372,7 +376,8 @@ LLVMValueRef specialize_and_bind_module(Ast *binding, Ast *app,
       exp_fn_type = fn;
     }
 
-    Type *sym_copy = apply_subst_to_type(subst, deep_copy_type(gen_sym->symbol_type));
+    Type *sym_copy =
+        apply_subst_to_type(subst, deep_copy_type(gen_sym->symbol_type));
     Type *exp_copy = deep_copy_type(exp_fn_type);
     TICtx ti_ctx = {};
     unify(exp_copy, sym_copy, &ti_ctx);
@@ -386,18 +391,17 @@ LLVMValueRef specialize_and_bind_module(Ast *binding, Ast *app,
   Type *module_type = module_result_type(gen_sym->symbol_type);
   module_type = apply_subst_to_type(subst, deep_copy_type(module_type));
 
-  JITSymbol *module_symbol =
-      create_module_symbol(module_type, spec_env,
-                           gen_sym->symbol_data.STYPE_GENERIC_MODULE.ast, ctx,
-                           llvm_module_ref);
+  JITSymbol *module_symbol = create_module_symbol(
+      module_type, spec_env, gen_sym->symbol_data.STYPE_GENERIC_MODULE.ast, ctx,
+      llvm_module_ref);
 
   JITLangCtx *module_ctx = module_symbol->symbol_data.STYPE_MODULE.ctx;
   module_ctx->type_subst = subst;
   module_ctx->env = spec_env;
 
   // Bind the module's parameters from the application's arguments so the
-  // body can reference them (e.g. `hash` in `module hash: (a -> Uint64) -> ...`).
-  // The arguments are compiled under a specialized context (with the
+  // body can reference them (e.g. `hash` in `module hash: (a -> Uint64) ->
+  // ...`). The arguments are compiled under a specialized context (with the
   // substitution applied) so that type-driven builtins like `asbytes` resolve
   // the module's type variable (e.g. `a = Int`).
   Ast *module_ast = gen_sym->symbol_data.STYPE_GENERIC_MODULE.ast;
@@ -405,33 +409,38 @@ LLVMValueRef specialize_and_bind_module(Ast *binding, Ast *app,
       apply_subst_to_type(subst, deep_copy_type(gen_sym->symbol_type));
   int arg_i = num_type_params;
   int param_i = 0;
-  AST_LIST_ITER(module_ast->data.AST_LAMBDA.params, ({
-    if (arg_i >= app->data.AST_APPLICATION.len) break;
-    if (param_type_cursor->kind != T_FN) break;
-    ModuleParamKind kind =
-        gen_sym->symbol_data.STYPE_GENERIC_MODULE.param_kinds
-            ? gen_sym->symbol_data.STYPE_GENERIC_MODULE.param_kinds[param_i]
-            : MODULE_PARAM_VALUE;
-    param_i++;
-    if (kind == MODULE_PARAM_TYPE) {
-      continue;
-    }
-    Ast *param_ast = l->ast;
-    Ast *arg_ast = app->data.AST_APPLICATION.args + arg_i;
+  AST_LIST_ITER(
+      module_ast->data.AST_LAMBDA.params, ({
+        if (arg_i >= app->data.AST_APPLICATION.len)
+          break;
+        if (param_type_cursor->kind != T_FN)
+          break;
+        ModuleParamKind kind =
+            gen_sym->symbol_data.STYPE_GENERIC_MODULE.param_kinds
+                ? gen_sym->symbol_data.STYPE_GENERIC_MODULE.param_kinds[param_i]
+                : MODULE_PARAM_VALUE;
+        param_i++;
+        if (kind == MODULE_PARAM_TYPE) {
+          continue;
+        }
+        Ast *param_ast = l->ast;
+        Ast *arg_ast = app->data.AST_APPLICATION.args + arg_i;
 
-    LLVMValueRef arg_val = codegen(arg_ast, module_ctx, llvm_module_ref, builder);
-    if (!arg_val) {
-      fprintf(stderr, "Error: failed to compile module parameter argument\n");
-    }
+        LLVMValueRef arg_val =
+            codegen(arg_ast, module_ctx, llvm_module_ref, builder);
+        if (!arg_val) {
+          fprintf(stderr,
+                  "Error: failed to compile module parameter argument\n");
+        }
 
-    Type *p_type = specialize_type_for_codegen(param_type_cursor->data.T_FN.from,
-                                               module_ctx);
-    bind_fn_param(arg_val, p_type, param_ast, ctx, module_ctx, llvm_module_ref,
-                  builder);
+        Type *p_type = specialize_type_for_codegen(
+            param_type_cursor->data.T_FN.from, module_ctx);
+        bind_fn_param(arg_val, p_type, param_ast, ctx, module_ctx,
+                      llvm_module_ref, builder);
 
-    param_type_cursor = param_type_cursor->data.T_FN.to;
-    arg_i++;
-  }));
+        param_type_cursor = param_type_cursor->data.T_FN.to;
+        arg_i++;
+      }));
 
   compile_module(module_symbol, module_ast, llvm_module_ref, builder);
 

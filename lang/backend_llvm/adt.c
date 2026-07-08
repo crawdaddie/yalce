@@ -41,20 +41,12 @@ LLVMValueRef codegen_simple_enum_member(Type *enum_type, const char *mem_name,
 LLVMValueRef codegen_adt_member(Type *enum_type, const char *mem_name,
                                 JITLangCtx *ctx, LLVMModuleRef module,
                                 LLVMBuilderRef builder) {
-
-  if (CHARS_EQ(enum_type->data.T_CONS.name, TYPE_NAME_VARIANT) &&
-      (sum_variant_count(enum_type) == 2) &&
-      (strcmp(sum_variant_at(enum_type, 0)->data.T_CONS.name, "Some") == 0) &&
-      (strcmp(sum_variant_at(enum_type, 1)->data.T_CONS.name, "None") == 0)) {
-
-    if (strcmp(mem_name, "None") == 0) {
-      return codegen_none(builder);
-    }
+  if (enum_type->kind == T_FN) {
+    enum_type = fn_return_type(enum_type);
   }
-  if (is_option_type(enum_type)) {
-    if (strcmp(mem_name, "None") == 0) {
-      return codegen_none(builder);
-    }
+
+  if (is_simple_enum(enum_type)) {
+    return codegen_simple_enum_member(enum_type, mem_name, ctx, module, builder);
   }
 
   int vidx;
@@ -65,7 +57,10 @@ LLVMValueRef codegen_adt_member(Type *enum_type, const char *mem_name,
     }
   }
 
-  return LLVMConstInt(LLVMInt8Type(), vidx, 0);
+  LLVMTypeRef llvm_type = type_to_llvm_type(enum_type, ctx, module);
+  LLVMValueRef value = LLVMGetUndef(llvm_type);
+  return LLVMBuildInsertValue(builder, value, LLVMConstInt(TAG_TYPE, vidx, 0),
+                              0, "insert variant tag");
 }
 
 LLVMValueRef codegen_adt_member_with_args(Type *enum_type, LLVMTypeRef tu_type,
@@ -406,6 +401,10 @@ bool type_contains_recursive_ref(Type *type, const char *target_name) {
   switch (type->kind) {
   case T_VAR:
     return type->is_recursive_type_ref;
+
+  case T_RECURSIVE_REF:
+    return type->data.T_RECURSIVE_REF.name &&
+           strcmp(type->data.T_RECURSIVE_REF.name, target_name) == 0;
 
   case T_CONS:
   case T_SUM: {

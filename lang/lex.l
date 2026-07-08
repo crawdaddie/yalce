@@ -2,6 +2,7 @@
 #ifndef _LEX_YY_C
 #define _LEX_YY_C
 #include <stdlib.h>
+#include <string.h>
 #include "parse.h"
 #include "y.tab.h"
 #include "string_proc.h"
@@ -39,6 +40,19 @@ long long int yyprevoffset = 0;
     yycolumn += yyleng; \
     yyprevoffset = yyabsoluteoffset; \
     yyabsoluteoffset += yyleng;
+
+static char *strip_numeric_separators(const char *src) {
+  size_t len = strlen(src);
+  char *dst = malloc(len + 1);
+  size_t j = 0;
+  for (size_t i = 0; i < len; i++) {
+    if (src[i] != '_') {
+      dst[j++] = src[i];
+    }
+  }
+  dst[j] = '\0';
+  return dst;
+}
 %}
 %option yylineno
 
@@ -47,6 +61,7 @@ long long int yyprevoffset = 0;
 
 ESCAPE          \\(['"?\\abfnrtv]|[0-7]{1,3}|x[0-9a-fA-F]+)
 CHAR            '([^'\\\n]|{ESCAPE})'
+DEC_INT         0|[1-9](_?[0-9])*
 %%
 "fn"                    return FN;
 "module"                return MODULE;
@@ -196,21 +211,21 @@ CHAR            '([^'\\\n]|{ESCAPE})'
                         }
 
 
--?0                     { 
-                          yylval.vint = atoi(yytext);
-                          return INTEGER;
-                        }
 -?[0-9]+(\.[0-9]*)?f    {
                           yylval.vfloat = strtof(yytext, NULL);
                           return FLOAT;
                         }
 
- [0-9]+(\.[0-9]*)?u64   {
-                          yylval.vint64 = strtoull(yytext, NULL, 10);
+{DEC_INT}u64            {
+                          char *clean = strip_numeric_separators(yytext);
+                          yylval.vint64 = strtoull(clean, NULL, 10);
+                          free(clean);
                           return UINT64;
                         }
--?[1-9][0-9]*           { 
-                          yylval.vint = atoi(yytext);
+-?{DEC_INT}             { 
+                          char *clean = strip_numeric_separators(yytext);
+                          yylval.vint = (int)strtol(clean, NULL, 10);
+                          free(clean);
                           return INTEGER;
                         }
 

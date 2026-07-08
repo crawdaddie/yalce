@@ -190,6 +190,21 @@ let test_cor_map = fn () ->
   && x () == None
 
 ;;
+
+let test_cor_zip_struct_map = fn () ->
+  let x =
+    (
+      a: iter [1, 2],
+      b: iter [10, 20]
+    )
+    |> cor_zip_struct
+    |> cor_map (fn (a, b) -> a + b)
+  ;
+
+     x () == Some 11
+  && x () == Some 22
+  && x () == None
+;;
 #
 let test_cor_loop_and_map = fn () ->
   let c = fn () -> yield 1; yield 2; yield 3;;

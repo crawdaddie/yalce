@@ -144,6 +144,9 @@ Type *freshen_map_apply_to_type(FreshenMap *map, Type *t) {
     if (is_coroutine_type(t)) {
       return create_coroutine_instance_type(new_args[0]);
     }
+    if (is_array_type(t)) {
+      return create_array_type(new_args[0]);
+    }
     Type *result = t_alloc(sizeof(Type));
     *result = *t;
     result->data.T_CONS.args = new_args;

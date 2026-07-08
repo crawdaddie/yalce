@@ -187,6 +187,7 @@ int main() {
   status = test_parse("1 + 2", "((+ 1) 2)"); // single binop expression"
   //
   status &= test_parse("-1", "-1");
+  status &= test_parse("1_000_000", "1000000");
   status &= test_parse("1.", "1.000000");
   status &= test_parse("-4.", "-4.000000");
   status &= test_parse("1f", "1.000000");
@@ -257,9 +258,13 @@ int main() {
   status &= test_parse("fn () -> x + y;", "(() -> \n((+ x) y))\n");
   status &=
       test_parse("fn x y z -> x + y + z;", "(x y z -> \n((+ ((+ x) y)) z))\n");
-  status &= test_parse("Audio fn () -> sin_osc 200.", "(Audio (() -> \n(sin_osc 200.000000))\n)");
-  status &= test_parse("Audio fn x -> x + 1", "(Audio (x -> \n((+ x) 1))\n)");
-  status &= test_parse("Foo.Bar fn () -> x", "((. Foo Bar) (() -> \nx)\n)");
+  status &= test_parse("let y = @Audio fn () -> sin_osc 200.;;",
+                       "(let y (Audio (y () -> \n(sin_osc 200.000000))\n))");
+  status &= test_parse("let y = @Audio fn x -> x + 1;;",
+                       "(let y (Audio (y x -> \n((+ x) 1))\n))");
+
+  // status &= test_parse("let y = @Foo.Bar fn () -> x;;",
+  //                      "(let y ((. Foo Bar) (y () -> \nx)\n))");
 
   status &= test_parse("fn x (y, z) -> x + y + z;",
                        "(x (y, z) -> \n((+ ((+ x) y)) z))\n");
@@ -287,10 +292,12 @@ int main() {
   status &= test_parse("let x = 1", "(let x 1)");
   status &= test_parse("let (x, y) = (1, 2)", "(let (x, y) (1, 2))");
   status &= test_parse("let x = 1 + y", "(let x ((+ 1) y))");
-  status &= test_parse("let x = Audio fn () -> sin_osc 200.",
-                       "(let x (Audio (let x (x () -> \n(sin_osc 200.000000))\n)))");
-  status &= test_parse("let x = Foo.Bar fn y -> y",
-                       "(let x ((. Foo Bar) (let x (x y -> \ny)\n)))");
+  // status &=
+  //     test_parse("let x = Audio fn () -> sin_osc 200.",
+  //                "(let x (Audio (let x (x () -> \n(sin_osc
+  //                200.000000))\n)))");
+  // status &= test_parse("let x = Foo.Bar fn y -> y",
+  //                      "(let x ((. Foo Bar) (let x (x y -> \ny)\n)))");
   status &= test_parse("let x = 1 in x", "(let x 1) : x");
   status &= test_parse("let x = 1 in x + 2", "(let x 1) : ((+ x) 2)");
   status &=

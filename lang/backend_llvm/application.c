@@ -133,6 +133,11 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
     return alloca;
   }
 
+  if (is_list_type(from_type) && is_array_type(to_type)) {
+    fprintf(stderr, "Error: not yet implemented\n");
+    return NULL;
+  }
+
   if (to_type->constructor) {
     ConsMethod constructor = to_type->constructor;
     Type *resolved_from = from_type;

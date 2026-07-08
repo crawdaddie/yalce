@@ -45,18 +45,30 @@ void print_allocs(Allocation *allocs) {
 }
 
 Allocation *allocations_extend(Allocation *allocs, Allocation *alloc) {
-  if (!allocs) {
-    return alloc;
-  }
   if (!alloc) {
-    return alloc;
+    return allocs;
   }
-  Allocation *a = alloc;
-  while (a->next != NULL) {
-    a = a->next;
+
+  Allocation *head = NULL;
+  Allocation *tail = NULL;
+  for (Allocation *a = alloc; a; a = a->next) {
+    Allocation *copy = ea_alloc(sizeof(Allocation));
+    *copy = *a;
+    copy->next = NULL;
+
+    if (!head) {
+      head = copy;
+    } else {
+      tail->next = copy;
+    }
+    tail = copy;
   }
-  a->next = allocs;
-  return alloc;
+
+  if (!head) {
+    return allocs;
+  }
+  tail->next = allocs;
+  return head;
 }
 
 void ctx_add_allocation(EACtx *ctx, Allocation *alloc) {
@@ -65,11 +77,11 @@ void ctx_add_allocation(EACtx *ctx, Allocation *alloc) {
 }
 
 Allocation *ctx_find_allocation(EACtx *ctx, const char *varname) {
-  if (!ctx->allocations) {
+  if (!ctx || !varname || !ctx->allocations) {
     return NULL;
   }
   for (Allocation *a = ctx->allocations; a; a = a->next) {
-    if (strcmp(a->varname, varname) == 0) {
+    if (a->varname && strcmp(a->varname, varname) == 0) {
       return a;
     }
   }
@@ -130,6 +142,9 @@ void ctx_bind_allocations(EACtx *ctx, Ast *binding, Allocation *allocs) {
 }
 
 bool alloc_crosses_yield_boundary(Allocation *alloc, Ast *lambda_ast) {
+  if (!alloc || !alloc->varname || !lambda_ast) {
+    return false;
+  }
 
   AST_LIST_ITER(
       lambda_ast->data.AST_LAMBDA.yield_boundary_crossers, ({

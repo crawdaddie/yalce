@@ -564,6 +564,19 @@ static bool type_is_named_recursive_ref(Type *type, const char *name) {
          strcmp(type->data.T_RECURSIVE_REF.name, name) == 0;
 }
 
+static bool type_is_named_type_var(Type *type, const char *name) {
+  return type && type->kind == T_VAR && type->data.T_VAR.name &&
+         strcmp(type->data.T_VAR.name, name) == 0;
+}
+
+static bool type_has_alias(Type *type, const char *name) {
+  return type && type->alias && strcmp(type->alias, name) == 0;
+}
+
+static Type *array_element_type(Type *type) {
+  return type && is_array_type(type) ? type->data.T_CONS.args[0] : NULL;
+}
+
 static bool is_option_returning_fn(Type *type) {
   return type && type->kind == T_FN && type->data.T_FN.from &&
          is_string_type(type->data.T_FN.from) && type->data.T_FN.to &&
@@ -610,9 +623,10 @@ int test_type_declarations() {
   });
 
   ({
-    Type imatrix = TCONS("Matrix", 3, &t_int, &t_int, &TARRAY(&t_int));
+    Type imatrix = TTUPLE(3, &t_int, &t_int, &TARRAY(&t_int));
 
     imatrix.data.T_CONS.names = (char *[]){"rows", "cols", "data"};
+    imatrix.alias = "Matrix";
 
     T("type Matrix = (\n"
       "  rows: Int,\n"
@@ -630,8 +644,7 @@ int test_type_declarations() {
     Type *vt = ast ? ast->type : NULL;
     Type *children = vt ? get_struct_member_type("children", vt) : NULL;
     status &= TASSERT("recursive Value constructor application returns Value",
-                      vt && vt->kind == T_CONS &&
-                          strcmp(vt->data.T_CONS.name, "Value") == 0);
+                      vt && is_tuple_type(vt) && type_has_alias(vt, "Value"));
     status &=
         TASSERT("Value.data field is Double",
                 vt && types_equal(get_struct_member_type("data", vt), &t_num));
@@ -642,8 +655,7 @@ int test_type_declarations() {
                                                  "Value") ||
                      (children->data.T_CONS.args[0] &&
                       children->data.T_CONS.args[0]->kind == T_CONS &&
-                      strcmp(children->data.T_CONS.args[0]->data.T_CONS.name,
-                             "Value") == 0)));
+                      type_has_alias(children->data.T_CONS.args[0], "Value"))));
   });
 
   ({
@@ -662,8 +674,146 @@ int test_type_declarations() {
         TASSERT("const takes a Double",
                 entry && types_equal(entry->type->data.T_FN.from, &t_num));
     status &= TASSERT("const returns Value",
-                      ret && ret->kind == T_CONS &&
-                          strcmp(ret->data.T_CONS.name, "Value") == 0);
+                      ret && is_tuple_type(ret) && type_has_alias(ret, "Value"));
+  });
+
+  TFAIL("type BadNode = (next: BadNode,);\n");
+  TFAIL("type BadSum =\n"
+        "  | Wrap of BadSum\n"
+        ";\n");
+
+  ({
+    Ast *ast = _T("type TensorNode = (\n"
+                  "  shape: Array of Int,\n"
+                  "  grad: Array of Double,\n"
+                  "  operands: List of TensorNode\n"
+                  ");\n"
+                  "let first_shape = fn t: (TensorNode) ->\n"
+                  "  match t.operands with\n"
+                  "  | a::[] -> a.shape\n"
+                  "  | _ -> t.shape\n"
+                  ";;\n");
+    TypeEnv *entry = lookup_test_env_binding("first_shape");
+    Type *ret = entry && entry->type && entry->type->kind == T_FN
+                    ? fn_return_type(entry->type)
+                    : NULL;
+    status &= TASSERT("recursive record field access through List pattern infers",
+                      ast && entry && entry->type && entry->type->kind == T_FN);
+    status &= TASSERT("recursive List element field access returns Array Int",
+                      ret && is_array_type(ret) &&
+                          types_equal(array_element_type(ret), &t_int));
+  });
+
+  ({
+    Ast *ast = _T("type TensorNode = (\n"
+                  "  shape: Array of Int,\n"
+                  "  grad: Array of Double,\n"
+                  "  operands: List of TensorNode\n"
+                  ");\n"
+                  "let first_grad = fn t: (TensorNode) ->\n"
+                  "  match t.operands with\n"
+                  "  | a::[] -> a.grad\n"
+                  "  | _ -> t.grad\n"
+                  ";;\n");
+    TypeEnv *entry = lookup_test_env_binding("first_grad");
+    Type *ret = entry && entry->type && entry->type->kind == T_FN
+                    ? fn_return_type(entry->type)
+                    : NULL;
+    status &= TASSERT("recursive record HasField predicate resolves via decl",
+                      ast && entry && entry->type && entry->type->kind == T_FN);
+    status &= TASSERT("recursive List element grad field returns Array Double",
+                      ret && is_array_type(ret) &&
+                          types_equal(array_element_type(ret), &t_num));
+  });
+
+  ({
+    Ast *ast = _T(
+        "type TensorRef = Array of TensorNode;\n"
+        "\n"
+        "type TensorNode = (\n"
+        "  data: Array of Double,\n"
+        "  grad: Array of Double,\n"
+        "  shape: Array of Int,\n"
+        "  op: TensOp\n"
+        ");\n"
+        "\n"
+        "type TensOp =\n"
+        "  | TensOpLeaf\n"
+        "  | TensOpAdd of (TensorRef, TensorRef)\n"
+        "  | TensOpMul of (TensorRef, TensorRef)\n"
+        "  | TensOpNeg of TensorRef\n"
+        "  | TensOpDiv of (TensorRef, TensorRef)\n"
+        "  | TensOpSum of TensorRef\n"
+        "  | TensOpMatMul of (TensorRef, TensorRef)\n"
+        ";\n"
+        "\n"
+        "let tens = fn data shape ->\n"
+        "  [| TensorNode data [| 0.|] shape TensOpLeaf |]\n"
+        ";;\n"
+        "let tens_add = fn a: (TensorRef) b: (TensorRef) ->\n"
+        "  [| TensorNode [| 0.|] [| 0.|] [| 1 |] (TensOpAdd (a, b)) |]\n"
+        ";;\n");
+    TypeEnv *tensor_ref = lookup_test_env_binding("TensorRef");
+    TypeEnv *tensor_node = lookup_test_env_binding("TensorNode");
+    TypeEnv *tens_op = lookup_test_env_binding("TensOp");
+    TypeEnv *tens = lookup_test_env_binding("tens");
+    TypeEnv *tens_add = lookup_test_env_binding("tens_add");
+    Type *tens_ret = tens && tens->type && tens->type->kind == T_FN &&
+                             tens->type->data.T_FN.to->kind == T_FN
+                         ? tens->type->data.T_FN.to->data.T_FN.to
+                         : NULL;
+    Type *ret_node = array_element_type(tens_ret);
+    Type *ret_op = ret_node ? get_struct_member_type("op", ret_node) : NULL;
+    Type *add_variant =
+        tens_op && tens_op->type && tens_op->type->kind == T_SUM
+            ? tens_op->type->data.T_CONS.args[1]
+            : NULL;
+    Type *add_payload =
+        add_variant && add_variant->kind == T_CONS &&
+                add_variant->data.T_CONS.num_args == 1
+            ? add_variant->data.T_CONS.args[0]
+            : NULL;
+
+    status &= TASSERT("mutually recursive Tensor declarations infer",
+                      ast && tensor_ref && tensor_node && tens_op && tens &&
+                          tens_add);
+    status &= TASSERT("TensorRef is Array of TensorNode",
+                      tensor_ref && tensor_ref->type &&
+                          is_array_type(tensor_ref->type) &&
+                          type_has_alias(tensor_ref->type, "TensorRef") &&
+                          array_element_type(tensor_ref->type) &&
+                          (type_is_named_recursive_ref(
+                               array_element_type(tensor_ref->type),
+                               "TensorNode") ||
+                           type_is_named_type_var(
+                               array_element_type(tensor_ref->type),
+                               "TensorNode") ||
+                           type_has_alias(array_element_type(tensor_ref->type),
+                                          "TensorNode")));
+    status &=
+        TASSERT("TensorNode has an op field",
+                tensor_node && tensor_node->type &&
+                    get_struct_member_type("op", tensor_node->type) != NULL);
+    status &= TASSERT("TensOp is a seven-constructor sum",
+                      tens_op && tens_op->type && tens_op->type->kind == T_SUM &&
+                          strcmp(tens_op->type->data.T_CONS.name, "TensOp") ==
+                              0 &&
+                          tens_op->type->data.T_CONS.num_args == 7);
+    status &= TASSERT("TensOpAdd carries two TensorRef operands",
+                      add_payload && is_tuple_type(add_payload) &&
+                          add_payload->data.T_CONS.num_args == 2 &&
+                          is_array_type(add_payload->data.T_CONS.args[0]) &&
+                          is_array_type(add_payload->data.T_CONS.args[1]));
+    status &= TASSERT("tens returns TensorRef",
+                      tens_ret && is_array_type(tens_ret) &&
+                          ret_node && type_has_alias(ret_node, "TensorNode"));
+    status &= TASSERT("tens result node op resolves to TensOp",
+                      ret_op && tens_op && tens_op->type &&
+                          (test_types_equal(ret_op, tens_op->type) ||
+                           types_match(ret_op, tens_op->type) ||
+                           types_match(tens_op->type, ret_op)));
+    status &= TASSERT("TensOpAdd constructor can be used in TensorRef result",
+                      tens_add && tens_add->type && tens_add->type->kind == T_FN);
   });
 
   ({
@@ -1163,6 +1313,8 @@ int test_basic_ops() {
   printf("## TEST BASIC OPS\n---------------------------------------------\n");
   bool status = true;
   T("1", &t_int);
+  T("1_000_000", &t_int);
+  T("1_000_000u64", &t_uint64);
   T("1.", &t_num);
   T("'c'", &t_char);
   T("\"hello\"", &t_string);
@@ -1914,6 +2066,20 @@ int test_match_exprs() {
     "  | (1, 3) -> 0\n"
     "  ;;\n",
     &MAKE_FN_TYPE_2(&TTUPLE(2, &t_int, &t_int), &t_int));
+
+  T("let f = fn x ->\n"
+    "match x with\n"
+    "  | [| a, b |] -> a + b\n"
+    "  | _ -> 0\n"
+    "  ;;\n",
+    &MAKE_FN_TYPE_2(&TARRAY(&t_int), &t_int));
+
+  T("let f = fn x: (Array of Int) ->\n"
+    "match x with\n"
+    "  | [| |] -> 0\n"
+    "  | _ -> 1\n"
+    "  ;;\n",
+    &MAKE_FN_TYPE_2(&TARRAY(&t_int), &t_int));
 
   ({
     Ast *b = T("let x = 1;\n"

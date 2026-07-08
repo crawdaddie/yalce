@@ -24,6 +24,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+static Type *record_access_type_view(Type *type) {
+  if (type && type->kind == T_RECURSIVE_REF &&
+      type->data.T_RECURSIVE_REF.decl &&
+      type->data.T_RECURSIVE_REF.decl->type) {
+    return type->data.T_RECURSIVE_REF.decl->type;
+  }
+  return type;
+}
+
 LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
@@ -237,15 +246,16 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
         record_type = symbol_type;
       }
     }
+    Type *record_view = record_access_type_view(record_type);
 
     // printf("RECORD ACCESS cons: %p\n", record_type->constructor);
     // print_ast(ast);
     // print_type(record_type);
 
-    if (is_module(record_type)) {
+    if (is_module(record_view)) {
 
       LLVMValueRef val = codegen_module_access(
-          record, record_type, ast->data.AST_RECORD_ACCESS.index,
+          record, record_view, ast->data.AST_RECORD_ACCESS.index,
           ast->data.AST_RECORD_ACCESS.member, member_type, ctx, module,
           builder);
       res = val;
@@ -257,10 +267,10 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // print_ast(record);
     // printf("rec %p\n", rec);
 
-    bool has_named_fields = record_type && record_type->kind == T_CONS &&
-                            record_type->data.T_CONS.names;
-    int member_idx = get_struct_member_idx(member_name, record_type);
-    if (member_idx < 0 && !has_named_fields && !is_generic(record_type)) {
+    bool has_named_fields = record_view && record_view->kind == T_CONS &&
+                            record_view->data.T_CONS.names;
+    int member_idx = get_struct_member_idx(member_name, record_view);
+    if (member_idx < 0 && !has_named_fields && !is_generic(record_view)) {
       member_idx = ast->data.AST_RECORD_ACCESS.index;
     }
 
@@ -271,7 +281,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
 
     res = codegen_tuple_access(
-        member_idx, rec, type_to_llvm_type(record_type, ctx, module), builder);
+        member_idx, rec, type_to_llvm_aggregate_type(record_view, ctx, module),
+        builder);
     break;
   }
 
@@ -281,7 +292,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_TYPE_DECL: {
-    Type *t = ast->type;
+    Type *t = specialize_type_for_codegen(ast->type, ctx);
+    ast->type = t;
 
     if (!is_generic(t) && is_sum_type(t)) {
 

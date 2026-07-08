@@ -22,6 +22,11 @@
 LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
                               LLVMModuleRef module);
 
+LLVMTypeRef type_to_llvm_aggregate_type(Type *type, JITLangCtx *ctx,
+                                        LLVMModuleRef module);
+
+bool type_uses_boxed_recursive_storage(Type *type);
+
 Type *specialize_type_for_codegen(Type *type, JITLangCtx *ctx);
 
 LLVMValueRef attempt_value_conversion(LLVMValueRef value, Type *type_from,

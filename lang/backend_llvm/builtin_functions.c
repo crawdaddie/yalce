@@ -16,6 +16,7 @@
 #include "types.h"
 #include "types/builtins.h"
 #include "types/inference.h"
+#include "types/type_expressions.h"
 #include "types/type_ser.h"
 #include "util.h"
 #include "llvm-c/Target.h"
@@ -1003,8 +1004,7 @@ LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
   }
 
   case T_CHAR: {
-    return LLVMBuildZExt(builder, val, LLVMInt64Type(),
-                         "cast_char_to_uint64");
+    return LLVMBuildZExt(builder, val, LLVMInt64Type(), "cast_char_to_uint64");
   }
 
   default:
@@ -1465,11 +1465,13 @@ LLVMValueRef IndexAccessHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef SizeOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
-  Type *t = NULL;
   TICtx _ctx = {.env = ctx->env};
 
   Ast *expr = ast->data.AST_APPLICATION.args;
-  t = expr->type;
+  Type *t = compute_type_expression(expr, &_ctx);
+  if (!t) {
+    t = expr->type;
+  }
 
   unsigned size;
 
@@ -1479,7 +1481,6 @@ LLVMValueRef SizeOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
 
-  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
   LLVMTypeRef llvm_type = type_to_llvm_type(t, ctx, module);
 
   if (!llvm_type) {
@@ -1521,7 +1522,8 @@ LLVMValueRef AsBytesHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
         codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
     if (t->kind == T_NUM) {
-      value = LLVMBuildBitCast(builder, value, LLVMInt64Type(), "double_as_int");
+      value =
+          LLVMBuildBitCast(builder, value, LLVMInt64Type(), "double_as_int");
     }
 
     LLVMTypeRef value_llvm_type = type_to_llvm_type(t, ctx, module);
@@ -1538,8 +1540,8 @@ LLVMValueRef AsBytesHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
 
     LLVMTypeRef value_ptr_type = LLVMPointerType(value_llvm_type, 0);
-    LLVMValueRef value_ptr = LLVMBuildBitCast(builder, byte_array_ptr,
-                                             value_ptr_type, "value_ptr");
+    LLVMValueRef value_ptr =
+        LLVMBuildBitCast(builder, byte_array_ptr, value_ptr_type, "value_ptr");
     LLVMBuildStore(builder, value, value_ptr);
 
     LLVMValueRef byte_ptr = LLVMBuildBitCast(

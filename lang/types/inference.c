@@ -11,6 +11,9 @@
 #include "./type.h"
 #include "./type_expressions.h"
 #include "./type_ser.h"
+
+#include "../serde.h"
+#include "trait.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,6 +44,24 @@ static Type *create_module_type_from_env(TypeEnv *mod_env, int mod_size);
 static bool occurs_in(int var_id, Type *type);
 
 static FILE *err_stream;
+
+static Type *recursive_ref_decl_type(Type *type) {
+  if (!type || type->kind != T_RECURSIVE_REF ||
+      !type->data.T_RECURSIVE_REF.decl) {
+    return type;
+  }
+
+  Type *decl_type = type->data.T_RECURSIVE_REF.decl->type;
+  return decl_type ? decl_type : type;
+}
+
+static Type *record_field_view(Type *type) {
+  Type *view = recursive_ref_decl_type(type);
+  if (view && view->kind == T_CONS && view->data.T_CONS.names) {
+    return view;
+  }
+  return type;
+}
 
 static bool is_recursive_self_reference(Ast *ast, TICtx *ctx) {
   if (!ast || !ctx || !ctx->current_fn_ast) {
@@ -635,8 +656,12 @@ Type *infer(Ast *ast, TICtx *ctx) {
 // ============================================================================
 
 Type *infer_list_literal(Ast *ast, TICtx *ctx) {
-  Type *el_type = next_tvar();
   int len = ast->data.AST_LIST.len;
+  Type *el_type = NULL;
+
+  if (len == 0) {
+    el_type = next_tvar();
+  }
 
   for (int i = 0; i < len; i++) {
     Ast *el = ast->data.AST_LIST.items + i;
@@ -644,19 +669,18 @@ Type *infer_list_literal(Ast *ast, TICtx *ctx) {
     if (!item_type) {
       return NULL;
     }
-    add_constraint(ctx, item_type, el_type);
+    if (i == 0) {
+      el_type = item_type;
+    } else {
+      add_constraint(ctx, item_type, el_type);
+    }
   }
 
   if (ast->tag == AST_LIST) {
     return create_list_type_of_type(el_type);
   }
 
-  Type *type = t_alloc(sizeof(Type));
-  Type **contained = t_alloc(sizeof(Type *));
-  contained[0] = el_type;
-
-  *type = (Type){T_CONS, {.T_CONS = {TYPE_NAME_ARRAY, contained, 1}}};
-  return type;
+  return create_array_type(el_type);
 }
 
 // ============================================================================
@@ -835,13 +859,29 @@ static TypeList *set_diff(TypeList *a, TypeList *b) {
   return result;
 }
 
+static TypeList *filter_decl_ref_vars(TypeList *vars, TypeEnv *env) {
+  TypeList *result = NULL;
+  for (TypeList *v = vars; v; v = v->next) {
+    Type *t = v->type;
+    TypeEnv *ref = t && t->kind == T_VAR && t->data.T_VAR.name
+                       ? lookup_type_ref(env, t->data.T_VAR.name)
+                       : NULL;
+    if (ref && ref->md.type == BT_TYPE_DECL) {
+      continue;
+    }
+    result = type_list_append_var(result, t);
+  }
+  return result;
+}
+
 // ============================================================================
 // Generalize / Instantiate
 // Operate on TypeEnv entries, not on Type nodes directly.
 // ============================================================================
 
 void generalize_env(TypeEnv *entry, TypeEnv *env) {
-  TypeList *fv_type = free_vars_type(NULL, entry->type);
+  TypeList *fv_type =
+      filter_decl_ref_vars(free_vars_type(NULL, entry->type), entry);
   TypeList *fv_env = free_vars_env(NULL, env);
   TypeList *scheme_vars = set_diff(fv_type, fv_env);
   // A non-function value binding (e.g. `let x2 = x / 10`) whose type is a
@@ -935,12 +975,11 @@ Type *instantiate_env(TypeEnv *entry, TICtx *ctx) {
                    : p->data.HAS_FIELD.record;
       Type *fresh_field =
           base.len
-              ? freshen_map_apply_to_type(&base,
-                                          p->data.HAS_FIELD.field_type)
+              ? freshen_map_apply_to_type(&base, p->data.HAS_FIELD.field_type)
               : p->data.HAS_FIELD.field_type;
-      ctx->predicates = predicate_append_has_field(
-          ctx->predicates, fresh_record, p->data.HAS_FIELD.field_name,
-          fresh_field);
+      ctx->predicates =
+          predicate_append_has_field(ctx->predicates, fresh_record,
+                                     p->data.HAS_FIELD.field_name, fresh_field);
     }
   }
 
@@ -954,10 +993,14 @@ Type *instantiate_env(TypeEnv *entry, TICtx *ctx) {
 // no predicates to copy.  Keeps predicate-copying centralized in
 // instantiate_env when it is needed.
 static Type *instantiate_ref(TypeEnv *ref, TICtx *ctx) {
-  if (!ref->scheme_vars && !ref->predicates) {
-    return ref->type;
+  Type *inst = (!ref->scheme_vars && !ref->predicates)
+                   ? ref->type
+                   : instantiate_env(ref, ctx);
+  if ((ref->md.type == BT_TYPE_DECL || ref->md.type == BT_TYPE_CONSTRUCTOR) &&
+      inst && ctx && ctx->env) {
+    return resolve_type_in_env(deep_copy_type(inst), ctx->env);
   }
-  return instantiate_env(ref, ctx);
+  return inst;
 }
 
 Type *instantiate_type_in_env(Type *sch, TypeEnv *env) { return sch; }
@@ -973,8 +1016,10 @@ static Type *infer_identifier(Ast *ast, TICtx *ctx) {
   if (ref) {
     if (ref->md.type == BT_TYPE_DECL && ref->type &&
         ref->type->kind == T_CONS && !is_sum_type(ref->type)) {
-      return create_type_multi_param_fn(ref->type->data.T_CONS.num_args,
-                                        ref->type->data.T_CONS.args, ref->type);
+      Type *decl_type =
+          resolve_type_in_env(deep_copy_type(ref->type), ctx->env);
+      return create_type_multi_param_fn(decl_type->data.T_CONS.num_args,
+                                        decl_type->data.T_CONS.args, decl_type);
     }
     Type *inst = instantiate_ref(ref, ctx);
     ast->type = inst;
@@ -1072,6 +1117,27 @@ int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx) {
     add_constraint(ctx, value_type, create_tuple_type(len, items));
     for (int i = 0; i < len; i++) {
       if (bind_pattern(pattern->data.AST_LIST.items + i, items[i], ctx) != 0) {
+        return 1;
+      }
+    }
+    return 0;
+  }
+
+  case AST_ARRAY: {
+
+    if (pattern->data.AST_LIST.len == 0) {
+      Type *item_type = next_tvar();
+      add_constraint(ctx, value_type, create_array_type(item_type));
+      return 0;
+    }
+
+    int len = pattern->data.AST_LIST.len;
+    Type *el = next_tvar();
+
+    add_constraint(ctx, value_type, create_array_type(el));
+
+    for (int i = 0; i < len; i++) {
+      if (bind_pattern(pattern->data.AST_LIST.items + i, el, ctx)) {
         return 1;
       }
     }
@@ -1293,9 +1359,11 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
     //   ast->data.AST_RECORD_ACCESS.record->type = rec_type;
     // }
 
-    if (rec_type->kind == T_MODULE) {
+    Type *rec_view = record_field_view(rec_type);
+
+    if (rec_view->kind == T_MODULE) {
       int i = 0;
-      for (TypeEnv *te = rec_type->data.T_MODULE.env; te; te = te->next, i++) {
+      for (TypeEnv *te = rec_view->data.T_MODULE.env; te; te = te->next, i++) {
         if (CHARS_EQ(te->name, member_name)) {
           type = instantiate_env(te, ctx);
           ast->data.AST_RECORD_ACCESS.index = i;
@@ -1309,28 +1377,27 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
       break;
     }
 
-    if (rec_type->kind == T_VAR) {
+    if (rec_view->kind == T_VAR) {
       Type *field_type = next_tvar();
-      ctx->predicates =
-          predicate_append_has_field(ctx->predicates, rec_type, member_name,
-                                     field_type);
+      ctx->predicates = predicate_append_has_field(ctx->predicates, rec_view,
+                                                   member_name, field_type);
       type = field_type;
       break;
     }
 
-    if (rec_type->kind != T_CONS) {
+    if (rec_view->kind != T_CONS) {
       fprintf(stderr, "Error: record type not cons\n");
       return NULL;
     }
 
-    if (rec_type->kind == T_CONS && rec_type->data.T_CONS.names == NULL) {
+    if (rec_view->kind == T_CONS && rec_view->data.T_CONS.names == NULL) {
       fprintf(stderr, "Error: record type does not have names\n");
       return NULL;
     }
 
-    int member_idx = get_struct_member_idx(member_name, rec_type);
+    int member_idx = get_struct_member_idx(member_name, rec_view);
     if (member_idx >= 0) {
-      type = rec_type->data.T_CONS.args[member_idx];
+      type = rec_view->data.T_CONS.args[member_idx];
       ast->data.AST_RECORD_ACCESS.index = member_idx;
     }
 
@@ -1378,81 +1445,7 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
   }
 
   case AST_TRAIT_IMPL: {
-    Ast *impl = ast->data.AST_TRAIT_IMPL.impl;
-    Type *impl_type = infer_expr(impl, ctx);
-    if (!impl_type) {
-      return NULL;
-    }
-
-    const char *trait_name = ast->data.AST_TRAIT_IMPL.trait_name.chars;
-    const char *type_name = ast->data.AST_TRAIT_IMPL.type.chars;
-
-    Type *target = env_lookup(ctx->env, type_name);
-
-    if (!target) {
-      target = lookup_builtin_type(type_name);
-    }
-
-    if (!target) {
-      type_error(ast, "cannot register trait %s: type %s not in scope",
-                 trait_name, type_name);
-      return NULL;
-    }
-
-    TypeClass *tc = t_alloc(sizeof(TypeClass));
-    *tc = (TypeClass){.name = trait_name, .module = impl_type};
-    typeclasses_extend(target, tc);
-
-    if (strcmp(trait_name, "Zero") == 0) {
-      TypeEnv *imp = impl_type->data.T_MODULE.env;
-      imp->next = ctx->env;
-      ctx->env = imp;
-      return imp->type;
-    }
-
-    if (strcmp(trait_name, TYPE_NAME_TYPECLASS_FROM) == 0) {
-      if (impl_type->kind == T_MODULE) {
-        for (TypeEnv *te = impl_type->data.T_MODULE.env; te; te = te->next) {
-          const char *mname = te->name;
-          if (strncmp(mname, "from_", 5) != 0) {
-            continue;
-          }
-          Type *mtype = te->type;
-          if (!mtype || mtype->kind != T_FN) {
-            continue;
-          }
-          Type *src = mtype->data.T_FN.from;
-          if (!src || is_generic(src)) {
-            continue;
-          }
-          TypeList *src_params = t_alloc(sizeof(TypeList));
-          src_params->type = src;
-          src_params->next = NULL;
-          TypeClass *src_tc = t_alloc(sizeof(TypeClass));
-          *src_tc = (TypeClass){
-              .name = trait_name, .module = impl_type, .params = src_params};
-          typeclasses_extend(target, src_tc);
-        }
-      }
-
-      Type *a = tvar("a");
-      Type *ctor_fn = type_fn(a, target);
-      TypeList *scheme_vars = t_alloc(sizeof(TypeList));
-      scheme_vars->type = a;
-      scheme_vars->next = NULL;
-      TypeList *from_params = t_alloc(sizeof(TypeList));
-      from_params->type = a;
-      from_params->next = NULL;
-      Predicate *preds =
-          predicate_append_applied(NULL, GenericFrom, target, from_params);
-      ctx->env = env_extend_with_preds(ctx->env, type_name, ctor_fn, preds);
-      ctx->env->scheme_vars = scheme_vars;
-      ctx->env->can_generalize = true;
-      ctx->env->needs_generalization = true;
-    }
-
-    ast->type = impl_type;
-    type = impl_type;
+    type = type_trait_impl(ast, ctx);
     break;
   }
 
@@ -1504,8 +1497,8 @@ Predicate *predicate_append_has_field(Predicate *list, Type *record,
   *p = (Predicate){.kind = PRED_HAS_FIELD,
                    .trait = NULL,
                    .data = {.HAS_FIELD = {.record = record,
-                                           .field_name = field_name,
-                                           .field_type = field_type}},
+                                          .field_name = field_name,
+                                          .field_type = field_type}},
                    .next = list};
   return p;
 }
@@ -1626,8 +1619,8 @@ void print_predicate(Predicate *p) {
       printf("(null)");
     }
     printf(" . %s : ", p->data.HAS_FIELD.field_name
-                            ? p->data.HAS_FIELD.field_name
-                            : "(null)");
+                           ? p->data.HAS_FIELD.field_name
+                           : "(null)");
     if (p->data.HAS_FIELD.field_type) {
       print_type_to_stream(p->data.HAS_FIELD.field_type, stdout);
     } else {
@@ -1677,8 +1670,22 @@ int resolve_predicates(Subst **subst_ptr, Predicate *preds) {
             !get_typeclass_instance(t, p->trait->name, params)) {
           if (err_stream) {
             fprintf(err_stream, "Type Error: ");
-            print_type_to_stream(t, err_stream);
-            fprintf(err_stream, " does not implement %s\n", p->trait->name);
+            if (strcmp(p->trait->name, TYPE_NAME_TYPECLASS_FROM) == 0 &&
+                params && params->type) {
+              fprintf(err_stream, "cannot convert ");
+              print_type_to_stream(params->type, err_stream);
+              fprintf(err_stream, " to ");
+              print_type_to_stream(t, err_stream);
+              fprintf(err_stream, ": ");
+              print_type_to_stream(t, err_stream);
+              fprintf(err_stream, " does not implement %s from ",
+                      p->trait->name);
+              print_type_to_stream(params->type, err_stream);
+              fprintf(err_stream, "\n");
+            } else {
+              print_type_to_stream(t, err_stream);
+              fprintf(err_stream, " does not implement %s\n", p->trait->name);
+            }
             fflush(err_stream);
           }
           return 1;
@@ -1822,12 +1829,13 @@ int resolve_predicates(Subst **subst_ptr, Predicate *preds) {
         Type *record = apply_subst_to_type(subst, p->data.HAS_FIELD.record);
         Type *field_type =
             apply_subst_to_type(subst, p->data.HAS_FIELD.field_type);
+        Type *record_view = record_field_view(record);
 
-        if (record->kind == T_VAR) {
+        if (record_view->kind == T_VAR) {
           continue;
         }
 
-        if (record->kind != T_CONS || !record->data.T_CONS.names) {
+        if (record_view->kind != T_CONS || !record_view->data.T_CONS.names) {
           if (err_stream) {
             fprintf(err_stream, "Type Error: ");
             print_type_to_stream(record, err_stream);
@@ -1839,7 +1847,7 @@ int resolve_predicates(Subst **subst_ptr, Predicate *preds) {
         }
 
         int field_idx =
-            get_struct_member_idx(p->data.HAS_FIELD.field_name, record);
+            get_struct_member_idx(p->data.HAS_FIELD.field_name, record_view);
         if (field_idx < 0) {
           if (err_stream) {
             fprintf(err_stream, "Type Error: ");
@@ -1851,7 +1859,7 @@ int resolve_predicates(Subst **subst_ptr, Predicate *preds) {
           return 1;
         }
 
-        Type *actual_field_type = record->data.T_CONS.args[field_idx];
+        Type *actual_field_type = record_view->data.T_CONS.args[field_idx];
         Subst *next_subst = NULL;
         if (unify_types(field_type, actual_field_type, subst, &next_subst) !=
             0) {
@@ -2217,6 +2225,9 @@ Type *apply_subst_to_type(Subst *subst, Type *t) {
     if (is_coroutine_type(t)) {
       return create_coroutine_instance_type(new_args[0]);
     }
+    if (is_array_type(t)) {
+      return create_array_type(new_args[0]);
+    }
     Type *result = t_alloc(sizeof(Type));
     *result = *t;
     result->data.T_CONS.args = new_args;
@@ -2302,13 +2313,29 @@ void apply_substitution_to_lambda_body(Ast *ast, Subst *subst) {
   finalize_ast_types(ast, subst);
 }
 
-Type *resolve_type_in_env(Type *r, TypeEnv *env) {
+typedef struct ResolveTypeFrame {
+  const char *name;
+  struct ResolveTypeFrame *next;
+} ResolveTypeFrame;
+
+static ResolveTypeFrame *resolve_frame_find(ResolveTypeFrame *frame,
+                                            const char *name) {
+  for (; frame; frame = frame->next) {
+    if (frame->name && name && strcmp(frame->name, name) == 0) {
+      return frame;
+    }
+  }
+  return NULL;
+}
+
+static Type *resolve_type_in_env_inner(Type *r, TypeEnv *env,
+                                       ResolveTypeFrame *frame) {
   if (!r) {
     return NULL;
   }
 
   if (r->closure_meta) {
-    r->closure_meta = resolve_type_in_env(r->closure_meta, env);
+    r->closure_meta = resolve_type_in_env_inner(r->closure_meta, env, frame);
   }
 
   switch (r->kind) {
@@ -2319,17 +2346,31 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) {
       return r;
     }
 
-    Type *resolved = env_lookup(env, r->data.T_VAR.name);
-    if (!resolved) {
+    TypeEnv *ref = lookup_type_ref(env, r->data.T_VAR.name);
+    if (!ref || !ref->type) {
       return r;
     }
 
+    Type *resolved = ref->type;
     if (resolved->kind == T_VAR && types_equal(resolved, r)) {
       return r;
     }
 
+    const char *resolved_name = ref->name ? ref->name : r->data.T_VAR.name;
+    if (ref->md.type == BT_TYPE_DECL &&
+        resolve_frame_find(frame, resolved_name)) {
+      return trec(resolved_name, ref);
+    }
+
+    ResolveTypeFrame next_frame = {
+        .name = resolved_name,
+        .next = frame,
+    };
+    ResolveTypeFrame *use_frame =
+        ref->md.type == BT_TYPE_DECL ? &next_frame : frame;
+
     Type *copy = deep_copy_type(resolved);
-    copy = resolve_type_in_env(copy, env);
+    copy = resolve_type_in_env_inner(copy, env, use_frame);
     if (saved_closure_meta && !copy->closure_meta) {
       copy->closure_meta = deep_copy_type(saved_closure_meta);
     }
@@ -2339,14 +2380,16 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) {
   case T_CONS:
   case T_SUM: {
     for (int i = 0; i < r->data.T_CONS.num_args; i++) {
-      r->data.T_CONS.args[i] = resolve_type_in_env(r->data.T_CONS.args[i], env);
+      r->data.T_CONS.args[i] =
+          resolve_type_in_env_inner(r->data.T_CONS.args[i], env, frame);
     }
     return r;
   }
 
   case T_FN: {
-    r->data.T_FN.from = resolve_type_in_env(r->data.T_FN.from, env);
-    r->data.T_FN.to = resolve_type_in_env(r->data.T_FN.to, env);
+    r->data.T_FN.from =
+        resolve_type_in_env_inner(r->data.T_FN.from, env, frame);
+    r->data.T_FN.to = resolve_type_in_env_inner(r->data.T_FN.to, env, frame);
     return r;
   }
 
@@ -2354,6 +2397,10 @@ Type *resolve_type_in_env(Type *r, TypeEnv *env) {
     return r;
   }
   }
+}
+
+Type *resolve_type_in_env(Type *r, TypeEnv *env) {
+  return resolve_type_in_env_inner(r, env, NULL);
 }
 
 Type *find_in_subst(Subst *subst, int var_id) {

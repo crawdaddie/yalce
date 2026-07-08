@@ -12,7 +12,6 @@ type Scalar = Double;
 let compile_audio_fn = extern fn T -> T;
 
 let Audio = extern fn (T: (Double ... -> Double)) -> T;
-let Pattern = extern fn T -> T;
 # let Audio = extern fn T -> T;
 
 let pat = extern fn String -> Coroutine of Double;
@@ -399,12 +398,12 @@ let ladder = @Audio fn cutoff res drive x ->
 
 
 let dsp_list = module () ->
-  let fold = extern fn (R -> T -> T) -> R -> List of T -> R;
-  let foldi = extern fn (Int -> R -> T -> T) -> R -> List of T -> R;
+  let fold = extern fn (R -> T -> R) -> R -> List of T -> R;
+  let foldi = extern fn (Int -> R -> T -> R) -> R -> List of T -> R;
 ;
 
 let dsp_array = module () ->
-  let fold = extern fn (R -> T -> T) -> R -> Array of T -> R;
+  let fold = extern fn (R -> T -> R) -> R -> Array of T -> R;
   let foldi = extern fn (Int -> R -> T -> R) -> R -> Array of T -> R;
   let map = extern fn (T -> R) -> Array of T -> Array of R;
   let mapi = extern fn (Int -> T -> R) -> Array of T -> Array of R;
@@ -449,8 +448,13 @@ let plate = @Audio fn fb x ->
               |> allpass 0.0127 0.05 0.7
   in
   # Tank: two allpass loops in series approximate a reverb tail
-  [0.0672, 0.0100, 0.0442, 0.0908, 0.0100, 0.0400]
-  |> dsp_list.fold (fn acc t -> acc |> allpass t 0.15 fb) pre
+  pre
+  |> allpass 0.0672 0.15 fb
+  |> allpass 0.0100 0.15 fb
+  |> allpass 0.0442 0.15 fb
+  |> allpass 0.0908 0.15 fb
+  |> allpass 0.0100 0.15 fb
+  |> allpass 0.0400 0.15 fb
 ;;
 
 # 4. Adding tone shaping — absorptive reverb by LP-filtering the comb feedback:
@@ -591,42 +595,58 @@ let fdn8 = @Audio fn d1 d2 d3 d4 d5 d6 d7 d8 rt60 inp ->
      0.25,  0.25,  0.25,  0.25,  0.25,  0.25, -0.75,  0.25,
      0.25,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25, -0.75,
   |];
-  let b = array_fill_const 8 1.;
   let c = array_fill_const 8 0.125;
 
-  let dls = [|
-    (delay_line 1, d1),
-    (delay_line 1, d2),
-    (delay_line 1, d3),
-    (delay_line 1, d4),
-    (delay_line 1, d5),
-    (delay_line 1, d6),
-    (delay_line 1, d7),
-    (delay_line 1, d8),
-  |];
-
-  let dl0, _ = dls[0];
-  let max_size = array_size dl0;
+  let dl1 = delay_line 1;
+  let dl2 = delay_line 1;
+  let dl3 = delay_line 1;
+  let dl4 = delay_line 1;
+  let dl5 = delay_line 1;
+  let dl6 = delay_line 1;
+  let dl7 = delay_line 1;
+  let dl8 = delay_line 1;
+  let max_size = array_size dl1;
 
   let counter = [| 0 |];
   let w = counter[0];
 
-  let y = dsp_array.map (fn (dl, dt) ->
-    tabread_samp dl (w - sample_rate * dt)
-  ) dls;
+  let y = [|
+    tabread_samp dl1 (w - sample_rate * d1),
+    tabread_samp dl2 (w - sample_rate * d2),
+    tabread_samp dl3 (w - sample_rate * d3),
+    tabread_samp dl4 (w - sample_rate * d4),
+    tabread_samp dl5 (w - sample_rate * d5),
+    tabread_samp dl6 (w - sample_rate * d6),
+    tabread_samp dl7 (w - sample_rate * d7),
+    tabread_samp dl8 (w - sample_rate * d8),
+  |];
 
-  array_fill_const 8 0.
-  |> dsp_mmul_op M y
-  |> dsp_array.mapi (fn i d ->
-    let (dl, dt) = dls[i];
-    dl[w] := inp * b[i] + (
-      d
-      |> (*) (Math.pow 10.0 ((-3.0 * dt) / rt60))
-      |> Filter.lpf1p 8000
-      |> Filter.hpf1p 200
-    )
-  )
-  ;
+  let v = array_fill_const 8 0. |> dsp_mmul_op M y;
+
+  dl1[w] := inp + (
+    v[0] |> (*) (Math.pow 10.0 ((-3.0 * d1) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl2[w] := inp + (
+    v[1] |> (*) (Math.pow 10.0 ((-3.0 * d2) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl3[w] := inp + (
+    v[2] |> (*) (Math.pow 10.0 ((-3.0 * d3) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl4[w] := inp + (
+    v[3] |> (*) (Math.pow 10.0 ((-3.0 * d4) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl5[w] := inp + (
+    v[4] |> (*) (Math.pow 10.0 ((-3.0 * d5) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl6[w] := inp + (
+    v[5] |> (*) (Math.pow 10.0 ((-3.0 * d6) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl7[w] := inp + (
+    v[6] |> (*) (Math.pow 10.0 ((-3.0 * d7) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl8[w] := inp + (
+    v[7] |> (*) (Math.pow 10.0 ((-3.0 * d8) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
 
   counter[0] := (w + 1) % max_size;
   inp + (vec_dot c y)
@@ -646,44 +666,69 @@ let fdn8rs = @Audio fn rs rt60 inp ->
      0.25,  0.25,  0.25,  0.25,  0.25,  0.25, -0.75,  0.25,
      0.25,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25, -0.75,
   |];
-  let b = array_fill_const 8 1.;
   let c = array_fill_const 8 0.125;
 
   # let 0.0199  0.0260  0.0341  0.0440  0.0581  0.0759  0.0990  0.1291
 
-  let dls = [|
-    (delay_line 1, 0.0199),
-    (delay_line 1, 0.0260),
-    (delay_line 1, 0.0341),
-    (delay_line 1, 0.0440),
-    (delay_line 1, 0.0581),
-    (delay_line 1, 0.0759),
-    (delay_line 1, 0.0990),
-    (delay_line 1, 0.1291),
-  |];
+  let dt1 = 0.0199;
+  let dt2 = 0.0260;
+  let dt3 = 0.0341;
+  let dt4 = 0.0440;
+  let dt5 = 0.0581;
+  let dt6 = 0.0759;
+  let dt7 = 0.0990;
+  let dt8 = 0.1291;
 
-  let dl0, _ = dls[0];
-  let max_size = array_size dl0;
+  let dl1 = delay_line 1;
+  let dl2 = delay_line 1;
+  let dl3 = delay_line 1;
+  let dl4 = delay_line 1;
+  let dl5 = delay_line 1;
+  let dl6 = delay_line 1;
+  let dl7 = delay_line 1;
+  let dl8 = delay_line 1;
+  let max_size = array_size dl1;
 
   let counter = [| 0 |];
   let w = counter[0];
 
-  let y = dsp_array.map (fn (dl, dt) ->
-    tabread_samp dl (w - sample_rate * dt * rs )
-  ) dls;
+  let y = [|
+    tabread_samp dl1 (w - sample_rate * dt1 * rs),
+    tabread_samp dl2 (w - sample_rate * dt2 * rs),
+    tabread_samp dl3 (w - sample_rate * dt3 * rs),
+    tabread_samp dl4 (w - sample_rate * dt4 * rs),
+    tabread_samp dl5 (w - sample_rate * dt5 * rs),
+    tabread_samp dl6 (w - sample_rate * dt6 * rs),
+    tabread_samp dl7 (w - sample_rate * dt7 * rs),
+    tabread_samp dl8 (w - sample_rate * dt8 * rs),
+  |];
 
-  array_fill_const 8 0.
-  |> dsp_mmul_op M y
-  |> dsp_array.mapi (fn i d ->
-    let (dl, dt) = dls[i];
-    dl[w] := inp * b[i] + (
-      d
-      |> (*) (Math.pow 10.0 ((-3.0 * dt * rs) / rt60))
-      |> Filter.lpf1p 8000
-      |> Filter.hpf1p 200
-    )
-  )
-  ;
+  let v = array_fill_const 8 0. |> dsp_mmul_op M y;
+
+  dl1[w] := inp + (
+    v[0] |> (*) (Math.pow 10.0 ((-3.0 * dt1 * rs) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl2[w] := inp + (
+    v[1] |> (*) (Math.pow 10.0 ((-3.0 * dt2 * rs) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl3[w] := inp + (
+    v[2] |> (*) (Math.pow 10.0 ((-3.0 * dt3 * rs) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl4[w] := inp + (
+    v[3] |> (*) (Math.pow 10.0 ((-3.0 * dt4 * rs) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl5[w] := inp + (
+    v[4] |> (*) (Math.pow 10.0 ((-3.0 * dt5 * rs) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl6[w] := inp + (
+    v[5] |> (*) (Math.pow 10.0 ((-3.0 * dt6 * rs) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl7[w] := inp + (
+    v[6] |> (*) (Math.pow 10.0 ((-3.0 * dt7 * rs) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
+  dl8[w] := inp + (
+    v[7] |> (*) (Math.pow 10.0 ((-3.0 * dt8 * rs) / rt60)) |> Filter.lpf1p 8000 |> Filter.hpf1p 200
+  );
 
   counter[0] := (w + 1) % max_size;
   inp + (vec_dot c y)

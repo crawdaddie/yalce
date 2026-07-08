@@ -778,6 +778,7 @@ __attribute__((constructor)) static void ylc_audio_jit_init(void) {
 
   register_builtin(stack, "play_pattern", play_pattern_handler);
   register_builtin(stack, "play", play_module_handler);
+  register_builtin(stack, "Pattern", named_pattern_handler);
 }
 
 void *null_synth_ptr() { return NULL; }

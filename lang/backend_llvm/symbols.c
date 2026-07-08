@@ -48,9 +48,8 @@ static void specialize_ast_types_for_codegen(Ast *ast, JITLangCtx *ctx) {
 
   switch (ast->tag) {
   case AST_BODY:
-    AST_LIST_ITER(ast->data.AST_BODY.stmts, ({
-                    specialize_ast_types_for_codegen(l->ast, ctx);
-                  }));
+    AST_LIST_ITER(ast->data.AST_BODY.stmts,
+                  ({ specialize_ast_types_for_codegen(l->ast, ctx); }));
     break;
   case AST_LET:
     specialize_ast_types_for_codegen(ast->data.AST_LET.binding, ctx);
@@ -65,9 +64,8 @@ static void specialize_ast_types_for_codegen(Ast *ast, JITLangCtx *ctx) {
     break;
   case AST_LAMBDA:
   case AST_MODULE:
-    AST_LIST_ITER(ast->data.AST_LAMBDA.params, ({
-                    specialize_ast_types_for_codegen(l->ast, ctx);
-                  }));
+    AST_LIST_ITER(ast->data.AST_LAMBDA.params,
+                  ({ specialize_ast_types_for_codegen(l->ast, ctx); }));
     specialize_ast_types_for_codegen(ast->data.AST_LAMBDA.body, ctx);
     break;
   case AST_MATCH:
@@ -226,7 +224,7 @@ static LLVMValueRef emit_array_fn_binding(Ast *binding, Ast *expr,
                            builder);
 }
 
-  // Emit concrete function-like bindings, including externs and closures.
+// Emit concrete function-like bindings, including externs and closures.
 static LLVMValueRef emit_function_binding(Ast *binding, Ast *expr,
                                           Type *binding_type, JITLangCtx *ctx,
                                           LLVMModuleRef module,
@@ -479,7 +477,8 @@ LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,
 // Register a parametrized module binding without forcing specialization yet.
 LLVMValueRef create_generic_module_binding(Ast *binding, Ast *module_ast,
                                            JITLangCtx *ctx) {
-  JITSymbol *sym = new_symbol(STYPE_GENERIC_MODULE, module_ast->type, NULL, NULL);
+  JITSymbol *sym =
+      new_symbol(STYPE_GENERIC_MODULE, module_ast->type, NULL, NULL);
   sym->symbol_data.STYPE_GENERIC_MODULE.ast = module_ast;
   sym->symbol_data.STYPE_GENERIC_MODULE.stack_ptr = ctx->stack_ptr;
   sym->symbol_data.STYPE_GENERIC_MODULE.stack_frame = ctx->frame;
@@ -591,6 +590,7 @@ LLVMValueRef _codegen_let_expr(Ast *binding, Ast *expr, JITLangCtx *ctx,
     return create_generic_fn_binding(binding, expr, ctx);
   case BIND_GENERIC_MODULE:
     return create_generic_module_binding(binding, expr, ctx);
+
   case BIND_SPECIALIZED_MODULE:
     return specialize_and_bind_module(binding, expr, binding_type, ctx, module,
                                       builder);

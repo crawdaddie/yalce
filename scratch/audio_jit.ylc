@@ -101,7 +101,7 @@ play_pattern (4* q) (
 
   hh: (
   (dur:     pat "1 1 2 ",
-    hh: pat_key "c c o "
+    hh: pat_key_chars "c c o "
   )
   |> cor_zip_struct 
   |> cor_map (fn (d, hh) ->

@@ -59,6 +59,15 @@ static void extend_coroutine_from_instances(Type *coroutine, Type *yielded) {
       make_typeclass_instance(TYPE_NAME_TYPECLASS_FROM, 1000.0, array_params));
 }
 
+static void extend_array_from_instances(Type *array, Type *element) {
+  TypeList *list_params = t_alloc(sizeof(TypeList));
+  list_params->type = create_list_type_of_type(element);
+  list_params->next = NULL;
+  typeclasses_extend(
+      array,
+      make_typeclass_instance(TYPE_NAME_TYPECLASS_FROM, 1000.0, list_params));
+}
+
 static bool module_matches_cons(Type *mod, Type *cons, bool exact) {
   if (!mod || !cons || mod->kind != T_MODULE || cons->kind != T_CONS ||
       strcmp(cons->data.T_CONS.name, TYPE_NAME_MODULE) != 0) {
@@ -93,6 +102,17 @@ static bool module_matches_cons(Type *mod, Type *cons, bool exact) {
   return env == NULL;
 }
 
+static bool recursive_ref_matches_decl(Type *ref, Type *type) {
+  if (!ref || ref->kind != T_RECURSIVE_REF || !type ||
+      (type->kind != T_CONS && type->kind != T_SUM)) {
+    return false;
+  }
+
+  const char *name = ref->data.T_RECURSIVE_REF.name;
+  return (type->alias && strcmp(name, type->alias) == 0) ||
+         (type->data.T_CONS.name && strcmp(name, type->data.T_CONS.name) == 0);
+}
+
 bool types_match(Type *t1, Type *t2) {
   if (t1 == t2) {
     return true;
@@ -112,6 +132,10 @@ bool types_match(Type *t1, Type *t2) {
   }
 
   if (t1->kind != t2->kind) {
+    if (recursive_ref_matches_decl(t1, t2) ||
+        recursive_ref_matches_decl(t2, t1)) {
+      return true;
+    }
     if (t1->kind == T_MODULE && t2->kind == T_CONS) {
       return module_matches_cons(t1, t2, false);
     }
@@ -210,6 +234,10 @@ bool types_equal(Type *t1, Type *t2) {
   }
 
   if (t1->kind != t2->kind) {
+    if (recursive_ref_matches_decl(t1, t2) ||
+        recursive_ref_matches_decl(t2, t1)) {
+      return true;
+    }
     if (t1->kind == T_MODULE && t2->kind == T_CONS) {
       return module_matches_cons(t1, t2, true);
     }
@@ -591,6 +619,7 @@ Type *create_array_type(Type *of) {
   gen_array->data.T_CONS.num_args = 1;
   gen_array->data.T_CONS.args[0] = of;
   typeclasses_extend(gen_array, &_GenericEq);
+  extend_array_from_instances(gen_array, of);
   return gen_array;
 }
 

@@ -16,14 +16,20 @@ LLVMValueRef codegen_cons_type_constructor(Ast *ast, JITLangCtx *ctx,
     return NULL;
   }
 
-  LLVMTypeRef struct_type = named_struct_type(expected_type->data.T_CONS.name,
-                                              expected_type, ctx, module);
+  LLVMTypeRef struct_type =
+      type_to_llvm_aggregate_type(expected_type, ctx, module);
 
   LLVMValueRef tuple = LLVMGetUndef(struct_type);
   for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
     Ast *arg = ast->data.AST_APPLICATION.args + i;
     LLVMValueRef item_val = codegen(arg, ctx, module, builder);
     tuple = LLVMBuildInsertValue(builder, tuple, item_val, i, "");
+  }
+
+  if (type_uses_boxed_recursive_storage(expected_type)) {
+    LLVMValueRef boxed = LLVMBuildMalloc(builder, struct_type, "boxed_record");
+    LLVMBuildStore(builder, tuple, boxed);
+    return boxed;
   }
 
   return tuple;

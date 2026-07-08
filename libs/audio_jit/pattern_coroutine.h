@@ -39,5 +39,8 @@ LLVMValueRef pattern_key_chars_handler(Ast *ast, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder);
 
+LLVMValueRef named_pattern_handler(Ast *ast, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder);
 extern int STYPE_AUDIO_JIT_LIVE_PATTERN;
 #endif

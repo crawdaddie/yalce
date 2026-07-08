@@ -37,6 +37,59 @@ static Type *infer_module_type_arg(Ast *arg_ast, TICtx *ctx) {
   return type_error(arg_ast, "Unknown type argument '%s'", name);
 }
 
+static bool is_identifier_named(Ast *ast, const char *name) {
+  return ast && ast->tag == AST_IDENTIFIER &&
+         strcmp(ast->data.AST_IDENTIFIER.value, name) == 0;
+}
+
+static bool is_void_arg_function_type(Type *type) {
+  return type && type->kind == T_FN && type->data.T_FN.from &&
+         type->data.T_FN.from->kind == T_VOID;
+}
+
+static Type *cor_zip_struct_field_type(Type *field_type) {
+  if (!field_type) {
+    return NULL;
+  }
+  if (is_coroutine_type(field_type)) {
+    return field_type->data.T_CONS.args[0];
+  }
+  if (is_void_arg_function_type(field_type)) {
+    return fn_return_type(field_type);
+  }
+  return field_type;
+}
+
+static Type *infer_cor_zip_struct_application(Ast *ast, TICtx *ctx) {
+  if (ast->data.AST_APPLICATION.len != 1) {
+    return type_error(ast, "cor_zip_struct expects one tuple/record argument");
+  }
+
+  Ast *struct_ast = ast->data.AST_APPLICATION.args;
+  Type *struct_type = infer_expr(struct_ast, ctx);
+  if (!struct_type) {
+    return NULL;
+  }
+  if (struct_type->kind != T_CONS) {
+    return type_error(struct_ast,
+                      "cor_zip_struct expects a tuple/record argument");
+  }
+
+  int len = struct_type->data.T_CONS.num_args;
+  Type **yield_fields = t_alloc(sizeof(Type *) * len);
+  for (int i = 0; i < len; i++) {
+    yield_fields[i] =
+        cor_zip_struct_field_type(struct_type->data.T_CONS.args[i]);
+    if (!yield_fields[i]) {
+      return NULL;
+    }
+  }
+
+  Type *yield_tuple = create_tuple_type(len, yield_fields);
+  yield_tuple->data.T_CONS.names = struct_type->data.T_CONS.names;
+  return create_coroutine_instance_type(yield_tuple);
+}
+
 Type *callable_view(Type *type) {
   if (type && is_coroutine_type(type)) {
     return type_fn(&t_void, create_option_type(type->data.T_CONS.args[0]));
@@ -104,6 +157,23 @@ static Type *get_variadic_constraint(Type *t) {
   return NULL;
 }
 
+static bool types_compatible_ignoring_closure_meta(Type *param_type,
+                                                   Type *arg_type) {
+  if (!param_type || !arg_type) {
+    return false;
+  }
+
+  if (param_type->kind == T_FN && arg_type->kind == T_FN) {
+    return types_compatible_ignoring_closure_meta(param_type->data.T_FN.from,
+                                                 arg_type->data.T_FN.from) &&
+           types_compatible_ignoring_closure_meta(param_type->data.T_FN.to,
+                                                 arg_type->data.T_FN.to) &&
+           param_type->is_coroutine_instance == arg_type->is_coroutine_instance;
+  }
+
+  return types_match(param_type, arg_type) || types_match(arg_type, param_type);
+}
+
 static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
                                              Type *param_type, Ast *arg_ast) {
   // Variadic structural constraint: if the parameter type carries a Variadic
@@ -136,11 +206,16 @@ static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
   }
 
   bool structurally_compatible =
-      types_match(param_type, arg_type) || types_match(arg_type, param_type);
+      types_match(param_type, arg_type) || types_match(arg_type, param_type) ||
+      types_compatible_ignoring_closure_meta(param_type, arg_type);
+  bool closure_callable_compatible =
+      param_type && arg_type && param_type->kind == T_FN &&
+      arg_type->kind == T_FN &&
+      types_compatible_ignoring_closure_meta(param_type, arg_type);
 
   if (types_equal(arg_type, param_type) ||
-      ((is_generic(arg_type) || is_generic(param_type)) &&
-       structurally_compatible)) {
+      closure_callable_compatible ||
+      structurally_compatible) {
     add_constraint(ctx, arg_type, param_type);
     return;
   }
@@ -154,6 +229,13 @@ static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
       }
     } else if (is_array_type(arg_type)) {
       add_constraint(ctx, yielded, arg_type->data.T_CONS.args[0]);
+    }
+  }
+
+  if (is_array_type(param_type) && is_list_type(arg_type)) {
+    Type *elem = type_of_list(arg_type);
+    if (elem) {
+      add_constraint(ctx, param_type->data.T_CONS.args[0], elem);
     }
   }
 
@@ -199,6 +281,10 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
 
   if (!fn_type) {
     return NULL;
+  }
+
+  if (is_identifier_named(fn_ast, "cor_zip_struct")) {
+    return infer_cor_zip_struct_application(ast, ctx);
   }
 
   size_t module_type_arg_count = 0;

@@ -17,12 +17,13 @@ let collatz = fn n ->
 # }
 
 let SeqLengthMap = Map 
+    (fn () -> 0u64)
+    (fn () -> 0)
     (fn x: (Uint64) ->
       let xb = x |> asbytes ;
       hash_string xb
     )
     (==)
-    (fn () -> 0)
 
     ;
 
@@ -50,4 +51,4 @@ let get_lengths = fn (start, seq_len) n cache ->
   )
 ;;
 
-print `{get_lengths (0u64, 0) 1000000u64 (SeqLengthMap.new_sized 16384) }\n`;
+print `{get_lengths (0u64, 0) 1_000_000u64 (SeqLengthMap.new_sized 16384) }\n`;

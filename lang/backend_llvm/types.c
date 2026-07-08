@@ -25,6 +25,148 @@
 LLVMTypeRef codegen_fn_type(LLVMTypeRef _ret_type, Type *fn_type, int fn_len,
                             JITLangCtx *ctx, LLVMModuleRef module);
 
+typedef struct RecursiveStructBuildFrame {
+  const char *name;
+  LLVMModuleRef module;
+  struct RecursiveStructBuildFrame *next;
+} RecursiveStructBuildFrame;
+
+static RecursiveStructBuildFrame *recursive_struct_build_stack = NULL;
+
+static bool is_building_recursive_struct(const char *name,
+                                         LLVMModuleRef module) {
+  for (RecursiveStructBuildFrame *frame = recursive_struct_build_stack; frame;
+       frame = frame->next) {
+    if (frame->module == module && frame->name && name &&
+        strcmp(frame->name, name) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static const char *type_codegen_name(Type *type) {
+  if (!type) {
+    return NULL;
+  }
+
+  if (type->kind == T_RECURSIVE_REF) {
+    return type->data.T_RECURSIVE_REF.name;
+  }
+
+  if (type->alias) {
+    return type->alias;
+  }
+
+  if (type->kind == T_CONS || type->kind == T_SUM) {
+    return type->data.T_CONS.name;
+  }
+
+  return NULL;
+}
+
+static bool type_contains_recursive_ref_name(Type *type, const char *name) {
+  if (!type || !name) {
+    return false;
+  }
+
+  switch (type->kind) {
+  case T_RECURSIVE_REF:
+    return type->data.T_RECURSIVE_REF.name &&
+           strcmp(type->data.T_RECURSIVE_REF.name, name) == 0;
+
+  case T_VAR:
+    return type->is_recursive_type_ref && type->data.T_VAR.name &&
+           strcmp(type->data.T_VAR.name, name) == 0;
+
+  case T_CONS:
+  case T_SUM:
+    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+      if (type_contains_recursive_ref_name(type->data.T_CONS.args[i], name)) {
+        return true;
+      }
+    }
+    return false;
+
+  case T_FN:
+    return type_contains_recursive_ref_name(type->data.T_FN.from, name) ||
+           type_contains_recursive_ref_name(type->data.T_FN.to, name) ||
+           type_contains_recursive_ref_name(type->closure_meta, name);
+
+  default:
+    return false;
+  }
+}
+
+static bool type_contains_unwrapped_recursive_ref_name(Type *type,
+                                                       const char *name) {
+  if (!type || !name) {
+    return false;
+  }
+
+  switch (type->kind) {
+  case T_RECURSIVE_REF:
+    return type->data.T_RECURSIVE_REF.name &&
+           strcmp(type->data.T_RECURSIVE_REF.name, name) == 0;
+
+  case T_VAR:
+    return type->is_recursive_type_ref && type->data.T_VAR.name &&
+           strcmp(type->data.T_VAR.name, name) == 0;
+
+  case T_FN:
+    return false;
+
+  case T_CONS:
+  case T_SUM:
+    if (is_array_type(type) || is_list_type(type) || is_pointer_type(type) ||
+        is_coroutine_type(type)) {
+      return false;
+    }
+
+    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+      if (type_contains_unwrapped_recursive_ref_name(
+              type->data.T_CONS.args[i], name)) {
+        return true;
+      }
+    }
+    return false;
+
+  default:
+    return false;
+  }
+}
+
+static bool type_uses_named_recursive_storage(Type *type) {
+  if (!type || type->kind != T_CONS || !type->alias) {
+    return false;
+  }
+
+  if (is_array_type(type) || is_list_type(type) || is_pointer_type(type) ||
+      is_coroutine_type(type)) {
+    return false;
+  }
+
+  return type_contains_recursive_ref_name(type, type->alias);
+}
+
+bool type_uses_boxed_recursive_storage(Type *type) {
+  if (!type || type->kind != T_CONS || !type->alias) {
+    return false;
+  }
+
+  return type_contains_unwrapped_recursive_ref_name(type, type->alias);
+}
+
+static LLVMTypeRef get_or_create_named_struct(const char *name,
+                                              LLVMModuleRef module) {
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef existing = LLVMGetTypeByName2(llvm_ctx, name);
+  return existing ? existing : LLVMStructCreateNamed(llvm_ctx, name);
+}
+
+static LLVMTypeRef recursive_ref_aggregate_type(Type *type, JITLangCtx *ctx,
+                                                LLVMModuleRef module);
+
 // Function to create an LLVM tuple type
 LLVMTypeRef tuple_type(Type *tuple_type, JITLangCtx *ctx,
                        LLVMModuleRef module) {
@@ -52,6 +194,10 @@ LLVMTypeRef tuple_type(Type *tuple_type, JITLangCtx *ctx,
 
 LLVMTypeRef named_struct_type(const char *name, Type *tuple_type,
                               JITLangCtx *ctx, LLVMModuleRef module) {
+  if (type_uses_named_recursive_storage(tuple_type)) {
+    return recursive_ref_aggregate_type(tuple_type, ctx, module);
+  }
+
   int len = tuple_type->data.T_CONS.num_args;
   LLVMTypeRef element_types[len];
   for (int i = 0; i < len; i++) {
@@ -67,6 +213,65 @@ LLVMTypeRef named_struct_type(const char *name, Type *tuple_type,
   LLVMTypeRef llvm_tuple_type = LLVMStructType(element_types, len, 0);
 
   return llvm_tuple_type;
+}
+
+static LLVMTypeRef recursive_ref_aggregate_type(Type *type, JITLangCtx *ctx,
+                                                LLVMModuleRef module) {
+  const char *name = type_codegen_name(type);
+  if (!name) {
+    return NULL;
+  }
+
+  Type *decl_type = type;
+  if (type->kind == T_RECURSIVE_REF) {
+    TypeEnv *decl = type->data.T_RECURSIVE_REF.decl;
+    decl_type = decl ? decl->type : NULL;
+  }
+
+  LLVMTypeRef llvm_struct = get_or_create_named_struct(name, module);
+  if (!decl_type || decl_type->kind != T_CONS ||
+      !LLVMIsOpaqueStruct(llvm_struct)) {
+    return llvm_struct;
+  }
+
+  if (is_building_recursive_struct(name, module)) {
+    return llvm_struct;
+  }
+
+  RecursiveStructBuildFrame build_frame = {
+      .name = name,
+      .module = module,
+      .next = recursive_struct_build_stack,
+  };
+  recursive_struct_build_stack = &build_frame;
+
+  int len = decl_type->data.T_CONS.num_args;
+  LLVMTypeRef element_types[len];
+  for (int i = 0; i < len; i++) {
+    Type *field_type = decl_type->data.T_CONS.args[i];
+    if (field_type->kind == T_FN && !is_closure(field_type)) {
+      element_types[i] = GENERIC_PTR;
+    } else {
+      element_types[i] = type_to_llvm_type(field_type, ctx, module);
+    }
+  }
+
+  LLVMStructSetBody(llvm_struct, element_types, len, 0);
+  recursive_struct_build_stack = build_frame.next;
+  return llvm_struct;
+}
+
+LLVMTypeRef type_to_llvm_aggregate_type(Type *type, JITLangCtx *ctx,
+                                        LLVMModuleRef module) {
+  if (type_uses_named_recursive_storage(type)) {
+    return recursive_ref_aggregate_type(type, ctx, module);
+  }
+
+  if (type && type->kind == T_RECURSIVE_REF) {
+    return recursive_ref_aggregate_type(type, ctx, module);
+  }
+
+  return type_to_llvm_type(type, ctx, module);
 }
 
 LLVMTypeRef create_llvm_list_type(Type *list_el_type, JITLangCtx *ctx,
@@ -163,6 +368,16 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
     return GENERIC_PTR;
   }
 
+  case T_RECURSIVE_REF: {
+    LLVMTypeRef aggregate = recursive_ref_aggregate_type(type, ctx, module);
+    TypeEnv *decl = type->data.T_RECURSIVE_REF.decl;
+    Type *decl_type = decl ? decl->type : NULL;
+    if (aggregate && type_uses_boxed_recursive_storage(decl_type)) {
+      return LLVMPointerType(aggregate, 0);
+    }
+    return aggregate ? aggregate : GENERIC_PTR;
+  }
+
   case T_SUM: {
     if (is_list_type(type)) {
       return create_llvm_list_type(type_of_list(type), ctx, module);
@@ -181,12 +396,23 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
   }
 
   case T_CONS: {
+    if (type_uses_boxed_recursive_storage(type)) {
+      LLVMTypeRef aggregate = recursive_ref_aggregate_type(type, ctx, module);
+      return aggregate ? LLVMPointerType(aggregate, 0) : GENERIC_PTR;
+    }
+
+    if (type_uses_named_recursive_storage(type)) {
+      LLVMTypeRef aggregate = recursive_ref_aggregate_type(type, ctx, module);
+      return aggregate ? aggregate : GENERIC_PTR;
+    }
+
     if (is_coroutine_type(type)) {
       return GENERIC_PTR;
     }
 
     if (is_array_type(type)) {
-      if (type->data.T_CONS.args[0]->kind == T_VAR) {
+      if (type->data.T_CONS.args[0]->kind == T_VAR &&
+          !type->data.T_CONS.args[0]->is_recursive_type_ref) {
         return tmp_generic_codegen_array_type();
       }
       LLVMTypeRef el_type;

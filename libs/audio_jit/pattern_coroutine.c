@@ -2833,3 +2833,12 @@ LLVMValueRef play_pattern_handler(Ast *ast, JITLangCtx *ctx,
   print_ast_err(pattern_record);
   return NULL;
 }
+
+LLVMValueRef named_pattern_handler(Ast *ast, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+
+  printf("named pattern handler\n");
+  print_ast(ast);
+  return NULL;
+}

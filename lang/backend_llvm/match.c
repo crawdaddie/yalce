@@ -1,4 +1,5 @@
 #include "adt.h"
+#include "array.h"
 #include "binding.h"
 #include "builtin_functions.h"
 #include "common.h"
@@ -333,6 +334,79 @@ LLVMValueRef test_list_cons_pattern(Ast *pattern, LLVMValueRef val,
   return LLVMBuildAnd(builder, tv, tpv, "");
 }
 
+LLVMValueRef test_array_literal_pattern(Ast *pattern, LLVMValueRef val,
+                                        Type *val_type, JITLangCtx *ctx,
+                                        LLVMModuleRef module,
+                                        LLVMBuilderRef builder) {
+  if (is_generic(val_type)) {
+    val_type = specialize_type_for_codegen(val_type, ctx);
+  }
+
+  if (!is_array_type(val_type)) {
+    return _FALSE;
+  }
+
+  Type *array_el_type = val_type->data.T_CONS.args[0];
+  LLVMTypeRef llvm_array_el_type =
+      array_el_type->kind == T_FN ? GENERIC_PTR
+                                  : type_to_llvm_type(array_el_type, ctx, module);
+
+  int len = pattern->data.AST_LIST.len;
+  LLVMValueRef actual_size =
+      codegen_get_array_size(builder, val, llvm_array_el_type);
+  LLVMValueRef expected_size =
+      LLVMConstInt(LLVMInt32Type(), (unsigned long long)len, 0);
+  LLVMValueRef size_matches = LLVMBuildICmp(builder, LLVMIntEQ, actual_size,
+                                            expected_size, "array_len_match");
+
+  if (len == 0) {
+    return size_matches;
+  }
+
+  LLVMValueRef parent_func =
+      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+
+  LLVMBasicBlockRef extract_block =
+      LLVMAppendBasicBlock(parent_func, "array_pattern_extract");
+  LLVMBasicBlockRef merge_block =
+      LLVMAppendBasicBlock(parent_func, "array_pattern_merge");
+  LLVMBasicBlockRef pre_branch_block = LLVMGetInsertBlock(builder);
+
+  LLVMBuildCondBr(builder, size_matches, extract_block, merge_block);
+
+  LLVMValueRef elements[len];
+  LLVMPositionBuilderAtEnd(builder, extract_block);
+  for (int i = 0; i < len; i++) {
+    LLVMValueRef idx = LLVMConstInt(LLVMInt32Type(), (unsigned long long)i, 0);
+    elements[i] = get_array_element(builder, val, idx, llvm_array_el_type);
+  }
+  LLVMBasicBlockRef extract_end_block = LLVMGetInsertBlock(builder);
+  LLVMBuildBr(builder, merge_block);
+
+  LLVMPositionBuilderAtEnd(builder, merge_block);
+  LLVMBasicBlockRef incoming_blocks[2] = {pre_branch_block, extract_end_block};
+
+  LLVMValueRef element_phis[len];
+  for (int i = 0; i < len; i++) {
+    element_phis[i] =
+        LLVMBuildPhi(builder, llvm_array_el_type, "array_pattern_element");
+    LLVMValueRef element_values[2] = {LLVMGetUndef(llvm_array_el_type),
+                                      elements[i]};
+    LLVMAddIncoming(element_phis[i], element_values, incoming_blocks, 2);
+  }
+
+  LLVMValueRef bool_acc = size_matches;
+  for (int i = 0; i < len; i++) {
+    Ast *p = pattern->data.AST_LIST.items + i;
+    LLVMValueRef pattern_result =
+        test_pattern(p, element_phis[i], array_el_type, ctx, module, builder);
+    bool_acc =
+        LLVMBuildAnd(builder, bool_acc, pattern_result, "array_pattern_acc");
+  }
+
+  return bool_acc;
+}
+
 LLVMValueRef test_pattern(Ast *pattern,
 
                           LLVMValueRef val, Type *val_type,
@@ -399,6 +473,10 @@ LLVMValueRef test_pattern(Ast *pattern,
     }
     break;
   }
+  case AST_ARRAY:
+    return test_array_literal_pattern(pattern, val, val_type, ctx, module,
+                                      builder);
+
   case AST_APPLICATION: {
     if (is_list_cons_operator(pattern)) {
       return test_list_cons_pattern(pattern, val, val_type, ctx, module,

@@ -1,0 +1,231 @@
+open autograd3;
+
+#%% Polynomial regression
+# input:  [x, y]
+# target: x*x - y*y + 0.5*x*y
+
+let Data = module () ->
+  let n = 9;
+
+  let x = tensor [| 9, 2 |] [|
+    -1., -1.,
+    -1.,  0.,
+    -1.,  1.,
+     0., -1.,
+     0.,  0.,
+     0.,  1.,
+     1., -1.,
+     1.,  0.,
+     1.,  1.
+  |];
+
+  let y = tensor [| 9, 1 |] [|
+     0.5,
+     1.0,
+    -0.5,
+    -1.0,
+     0.0,
+    -1.0,
+    -0.5,
+     1.0,
+     0.5
+  |];
+
+  let x_at = fn i ->
+    let d = tensor_data x;
+    tensor [| 1, 2 |] (d[(i * 2) .. (i * 2 + 2)])
+  ;;
+
+  let y_at = fn i ->
+    let d = tensor_data y;
+    tensor [| 1, 1 |] (d[i .. (i + 1)])
+  ;;
+;
+
+let Model = module () -> 
+  let HIDDEN = 8;
+
+  let w1 = tensor_rand [| 2, HIDDEN |] 0.45;
+  let b1 = tensor_zeroes [| 1, HIDDEN |];
+  let w2 = tensor_rand [| HIDDEN, HIDDEN |] 0.35;
+  let b2 = tensor_zeroes [| 1, HIDDEN |];
+  let w3 = tensor_rand [| HIDDEN, 1 |] 0.35;
+  let b3 = tensor_zeroes [| 1, 1 |];
+  let params = [| w1, b1, w2, b2, w3, b3 |];
+
+  let model = fn x ->
+    x
+    |> linear w1 b1
+    |> tensor_relu
+    |> linear w2 b2
+    |> tensor_relu
+    |> linear w3 b3
+  ;;
+
+  let infer = fn x -> model x;;
+
+  let zero_grads = fn () ->
+    for i = 0 .. array_size params in (
+      tensor_zero_grad (params[i])
+    )
+  ;;
+
+  let step = fn learning_rate ->
+    for i = 0 .. array_size params in (
+      tensor_sgd_step learning_rate (params[i])
+    )
+  ;;
+;
+
+let get_pred_loss = fn i ->
+  let x = Data.x_at i;
+  let y = Data.y_at i;
+  let p = Model.infer x;
+  let loss = squared_error p y;
+  ((p |> tensor_data)[0], (loss |> tensor_data)[0])
+;;
+
+let total_loss = fn () ->
+  let acc = [| 0. |];
+  for i = 0 .. Data.n in (
+    let (_, loss) = get_pred_loss i;
+    acc[0] := acc[0] + loss
+  );
+  acc[0]
+;;
+
+let train_one = fn learning_rate i ->
+  Model.zero_grads ();
+  let x = Data.x_at i;
+  let y = Data.y_at i; let p = Model.infer x;
+  let loss = squared_error p y;
+  tensor_backward_loss loss;
+  Model.step learning_rate;
+  ((p |> tensor_data)[0], (loss |> tensor_data)[0])
+;;
+
+# import graph_compile;
+# let output = Data.x_at 0 |> Model.infer;
+# let (nodes, output_id) = graph_compile.flatten_graph output; 
+# print `
+# YLC flattened polynomial MLP graph
+# output: %{output_id}
+#
+# `;
+#
+# graph_compile.print_flat_nodes nodes;
+# print "\n\n\n\n";
+
+
+let train_epoch = fn learning_rate ->
+  for i = 0 .. Data.n in (
+    train_one learning_rate i
+  )
+;;
+
+let TRAIN_EPOCHS = 50;
+let losses = array_fill_const (TRAIN_EPOCHS + 1) 0.;
+
+let train = fn epochs learning_rate losses ->
+  losses[0] := total_loss ();
+  for epoch = 0 .. epochs in (
+    train_epoch learning_rate;
+    losses[epoch + 1] := total_loss ()
+  );
+  losses[epochs]
+;;
+
+let loss_before = total_loss ();
+train TRAIN_EPOCHS 0.025 losses;
+let loss_after = losses[TRAIN_EPOCHS];
+
+let popen = extern fn Ptr -> Ptr -> Ptr; 
+let fprintf = extern fn Ptr -> Ptr -> Int;
+let fflush = extern fn Ptr -> Int;
+let pclose = extern fn Ptr -> Int;
+
+let plot_losses = fn losses epochs ->
+  let gp = popen (cstr "gnuplot") (cstr "w"); 
+  fprintf gp (cstr "set terminal kittycairo size 900,500\n");
+  fprintf gp (cstr "set title 'Polynomial MLP training loss'\n");
+  fprintf gp (cstr "set xlabel 'epoch'\n");
+  fprintf gp (cstr "set ylabel 'total loss'\n");
+  fprintf gp (cstr "set grid\n");
+  fprintf gp (cstr "plot '-' using 1:2 with lines title 'loss'\n");
+  for epoch = 0 .. (epochs + 1) in (
+    fprintf gp (cstr `{epoch} {losses[epoch]}\n`)
+  );
+  fprintf gp (cstr "e\n");
+  fflush gp;
+  pclose gp
+;;
+
+plot_losses losses TRAIN_EPOCHS;
+
+let target_surface = fn x y ->
+  x * x - y * y + 0.5 * x * y
+;;
+
+let model_surface = fn x y ->
+  let p = Model.infer (tensor [| 1, 2 |] [| x, y |]);
+  (tensor_data p)[0]
+;;
+
+let grid_value = fn i: (Int) steps: (Int) ->
+  -1. + 2. * (Double i) / ((Double steps) - 1.)
+;;
+
+let plot_target_surface = fn steps ->
+  let gp = popen (cstr "gnuplot") (cstr "w"); 
+  fprintf gp (cstr "set terminal kittycairo size 900,650\n");
+  fprintf gp (cstr "set title 'Polynomial surface and trained MLP predictions'\n");
+  fprintf gp (cstr "set xlabel 'x'\n");
+  fprintf gp (cstr "set ylabel 'y'\n");
+  fprintf gp (cstr "set zlabel 'z'\n");
+  fprintf gp (cstr "set grid\n");
+  fprintf gp (cstr "set hidden3d\n");
+  fprintf gp (cstr "set view 55, 35\n");
+  fprintf gp (cstr "splot '-' using 1:2:3 with lines title 'target', '-' using 1:2:3 with points pointtype 7 pointsize 0.35 title 'model'\n");
+
+  for xi = 0 .. steps in (
+    let x = grid_value xi steps;
+    for yi = 0 .. steps in (
+      let y = grid_value yi steps;
+      fprintf gp (cstr `{x} {y} {target_surface x y}\n`)
+    );
+    fprintf gp (cstr "\n")
+  );
+  fprintf gp (cstr "e\n");
+
+  for xi = 0 .. steps in (
+    let x = grid_value xi steps;
+    for yi = 0 .. steps in (
+      let y = grid_value yi steps;
+      fprintf gp (cstr `{x} {y} {model_surface x y}\n`)
+    )
+  );
+  fprintf gp (cstr "e\n");
+  fflush gp;
+  pclose gp
+;;
+
+plot_target_surface 25;
+
+
+print `
+polynomial regression MLP
+target: x*x - y*y + 0.5*x*y
+
+loss before: {loss_before}
+loss after:  {loss_after}
+
+[-1, -1] -> {get_pred_loss 0} target  0.5
+[-1,  0] -> {get_pred_loss 1} target  1.0
+[-1,  1] -> {get_pred_loss 2} target -0.5
+[ 0, -1] -> {get_pred_loss 3} target -1.0
+[ 0,  0] -> {get_pred_loss 4} target  0.0
+[ 0,  1] -> {get_pred_loss 5} target -1.0
+[ 1, -1] -> {get_pred_loss 6} target -0.5
+[ 1,  0] -> {get_pred_loss 7} target  1.0
+[ 1,  1] -> {get_pred_loss 8} target  0.5
+`;

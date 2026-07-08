@@ -28,6 +28,7 @@ typedef struct BuiltinEnvRefs {
   TypeEnv *array_size;
   TypeEnv *array_set;
   TypeEnv *array_fill_const;
+  TypeEnv *array_uninit;
   TypeEnv *array_fill;
   TypeEnv *array_range;
   TypeEnv *array_succ;

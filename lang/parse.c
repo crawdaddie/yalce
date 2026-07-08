@@ -1503,8 +1503,16 @@ Ast *array_range_expression(Ast *array, Ast *start_expr, Ast *end_expr) {
 
 Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
                           Ast *lambda_expr) {
+  // printf("decoration\n");
+  // print_ast(lambda_expr);
 
-  // if (lambda_expr->tag == AST_LAMBDA) {
+  if (lambda_expr->tag == AST_MODULE) {
+    lambda_expr->data.AST_LAMBDA.fn_name = binding;
+    Ast *dec_id = ast_identifier(decorator);
+    Ast *bind = ast_identifier(binding);
+    Ast *let = ast_let(bind, ast_application(dec_id, lambda_expr), NULL);
+    return let;
+  }
   //   lambda_expr->data.AST_LAMBDA.fn_name = binding;
   //   Ast *dec_id = ast_identifier(decorator);
   //   Ast *bind = ast_identifier(binding);
@@ -1514,6 +1522,7 @@ Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
   // }
 
   if (lambda_expr->tag == AST_LAMBDA) {
+    // print_ast(lambda_expr);
     lambda_expr->data.AST_LAMBDA.fn_name = binding;
     Ast *dec_id = ast_identifier(decorator);
     Ast *bind = ast_identifier(binding);

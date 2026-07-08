@@ -1,5 +1,58 @@
 type RegexMatch = (rm_so: Uint64, rm_eo: Uint64);
 
+type TensorRef = Array of TensorNode;
+
+type TensorNode = (
+  data: Array of Double,
+  grad: Array of Double,
+  shape: Array of Int,
+  op: TensOp
+);
+
+type DirectNode = (
+  value: Int,
+  kids: List of DirectNode
+);
+
+type DirectArrayNode = (
+  value: Int,
+  kids: Array of DirectArrayNode
+);
+
+type TensOp =
+  | TensOpLeaf
+  | TensOpAdd of (TensorRef, TensorRef)
+  | TensOpMul of (TensorRef, TensorRef)
+  | TensOpNeg of TensorRef
+  | TensOpDiv of (TensorRef, TensorRef)
+  | TensOpSum of TensorRef
+  | TensOpMatMul of (TensorRef, TensorRef)
+;
+
+let tensor_make = fn data shape ->
+  [| TensorNode data [| 0.|] shape TensOpLeaf |]
+;;
+
+let tensor_add = fn a: (TensorRef) b: (TensorRef) ->
+  [| TensorNode [| 0.|] [| 0.|] [| 1 |] (TensOpAdd (a, b)) |]
+;;
+
+let direct_leaf = fn value ->
+  DirectNode value []
+;;
+
+let direct_pair = fn a b ->
+  DirectNode 3 [a, b]
+;;
+
+let direct_array_leaf = fn value ->
+  DirectArrayNode value [| |]
+;;
+
+let direct_array_pair = fn a b ->
+  DirectArrayNode 3 [| a, b |]
+;;
+
 let test = module () ->
 
   let test_record_access = fn () ->
@@ -16,5 +69,34 @@ let test = module () ->
     x.rm_so == 0
   ;;
 
+  let test_sizeof_type_exprs = fn () ->
+    sizeof Int == 4 &&
+    sizeof Double == 8 &&
+    sizeof (type _ = Array of Double) == 16
+  ;;
+
+  let test_mutually_recursive_tensor_ref = fn () ->
+    let t = tensor_make [| 1.|] [| 1 |];
+    let t2 = tensor_add t t;
+    array_size t2 == 1
+  ;;
+
+  let test_direct_recursive_record_list = fn () ->
+    let a = direct_leaf 1;
+    let b = direct_leaf 2;
+    let p = direct_pair a b;
+    match p.kids with
+    | x::y::[] -> x.value == 1 && y.value == 2
+    | _ -> false
+  ;;
+
+  let test_direct_recursive_record_array_pattern = fn () ->
+    let a = direct_array_leaf 1;
+    let b = direct_array_leaf 2;
+    let p = direct_array_pair a b;
+    match p.kids with
+    | [| x, y |] -> x.value == 1 && y.value == 2
+    | _ -> false
+  ;;
 
 ;

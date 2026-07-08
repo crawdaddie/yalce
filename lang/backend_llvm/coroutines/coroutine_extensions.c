@@ -402,6 +402,11 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   LLVMValueRef inner_handle = codegen(coro_ast, ctx, module, builder);
+  if (!inner_handle) {
+    print_ast(coro_ast);
+    fprintf(stderr, "Error could not compile inner handle for coroutine map\n");
+    return NULL;
+  }
 
   // Create wrapper coroutine function that TAKES frame_size_out, map function,
   // and coroutine as parameters

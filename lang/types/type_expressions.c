@@ -121,6 +121,11 @@ static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
     TypeEnv *type_ref = lookup_type_ref(ctx->env, name);
 
     if (type_ref) {
+      if ((type_ref->md.type == BT_TYPE_DECL ||
+           type_ref->md.type == BT_TYPE_CONSTRUCTOR) &&
+          type_ref->type) {
+        return resolve_type_in_env(deep_copy_type(type_ref->type), ctx->env);
+      }
       return type_ref->type;
     }
 
@@ -302,6 +307,44 @@ static bool type_decl_introduces_constructors(Ast *expr) {
   return expr && expr->tag == AST_LIST;
 }
 
+static bool type_contains_unwrapped_recursive_ref(Type *type,
+                                                  const char *name) {
+  if (!type || !name) {
+    return false;
+  }
+
+  switch (type->kind) {
+  case T_RECURSIVE_REF:
+    return type->data.T_RECURSIVE_REF.name &&
+           strcmp(type->data.T_RECURSIVE_REF.name, name) == 0;
+
+  case T_VAR:
+    return type->is_recursive_type_ref && type->data.T_VAR.name &&
+           strcmp(type->data.T_VAR.name, name) == 0;
+
+  case T_FN:
+    return false;
+
+  case T_CONS:
+  case T_SUM:
+    if (is_array_type(type) || is_list_type(type) || is_pointer_type(type) ||
+        is_coroutine_type(type)) {
+      return false;
+    }
+
+    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+      if (type_contains_unwrapped_recursive_ref(type->data.T_CONS.args[i],
+                                                name)) {
+        return true;
+      }
+    }
+    return false;
+
+  default:
+    return false;
+  }
+}
+
 void compute_lambda_param_types(AstList *annotations, size_t len, Type **out,
                                 TICtx *ctx) {
   TypeEnv *saved_type_var_env = current_type_var_env;
@@ -385,18 +428,25 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
     return NULL;
   }
 
-  if (decl_env) {
-    decl_env->type = computed;
-  }
-
   bool introduces_constructors = type_decl_introduces_constructors(expr);
 
   if (binding->tag == AST_IDENTIFIER && computed->kind == T_CONS) {
     const char *type_name = binding->data.AST_IDENTIFIER.value;
+    computed = deep_copy_type(computed);
     computed->alias = type_name;
-    if (!is_sum_type(computed)) {
-      computed->data.T_CONS.name = type_name;
-    }
+  }
+
+  if (binding->tag == AST_IDENTIFIER &&
+      (computed->kind == T_CONS || computed->kind == T_SUM) &&
+      type_contains_unwrapped_recursive_ref(
+          computed, binding->data.AST_IDENTIFIER.value)) {
+    return type_error(ast,
+                      "recursive type references must be behind Array/List or "
+                      "another pointer-like boundary");
+  }
+
+  if (decl_env) {
+    decl_env->type = computed;
   }
 
   if (binding->tag == AST_IDENTIFIER && computed->kind == T_SUM &&
