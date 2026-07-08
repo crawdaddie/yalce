@@ -1,0 +1,227 @@
+open autograd3;
+
+#%% Logistic regression (binary classification)
+# input:  [x1, x2]
+# target: 1 if x2 > x1 else 0  (linearly separable, margin > 0)
+
+let Data = module () ->
+  let n = 10;
+
+  let x = tensor [| 10, 2 |] [|
+    0.,  1.,
+    1.,  2.,
+   -1.,  0.,
+    0.,  2.,
+   -2.,  1.,
+    1.,  0.,
+    2.,  1.,
+    0., -1.,
+    1., -1.,
+   -1., -2.
+  |];
+
+  let y = tensor [| 10, 1 |] [|
+    1., 1., 1., 1., 1.,
+    0., 0., 0., 0., 0.
+  |];
+
+  let x_at = fn i ->
+    let d = tensor_data x;
+    tensor [| 1, 2 |] (d[(i * 2) .. (i * 2 + 2)])
+  ;;
+
+  let y_at = fn i ->
+    let d = tensor_data y;
+    tensor [| 1, 1 |] (d[i .. (i + 1)])
+  ;;
+;
+
+let Model = module () ->
+  let w = tensor_rand [| 2, 1 |] 0.5;
+  let b = tensor_zeroes [| 1, 1 |];
+  let params = [| w, b |];
+
+  let sigmoid = fn z ->
+    let one = tensor_ones (tensor_shape z);
+    let denom = TensorAdd.tensor_add one (tensor_exp (tensor_neg z));
+    tensor_div one denom
+  ;;
+
+  let model = fn x ->
+    linear w b x |> sigmoid
+  ;;
+
+  let infer = fn x -> model x;;
+
+  let zero_grads = fn () ->
+    for i = 0 .. array_size params in (
+      tensor_zero_grad (params[i])
+    )
+  ;;
+
+  let step = fn learning_rate lambda ->
+    for i = 0 .. array_size params in (
+      let p = params[i];
+      let data = tensor_data p;
+      let grad = tensor_grad p;
+      for j = 0 .. array_size data in (
+        data[j] := data[j] - learning_rate * (grad[j] + lambda * data[j])
+      )
+    )
+  ;;
+;
+
+# p = sigmoid(z), bce = -( y*log(p) + (1-y)*log(1-p) )
+let bce = fn pred target ->
+  let one = tensor_ones (tensor_shape pred);
+  let log_p = tensor_log pred;
+  let log_1mp = tensor_log (TensorSub.tensor_sub one pred);
+  let term1 = tensor_mul target log_p;
+  let term2 = tensor_mul (TensorSub.tensor_sub one target) log_1mp;
+  tensor_neg (tensor_sum (TensorAdd.tensor_add term1 term2))
+;;
+
+let get_pred_loss = fn i ->
+  let x = Data.x_at i;
+  let y = Data.y_at i;
+  let p = Model.infer x;
+  let loss = bce p y;
+  ((p |> tensor_data)[0], (loss |> tensor_data)[0])
+;;
+
+let total_loss = fn () ->
+  let acc = [| 0. |];
+  for i = 0 .. Data.n in (
+    let (_, loss) = get_pred_loss i;
+    acc[0] := acc[0] + loss
+  );
+  acc[0]
+;;
+
+let train_one = fn learning_rate lambda i ->
+  Model.zero_grads ();
+  let x = Data.x_at i;
+  let y = Data.y_at i;
+  let p = Model.infer x;
+  let loss = bce p y;
+  tensor_backward_loss loss;
+  Model.step learning_rate lambda;
+  ((p |> tensor_data)[0], (loss |> tensor_data)[0])
+;;
+
+let train_epoch = fn learning_rate lambda ->
+  for i = 0 .. Data.n in (
+    train_one learning_rate lambda i
+  )
+;;
+
+let TRAIN_EPOCHS = 400;
+let LR = 0.3;
+let LAMBDA = 0.01;
+let losses = array_fill_const (TRAIN_EPOCHS + 1) 0.;
+
+let train = fn epochs learning_rate lambda losses ->
+  losses[0] := total_loss ();
+  for epoch = 0 .. epochs in (
+    train_epoch learning_rate lambda;
+    losses[epoch + 1] := total_loss ()
+  );
+  losses[epochs]
+;;
+
+let loss_before = total_loss ();
+train TRAIN_EPOCHS LR LAMBDA losses;
+let loss_after = losses[TRAIN_EPOCHS];
+
+let accuracy = fn () ->
+  let acc = [| 0. |];
+  for i = 0 .. Data.n in (
+    let (p, _) = get_pred_loss i;
+    let label = (tensor_data (Data.y_at i))[0];
+    let pred_label = if p > 0.5 then 1. else 0.;
+    if pred_label == label then acc[0] := acc[0] + 1.
+  );
+  acc[0] / (Double Data.n)
+;;
+
+let acc = accuracy ();
+
+let popen = extern fn Ptr -> Ptr -> Ptr;
+let fprintf = extern fn Ptr -> Ptr -> Int;
+let fflush = extern fn Ptr -> Int;
+let pclose = extern fn Ptr -> Int;
+
+let plot_losses = fn losses epochs ->
+  let gp = popen (cstr "gnuplot") (cstr "w");
+  fprintf gp (cstr "set terminal kittycairo size 900,500\n");
+  fprintf gp (cstr "set title 'Logistic regression training loss (BCE)'\n");
+  fprintf gp (cstr "set xlabel 'epoch'\n");
+  fprintf gp (cstr "set ylabel 'total loss'\n");
+  fprintf gp (cstr "set grid\n");
+  fprintf gp (cstr "plot '-' using 1:2 with lines title 'loss'\n");
+  for epoch = 0 .. (epochs + 1) in (
+    fprintf gp (cstr `{epoch} {losses[epoch]}\n`)
+  );
+  fprintf gp (cstr "e\n");
+  fflush gp;
+  pclose gp
+;;
+
+plot_losses losses TRAIN_EPOCHS;
+
+let w0 = (tensor_data Model.w)[0];
+let w1 = (tensor_data Model.w)[1];
+let bb = (tensor_data Model.b)[0];
+
+let emit_points = fn gp target_label ->
+  for i = 0 .. Data.n in (
+    let x0 = (tensor_data (Data.x_at i))[0];
+    let x1 = (tensor_data (Data.x_at i))[1];
+    let lab = (tensor_data (Data.y_at i))[0];
+    if lab == target_label then (
+      fprintf gp (cstr `{x0} {x1}\n`)
+    )
+  );
+  fprintf gp (cstr "e\n")
+;;
+
+let plot_decision = fn () ->
+  let gp = popen (cstr "gnuplot") (cstr "w");
+  fprintf gp (cstr "set terminal kittycairo size 900,650\n");
+  fprintf gp (cstr "set title 'Logistic regression decision boundary'\n");
+  fprintf gp (cstr "set xlabel 'x1'\n");
+  fprintf gp (cstr "set ylabel 'x2'\n");
+  fprintf gp (cstr "set grid\n");
+  fprintf gp (cstr "set xrange [-3:3]\n");
+  fprintf gp (cstr "set yrange [-3:3]\n");
+  fprintf gp (cstr `f(x) = -({w0}*x + {bb})/{w1}\n`);
+  fprintf gp (cstr "plot f(x) with lines linewidth 2 title 'boundary', '-' using 1:2 with points pointtype 7 ps 1.3 title 'class 1', '-' using 1:2 with points pointtype 5 ps 1.3 title 'class 0'\n");
+  emit_points gp 1.;
+  emit_points gp 0.;
+  fflush gp;
+  pclose gp
+;;
+
+plot_decision ();
+
+print `
+logistic regression (binary classification)
+target: label = 1 if x2 > x1 else 0
+
+loss before: {loss_before}
+loss after:  {loss_after}
+accuracy:    {acc}
+
+w = [{w0}, {w1}]  b = {bb}
+
+[ 0,  1] -> {get_pred_loss 0} target 1
+[ 1,  2] -> {get_pred_loss 1} target 1
+[-1,  0] -> {get_pred_loss 2} target 1
+[ 0,  2] -> {get_pred_loss 3} target 1
+[-2,  1] -> {get_pred_loss 4} target 1
+[ 1,  0] -> {get_pred_loss 5} target 0
+[ 2,  1] -> {get_pred_loss 6} target 0
+[ 0, -1] -> {get_pred_loss 7} target 0
+[ 1, -1] -> {get_pred_loss 8} target 0
+[-1, -2] -> {get_pred_loss 9} target 0
+`;

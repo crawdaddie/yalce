@@ -20,6 +20,13 @@ let tensor_id = fn () ->
   tid
 ;;
 
+# let IdCounter = [| 0 |];
+# let tensor_id = fn () ->
+#   let tid = IdCounter[0];
+#   IdCounter[0] := tid + 1;
+#   tid
+# ;;
+
 
 import std/Arrays;
 import std/Math;
@@ -81,60 +88,6 @@ let TensorOp = fn shape
 let tensor_forward_leaf = fn self -> self;;
 let tensor_backward_leaf = fn self -> self;;
 
-# let a = Tensor [|1, 1|] [|1.|] tensor_forward_leaf tensor_backward_leaf [| |];
-# let b = Tensor [|1, 1|] [|1.|] tensor_forward_leaf tensor_backward_leaf [| |];
-
-let tensor_is_row_bias_for = fn bias target ->
-  let bshape = tensor_shape bias;
-  let tshape = tensor_shape target;
-  if array_size bshape == 2 && array_size tshape == 2 then (
-       bshape[0] == 1
-    && bshape[1] == tshape[1]
-  ) else false
-;;
-
-let tensor_add_row_broadcast_data = fn bias target ->
-  let bdata = tensor_data bias;
-  let tdata = tensor_data target;
-  let tshape = tensor_shape target;
-  let rows = tshape[0];
-  let cols = tshape[1];
-  let out = array_fill_const (rows * cols) 0.;
-  for r = 0 .. rows in (
-    for c = 0 .. cols in (
-      let idx = (r * cols) + c;
-      out[idx] := tdata[idx] + bdata[c]
-    )
-  );
-  out
-;;
-
-let tensor_add_data = fn a b ->
-  if tensor_is_row_bias_for a b then (
-    tensor_add_row_broadcast_data a b
-  ) else if tensor_is_row_bias_for b a then (
-    tensor_add_row_broadcast_data b a
-  ) else (
-    Arrays.map2 (+) (tensor_data a) (tensor_data b)
-  )
-;;
-
-let tensor_add_shape = fn a b ->
-  if tensor_is_row_bias_for a b then (
-    tensor_shape b
-  ) else if tensor_is_row_bias_for b a then (
-    tensor_shape a
-  ) else (
-    tensor_shape a
-  )
-;;
-
-let tensor_forward_add = fn self: (TensorNode) ->
-  match self.operands with
-  | [| a, b |] ->
-    tensor_set_data self (tensor_add_data a b)
-  | _ -> self
-;;
 
 let tensor_accum_grad_pair = fn a: (TensorNode) b: (TensorNode) delta: (Array of Double) ->
   let agrad = tensor_grad a;
@@ -160,30 +113,6 @@ let tensor_accum_grad_row_broadcast = fn bias: (TensorNode) target: (TensorNode)
     )
   );
   bias
-;;
-
-let tensor_backward_add = fn self ->
-  match self.operands with
-  | [| a, b |] -> (
-    if tensor_is_row_bias_for a b then (
-      tensor_accum_grad_row_broadcast a b (tensor_grad self)
-    ) else if tensor_is_row_bias_for b a then (
-      tensor_accum_grad_row_broadcast b a (tensor_grad self)
-    ) else (
-      tensor_accum_grad_pair a b (tensor_grad self)
-    );
-    self
-  )
-  | _ -> self
-;;
-
-let tensor_add = fn a b ->
-  TensorOp (tensor_add_shape a b)
-    (tensor_add_data a b)
-    tensor_forward_add
-    tensor_backward_add
-    [| a, b |]
-    1
 ;;
 
 let tensor_zero_grad = fn t ->
@@ -214,33 +143,188 @@ let tensor_accum_grad_scaled = fn t delta scale ->
 let tensor = fn shape data ->
   TensorOp shape data tensor_forward_leaf tensor_backward_leaf [| |] 0
 ;;
-#
-#
-let tensor_forward_sub = fn self ->
-  match tensor_operands self with
-  | [| a, b |] ->
-    tensor_set_data self (Arrays.map2 (fn x y -> x - y) (tensor_data a) (tensor_data b))
-  | _ -> self
-;;
-let tensor_backward_sub = fn self ->
-  match tensor_operands self with
-  | [| a, b |] -> (
-    let grad = tensor_grad self;
-    tensor_accum_grad a grad;
-    tensor_accum_grad_scaled b grad (-1.);
-    self
-  )
-  | _ -> self
-;;
 
-let tensor_sub = fn a b ->
-  TensorOp (tensor_shape a)
-    (Arrays.map2 (fn x y -> x - y) (tensor_data a) (tensor_data b))
-    tensor_forward_sub
-    tensor_backward_sub
-    [| a, b |]
-    2
+
+let tensor_is_row_bias_for = fn bias target ->
+  let bshape = tensor_shape bias;
+  let tshape = tensor_shape target;
+  if array_size bshape == 2 && array_size tshape == 2 then (
+       bshape[0] == 1
+    && bshape[1] == tshape[1]
+  ) else false
 ;;
+let TensorAdd = module () ->
+  let N = 1;
+
+  let tensor_add_row_broadcast_data = fn bias target ->
+    let bdata = tensor_data bias;
+    let tdata = tensor_data target;
+    let tshape = tensor_shape target;
+    let rows = tshape[0];
+    let cols = tshape[1];
+    let out = array_fill_const (rows * cols) 0.;
+    for r = 0 .. rows in (
+      for c = 0 .. cols in (
+        let idx = (r * cols) + c;
+        out[idx] := tdata[idx] + bdata[c]
+      )
+    );
+    out
+  ;;
+
+  let tensor_add_data = fn a b ->
+    if tensor_is_row_bias_for a b then (
+      tensor_add_row_broadcast_data a b
+    ) else if tensor_is_row_bias_for b a then (
+      tensor_add_row_broadcast_data b a
+    ) else (
+      Arrays.map2 (+) (tensor_data a) (tensor_data b)
+    )
+  ;;
+
+  let shape = fn a b ->
+    if tensor_is_row_bias_for a b then (
+      tensor_shape b
+    ) else if tensor_is_row_bias_for b a then (
+      tensor_shape a
+    ) else (
+      tensor_shape a
+    )
+  ;;
+
+  let forward = fn self: (TensorNode) ->
+    match self.operands with
+    | [| a, b |] ->
+      tensor_set_data self (tensor_add_data a b)
+    | _ -> self
+  ;;
+
+  let backward = fn self ->
+    match self.operands with
+    | [| a, b |] -> (
+      if tensor_is_row_bias_for a b then (
+        tensor_accum_grad_row_broadcast a b (tensor_grad self)
+      ) else if tensor_is_row_bias_for b a then (
+        tensor_accum_grad_row_broadcast b a (tensor_grad self)
+      ) else (
+        tensor_accum_grad_pair a b (tensor_grad self)
+      );
+      self
+    )
+    | _ -> self
+  ;;
+
+  let tensor_add = fn a b ->
+    TensorOp (shape a b)
+      (tensor_add_data a b)
+      forward
+      backward
+      [| a, b |]
+      N
+  ;;
+;
+let TensorSub = module () ->
+  let tensor_sub_row_broadcast_data = fn bias target ->
+    let bdata = tensor_data bias;
+    let tdata = tensor_data target;
+    let tshape = tensor_shape target;
+    let rows = tshape[0];
+    let cols = tshape[1];
+    let out = array_fill_const (rows * cols) 0.;
+    for r = 0 .. rows in (
+      for c = 0 .. cols in (
+        let idx = (r * cols) + c;
+        out[idx] := tdata[idx] - bdata[c]
+      )
+    );
+    out
+  ;;
+
+  let tensor_row_bias_sub_data = fn bias target ->
+    let bdata = tensor_data bias;
+    let tdata = tensor_data target;
+    let tshape = tensor_shape target;
+    let rows = tshape[0];
+    let cols = tshape[1];
+    let out = array_fill_const (rows * cols) 0.;
+    for r = 0 .. rows in (
+      for c = 0 .. cols in (
+        let idx = (r * cols) + c;
+        out[idx] := bdata[c] - tdata[idx]
+      )
+    );
+    out
+  ;;
+
+  let tensor_sub_shape = fn a b ->
+    if tensor_is_row_bias_for b a then (
+      tensor_shape a
+    ) else if tensor_is_row_bias_for a b then (
+      tensor_shape b
+    ) else (
+      tensor_shape a
+    )
+  ;;
+
+  let tensor_sub_data = fn a b ->
+    if tensor_is_row_bias_for b a then (
+      tensor_sub_row_broadcast_data b a
+    ) else if tensor_is_row_bias_for a b then (
+      tensor_row_bias_sub_data a b
+    ) else (
+      Arrays.map2 (fn x y -> x - y) (tensor_data a) (tensor_data b)
+    )
+  ;;
+
+  let tensor_accum_grad_row_sum = fn bias target delta sign ->
+    let bgrad = tensor_grad bias;
+    let tshape = tensor_shape target;
+    let rows = tshape[0];
+    let cols = tshape[1];
+    for r = 0 .. rows in (
+      for c = 0 .. cols in (
+        let idx = (r * cols) + c;
+        bgrad[c] := bgrad[c] + sign * delta[idx]
+      )
+    );
+    bias
+  ;;
+
+  let tensor_forward_sub = fn self ->
+    match tensor_operands self with
+    | [| a, b |] ->
+      tensor_set_data self (tensor_sub_data a b)
+    | _ -> self
+  ;;
+  let tensor_backward_sub = fn self ->
+    match tensor_operands self with
+    | [| a, b |] -> (
+      let grad = tensor_grad self;
+      if tensor_is_row_bias_for b a then (
+        tensor_accum_grad a grad;
+        tensor_accum_grad_row_sum b a grad (-1.)
+      ) else if tensor_is_row_bias_for a b then (
+        tensor_accum_grad_row_sum a b grad 1.;
+        tensor_accum_grad_scaled b grad (-1.)
+      ) else (
+        tensor_accum_grad a grad;
+        tensor_accum_grad_scaled b grad (-1.)
+      );
+      self
+    )
+    | _ -> self
+  ;;
+
+  let tensor_sub = fn a b ->
+    TensorOp (tensor_sub_shape a b)
+      (tensor_sub_data a b)
+      tensor_forward_sub
+      tensor_backward_sub
+      [| a, b |]
+      2
+  ;;
+;
+
 
 let tensor_forward_mul = fn self ->
   match tensor_operands self with
@@ -331,24 +415,123 @@ let tensor_neg = fn a ->
     5
 ;;
 
+let tensor_div_row_broadcast_data = fn bias target ->
+  let bdata = tensor_data bias;
+  let tdata = tensor_data target;
+  let tshape = tensor_shape target;
+  let rows = tshape[0];
+  let cols = tshape[1];
+  let out = array_fill_const (rows * cols) 0.;
+  for r = 0 .. rows in (
+    for c = 0 .. cols in (
+      let idx = (r * cols) + c;
+      out[idx] := tdata[idx] / bdata[c]
+    )
+  );
+  out
+;;
+
+let tensor_row_bias_div_data = fn bias target ->
+  let bdata = tensor_data bias;
+  let tdata = tensor_data target;
+  let tshape = tensor_shape target;
+  let rows = tshape[0];
+  let cols = tshape[1];
+  let out = array_fill_const (rows * cols) 0.;
+  for r = 0 .. rows in (
+    for c = 0 .. cols in (
+      let idx = (r * cols) + c;
+      out[idx] := bdata[c] / tdata[idx]
+    )
+  );
+  out
+;;
+
+let tensor_div_shape = fn a b ->
+  if tensor_is_row_bias_for b a then (
+    tensor_shape a
+  ) else if tensor_is_row_bias_for a b then (
+    tensor_shape b
+  ) else (
+    tensor_shape a
+  )
+;;
+
+let tensor_div_data = fn a b ->
+  if tensor_is_row_bias_for b a then (
+    tensor_div_row_broadcast_data b a
+  ) else if tensor_is_row_bias_for a b then (
+    tensor_row_bias_div_data a b
+  ) else (
+    Arrays.map2 (/) (tensor_data a) (tensor_data b)
+  )
+;;
+
 let tensor_forward_div = fn self ->
   match tensor_operands self with
   | [| a, b |] ->
-    tensor_set_data self (Arrays.map2 (/) (tensor_data a) (tensor_data b))
+    tensor_set_data self (tensor_div_data a b)
   | _ -> self
+;;
+
+let tensor_accum_grad_row_div = fn bias target delta scale ->
+  let bgrad = tensor_grad bias;
+  let tshape = tensor_shape target;
+  let rows = tshape[0];
+  let cols = tshape[1];
+  for r = 0 .. rows in (
+    for c = 0 .. cols in (
+      let idx = (r * cols) + c;
+      bgrad[c] := bgrad[c] + scale * delta[idx]
+    )
+  );
+  bias
 ;;
 
 let tensor_backward_div = fn self ->
   match tensor_operands self with
   | [| a, b |] -> (
     let grad = tensor_grad self;
-    let adata = tensor_data a;
-    let bdata = tensor_data b;
-    let agrad = tensor_grad a;
-    let bgrad = tensor_grad b;
-    for i = 0 .. array_size grad in (
-      agrad[i] := agrad[i] + grad[i] / bdata[i];
-      bgrad[i] := bgrad[i] - grad[i] * adata[i] / (bdata[i] * bdata[i])
+    if tensor_is_row_bias_for b a then (
+      # a / bias : a is [R,C], b is [1,C]
+      let bdata = tensor_data b;
+      let agrad = tensor_grad a;
+      let bgrad = tensor_grad b;
+      let tshape = tensor_shape a;
+      let rows = tshape[0];
+      let cols = tshape[1];
+      for r = 0 .. rows in (
+        for c = 0 .. cols in (
+          let idx = (r * cols) + c;
+          agrad[idx] := agrad[idx] + grad[idx] / bdata[c];
+          bgrad[c] := bgrad[c] - grad[idx] * (tensor_data a)[idx] / (bdata[c] * bdata[c])
+        )
+      )
+    ) else if tensor_is_row_bias_for a b then (
+      # bias / b : a is [1,C], b is [R,C]
+      let adata = tensor_data a;
+      let bdata = tensor_data b;
+      let agrad = tensor_grad a;
+      let bgrad = tensor_grad b;
+      let tshape = tensor_shape b;
+      let rows = tshape[0];
+      let cols = tshape[1];
+      for r = 0 .. rows in (
+        for c = 0 .. cols in (
+          let idx = (r * cols) + c;
+          agrad[c] := agrad[c] + grad[idx] / bdata[idx];
+          bgrad[idx] := bgrad[idx] - grad[idx] * adata[c] / (bdata[idx] * bdata[idx])
+        )
+      )
+    ) else (
+      let adata = tensor_data a;
+      let bdata = tensor_data b;
+      let agrad = tensor_grad a;
+      let bgrad = tensor_grad b;
+      for i = 0 .. array_size grad in (
+        agrad[i] := agrad[i] + grad[i] / bdata[i];
+        bgrad[i] := bgrad[i] - grad[i] * adata[i] / (bdata[i] * bdata[i])
+      )
     );
     self
   )
@@ -356,12 +539,72 @@ let tensor_backward_div = fn self ->
 ;;
 
 let tensor_div = fn a b ->
-  TensorOp (tensor_shape a)
-    (Arrays.map2 (/) (tensor_data a) (tensor_data b))
+  TensorOp (tensor_div_shape a b)
+    (tensor_div_data a b)
     tensor_forward_div
     tensor_backward_div
     [| a, b |]
     6
+;;
+
+let tensor_forward_exp = fn self ->
+  match tensor_operands self with
+  | [| a |] ->
+    tensor_set_data self (Arrays.map Math.exp (tensor_data a))
+  | _ -> self
+;;
+
+let tensor_backward_exp = fn self ->
+  match tensor_operands self with
+  | [| a |] -> (
+    let grad = tensor_grad self;
+    let odata = tensor_data self;
+    let agrad = tensor_grad a;
+    for i = 0 .. array_size grad in (
+      agrad[i] := agrad[i] + grad[i] * odata[i]
+    );
+    self
+  )
+  | _ -> self
+;;
+
+let tensor_exp = fn a ->
+  TensorOp (tensor_shape a)
+    (Arrays.map Math.exp (tensor_data a))
+    tensor_forward_exp
+    tensor_backward_exp
+    [| a |]
+    10
+;;
+
+let tensor_forward_log = fn self ->
+  match tensor_operands self with
+  | [| a |] ->
+    tensor_set_data self (Arrays.map Math.log (tensor_data a))
+  | _ -> self
+;;
+
+let tensor_backward_log = fn self ->
+  match tensor_operands self with
+  | [| a |] -> (
+    let grad = tensor_grad self;
+    let adata = tensor_data a;
+    let agrad = tensor_grad a;
+    for i = 0 .. array_size grad in (
+      agrad[i] := agrad[i] + grad[i] / adata[i]
+    );
+    self
+  )
+  | _ -> self
+;;
+
+let tensor_log = fn a ->
+  TensorOp (tensor_shape a)
+    (Arrays.map Math.log (tensor_data a))
+    tensor_forward_log
+    tensor_backward_log
+    [| a |]
+    11
 ;;
 
 let tensor_forward_relu = fn self ->
@@ -560,7 +803,7 @@ let tensor_sgd_step = fn learning_rate t ->
 
 
 let linear = fn w b x ->
-  tensor_matmul x w |> tensor_add b
+  tensor_matmul x w |> TensorAdd.tensor_add b
 ;;
 
 let random_array = fn n scale ->
@@ -587,7 +830,7 @@ let tensor_ones = fn shape ->
 ;;
 
 let squared_error = fn pred target ->
-  let err = tensor_sub pred target;
+  let err = TensorSub.tensor_sub pred target;
   tensor_sum (tensor_sq err)
 ;;
 
@@ -603,6 +846,8 @@ let op_name = fn op ->
   | 7 -> "Relu"
   | 8 -> "Sum"
   | 9 -> "Matmul"
+  | 10 -> "Exp"
+  | 11 -> "Log"
   | _ -> "Unknown"
 ;;
 
@@ -687,7 +932,7 @@ let test = module () ->
   ;;
 
   let test_tensor_add = fn () ->
-    let c = tensor_add (make_a ()) (make_b ());
+    let c = TensorAdd.tensor_add (make_a ()) (make_b ());
        shape2_eq (tensor_shape c) 2 2
     && vec4_eq (tensor_data c) 11. 22. 33. 44.
     && operand_count2 c
@@ -696,7 +941,7 @@ let test = module () ->
   let test_tensor_add_bias_broadcast = fn () ->
     let x = tensor [| 2, 3 |] [| 1., 2., 3., 4., 5., 6. |];
     let bias = tensor [| 1, 3 |] [| 10., 20., 30. |];
-    let c = tensor_add x bias;
+    let c = TensorAdd.tensor_add x bias;
        shape2_eq (tensor_shape c) 2 3
     && vec6_eq (tensor_data c) 11. 22. 33. 14. 25. 36.
     && operand_count2 c
@@ -705,18 +950,61 @@ let test = module () ->
   let test_tensor_add_bias_broadcast_left = fn () ->
     let x = tensor [| 2, 3 |] [| 1., 2., 3., 4., 5., 6. |];
     let bias = tensor [| 1, 3 |] [| 10., 20., 30. |];
-    let c = tensor_add bias x;
+    let c = TensorAdd.tensor_add bias x;
        shape2_eq (tensor_shape c) 2 3
     && vec6_eq (tensor_data c) 11. 22. 33. 14. 25. 36.
     && operand_count2 c
   ;;
 
   let test_tensor_sub = fn () ->
-    let c = tensor_sub (make_b ()) (make_a ());
+    let c = TensorSub.tensor_sub (make_b ()) (make_a ());
        shape2_eq (tensor_shape c) 2 2
     && vec4_eq (tensor_data c) 9. 18. 27. 36.
     && operand_count2 c
   ;;
+
+  let test_tensor_sub_bias_broadcast = fn () ->
+    let x = tensor [| 2, 3 |] [| 1., 2., 3., 4., 5., 6. |];
+    let bias = tensor [| 1, 3 |] [| 10., 20., 30. |];
+    let c = TensorSub.tensor_sub x bias;
+       shape2_eq (tensor_shape c) 2 3
+    && vec6_eq (tensor_data c) (-9.) (-18.) (-27.) (-6.) (-15.) (-24.)
+    && operand_count2 c
+  ;;
+
+  let test_tensor_sub_bias_broadcast_left = fn () ->
+    let x = tensor [| 2, 3 |] [| 1., 2., 3., 4., 5., 6. |];
+    let bias = tensor [| 1, 3 |] [| 10., 20., 30. |];
+    let c = TensorSub.tensor_sub bias x;
+       shape2_eq (tensor_shape c) 2 3
+    && vec6_eq (tensor_data c) 9. 18. 27. 6. 15. 24.
+    && operand_count2 c
+  ;;
+
+  let test_backward_sub_bias_broadcast = fn () ->
+    let x = tensor [| 2, 3 |] [| 1., 2., 3., 4., 5., 6. |];
+    let bias = tensor [| 1, 3 |] [| 10., 20., 30. |];
+    let y = TensorSub.tensor_sub x bias;
+    let loss = tensor_sum y;
+    tensor_seed_loss loss;
+    tensor_backward loss;
+    tensor_backward y;
+       vec6_eq (tensor_grad x) 1. 1. 1. 1. 1. 1.
+    && vec3_eq (tensor_grad bias) (-2.) (-2.) (-2.)
+  ;;
+
+  let test_backward_sub_bias_broadcast_left = fn () ->
+    let x = tensor [| 2, 3 |] [| 1., 2., 3., 4., 5., 6. |];
+    let bias = tensor [| 1, 3 |] [| 10., 20., 30. |];
+    let y = TensorSub.tensor_sub bias x;
+    let loss = tensor_sum y;
+    tensor_seed_loss loss;
+    tensor_backward loss;
+    tensor_backward y;
+       vec6_eq (tensor_grad x) (-1.) (-1.) (-1.) (-1.) (-1.) (-1.)
+    && vec3_eq (tensor_grad bias) 2. 2. 2.
+  ;;
+
 
   let test_tensor_mul = fn () ->
     let c = tensor_mul (make_a ()) (make_b ());
@@ -746,11 +1034,102 @@ let test = module () ->
     && operand_count2 c
   ;;
 
+  let test_tensor_div_bias_broadcast = fn () ->
+    let x = tensor [| 2, 3 |] [| 10., 20., 30., 40., 50., 60. |];
+    let bias = tensor [| 1, 3 |] [| 2., 5., 6. |];
+    let c = tensor_div x bias;
+       shape2_eq (tensor_shape c) 2 3
+    && vec6_eq (tensor_data c) 5. 4. 5. 20. 10. 10.
+    && operand_count2 c
+  ;;
+
+  let test_tensor_div_bias_broadcast_left = fn () ->
+    let x = tensor [| 2, 3 |] [| 1., 2., 3., 4., 5., 6. |];
+    let bias = tensor [| 1, 3 |] [| 60., 50., 30. |];
+    let c = tensor_div bias x;
+       shape2_eq (tensor_shape c) 2 3
+    && vec6_eq (tensor_data c) 60. 25. 10. 15. 10. 5.
+    && operand_count2 c
+  ;;
+
+  let test_backward_div_bias_broadcast = fn () ->
+    # x [R,C] / bias [1,C], loss = sum
+    # out[r,c] = x[r,c]/b[c]; d/dx = 1/b ; d/db = sum_r -x[r,c]/b[c]^2
+    let x = tensor [| 2, 3 |] [| 2., 4., 8., 6., 8., 16. |];
+    let bias = tensor [| 1, 3 |] [| 2., 4., 8. |];
+    let y = tensor_div x bias;
+    let loss = tensor_sum y;
+    tensor_seed_loss loss;
+    tensor_backward loss;
+    tensor_backward y;
+    # out = [1,1,1, 3,2,2]
+    # x grad = 1/b = [0.5,0.25,0.125] both rows
+    # bias grad = -(2+6)/4, -(4+8)/16, -(8+16)/64 = -2, -0.75, -0.375
+       vec6_eq (tensor_grad x) 0.5 0.25 0.125 0.5 0.25 0.125
+    && vec3_eq (tensor_grad bias) (-2.) (-0.75) (-0.375)
+  ;;
+
+  let test_backward_div_bias_broadcast_left = fn () ->
+    # bias [1,C] / x [R,C], loss = sum
+    # out[r,c] = b[c]/x[r,c]; d/db = sum_r 1/x ; d/dx = -b/x^2
+    let x = tensor [| 2, 3 |] [| 1., 2., 4., 2., 4., 8. |];
+    let bias = tensor [| 1, 3 |] [| 2., 4., 8. |];
+    let y = tensor_div bias x;
+    let loss = tensor_sum y;
+    tensor_seed_loss loss;
+    tensor_backward loss;
+    tensor_backward y;
+    # out = [2,2,2, 1,1,1]
+    # bias grad = (1/1+1/2, 1/2+1/4, 1/4+1/8) = 1.5, 0.75, 0.375
+    # x grad = -b/x^2 = -2, -1, -0.5, -0.5, -0.25, -0.125
+       vec3_eq (tensor_grad bias) 1.5 0.75 0.375
+    && vec6_eq (tensor_grad x) (-2.) (-1.) (-0.5) (-0.5) (-0.25) (-0.125)
+  ;;
+
   let test_tensor_relu = fn () ->
     let c = tensor_relu (tensor [| 1, 4 |] [| -1., 0., 2., 3. |]);
        shape2_eq (tensor_shape c) 1 4
     && vec4_eq (tensor_data c) 0. 0. 2. 3.
     && operand_count1 c
+  ;;
+
+  let test_tensor_exp = fn () ->
+    let c = tensor_exp (tensor [| 1, 3 |] [| -1., 0., 1. |]);
+    let d = tensor_data c;
+       shape2_eq (tensor_shape c) 1 3
+    && operand_count1 c
+    && d[1] == 1.
+  ;;
+
+  let test_tensor_log = fn () ->
+    let c = tensor_log (tensor [| 1, 3 |] [| 1., 2., Math.exp 1. |]);
+    let d = tensor_data c;
+       shape2_eq (tensor_shape c) 1 3
+    && operand_count1 c
+    && d[0] == 0.
+    && d[2] == 1.
+  ;;
+
+  let test_backward_exp = fn () ->
+    # exp(0) = 1; d/dx exp(x) = exp(x) = 1 at x=0
+    let a = tensor [| 1, 1 |] [| 0. |];
+    let y = tensor_exp a;
+    let loss = tensor_sum y;
+    tensor_seed_loss loss;
+    tensor_backward loss;
+    tensor_backward y;
+    vec1_eq (tensor_grad a) 1.
+  ;;
+
+  let test_backward_log = fn () ->
+    # log(2); d/dx log(x) = 1/x = 0.5 at x=2
+    let a = tensor [| 1, 1 |] [| 2. |];
+    let y = tensor_log a;
+    let loss = tensor_sum y;
+    tensor_seed_loss loss;
+    tensor_backward loss;
+    tensor_backward y;
+    vec1_eq (tensor_grad a) 0.5
   ;;
 
   let test_tensor_sum = fn () ->
@@ -772,7 +1151,7 @@ let test = module () ->
   let test_forward_tree_refreshes_data = fn () ->
     let a = tensor [| 1, 1 |] [| 2. |];
     let b = tensor [| 1, 1 |] [| 3. |];
-    let c = tensor_add a b;
+    let c = TensorAdd.tensor_add a b;
     tensor_data a[0] := 10.;
     let refreshed = tensor_forward_tree c;
     vec1_eq (tensor_data refreshed) 13.
@@ -789,7 +1168,7 @@ let test = module () ->
   let test_backward_add = fn () ->
     let a = tensor [| 1, 1 |] [| 2. |];
     let b = tensor [| 1, 1 |] [| 3. |];
-    let y = tensor_add a b;
+    let y = TensorAdd.tensor_add a b;
     tensor_seed_loss y;
     tensor_backward y;
        vec1_eq (tensor_grad a) 1.
@@ -799,7 +1178,7 @@ let test = module () ->
   let test_backward_add_bias_broadcast = fn () ->
     let x = tensor [| 2, 3 |] [| 1., 2., 3., 4., 5., 6. |];
     let bias = tensor [| 1, 3 |] [| 10., 20., 30. |];
-    let y = tensor_add bias x;
+    let y = TensorAdd.tensor_add bias x;
     let loss = tensor_sum y;
     tensor_seed_loss loss;
     tensor_backward loss;
