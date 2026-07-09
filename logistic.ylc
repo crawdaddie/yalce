@@ -153,7 +153,7 @@ let pclose = extern fn Ptr -> Int;
 
 let plot_losses = fn losses epochs ->
   let gp = popen (cstr "gnuplot") (cstr "w");
-  fprintf gp (cstr "set terminal kittycairo size 900,500\n");
+  fprintf gp (cstr "set terminal kittycairo size 900,500 scroll\n");
   fprintf gp (cstr "set title 'Logistic regression training loss (BCE)'\n");
   fprintf gp (cstr "set xlabel 'epoch'\n");
   fprintf gp (cstr "set ylabel 'total loss'\n");
@@ -187,7 +187,7 @@ let emit_points = fn gp target_label ->
 
 let plot_decision = fn () ->
   let gp = popen (cstr "gnuplot") (cstr "w");
-  fprintf gp (cstr "set terminal kittycairo size 900,650\n");
+  fprintf gp (cstr "set terminal kittycairo size 900,650 scroll\n");
   fprintf gp (cstr "set title 'Logistic regression decision boundary'\n");
   fprintf gp (cstr "set xlabel 'x1'\n");
   fprintf gp (cstr "set ylabel 'x2'\n");
@@ -225,3 +225,11 @@ w = [{w0}, {w1}]  b = {bb}
 [ 1, -1] -> {get_pred_loss 8} target 0
 [-1, -2] -> {get_pred_loss 9} target 0
 `;
+
+import graph_compile;
+let fg, output_id = Model.infer (Data.x_at 0) |> graph_compile.flatten_graph ;
+graph_compile.print_flat_nodes fg;
+
+
+
+#%%
