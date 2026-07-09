@@ -14,7 +14,11 @@ typedef struct RTConfig {
   const char *base_libs_dir;
   const char *import_current_dir;
   const char *opt_level;
+  const char **input_scripts;
+  int num_input_scripts;
 
 } RTConfig;
 extern RTConfig ylc_config;
+
+void print_config();
 #endif
