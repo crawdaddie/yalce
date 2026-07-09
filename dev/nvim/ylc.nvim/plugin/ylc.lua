@@ -18,6 +18,10 @@ vim.api.nvim_create_user_command("YlcOpenDebug", function()
 	ylc.open_debug()
 end, {})
 
+vim.api.nvim_create_user_command("YlcOpenKitty", function()
+	ylc.open_kitty()
+end, {})
+
 vim.api.nvim_create_user_command("YlcRestart", function()
 	ylc.restart()
 end, {})

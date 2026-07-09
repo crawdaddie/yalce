@@ -21,6 +21,9 @@ Installation and your first YALCE programs.
 ### [Language Reference](reference.md)
 Complete syntax and features reference.
 
+### [REPL JIT Transaction Modules](repl_jit_transactions.md)
+Design note for per-input JIT modules, MCJIT addModule, and ORC/LLJIT.
+
 
 ## Examples and Tutorials
 
@@ -32,5 +35,4 @@ Practical code examples and patterns.
 
 ### [Audio Engine](audio_engine.md)
 Real-time audio synthesis and processing.
-
 

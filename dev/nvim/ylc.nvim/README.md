@@ -6,10 +6,11 @@ Neovim plugin for running `ylc <current-file> -i` in a side terminal and sending
 
 - `:YlcOpen` starts a YLC REPL for the current file in a vertical split
 - `:YlcOpen` starts notebook mode automatically when the current buffer ends in `.ylcnb`
+- `:YlcOpenKitty` starts YLC in an external Kitty window and sends snippets via Kitty remote control
 - `:YlcOpenDebug` starts `ylc` under `lldb`, runs it automatically, and uses the same input send path as normal mode
 - `:YlcReload` restarts the plugin-managed YLC job if one is open, otherwise starts one
-- `<C-c><C-c>` in normal mode expands to the attached LSP `selectionRange` and sends it, with no fallback path
-- `<C-c><C-c>` in visual mode sends the current selection
+- `<C-CR>` / `<D-CR>` in normal mode sends the current notebook cell, or expands to the attached LSP `selectionRange`
+- `<C-CR>` / `<D-CR>` in visual mode sends the current selection
 - `<leader>yo` runs `:YlcReload`
 - blank lines are ignored in normal mode
 - `:YlcRestart`, `:YlcStop`, `:YlcSelectNode`, `:YlcSendNode`, `:YlcSendParagraph`, `:YlcSendLine`, and `:YlcSendBuffer`
@@ -37,3 +38,44 @@ Example with `lazy.nvim`:
 - Configure a custom command or process environment with `require("ylc").setup({ cmd = {...}, env = {...} })`
 - Configure debugger launch with `require("ylc").setup({ debugger_cmd = { "lldb" } })`
 - Set `close_term_on_successful_exit = false` if you never want the terminal to close automatically
+
+## External Kitty Terminal
+
+For terminal graphics such as `gnuplot`'s `kittycairo` terminal, Neovim's built-in
+terminal buffer is not enough because it is a libvterm emulator. Use an external
+Kitty window instead:
+
+```vim
+:YlcOpenKitty
+```
+
+This launches Kitty with remote control enabled for that window and sends code
+with `kitty @ send-text`. To make notebook buffers use this backend by default:
+
+```lua
+require("ylc").setup({
+  notebook_terminal_backend = "kitty",
+})
+```
+
+To make all YLC sessions use external Kitty:
+
+```lua
+require("ylc").setup({
+  terminal_backend = "kitty",
+})
+```
+
+The Kitty backend can be customized:
+
+```lua
+require("ylc").setup({
+  kitty = {
+    cmd = { "kitty" },
+    title = "ylc.nvim",
+    socket = nil,
+    startup_delay_ms = 250,
+    extra_args = {},
+  },
+})
+```

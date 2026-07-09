@@ -3,9 +3,18 @@ local M = {}
 local config = {
 	cmd = { "ylc" },
 	interactive_flag = "-i",
+	terminal_backend = "nvim",
+	notebook_terminal_backend = nil,
 	open_cmd = "botright vsplit",
 	close_term_on_successful_exit = true,
 	env = {},
+	kitty = {
+		cmd = { "kitty" },
+		title = "ylc.nvim",
+		socket = nil,
+		startup_delay_ms = 250,
+		extra_args = {},
+	},
 	debugger_cmd = { "lldb" },
 	lsp = {
 		enabled = true,
@@ -16,11 +25,15 @@ local config = {
 }
 
 local state = {
+	backend = nil,
 	job_id = nil,
 	term_buf = nil,
 	term_win = nil,
 	script_path = nil,
 	debug_active = false,
+	kitty_socket = nil,
+	kitty_title = nil,
+	kitty_window_id = nil,
 }
 
 local autocmd_group = vim.api.nvim_create_augroup("ylc.nvim", { clear = true })
@@ -82,14 +95,117 @@ local function escape_text(text)
 end
 
 local function reset_state()
+	state.backend = nil
 	state.job_id = nil
 	state.term_buf = nil
 	state.term_win = nil
 	state.script_path = nil
 	state.debug_active = false
+	state.kitty_socket = nil
+	state.kitty_title = nil
+	state.kitty_window_id = nil
+end
+
+local function kitty_cmd()
+	return tbl_copy(config.kitty.cmd or { "kitty" })
+end
+
+local function kitty_executable()
+	local cmd = config.kitty.cmd or { "kitty" }
+	return cmd[1] or "kitty"
+end
+
+local function kitty_socket_path()
+	if config.kitty.socket and config.kitty.socket ~= "" then
+		return config.kitty.socket
+	end
+	return string.format("/tmp/ylc-nvim-%d.sock", vim.fn.getpid())
+end
+
+local function kitty_title()
+	return string.format("%s-%d", config.kitty.title or "ylc.nvim", vim.fn.getpid())
+end
+
+local function kitty_target()
+	return "unix:" .. state.kitty_socket
+end
+
+local function kitty_remote(args, stdin)
+	if not state.kitty_socket then
+		return false, "Kitty socket is not initialized"
+	end
+
+	local cmd = kitty_cmd()
+	cmd[#cmd + 1] = "@"
+	cmd[#cmd + 1] = "--to"
+	cmd[#cmd + 1] = kitty_target()
+	for _, arg in ipairs(args) do
+		cmd[#cmd + 1] = arg
+	end
+
+	local output = vim.fn.system(cmd, stdin or "")
+	return vim.v.shell_error == 0, output
+end
+
+local function decode_json(text)
+	if vim.json and vim.json.decode then
+		local ok, decoded = pcall(vim.json.decode, text)
+		if ok then
+			return decoded
+		end
+	end
+
+	local ok, decoded = pcall(vim.fn.json_decode, text)
+	if ok then
+		return decoded
+	end
+
+	return nil
+end
+
+local function first_kitty_window_id(tree)
+	if type(tree) ~= "table" then
+		return nil
+	end
+
+	for _, os_window in ipairs(tree) do
+		for _, tab in ipairs(os_window.tabs or {}) do
+			for _, window in ipairs(tab.windows or {}) do
+				if window.id ~= nil then
+					return tostring(window.id)
+				end
+			end
+		end
+	end
+
+	return nil
+end
+
+local function record_kitty_window_id(output)
+	local id = first_kitty_window_id(decode_json(output))
+	if not id then
+		return false
+	end
+
+	state.kitty_window_id = id
+	return true
+end
+
+local function is_kitty_running()
+	if state.backend ~= "kitty" or not state.kitty_socket then
+		return false
+	end
+	local ok, output = kitty_remote({ "ls" })
+	if ok and not record_kitty_window_id(output) then
+		state.kitty_window_id = nil
+	end
+	return ok
 end
 
 local function is_job_running()
+	if state.backend == "kitty" then
+		return is_kitty_running()
+	end
 	return state.job_id and vim.fn.jobwait({ state.job_id }, 0)[1] == -1
 end
 
@@ -400,9 +516,30 @@ local function focus_terminal_end()
 end
 
 local function send_to_job(text)
+	if state.backend == "kitty" then
+		if not is_kitty_running() then
+			return false
+		end
+
+		local args = { "send-text" }
+		if state.kitty_window_id then
+			args[#args + 1] = "--match"
+			args[#args + 1] = "id:" .. state.kitty_window_id
+		end
+		args[#args + 1] = "--stdin"
+
+		local ok, output = kitty_remote(args, escape_text(text))
+		if not ok then
+			notify("Failed to send text to Kitty: " .. vim.trim(output or ""), vim.log.levels.ERROR)
+			return false
+		end
+		return true
+	end
+
 	if not is_job_running() then
 		return false
 	end
+
 	vim.fn.chansend(state.job_id, escape_text(text))
 	return true
 end
@@ -451,7 +588,90 @@ local function build_debug_cmd(script_path, notebook)
 	return cmd
 end
 
+local function backend_for_opts(opts)
+	if opts.terminal_backend then
+		return opts.terminal_backend
+	end
+	if opts.notebook and config.notebook_terminal_backend then
+		return config.notebook_terminal_backend
+	end
+	return config.terminal_backend or "nvim"
+end
+
+local function build_kitty_launch_cmd(term_cmd)
+	local cmd = kitty_cmd()
+	cmd[#cmd + 1] = "--title"
+	cmd[#cmd + 1] = state.kitty_title
+	cmd[#cmd + 1] = "--listen-on"
+	cmd[#cmd + 1] = kitty_target()
+	cmd[#cmd + 1] = "--override"
+	cmd[#cmd + 1] = "allow_remote_control=yes"
+
+	for _, arg in ipairs(config.kitty.extra_args or {}) do
+		cmd[#cmd + 1] = arg
+	end
+
+	for _, arg in ipairs(term_cmd) do
+		cmd[#cmd + 1] = arg
+	end
+
+	return cmd
+end
+
+local function wait_for_kitty()
+	local deadline = vim.loop.hrtime() + ((config.kitty.startup_delay_ms or 250) * 1000000)
+	while vim.loop.hrtime() < deadline do
+		if is_kitty_running() then
+			return true
+		end
+		vim.wait(25)
+	end
+	return is_kitty_running()
+end
+
+local function open_kitty(term_cmd)
+	if vim.fn.executable(kitty_executable()) == 0 then
+		notify("Kitty executable not found: " .. kitty_executable(), vim.log.levels.ERROR)
+		return false
+	end
+
+	state.backend = "kitty"
+	state.kitty_socket = kitty_socket_path()
+	state.kitty_title = kitty_title()
+
+	pcall(vim.fn.delete, state.kitty_socket)
+
+	local job_id = vim.fn.jobstart(build_kitty_launch_cmd(term_cmd), {
+		env = current_env(),
+		detach = true,
+	})
+	if job_id <= 0 then
+		notify("Failed to start external Kitty YLC terminal", vim.log.levels.ERROR)
+		reset_state()
+		return false
+	end
+
+	if not wait_for_kitty() then
+		notify("Started Kitty but remote control is not ready yet", vim.log.levels.WARN)
+	end
+
+	return true
+end
+
 function M.stop()
+	if state.backend == "kitty" then
+		if is_kitty_running() then
+			local args = { "close-window" }
+			if state.kitty_window_id then
+				args[#args + 1] = "--match"
+				args[#args + 1] = "id:" .. state.kitty_window_id
+			end
+			kitty_remote(args)
+		end
+		reset_state()
+		return
+	end
+
 	if is_job_running() then
 		vim.fn.jobstop(state.job_id)
 	end
@@ -471,7 +691,7 @@ function M.open(opts)
 	end
 
 	if not opts.debug and not opts.raw_cmd and not opts.notebook and is_notebook_path(script_path) then
-		M.open_notebook()
+		M.open_notebook(opts)
 		return
 	end
 
@@ -483,9 +703,6 @@ function M.open(opts)
 		state.debug_active = true
 	end
 
-	local origin_win = vim.api.nvim_get_current_win()
-	open_window()
-
 	state.script_path = script_path
 	local term_cmd
 	if opts.raw_cmd then
@@ -495,6 +712,29 @@ function M.open(opts)
 	else
 		term_cmd = opts.debug and build_debug_cmd(script_path, false) or build_cmd(script_path)
 	end
+
+	local backend = backend_for_opts(opts)
+	if backend == "kitty" then
+		if open_kitty(term_cmd) then
+			if opts.debug then
+				notify("Started external Kitty YLC debugger for " .. script_path)
+			elseif opts.notebook then
+				notify("Started external Kitty YLC notebook for " .. script_path)
+			else
+				notify("Started external Kitty YLC for " .. script_path)
+			end
+		end
+		return
+	elseif backend ~= "nvim" then
+		notify("Unknown YLC terminal backend: " .. tostring(backend), vim.log.levels.ERROR)
+		reset_state()
+		return
+	end
+
+	local origin_win = vim.api.nvim_get_current_win()
+	open_window()
+	state.backend = "nvim"
+
 	state.job_id = vim.fn.termopen(term_cmd, {
 		env = current_env(),
 		on_stdout = function()
@@ -546,6 +786,7 @@ function M.open_notebook(opts)
 		script_path = script_path,
 		notebook = true,
 		debug = opts.debug,
+		terminal_backend = opts.terminal_backend,
 	})
 
 	if prelude ~= "" then
@@ -564,13 +805,20 @@ function M.open_debug()
 	M.open({ debug = true })
 end
 
+function M.open_kitty(opts)
+	opts = opts or {}
+	opts.terminal_backend = "kitty"
+	M.open(opts)
+end
+
 function M.restart()
+	local terminal_backend = state.backend
 	if current_buffer_is_notebook() then
-		M.open_notebook()
+		M.open_notebook({ terminal_backend = terminal_backend })
 		return
 	end
 
-	M.open()
+	M.open({ terminal_backend = terminal_backend })
 end
 
 function M.reload_or_open()
