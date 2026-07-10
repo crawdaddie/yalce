@@ -88,6 +88,6 @@ let Synth : Arithmetic = module () ->
 # ;
 
 let Synth : From = module () ->
-  let from_int = extern fn Int -> Synth;
-  let from_num = extern fn Double -> Synth;
+  let from_int = fn a: (Int) -> const_sig a;;
+  let from_num = fn a: (Double) -> const_sig a;;
 ;
