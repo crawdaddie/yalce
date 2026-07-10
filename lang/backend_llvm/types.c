@@ -12,18 +12,16 @@
 #include <stdio.h>
 #include <string.h>
 
-#define LLVM_TYPE_int LLVMInt32Type()
-#define LLVM_TYPE_uint64 LLVMInt64Type()
-#define LLVM_TYPE_bool LLVMInt1Type()
-#define LLVM_TYPE_float LLVMFloatType()
-#define LLVM_TYPE_double LLVMDoubleType()
-#define LLVM_TYPE_void LLVMVoidType()
-#define LLVM_TYPE_str LLVMPointerType(LLVMInt8Type(), 0)
-#define LLVM_TYPE_char LLVMInt8Type()
-#define LLVM_TYPE_ptr(type) LLVMPointerType(LLVM_TYPE_##type, 0)
-
 LLVMTypeRef codegen_fn_type(LLVMTypeRef _ret_type, Type *fn_type, int fn_len,
                             JITLangCtx *ctx, LLVMModuleRef module);
+
+static LLVMContextRef module_context(LLVMModuleRef module) {
+  return module ? LLVMGetModuleContext(module) : LLVMGetGlobalContext();
+}
+
+static LLVMTypeRef generic_ptr_type(LLVMModuleRef module) {
+  return LLVMPointerType(LLVMInt8TypeInContext(module_context(module)), 0);
+}
 
 typedef struct RecursiveStructBuildFrame {
   const char *name;
@@ -178,13 +176,14 @@ LLVMTypeRef tuple_type(Type *tuple_type, JITLangCtx *ctx,
 
     if (tuple_type->data.T_CONS.args[i]->kind == T_FN &&
         !is_closure(tuple_type->data.T_CONS.args[i])) {
-      element_types[i] = GENERIC_PTR;
+      element_types[i] = generic_ptr_type(module);
     } else {
       element_types[i] =
           type_to_llvm_type(tuple_type->data.T_CONS.args[i], ctx, module);
     }
   }
-  LLVMTypeRef llvm_tuple_type = LLVMStructType(element_types, len, 0);
+  LLVMTypeRef llvm_tuple_type =
+      LLVMStructTypeInContext(module_context(module), element_types, len, 0);
   // printf("llvm tuple type\n");
   // LLVMDumpType(llvm_tuple_type);
   // printf("\n");
@@ -204,13 +203,14 @@ LLVMTypeRef named_struct_type(const char *name, Type *tuple_type,
 
     if (tuple_type->data.T_CONS.args[i]->kind == T_FN &&
         !is_closure(tuple_type->data.T_CONS.args[i])) {
-      element_types[i] = GENERIC_PTR;
+      element_types[i] = generic_ptr_type(module);
     } else {
       element_types[i] =
           type_to_llvm_type(tuple_type->data.T_CONS.args[i], ctx, module);
     }
   }
-  LLVMTypeRef llvm_tuple_type = LLVMStructType(element_types, len, 0);
+  LLVMTypeRef llvm_tuple_type =
+      LLVMStructTypeInContext(module_context(module), element_types, len, 0);
 
   return llvm_tuple_type;
 }
@@ -250,7 +250,7 @@ static LLVMTypeRef recursive_ref_aggregate_type(Type *type, JITLangCtx *ctx,
   for (int i = 0; i < len; i++) {
     Type *field_type = decl_type->data.T_CONS.args[i];
     if (field_type->kind == T_FN && !is_closure(field_type)) {
-      element_types[i] = GENERIC_PTR;
+      element_types[i] = generic_ptr_type(module);
     } else {
       element_types[i] = type_to_llvm_type(field_type, ctx, module);
     }
@@ -312,23 +312,23 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
   switch (type->kind) {
 
   case T_INT: {
-    return LLVM_TYPE_int;
+    return LLVMInt32TypeInContext(module_context(module));
   }
 
   case T_UINT64: {
-    return LLVMInt64Type();
+    return LLVMInt64TypeInContext(module_context(module));
   }
 
   case T_NUM: {
-    return LLVM_TYPE_double;
+    return LLVMDoubleTypeInContext(module_context(module));
   }
 
   case T_BOOL: {
-    return LLVM_TYPE_bool;
+    return LLVMInt1TypeInContext(module_context(module));
   }
 
   case T_CHAR: {
-    return LLVM_TYPE_char;
+    return LLVMInt8TypeInContext(module_context(module));
   }
 
   case T_VAR: {
@@ -365,7 +365,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
 
     // Ordinary HM type variables are specialization-time placeholders, not
     // lexical env-bound names. If one survives to codegen, treat it as opaque.
-    return GENERIC_PTR;
+    return generic_ptr_type(module);
   }
 
   case T_RECURSIVE_REF: {
@@ -375,7 +375,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
     if (aggregate && type_uses_boxed_recursive_storage(decl_type)) {
       return LLVMPointerType(aggregate, 0);
     }
-    return aggregate ? aggregate : GENERIC_PTR;
+    return aggregate ? aggregate : generic_ptr_type(module);
   }
 
   case T_SUM: {
@@ -389,7 +389,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
     }
 
     if (is_simple_enum(type)) {
-      return LLVMInt8Type();
+      return LLVMInt8TypeInContext(module_context(module));
     }
 
     return codegen_adt_type(type, ctx, module);
@@ -398,22 +398,23 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
   case T_CONS: {
     if (type_uses_boxed_recursive_storage(type)) {
       LLVMTypeRef aggregate = recursive_ref_aggregate_type(type, ctx, module);
-      return aggregate ? LLVMPointerType(aggregate, 0) : GENERIC_PTR;
+      return aggregate ? LLVMPointerType(aggregate, 0)
+                       : generic_ptr_type(module);
     }
 
     if (type_uses_named_recursive_storage(type)) {
       LLVMTypeRef aggregate = recursive_ref_aggregate_type(type, ctx, module);
-      return aggregate ? aggregate : GENERIC_PTR;
+      return aggregate ? aggregate : generic_ptr_type(module);
     }
 
     if (is_coroutine_type(type)) {
-      return GENERIC_PTR;
+      return generic_ptr_type(module);
     }
 
     if (is_array_type(type)) {
       if (type->data.T_CONS.args[0]->kind == T_VAR &&
           !type->data.T_CONS.args[0]->is_recursive_type_ref) {
-        return tmp_generic_codegen_array_type();
+        return codegen_array_type(generic_ptr_type(module));
       }
       LLVMTypeRef el_type;
       el_type = type_to_llvm_type(type->data.T_CONS.args[0], ctx, module);
@@ -425,7 +426,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
     }
 
     if (is_pointer_type(type)) {
-      return LLVM_TYPE_ptr(char);
+      return generic_ptr_type(module);
     }
 
     // if (type->data.T_CONS.num_args == 1) {
@@ -455,7 +456,7 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
   }
 
   default: {
-    return LLVMVoidType();
+    return LLVMVoidTypeInContext(module_context(module));
   }
   }
 

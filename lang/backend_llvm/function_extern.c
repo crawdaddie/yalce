@@ -52,10 +52,8 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef instantiate_extern_fn_sym(JITSymbol *sym, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
-  if (sym->val == NULL) {
-    LLVMValueRef val = codegen_extern_fn(
-        sym->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast, ctx, module, builder);
-    sym->val = val;
-  }
+  LLVMValueRef val = codegen_extern_fn(
+      sym->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast, ctx, module, builder);
+  sym->val = val;
   return sym->val;
 }

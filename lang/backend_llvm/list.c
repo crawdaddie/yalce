@@ -8,6 +8,25 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
+static LLVMContextRef type_context(LLVMTypeRef type) {
+  return LLVMGetTypeContext(type);
+}
+
+static LLVMTypeRef generic_ptr_type_for_context(LLVMContextRef context) {
+  return LLVMPointerType(LLVMInt8TypeInContext(context), 0);
+}
+
+static LLVMTypeRef generic_ptr_type_for_module(LLVMModuleRef module) {
+  return generic_ptr_type_for_context(LLVMGetModuleContext(module));
+}
+
+static LLVMBasicBlockRef append_block_in_module(LLVMModuleRef module,
+                                                LLVMValueRef function,
+                                                const char *name) {
+  return LLVMAppendBasicBlockInContext(LLVMGetModuleContext(module), function,
+                                       name);
+}
+
 static Type *list_operand_type(Ast *operand_ast, JITLangCtx *ctx) {
   if (!operand_ast) {
     return NULL;
@@ -30,11 +49,12 @@ static Type *list_element_type_from_operand(Ast *operand_ast, JITLangCtx *ctx) {
 }
 
 LLVMTypeRef llnode_type(LLVMTypeRef llvm_el_type) {
+  LLVMContextRef llvm_ctx = type_context(llvm_el_type);
   LLVMTypeRef node_types[2];
   node_types[0] = llvm_el_type;
-  node_types[1] = LLVMPointerType(LLVMVoidType(), 0); // Pointer to next node
+  node_types[1] = generic_ptr_type_for_context(llvm_ctx);
 
-  LLVMTypeRef node_type = LLVMStructType(node_types, 2, 0);
+  LLVMTypeRef node_type = LLVMStructTypeInContext(llvm_ctx, node_types, 2, 0);
   return node_type;
 }
 
@@ -42,11 +62,11 @@ LLVMTypeRef llnode_type(LLVMTypeRef llvm_el_type) {
 LLVMTypeRef create_llvm_list_type(Type *list_el_type, JITLangCtx *ctx,
                                   LLVMModuleRef module) {
   if (list_el_type->kind == T_VAR) {
-    return GENERIC_PTR;
+    return generic_ptr_type_for_module(module);
   }
   if (list_el_type->kind == T_FN) {
 
-    LLVMTypeRef llvm_el_type = GENERIC_PTR;
+    LLVMTypeRef llvm_el_type = generic_ptr_type_for_module(module);
     LLVMTypeRef node_type = llnode_type(llvm_el_type);
 
     return LLVMPointerType(node_type, 0);
@@ -89,7 +109,7 @@ LLVMValueRef ll_is_null(LLVMValueRef list, LLVMTypeRef list_el_type,
                         LLVMBuilderRef builder) {
 
   if (!list_el_type) {
-    LLVMValueRef null_list = LLVMConstNull(GENERIC_PTR);
+    LLVMValueRef null_list = LLVMConstNull(LLVMTypeOf(list));
     return LLVMBuildICmp(builder, LLVMIntEQ, list, null_list, "is_null");
   }
 
@@ -102,7 +122,7 @@ LLVMValueRef ll_is_not_null(LLVMValueRef list, LLVMTypeRef list_el_type,
                             LLVMBuilderRef builder) {
 
   if (!list_el_type) {
-    LLVMValueRef null_list = LLVMConstNull(GENERIC_PTR);
+    LLVMValueRef null_list = LLVMConstNull(LLVMTypeOf(list));
     return LLVMBuildICmp(builder, LLVMIntNE, list, null_list, "is_null");
   }
 
@@ -132,7 +152,7 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   Type *list_el_type = type_of_list(ast->type);
   LLVMTypeRef llvm_el_type;
   if (list_el_type->kind == T_FN) {
-    llvm_el_type = GENERIC_PTR;
+    llvm_el_type = generic_ptr_type_for_module(module);
   } else {
     llvm_el_type = type_to_llvm_type(list_el_type, ctx, module);
   }
@@ -183,11 +203,11 @@ LLVMValueRef codegen_list(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // If the item is a function, we need to bitcast it to a pointer type
     // before storing it in the list
     if (item_type->kind == T_FN) {
-      LLVMTypeRef func_ptr_type = GENERIC_PTR;
+      LLVMTypeRef func_ptr_type = generic_ptr_type_for_module(module);
 
       // Perform the bitcast
       item_value =
-          LLVMBuildBitCast(builder, item_value, GENERIC_PTR, "func_ptr_cast");
+          LLVMBuildBitCast(builder, item_value, func_ptr_type, "func_ptr_cast");
     }
 
     // Calculate pointer to current node memory location
@@ -257,8 +277,10 @@ LLVMValueRef ListConcatHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMBasicBlockRef entry = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(entry);
-  LLVMBasicBlockRef loop_block = LLVMAppendBasicBlock(function, "loop");
-  LLVMBasicBlockRef after_loop = LLVMAppendBasicBlock(function, "after_loop");
+  LLVMBasicBlockRef loop_block =
+      append_block_in_module(module, function, "loop");
+  LLVMBasicBlockRef after_loop =
+      append_block_in_module(module, function, "after_loop");
 
   LLVMValueRef current = list;
 
@@ -310,7 +332,7 @@ LLVMValueRef ListRefSetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef llvm_list_el_type =
       (!list_el_type || list_el_type->kind == T_VAR ||
        list_el_type->kind == T_FN)
-          ? GENERIC_PTR
+          ? generic_ptr_type_for_module(module)
           : type_to_llvm_type(list_el_type, ctx, module);
 
   LLVMTypeRef node_type = llnode_type(llvm_list_el_type);
@@ -334,7 +356,7 @@ LLVMValueRef ListTailHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   if (!list_el_type || list_el_type->kind == T_VAR ||
       list_el_type->kind == T_FN) {
-    llvm_el_type = GENERIC_PTR;
+    llvm_el_type = generic_ptr_type_for_module(module);
   } else {
     llvm_el_type = type_to_llvm_type(list_el_type, ctx, module);
   }
@@ -344,9 +366,12 @@ LLVMValueRef ListTailHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef is_null_list = LLVMBuildIsNull(builder, list, "is_null_list");
   LLVMBasicBlockRef entry = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(entry);
-  LLVMBasicBlockRef loop_block = LLVMAppendBasicBlock(function, "loop");
-  LLVMBasicBlockRef after_loop = LLVMAppendBasicBlock(function, "after_loop");
-  LLVMBasicBlockRef null_case = LLVMAppendBasicBlock(function, "null_case");
+  LLVMBasicBlockRef loop_block =
+      append_block_in_module(module, function, "loop");
+  LLVMBasicBlockRef after_loop =
+      append_block_in_module(module, function, "after_loop");
+  LLVMBasicBlockRef null_case =
+      append_block_in_module(module, function, "null_case");
 
   LLVMBuildCondBr(builder, is_null_list, null_case, loop_block);
 

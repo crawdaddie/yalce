@@ -17,6 +17,36 @@
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
+static LLVMContextRef module_context(LLVMModuleRef module) {
+  return LLVMGetModuleContext(module);
+}
+
+static LLVMTypeRef module_i1_type(LLVMModuleRef module) {
+  return LLVMInt1TypeInContext(module_context(module));
+}
+
+static LLVMTypeRef module_i8_type(LLVMModuleRef module) {
+  return LLVMInt8TypeInContext(module_context(module));
+}
+
+static LLVMTypeRef module_i32_type(LLVMModuleRef module) {
+  return LLVMInt32TypeInContext(module_context(module));
+}
+
+static LLVMTypeRef module_generic_ptr_type(LLVMModuleRef module) {
+  return LLVMPointerType(module_i8_type(module), 0);
+}
+
+static LLVMValueRef module_bool_const(LLVMModuleRef module, int value) {
+  return LLVMConstInt(module_i1_type(module), value, 0);
+}
+
+static LLVMBasicBlockRef append_block_in_module(LLVMModuleRef module,
+                                                LLVMValueRef function,
+                                                const char *name) {
+  return LLVMAppendBasicBlockInContext(module_context(module), function, name);
+}
+
 LLVMValueRef bind_value(Ast *id, LLVMValueRef val, Type *val_type,
                         JITLangCtx *ctx, LLVMModuleRef module,
                         LLVMBuilderRef builder);
@@ -286,10 +316,10 @@ LLVMValueRef test_list_cons_pattern(Ast *pattern, LLVMValueRef val,
       LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
 
   LLVMBasicBlockRef test_elements_block =
-      LLVMAppendBasicBlock(parent_func, "list_cons_test_elements");
+      append_block_in_module(module, parent_func, "list_cons_test_elements");
 
   LLVMBasicBlockRef merge_block =
-      LLVMAppendBasicBlock(parent_func, "list_cons_merge");
+      append_block_in_module(module, parent_func, "list_cons_merge");
 
   LLVMBasicBlockRef pre_branch_block = LLVMGetInsertBlock(builder);
 
@@ -343,19 +373,19 @@ LLVMValueRef test_array_literal_pattern(Ast *pattern, LLVMValueRef val,
   }
 
   if (!is_array_type(val_type)) {
-    return _FALSE;
+    return module_bool_const(module, 0);
   }
 
   Type *array_el_type = val_type->data.T_CONS.args[0];
   LLVMTypeRef llvm_array_el_type =
-      array_el_type->kind == T_FN ? GENERIC_PTR
+      array_el_type->kind == T_FN ? module_generic_ptr_type(module)
                                   : type_to_llvm_type(array_el_type, ctx, module);
 
   int len = pattern->data.AST_LIST.len;
   LLVMValueRef actual_size =
       codegen_get_array_size(builder, val, llvm_array_el_type);
   LLVMValueRef expected_size =
-      LLVMConstInt(LLVMInt32Type(), (unsigned long long)len, 0);
+      LLVMConstInt(module_i32_type(module), (unsigned long long)len, 0);
   LLVMValueRef size_matches = LLVMBuildICmp(builder, LLVMIntEQ, actual_size,
                                             expected_size, "array_len_match");
 
@@ -367,9 +397,9 @@ LLVMValueRef test_array_literal_pattern(Ast *pattern, LLVMValueRef val,
       LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
 
   LLVMBasicBlockRef extract_block =
-      LLVMAppendBasicBlock(parent_func, "array_pattern_extract");
+      append_block_in_module(module, parent_func, "array_pattern_extract");
   LLVMBasicBlockRef merge_block =
-      LLVMAppendBasicBlock(parent_func, "array_pattern_merge");
+      append_block_in_module(module, parent_func, "array_pattern_merge");
   LLVMBasicBlockRef pre_branch_block = LLVMGetInsertBlock(builder);
 
   LLVMBuildCondBr(builder, size_matches, extract_block, merge_block);
@@ -377,7 +407,8 @@ LLVMValueRef test_array_literal_pattern(Ast *pattern, LLVMValueRef val,
   LLVMValueRef elements[len];
   LLVMPositionBuilderAtEnd(builder, extract_block);
   for (int i = 0; i < len; i++) {
-    LLVMValueRef idx = LLVMConstInt(LLVMInt32Type(), (unsigned long long)i, 0);
+    LLVMValueRef idx =
+        LLVMConstInt(module_i32_type(module), (unsigned long long)i, 0);
     elements[i] = get_array_element(builder, val, idx, llvm_array_el_type);
   }
   LLVMBasicBlockRef extract_end_block = LLVMGetInsertBlock(builder);
@@ -437,7 +468,7 @@ LLVMValueRef test_pattern(Ast *pattern,
   case AST_IDENTIFIER: {
 
     if (ast_is_placeholder_id(pattern)) {
-      return _TRUE; // Skip placeholder bindings like '_'
+      return module_bool_const(module, 1);
     }
 
     // const char *chars = pattern->data.AST_IDENTIFIER.value;
@@ -450,11 +481,11 @@ LLVMValueRef test_pattern(Ast *pattern,
     // ht_set_hash(ctx->frame->table, chars, id_hash, sym);
     bind_value(pattern, val, val_type, ctx, module, builder);
 
-    return _TRUE;
+    return module_bool_const(module, 1);
   }
 
   case AST_TUPLE: {
-    LLVMValueRef bool_acc = _TRUE;
+    LLVMValueRef bool_acc = module_bool_const(module, 1);
     char field_name[16];
     for (int i = 0; i < pattern->data.AST_LIST.len; i++) {
       Ast *p = pattern->data.AST_LIST.items + i;
@@ -517,7 +548,7 @@ LLVMValueRef test_pattern(Ast *pattern,
   }
 
   Ast *guard = NULL;
-  return _FALSE;
+  return module_bool_const(module, 0);
 }
 
 // given a partitioned list of Ast nodes for patterns that match a sum type
@@ -591,7 +622,7 @@ void test_sum_type_pattern(int pidx, int num_branches,
     return;
   }
 
-  LLVMValueRef ptag_val = LLVMConstInt(LLVMInt8Type(), ptag_idx, 0);
+  LLVMValueRef ptag_val = LLVMConstInt(module_i8_type(module), ptag_idx, 0);
 
   LLVMValueRef tags_match =
       LLVMBuildICmp(builder, LLVMIntEQ, tag, ptag_val, "eq_int");
@@ -605,7 +636,7 @@ void test_sum_type_pattern(int pidx, int num_branches,
       LLVMValueRef parent_func =
           LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
       LLVMBasicBlockRef unreachable_block =
-          LLVMAppendBasicBlock(parent_func, "match.exhausted");
+          append_block_in_module(module, parent_func, "match.exhausted");
       tag_fail = unreachable_block;
     } else {
       tag_fail =
@@ -620,7 +651,7 @@ void test_sum_type_pattern(int pidx, int num_branches,
       LLVMValueRef parent_func =
           LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
       LLVMBasicBlockRef unreachable_block =
-          LLVMAppendBasicBlock(parent_func, "match.exhausted");
+          append_block_in_module(module, parent_func, "match.exhausted");
       tag_fail = unreachable_block;
     } else {
       tag_fail = tag_blocks[next_tag_group_idx(val_type, pidx, num_branches, p,
@@ -657,7 +688,7 @@ void test_sum_type_pattern(int pidx, int num_branches,
       // Last branch - if payload doesn't match, unreachable
       LLVMValueRef parent_func = LLVMGetBasicBlockParent(test_blocks[pidx]);
       LLVMBasicBlockRef unreachable_block =
-          LLVMAppendBasicBlock(parent_func, "match.exhausted");
+          append_block_in_module(module, parent_func, "match.exhausted");
       test_fail = unreachable_block;
     } else {
       test_fail = tag_blocks[pidx + 1];
@@ -746,7 +777,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   bool is_void_type = (LLVMGetTypeKind(llvm_result_type) == LLVMVoidTypeKind);
 
   if (!is_tail_position) {
-    merge_block = LLVMAppendBasicBlock(parent_func, "match.merge");
+    merge_block = append_block_in_module(module, parent_func, "match.merge");
     LLVMPositionBuilderAtEnd(builder, merge_block);
 
     // Only create phi node if result type is not void
@@ -759,7 +790,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMBasicBlockRef skip_block = NULL;
   if (is_tail_position && allow_no_match) {
-    skip_block = LLVMAppendBasicBlock(parent_func, "match.skip");
+    skip_block = append_block_in_module(module, parent_func, "match.skip");
   }
 
   int num_branches_to_merge = 0;
@@ -771,7 +802,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (is_direct_bool_skip_match) {
     Ast *branch_expr = branches + 1;
     LLVMBasicBlockRef body_block =
-        LLVMAppendBasicBlock(parent_func, "match.body.0");
+        append_block_in_module(module, parent_func, "match.body.0");
     LLVMBasicBlockRef fail_dest =
         is_tail_position ? skip_block : merge_block;
 
@@ -847,11 +878,11 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     if (is_match_over_sum) {
       sprintf(block_name, "match.test.tag.%d", i);
-      tag_blocks[i] = LLVMAppendBasicBlock(parent_func, block_name);
+      tag_blocks[i] = append_block_in_module(module, parent_func, block_name);
     }
 
     sprintf(block_name, "match.test.%d", i);
-    test_blocks[i] = LLVMAppendBasicBlock(parent_func, block_name);
+    test_blocks[i] = append_block_in_module(module, parent_func, block_name);
     sprintf(block_name, "match.body.%d", i);
 
     // Ast *pattern = branches + (2 * i);
@@ -861,7 +892,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // }
 
     sprintf(block_name, "match.body.%d", i);
-    body_blocks[i] = LLVMAppendBasicBlock(parent_func, block_name);
+    body_blocks[i] = append_block_in_module(module, parent_func, block_name);
   }
 
   // Branch from entry block to first test block
@@ -911,7 +942,7 @@ LLVMValueRef codegen_match(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
         } else {
           // Last branch - pattern must match or unreachable
           LLVMBasicBlockRef unreachable_block =
-              LLVMAppendBasicBlock(parent_func, "match.exhausted");
+              append_block_in_module(module, parent_func, "match.exhausted");
           fail_dest = unreachable_block;
           LLVMBuildCondBr(builder, pat_res, body_blocks[i], fail_dest);
           LLVMPositionBuilderAtEnd(builder, unreachable_block);

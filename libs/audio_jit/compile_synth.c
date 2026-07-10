@@ -21,6 +21,30 @@
 
 static SynthRegistry synth_registry;
 
+static LLVMTypeRef audio_i8_type(LLVMModuleRef module) {
+  return LLVMInt8TypeInContext(LLVMGetModuleContext(module));
+}
+
+static LLVMTypeRef audio_i32_type(LLVMModuleRef module) {
+  return LLVMInt32TypeInContext(LLVMGetModuleContext(module));
+}
+
+static LLVMTypeRef audio_i64_type(LLVMModuleRef module) {
+  return LLVMInt64TypeInContext(LLVMGetModuleContext(module));
+}
+
+static LLVMTypeRef audio_f64_type(LLVMModuleRef module) {
+  return LLVMDoubleTypeInContext(LLVMGetModuleContext(module));
+}
+
+static LLVMTypeRef audio_void_type(LLVMModuleRef module) {
+  return LLVMVoidTypeInContext(LLVMGetModuleContext(module));
+}
+
+static LLVMTypeRef audio_ptr_type(LLVMModuleRef module) {
+  return LLVMPointerType(audio_i8_type(module), 0);
+}
+
 static DspSynthArgKind classify_synth_arg_kind(Type *type) {
   if (!type) {
     return DSP_SYNTH_ARG_SCALAR_ONLY;
@@ -102,18 +126,18 @@ static LLVMValueRef call_dsp_symbol(Ast *ast, JITLangCtx *ctx,
   if (!sym) {
     fprintf(stderr, "audio_jit: unresolved compiled synth symbol\n");
     print_ast_err(sym_id);
-    return LLVMConstNull(GENERIC_PTR);
+    return LLVMConstNull(audio_ptr_type(module_ref));
   }
   int synth_id = audio_sym_synth_id(sym);
   if (synth_id < 0 || synth_id >= synth_registry_len()) {
     fprintf(stderr, "audio_jit: synth id out of range: %d\n", synth_id);
-    return LLVMConstNull(GENERIC_PTR);
+    return LLVMConstNull(audio_ptr_type(module_ref));
   }
   SynthRecord synth_rec = synth_registry_get(synth_id);
 
   if (!synth_rec.ctor) {
     fprintf(stderr, "audio_jit: missing ctor for synth id: %d\n", synth_id);
-    return LLVMConstNull(GENERIC_PTR);
+    return LLVMConstNull(audio_ptr_type(module_ref));
   }
 
   LLVMValueRef ctor_fn = synth_rec.ctor;
@@ -150,8 +174,10 @@ static LLVMValueRef call_dsp_symbol(Ast *ast, JITLangCtx *ctx,
   // Emit an indirect call through ylc_get_synth_ctor so that redefining the
   // synth (updating synth_registry.records[synth_id].ctor) is picked up by
   // already-compiled call sites (e.g. coroutines) at runtime.
+  LLVMTypeRef i32_ty = audio_i32_type(module_ref);
+  LLVMTypeRef ptr_ty = audio_ptr_type(module_ref);
   LLVMTypeRef get_ctor_fn_ty =
-      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){LLVMInt32Type()}, 1, 0);
+      LLVMFunctionType(ptr_ty, (LLVMTypeRef[]){i32_ty}, 1, 0);
   LLVMValueRef get_ctor_fn =
       LLVMGetNamedFunction(module_ref, "ylc_get_synth_ctor");
   if (!get_ctor_fn) {
@@ -160,7 +186,7 @@ static LLVMValueRef call_dsp_symbol(Ast *ast, JITLangCtx *ctx,
     LLVMSetLinkage(get_ctor_fn, LLVMExternalLinkage);
   }
   LLVMValueRef synth_id_val =
-      LLVMConstInt(LLVMInt32Type(), (unsigned long long)synth_id, 0);
+      LLVMConstInt(i32_ty, (unsigned long long)synth_id, 0);
   LLVMValueRef current_ctor = LLVMBuildCall2(
       builder, get_ctor_fn_ty, get_ctor_fn, &synth_id_val, 1, "ctor.ptr");
 
@@ -257,16 +283,18 @@ LLVMTypeRef synth_frame_fn_type(Ast *lambda, JITLangCtx *ctx,
     }
   }
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef ptr_ty = audio_ptr_type(module);
+  LLVMTypeRef f64_ty = audio_f64_type(module);
 
   LLVMTypeRef *frame_param_tys =
       malloc(sizeof(LLVMTypeRef) * (size_t)(num_inputs + 3));
-  frame_param_tys[0] = GENERIC_PTR; // state ptr
-  frame_param_tys[1] = GENERIC_PTR; // enclosing node ptr
-  frame_param_tys[2] = LLVMPointerType(LLVMDoubleTypeInContext(llvm_ctx), 0);
+  frame_param_tys[0] = ptr_ty; // state ptr
+  frame_param_tys[1] = ptr_ty; // enclosing node ptr
+  frame_param_tys[2] = LLVMPointerType(f64_ty, 0);
   // output ptr
   for (int i = 0; i < num_inputs; i++) {
 
-    frame_param_tys[i + 3] = LLVMDoubleType();
+    frame_param_tys[i + 3] = f64_ty;
   }
   LLVMTypeRef frame_ty = LLVMFunctionType(LLVMVoidTypeInContext(llvm_ctx),
                                           frame_param_tys, num_inputs + 3, 0);
@@ -320,11 +348,16 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   // Type *ftype = lambda->type;
   //
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef i8_ty = audio_i8_type(module);
+  LLVMTypeRef i32_ty = audio_i32_type(module);
+  LLVMTypeRef i64_ty = audio_i64_type(module);
+  LLVMTypeRef f64_ty = audio_f64_type(module);
+  LLVMTypeRef void_ty = audio_void_type(module);
+  LLVMTypeRef ptr_ty = audio_ptr_type(module);
   // Build Synth Perform func scaffold
   LLVMTypeRef perf_ty =
-      LLVMFunctionType(GENERIC_PTR,
-                       (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR,
-                                       LLVMInt32Type(), LLVMDoubleType()},
+      LLVMFunctionType(ptr_ty,
+                       (LLVMTypeRef[]){ptr_ty, ptr_ty, ptr_ty, i32_ty, f64_ty},
                        5, 0);
   //
   // LLVMTypeRef *frame_param_tys =
@@ -345,20 +378,17 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   char init_name[32];
   sprintf(init_name, "%s.init", name);
   LLVMTypeRef init_ty =
-      LLVMFunctionType(LLVMVoidType(), (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+      LLVMFunctionType(void_ty, (LLVMTypeRef[]){ptr_ty}, 1, 0);
   LLVMValueRef init_fn = LLVMAddFunction(module, init_name, init_ty);
 
   // Build synth cons func scaffold
-  LLVMTypeRef i32_ty = LLVMInt32Type();
-  LLVMTypeRef i64_ty = LLVMInt64Type();
-  LLVMTypeRef f64_ty = LLVMDoubleType();
   LLVMTypeRef *cons_param_tys =
       num_inputs ? malloc(sizeof(LLVMTypeRef) * num_inputs) : NULL;
   for (int i = 0; i < num_inputs; i++) {
     cons_param_tys[i] = f64_ty;
   }
   LLVMTypeRef cons_ty =
-      LLVMFunctionType(GENERIC_PTR, cons_param_tys, num_inputs, 0);
+      LLVMFunctionType(ptr_ty, cons_param_tys, num_inputs, 0);
   char cons_name[32];
   sprintf(cons_name, "%s.cons", name);
   LLVMValueRef cons_fn = LLVMAddFunction(module, cons_name, cons_ty);
@@ -422,10 +452,9 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
       .tmp_alloc = &tmp_alloc,
   };
 
-  LLVMTypeRef create_param_tys[] = {GENERIC_PTR, i32_ty, i32_ty, i32_ty,
-                                    GENERIC_PTR};
+  LLVMTypeRef create_param_tys[] = {ptr_ty, i32_ty, i32_ty, i32_ty, ptr_ty};
   LLVMTypeRef create_fn_ty =
-      LLVMFunctionType(GENERIC_PTR, create_param_tys, 5, 0);
+      LLVMFunctionType(ptr_ty, create_param_tys, 5, 0);
   LLVMValueRef create_fn =
       LLVMGetNamedFunction(module, "ylc_create_audio_node");
   if (!create_fn) {
@@ -447,9 +476,8 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   LLVMBuildBr(ctor_b, ctor_init_bb);
 
   LLVMPositionBuilderAtEnd(ctor_b, ctor_init_bb);
-  LLVMTypeRef i8_ty = LLVMInt8TypeInContext(llvm_ctx);
   LLVMValueRef node_i8 =
-      LLVMBuildPointerCast(ctor_b, node_val, GENERIC_PTR, "node.i8");
+      LLVMBuildPointerCast(ctor_b, node_val, ptr_ty, "node.i8");
   LLVMValueRef state_base_off = LLVMConstInt(i32_ty, (uint64_t)sizeof(Node), 0);
   LLVMValueRef ctor_state_ptr =
       LLVMBuildGEP2(ctor_b, i8_ty, node_i8, &state_base_off, 1, "node.state");
@@ -487,9 +515,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
                    frame_ctx.state_cursor_ptr);
   }
   {
-    LLVMTypeRef f64_ty_local = LLVMDoubleType();
-    LLVMTypeRef spf_fn_ty =
-        LLVMFunctionType(f64_ty_local, (LLVMTypeRef[]){}, 0, 0);
+    LLVMTypeRef spf_fn_ty = LLVMFunctionType(f64_ty, (LLVMTypeRef[]){}, 0, 0);
     LLVMValueRef spf_fn = LLVMGetNamedFunction(module, "ctx_spf");
     if (!spf_fn) {
       spf_fn = LLVMAddFunction(module, "ctx_spf", spf_fn_ty);
@@ -580,11 +606,11 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
     LLVMBuildRetVoid(frame_ctx.init_builder);
   }
 
-  LLVMTypeRef ptr_ptr_ty = LLVMPointerType(GENERIC_PTR, 0);
+  LLVMTypeRef ptr_ptr_ty = LLVMPointerType(ptr_ty, 0);
   LLVMValueRef inputs_ptr_cast =
       LLVMBuildPointerCast(dsp_ctx.perform_builder, dsp_ctx.inputs_ptr,
                            ptr_ptr_ty, "inputs_ptr.cast");
-  LLVMTypeRef read_param_tys[] = {GENERIC_PTR, i64_ty};
+  LLVMTypeRef read_param_tys[] = {ptr_ty, i64_ty};
   LLVMTypeRef read_fn_ty = LLVMFunctionType(f64_ty, read_param_tys, 2, 0);
   LLVMValueRef read_fn = LLVMGetNamedFunction(module, "ylc_read_inlet_node");
   if (!read_fn) {
@@ -610,7 +636,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   frame_call_args[0] = dsp_ctx.state_ptr;
   frame_call_args[1] = dsp_ctx.node_ptr;
   LLVMTypeRef get_output_buf_fn_ty =
-      LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){GENERIC_PTR}, 1, 0);
+      LLVMFunctionType(ptr_ty, (LLVMTypeRef[]){ptr_ty}, 1, 0);
   LLVMValueRef get_output_buf_fn =
       LLVMGetNamedFunction(module, "ylc_get_output_buf");
   if (!get_output_buf_fn) {
@@ -635,10 +661,10 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
   for (unsigned i = 0; i < frame_user_params; i++) {
     LLVMValueRef idx_i64 = LLVMConstInt(i64_ty, (uint64_t)i, 0);
     LLVMValueRef inlet_slot =
-        LLVMBuildGEP2(dsp_ctx.perform_builder, GENERIC_PTR, inputs_ptr_cast,
+        LLVMBuildGEP2(dsp_ctx.perform_builder, ptr_ty, inputs_ptr_cast,
                       &idx_i64, 1, "inlet.slot");
     LLVMValueRef inlet_node = LLVMBuildLoad2(
-        dsp_ctx.perform_builder, GENERIC_PTR, inlet_slot, "inlet.node");
+        dsp_ctx.perform_builder, ptr_ty, inlet_slot, "inlet.node");
     LLVMValueRef read_args[] = {inlet_node, frame_i64};
     LLVMValueRef sample = LLVMBuildCall2(dsp_ctx.perform_builder, read_fn_ty,
                                          read_fn, read_args, 2, "inlet.sample");
@@ -672,7 +698,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
 
   if (!LLVMGetBasicBlockTerminator(
           LLVMGetInsertBlock(dsp_ctx.perform_builder))) {
-    LLVMBuildRet(dsp_ctx.perform_builder, LLVMConstNull(GENERIC_PTR));
+    LLVMBuildRet(dsp_ctx.perform_builder, LLVMConstNull(ptr_ty));
   }
   int state_bytes = 0;
 
@@ -687,7 +713,7 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
 
     if (num_inputs > 0) {
       LLVMTypeRef const_inlet_fn_ty =
-          LLVMFunctionType(GENERIC_PTR, (LLVMTypeRef[]){f64_ty}, 1, 0);
+          LLVMFunctionType(ptr_ty, (LLVMTypeRef[]){f64_ty}, 1, 0);
       LLVMValueRef const_inlet_fn =
           LLVMGetNamedFunction(module, "ylc_const_inlet");
       if (!const_inlet_fn) {
@@ -696,9 +722,9 @@ SynthRecord compile_lambda_to_synth_record(Ast *lambda, const char *name,
         LLVMSetLinkage(const_inlet_fn, LLVMExternalLinkage);
       }
 
-      LLVMTypeRef plug_input_tys[] = {i32_ty, GENERIC_PTR, GENERIC_PTR};
-      LLVMTypeRef plug_input_fn_ty = LLVMFunctionType(
-          LLVMVoidTypeInContext(llvm_ctx), plug_input_tys, 3, 0);
+      LLVMTypeRef plug_input_tys[] = {i32_ty, ptr_ty, ptr_ty};
+      LLVMTypeRef plug_input_fn_ty =
+          LLVMFunctionType(void_ty, plug_input_tys, 3, 0);
       LLVMValueRef plug_input_fn =
           LLVMGetNamedFunction(module, "plug_input_in_graph");
       if (!plug_input_fn) {
@@ -812,15 +838,17 @@ LLVMValueRef CompileAudioFnHandler(Ast *ast, JITLangCtx *ctx,
   // Emit a runtime call to ylc_register_synth_ctor(synth_id, cons_fn) so that
   // synth_ctor_table is populated with the real compiled address when the
   // top-level function executes.
+  LLVMTypeRef i32_ty = audio_i32_type(module);
   LLVMTypeRef reg_fn_ty = LLVMFunctionType(
-      LLVMVoidType(), (LLVMTypeRef[]){LLVMInt32Type(), GENERIC_PTR}, 2, 0);
+      audio_void_type(module), (LLVMTypeRef[]){i32_ty, audio_ptr_type(module)},
+      2, 0);
   LLVMValueRef reg_fn = LLVMGetNamedFunction(module, "ylc_register_synth_ctor");
   if (!reg_fn) {
     reg_fn = LLVMAddFunction(module, "ylc_register_synth_ctor", reg_fn_ty);
     LLVMSetLinkage(reg_fn, LLVMExternalLinkage);
   }
   LLVMValueRef synth_id_val =
-      LLVMConstInt(LLVMInt32Type(), (unsigned long long)synth_id, 0);
+      LLVMConstInt(i32_ty, (unsigned long long)synth_id, 0);
   LLVMBuildCall2(builder, reg_fn_ty, reg_fn,
                  (LLVMValueRef[]){synth_id_val, rec.ctor}, 2, "");
 

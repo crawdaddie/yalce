@@ -17,8 +17,11 @@
 
 void set_memory_effects(LLVMValueRef fn, uint64_t effects) {
   unsigned kind = LLVMGetEnumAttributeKindForName("memory", 6);
+  LLVMModuleRef module = LLVMGetGlobalParent(fn);
+  LLVMContextRef llvm_ctx =
+      module ? LLVMGetModuleContext(module) : LLVMGetGlobalContext();
   LLVMAttributeRef attr =
-      LLVMCreateEnumAttribute(LLVMGetGlobalContext(), kind, effects);
+      LLVMCreateEnumAttribute(llvm_ctx, kind, effects);
   LLVMAddAttributeAtIndex(fn, LLVMAttributeFunctionIndex, attr);
 }
 
@@ -27,11 +30,12 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 #define GET_SPRINTF                                                            \
   LLVMValueRef sprintf_func = LLVMGetNamedFunction(module, "sprintf");         \
+  LLVMContextRef sprintf_ctx = LLVMGetModuleContext(module);                   \
+  LLVMTypeRef sprintf_i8_ptr =                                                 \
+      LLVMPointerType(LLVMInt8TypeInContext(sprintf_ctx), 0);                  \
   LLVMTypeRef sprintf_type =                                                   \
-      LLVMFunctionType(LLVMInt32Type(),                                        \
-                       (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0),     \
-                                       LLVMPointerType(LLVMInt8Type(), 0)},    \
-                       2, 1);                                                  \
+      LLVMFunctionType(LLVMInt32TypeInContext(sprintf_ctx),                    \
+                       (LLVMTypeRef[]){sprintf_i8_ptr, sprintf_i8_ptr}, 2, 1); \
   if (!sprintf_func) {                                                         \
     sprintf_func = LLVMAddFunction(module, "sprintf", sprintf_type);           \
     set_memory_effects(sprintf_func, MEM_ARGMEM_MODREF);                       \
@@ -62,9 +66,11 @@ LLVMValueRef codegen_print_char_matrix(LLVMValueRef array2d,
 }
 
 #define STRLEN_TYPE                                                            \
-  LLVMFunctionType(LLVMInt32Type(),                                            \
-                   (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,     \
-                   false)
+  LLVMFunctionType(                                                            \
+      LLVMInt32TypeInContext(LLVMGetModuleContext(module)),                    \
+      (LLVMTypeRef[]){LLVMPointerType(                                         \
+          LLVMInt8TypeInContext(LLVMGetModuleContext(module)), 0)},            \
+      1, false)
 
 LLVMValueRef get_strlen_func(LLVMModuleRef module) {
   LLVMValueRef strlen_func = LLVMGetNamedFunction(module, "strlen");
@@ -80,7 +86,10 @@ LLVMValueRef _int_to_chars(LLVMValueRef int_value, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
 
   GET_SPRINTF LLVMValueRef buffer =
-      LLVMBuildAlloca(builder, LLVMArrayType(LLVMInt8Type(), 20), "str_buffer");
+      LLVMBuildAlloca(
+          builder,
+          LLVMArrayType(LLVMInt8TypeInContext(LLVMGetModuleContext(module)), 20),
+          "str_buffer");
 
   LLVMValueRef format_string =
       LLVMBuildGlobalStringPtr(builder, "%d", "format_string");
@@ -96,7 +105,10 @@ LLVMValueRef _uint64_to_string(LLVMValueRef int_value, LLVMModuleRef module,
 
   GET_SPRINTF
   LLVMValueRef buffer =
-      LLVMBuildAlloca(builder, LLVMArrayType(LLVMInt8Type(), 20), "str_buffer");
+      LLVMBuildAlloca(
+          builder,
+          LLVMArrayType(LLVMInt8TypeInContext(LLVMGetModuleContext(module)), 20),
+          "str_buffer");
 
   LLVMValueRef format_string =
       LLVMBuildGlobalStringPtr(builder, "%llu", "format_string");
@@ -139,7 +151,8 @@ LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
 
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
 
-  LLVMTypeRef struct_type = codegen_array_type(LLVMInt8Type());
+  LLVMTypeRef struct_type =
+      codegen_array_type(LLVMInt8TypeInContext(LLVMGetModuleContext(module)));
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
@@ -160,12 +173,14 @@ LLVMValueRef bool_to_string(LLVMValueRef int_value, LLVMModuleRef module,
   LLVMValueRef data_ptr =
       LLVMBuildSelect(builder, bool_val, true_str, false_str, "select_str");
 
-  LLVMValueRef true_len = LLVMConstInt(LLVMInt32Type(), 4, 0);
-  LLVMValueRef false_len = LLVMConstInt(LLVMInt32Type(), 5, 0);
+  LLVMTypeRef i32_type = LLVMInt32TypeInContext(LLVMGetModuleContext(module));
+  LLVMValueRef true_len = LLVMConstInt(i32_type, 4, 0);
+  LLVMValueRef false_len = LLVMConstInt(i32_type, 5, 0);
   LLVMValueRef len =
       LLVMBuildSelect(builder, bool_val, true_len, false_len, "select_len");
 
-  LLVMTypeRef struct_type = codegen_array_type(LLVMInt8Type());
+  LLVMTypeRef struct_type =
+      codegen_array_type(LLVMInt8TypeInContext(LLVMGetModuleContext(module)));
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
@@ -188,7 +203,8 @@ LLVMValueRef uint64_to_string(LLVMValueRef int_value, LLVMModuleRef module,
 
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
 
-  LLVMTypeRef struct_type = codegen_array_type(LLVMInt8Type());
+  LLVMTypeRef struct_type =
+      codegen_array_type(LLVMInt8TypeInContext(LLVMGetModuleContext(module)));
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
@@ -199,15 +215,17 @@ LLVMValueRef uint64_to_string(LLVMValueRef int_value, LLVMModuleRef module,
 LLVMValueRef char_to_string(LLVMValueRef char_value, LLVMModuleRef module,
                             LLVMBuilderRef builder) {
 
-  LLVMValueRef data_ptr = LLVMBuildAlloca(builder, LLVMInt8Type(), "char_ptr");
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef i8_type = LLVMInt8TypeInContext(llvm_ctx);
+  LLVMValueRef data_ptr = LLVMBuildAlloca(builder, i8_type, "char_ptr");
 
   LLVMBuildStore(builder, char_value, data_ptr);
 
-  LLVMValueRef len = LLVMConstInt(LLVMInt32Type(), 1, 0);
+  LLVMValueRef len = LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 1, 0);
 
-  LLVMTypeRef data_ptr_type = LLVMPointerType(LLVMInt8Type(), 0);
+  LLVMTypeRef data_ptr_type = LLVMPointerType(i8_type, 0);
 
-  LLVMTypeRef struct_type = codegen_array_type(LLVMInt8Type());
+  LLVMTypeRef struct_type = codegen_array_type(i8_type);
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
@@ -220,7 +238,10 @@ LLVMValueRef _num_to_string(LLVMValueRef double_value, LLVMModuleRef module,
 
   GET_SPRINTF
   LLVMValueRef buffer =
-      LLVMBuildAlloca(builder, LLVMArrayType(LLVMInt8Type(), 20), "str_buffer");
+      LLVMBuildAlloca(
+          builder,
+          LLVMArrayType(LLVMInt8TypeInContext(LLVMGetModuleContext(module)), 20),
+          "str_buffer");
 
   // TODO: allow specifying precision
   // LLVMValueRef format_string =
@@ -244,7 +265,8 @@ LLVMValueRef num_to_string(LLVMValueRef int_value, LLVMModuleRef module,
 
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
 
-  LLVMTypeRef struct_type = codegen_array_type(LLVMInt8Type());
+  LLVMTypeRef struct_type =
+      codegen_array_type(LLVMInt8TypeInContext(LLVMGetModuleContext(module)));
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
@@ -484,8 +506,12 @@ static LLVMValueRef codegen_cons_to_string(LLVMValueRef val, Type *val_type,
 
   if (is_coroutine_type(val_type)) {
 
-    GET_SPRINTF LLVMValueRef buffer = LLVMBuildAlloca(
-        builder, LLVMArrayType(LLVMInt8Type(), 11), "str_buffer");
+    LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+    LLVMTypeRef i8_type = LLVMInt8TypeInContext(llvm_ctx);
+    LLVMTypeRef i32_type = LLVMInt32TypeInContext(llvm_ctx);
+
+    GET_SPRINTF LLVMValueRef buffer =
+        LLVMBuildAlloca(builder, LLVMArrayType(i8_type, 11), "str_buffer");
 
     LLVMValueRef format_string =
         LLVMBuildGlobalStringPtr(builder, "%p", "format_string");
@@ -493,12 +519,13 @@ static LLVMValueRef codegen_cons_to_string(LLVMValueRef val, Type *val_type,
     LLVMValueRef args[] = {buffer, format_string, val};
     LLVMBuildCall2(builder, sprintf_type, sprintf_func, args, 3, "");
 
-    LLVMValueRef str =
-        LLVMGetUndef(string_struct_type(LLVMPointerType(LLVMInt8Type(), 0)));
+    LLVMTypeRef data_ptr_type = LLVMPointerType(i8_type, 0);
+    LLVMTypeRef str_type = LLVMStructTypeInContext(
+        llvm_ctx, (LLVMTypeRef[]){i32_type, data_ptr_type}, 2, false);
+    LLVMValueRef str = LLVMGetUndef(str_type);
     str = LLVMBuildInsertValue(builder, str, buffer, 1, "insert_array_data");
-    str =
-        LLVMBuildInsertValue(builder, str, LLVMConstInt(LLVMInt32Type(), 10, 0),
-                             0, "insert_array_size");
+    str = LLVMBuildInsertValue(builder, str, LLVMConstInt(i32_type, 10, 0), 0,
+                               "insert_array_size");
     return str;
   }
 
@@ -589,16 +616,21 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
 LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
                                   LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef i1_type = LLVMInt1TypeInContext(llvm_ctx);
+  LLVMTypeRef i8_type = LLVMInt8TypeInContext(llvm_ctx);
+  LLVMTypeRef i32_type = LLVMInt32TypeInContext(llvm_ctx);
+  LLVMTypeRef void_type = LLVMVoidTypeInContext(llvm_ctx);
+  LLVMTypeRef i8_ptr_type = LLVMPointerType(i8_type, 0);
 
   if (num_strings == 0) {
     // Return empty string
     LLVMValueRef empty_str = LLVMBuildGlobalStringPtr(builder, "", "empty");
-    LLVMTypeRef string_type = LLVMStructType(
-        (LLVMTypeRef[]){LLVMInt32Type(), LLVMPointerType(LLVMInt8Type(), 0)}, 2,
-        0);
+    LLVMTypeRef string_type = LLVMStructTypeInContext(
+        llvm_ctx, (LLVMTypeRef[]){i32_type, i8_ptr_type}, 2, 0);
     LLVMValueRef result = LLVMGetUndef(string_type);
-    result = LLVMBuildInsertValue(builder, result,
-                                  LLVMConstInt(LLVMInt32Type(), 0, 0), 0, "");
+    result = LLVMBuildInsertValue(builder, result, LLVMConstInt(i32_type, 0, 0),
+                                  0, "");
     result = LLVMBuildInsertValue(builder, result, empty_str, 1, "");
     return result;
   }
@@ -608,7 +640,7 @@ LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
   }
 
   // Calculate total length
-  LLVMValueRef total_len = LLVMConstInt(LLVMInt32Type(), 0, 0);
+  LLVMValueRef total_len = LLVMConstInt(i32_type, 0, 0);
   for (int i = 0; i < num_strings; i++) {
     LLVMValueRef len = LLVMBuildExtractValue(builder, strings[i], 0, "str_len");
     total_len = LLVMBuildAdd(builder, total_len, len, "add_len");
@@ -616,19 +648,17 @@ LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
 
   // Allocate buffer for concatenated string (total_len + 1 for null terminator)
   LLVMValueRef buffer_size = LLVMBuildAdd(
-      builder, total_len, LLVMConstInt(LLVMInt32Type(), 1, 0), "buffer_size");
+      builder, total_len, LLVMConstInt(i32_type, 1, 0), "buffer_size");
 
   LLVMValueRef malloc_func = LLVMGetNamedFunction(module, "malloc");
   if (!malloc_func) {
     LLVMTypeRef malloc_type =
-        LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
-                         (LLVMTypeRef[]){LLVMInt32Type()}, 1, 0);
+        LLVMFunctionType(i8_ptr_type, (LLVMTypeRef[]){i32_type}, 1, 0);
     malloc_func = LLVMAddFunction(module, "malloc", malloc_type);
   }
 
   LLVMTypeRef malloc_type =
-      LLVMFunctionType(LLVMPointerType(LLVMInt8Type(), 0),
-                       (LLVMTypeRef[]){LLVMInt32Type()}, 1, 0);
+      LLVMFunctionType(i8_ptr_type, (LLVMTypeRef[]){i32_type}, 1, 0);
   LLVMValueRef dest_buffer = LLVMBuildCall2(builder, malloc_type, malloc_func,
                                             &buffer_size, 1, "concat_buffer");
 
@@ -637,23 +667,21 @@ LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
       LLVMGetNamedFunction(module, "llvm.memcpy.p0.p0.i32");
   if (!memcpy_func) {
     LLVMTypeRef memcpy_type =
-        LLVMFunctionType(LLVMVoidType(),
-                         (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0),
-                                         LLVMPointerType(LLVMInt8Type(), 0),
-                                         LLVMInt32Type(), LLVMInt1Type()},
+        LLVMFunctionType(void_type,
+                         (LLVMTypeRef[]){i8_ptr_type, i8_ptr_type, i32_type,
+                                         i1_type},
                          4, 0);
     memcpy_func = LLVMAddFunction(module, "llvm.memcpy.p0.p0.i32", memcpy_type);
   }
 
   LLVMTypeRef memcpy_type =
-      LLVMFunctionType(LLVMVoidType(),
-                       (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0),
-                                       LLVMPointerType(LLVMInt8Type(), 0),
-                                       LLVMInt32Type(), LLVMInt1Type()},
+      LLVMFunctionType(void_type,
+                       (LLVMTypeRef[]){i8_ptr_type, i8_ptr_type, i32_type,
+                                       i1_type},
                        4, 0);
 
   // Copy each string into the buffer
-  LLVMValueRef offset = LLVMConstInt(LLVMInt32Type(), 0, 0);
+  LLVMValueRef offset = LLVMConstInt(i32_type, 0, 0);
   for (int i = 0; i < num_strings; i++) {
     LLVMValueRef str_len =
         LLVMBuildExtractValue(builder, strings[i], 0, "str_len");
@@ -661,12 +689,12 @@ LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
         LLVMBuildExtractValue(builder, strings[i], 1, "str_ptr");
 
     // Calculate destination pointer: dest_buffer + offset
-    LLVMValueRef dest_ptr = LLVMBuildGEP2(builder, LLVMInt8Type(), dest_buffer,
+    LLVMValueRef dest_ptr = LLVMBuildGEP2(builder, i8_type, dest_buffer,
                                           &offset, 1, "dest_offset");
 
     // memcpy(dest_ptr, str_ptr, str_len, is_volatile=false)
     LLVMValueRef memcpy_args[] = {dest_ptr, str_ptr, str_len,
-                                  LLVMConstInt(LLVMInt1Type(), 0, 0)};
+                                  LLVMConstInt(i1_type, 0, 0)};
     LLVMBuildCall2(builder, memcpy_type, memcpy_func, memcpy_args, 4, "");
 
     // Update offset
@@ -674,14 +702,13 @@ LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
   }
 
   // Add null terminator
-  LLVMValueRef null_ptr = LLVMBuildGEP2(builder, LLVMInt8Type(), dest_buffer,
+  LLVMValueRef null_ptr = LLVMBuildGEP2(builder, i8_type, dest_buffer,
                                         &total_len, 1, "null_ptr");
-  LLVMBuildStore(builder, LLVMConstInt(LLVMInt8Type(), 0, 0), null_ptr);
+  LLVMBuildStore(builder, LLVMConstInt(i8_type, 0, 0), null_ptr);
 
   // Build result struct {i32 length, ptr data}
-  LLVMTypeRef string_type = LLVMStructType(
-      (LLVMTypeRef[]){LLVMInt32Type(), LLVMPointerType(LLVMInt8Type(), 0)}, 2,
-      0);
+  LLVMTypeRef string_type = LLVMStructTypeInContext(
+      llvm_ctx, (LLVMTypeRef[]){i32_type, i8_ptr_type}, 2, 0);
   LLVMValueRef result = LLVMGetUndef(string_type);
   result = LLVMBuildInsertValue(builder, result, total_len, 0, "insert_len");
   result = LLVMBuildInsertValue(builder, result, dest_buffer, 1, "insert_ptr");
@@ -731,11 +758,13 @@ LLVMValueRef strings_equal(LLVMValueRef left, LLVMValueRef right,
 LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  LLVMTypeRef char_type = LLVMInt8Type();
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef char_type = LLVMInt8TypeInContext(llvm_ctx);
   LLVMTypeRef array_type = LLVMArrayType(char_type, length + 1);
 
-  LLVMValueRef length_val = LLVMConstInt(LLVMInt32Type(), length + 1, 0);
-  LLVMValueRef str_const = LLVMConstString(chars, length, 0);
+  LLVMValueRef length_val =
+      LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), length + 1, 0);
+  LLVMValueRef str_const = LLVMConstStringInContext(llvm_ctx, chars, length, 0);
   LLVMTypeRef str_const_type = LLVMTypeOf(str_const);
 
   LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
@@ -759,7 +788,10 @@ LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,
 }
 
 LLVMTypeRef string_struct_type(LLVMTypeRef data_ptr_type) {
-  return STRUCT_TY(2, LLVMInt32Type(), data_ptr_type);
+  LLVMContextRef llvm_ctx = LLVMGetTypeContext(data_ptr_type);
+  return LLVMStructTypeInContext(
+      llvm_ctx,
+      (LLVMTypeRef[]){LLVMInt32TypeInContext(llvm_ctx), data_ptr_type}, 2, 0);
 }
 
 LLVMValueRef _codegen_string(const char *chars, int length, JITLangCtx *ctx,
@@ -772,9 +804,11 @@ LLVMValueRef _codegen_string(const char *chars, int length, JITLangCtx *ctx,
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
-  str = LLVMBuildInsertValue(builder, str,
-                             LLVMConstInt(LLVMInt32Type(), length, 0), 0,
-                             "insert_array_size");
+  str = LLVMBuildInsertValue(
+      builder, str,
+      LLVMConstInt(LLVMInt32TypeInContext(LLVMGetModuleContext(module)), length,
+                   0),
+      0, "insert_array_size");
   return str;
 }
 
@@ -783,10 +817,12 @@ LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   const char *chars = ast->data.AST_STRING.value;
   int length = ast->data.AST_STRING.length;
 
-  LLVMTypeRef char_type = LLVMInt8Type();
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef char_type = LLVMInt8TypeInContext(llvm_ctx);
 
-  LLVMValueRef length_val = LLVMConstInt(LLVMInt32Type(), length, 0);
-  LLVMValueRef str_const = LLVMConstString(chars, length, 0);
+  LLVMValueRef length_val =
+      LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), length, 0);
+  LLVMValueRef str_const = LLVMConstStringInContext(llvm_ctx, chars, length, 0);
   LLVMTypeRef str_const_type = LLVMTypeOf(str_const);
 
   LLVMValueRef func = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
@@ -812,8 +848,9 @@ LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
   str = LLVMBuildInsertValue(builder, str,
-                             LLVMConstInt(LLVMInt32Type(), length, 0), 0,
-                             "insert_array_size");
+                             LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx),
+                                          length, 0),
+                             0, "insert_array_size");
   return str;
 }
 
@@ -921,17 +958,19 @@ LLVMValueRef stringify_value(LLVMValueRef val, Type *val_type, JITLangCtx *ctx,
 LLVMValueRef print_str(LLVMValueRef val, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMBuilderRef builder) {
 
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef i32_type = LLVMInt32TypeInContext(llvm_ctx);
+  LLVMTypeRef i8_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(llvm_ctx), 0);
+
   LLVMValueRef format_str =
       LLVMBuildGlobalStringPtr(builder, "%.*s", "fmt_str");
-  LLVMTypeRef printf_type = LLVMFunctionType(
-      LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,
-      1);
+  LLVMTypeRef printf_type =
+      LLVMFunctionType(i32_type, (LLVMTypeRef[]){i8_ptr_type}, 1, 1);
   LLVMValueRef printf_func = get_extern_fn("printf", printf_type, module);
   set_memory_effects(printf_func, MEM_ARGMEM_REF | MEM_INACCESSIBLE_MODREF);
 
   LLVMTypeRef fflush_type = LLVMFunctionType(
-      LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,
-      0);
+      i32_type, (LLVMTypeRef[]){i8_ptr_type}, 1, 0);
 
   LLVMValueRef fflush_func = get_extern_fn("fflush", fflush_type, module);
   set_memory_effects(fflush_func, MEM_INACCESSIBLE_MODREF);
@@ -945,26 +984,29 @@ LLVMValueRef print_str(LLVMValueRef val, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildCall2(builder, printf_type, printf_func, printf_args, 3,
                  "printf_call");
 
-  LLVMValueRef null_ptr = LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0));
+  LLVMValueRef null_ptr = LLVMConstNull(i8_ptr_type);
   LLVMBuildCall2(builder, fflush_type, fflush_func, &null_ptr, 1,
                  "fflush_stdout");
 
-  return LLVMGetUndef(LLVMVoidType());
+  return LLVMGetUndef(LLVMVoidTypeInContext(llvm_ctx));
 }
 
 LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
-  LLVMTypeRef printf_type = LLVMFunctionType(
-      LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,
-      1);
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef i32_type = LLVMInt32TypeInContext(llvm_ctx);
+  LLVMTypeRef i8_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(llvm_ctx), 0);
+  LLVMTypeRef void_type = LLVMVoidTypeInContext(llvm_ctx);
+
+  LLVMTypeRef printf_type =
+      LLVMFunctionType(i32_type, (LLVMTypeRef[]){i8_ptr_type}, 1, 1);
 
   LLVMValueRef printf_func = get_extern_fn("printf", printf_type, module);
   // memory(argmem: read, inaccessiblemem: readwrite)
   set_memory_effects(printf_func, MEM_ARGMEM_REF | MEM_INACCESSIBLE_MODREF);
 
   LLVMTypeRef fflush_type = LLVMFunctionType(
-      LLVMInt32Type(), (LLVMTypeRef[]){LLVMPointerType(LLVMInt8Type(), 0)}, 1,
-      0);
+      i32_type, (LLVMTypeRef[]){i8_ptr_type}, 1, 0);
 
   LLVMValueRef fflush_func = get_extern_fn("fflush", fflush_type, module);
   // memory(inaccessiblemem: readwrite)
@@ -990,11 +1032,11 @@ LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      "printf_call");
     }
 
-    LLVMValueRef null_ptr = LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0));
+    LLVMValueRef null_ptr = LLVMConstNull(i8_ptr_type);
     LLVMBuildCall2(builder, fflush_type, fflush_func, &null_ptr, 1,
                    "fflush_stdout");
 
-    return LLVMGetUndef(LLVMVoidType());
+    return LLVMGetUndef(void_type);
   }
   Ast *item = ast->data.AST_APPLICATION.args;
 
@@ -1013,10 +1055,10 @@ LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildCall2(builder, printf_type, printf_func, printf_args, 3,
                  "printf_call");
 
-  LLVMValueRef null_ptr = LLVMConstNull(LLVMPointerType(LLVMInt8Type(), 0));
+  LLVMValueRef null_ptr = LLVMConstNull(i8_ptr_type);
   LLVMBuildCall2(builder, fflush_type, fflush_func, &null_ptr, 1,
                  "fflush_stdout");
 
   // return LLVMConstNull(LLVMVoidType());
-  return LLVMGetUndef(LLVMVoidType());
+  return LLVMGetUndef(void_type);
 }

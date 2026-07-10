@@ -17,6 +17,67 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMTypeRef cor_inst_struct_type();
 
+static int specific_fn_name_counter = 0;
+
+static LLVMContextRef module_context(LLVMModuleRef module) {
+  return LLVMGetModuleContext(module);
+}
+
+static LLVMTypeRef generic_ptr_type(LLVMModuleRef module) {
+  return LLVMPointerType(LLVMInt8TypeInContext(module_context(module)), 0);
+}
+
+static char *copy_string_len(const char *chars, size_t len) {
+  if (!chars) {
+    return NULL;
+  }
+  char *copy = malloc(len + 1);
+  if (!copy) {
+    return NULL;
+  }
+  memcpy(copy, chars, len);
+  copy[len] = '\0';
+  return copy;
+}
+
+static char *copy_llvm_value_name(LLVMValueRef value) {
+  if (!value) {
+    return NULL;
+  }
+  size_t len = 0;
+  const char *name = LLVMGetValueName2(value, &len);
+  return copy_string_len(name, len);
+}
+
+static void assign_unique_specific_fn_name(LLVMValueRef func) {
+  if (!func || !LLVMIsAFunction(func)) {
+    return;
+  }
+
+  size_t original_len = 0;
+  const char *original = LLVMGetValueName2(func, &original_len);
+  if (!original || original_len == 0) {
+    original = "anonymous";
+    original_len = strlen(original);
+  }
+
+  int len = snprintf(NULL, 0, "__ylc_spec.%.*s.%d", (int)original_len,
+                     original, specific_fn_name_counter++);
+  if (len < 0) {
+    return;
+  }
+
+  char *name = malloc((size_t)len + 1);
+  if (!name) {
+    return;
+  }
+
+  snprintf(name, (size_t)len + 1, "__ylc_spec.%.*s.%d", (int)original_len,
+           original, specific_fn_name_counter - 1);
+  LLVMSetValueName2(func, name, strlen(name));
+  free(name);
+}
+
 LLVMTypeRef codegen_fn_type(LLVMTypeRef opt_ret_type, Type *fn_type, int fn_len,
                             JITLangCtx *ctx, LLVMModuleRef module) {
   if (!fn_type || fn_type->kind != T_FN) {
@@ -55,14 +116,14 @@ LLVMTypeRef codegen_fn_type(LLVMTypeRef opt_ret_type, Type *fn_type, int fn_len,
       }
       llvm_param_types[i] = tref;
     } else if (t->kind == T_FN) {
-      llvm_param_types[i] = GENERIC_PTR;
+      llvm_param_types[i] = generic_ptr_type(module);
     } else if (is_pointer_type(t) && t->data.T_CONS.num_args == 0) {
-      llvm_param_types[i] = GENERIC_PTR;
+      llvm_param_types[i] = generic_ptr_type(module);
     } else if (is_pointer_type(t)) {
       llvm_param_types[i] = LLVMPointerType(
           type_to_llvm_type(t->data.T_CONS.args[0], ctx, module), 0);
     } else if (is_coroutine_type(t)) {
-      llvm_param_types[i] = GENERIC_PTR;
+      llvm_param_types[i] = generic_ptr_type(module);
     } else {
       LLVMTypeRef tref = type_to_llvm_type(t, ctx, module);
       if (!tref) {
@@ -114,7 +175,8 @@ void add_recursive_closure_fn_ref(ObjString fn_name, LLVMValueRef func,
   LLVMValueRef closure = LLVMGetUndef(llvm_closure_type);
   closure = LLVMBuildInsertValue(builder, closure, func, 0, "self_closure_fn");
   LLVMValueRef env_ptr =
-      LLVMBuildBitCast(builder, closure_env, GENERIC_PTR, "self_closure_env");
+      LLVMBuildBitCast(builder, closure_env, generic_ptr_type(module),
+                       "self_closure_env");
   closure =
       LLVMBuildInsertValue(builder, closure, env_ptr, 1, "self_closure_env");
 
@@ -509,14 +571,19 @@ LLVMValueRef compile_specific_fn(Type *specific_type, JITSymbol *sym,
   return func;
 }
 
-LLVMValueRef specific_fns_lookup(SpecificFns *fns, Type *key) {
+static SpecificFns *specific_fns_lookup_entry(SpecificFns *fns, Type *key) {
   while (fns) {
     if (fn_types_match(key, fns->arg_types_key)) {
-      return fns->func;
+      return fns;
     }
     fns = fns->next;
   }
   return NULL;
+}
+
+LLVMValueRef specific_fns_lookup(SpecificFns *fns, Type *key) {
+  SpecificFns *entry = specific_fns_lookup_entry(fns, key);
+  return entry ? entry->func : NULL;
 }
 
 SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
@@ -524,23 +591,61 @@ SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
   SpecificFns *new_fns = malloc(sizeof(SpecificFns));
   new_fns->arg_types_key = key;
   new_fns->func = func;
+  new_fns->jit_name = copy_llvm_value_name(func);
   new_fns->next = fns;
   return new_fns;
+}
+
+static LLVMValueRef declare_cached_specific_fn(SpecificFns *entry,
+                                               LLVMTypeRef llvm_fn_type,
+                                               LLVMModuleRef module) {
+  if (!entry || !entry->jit_name) {
+    return entry ? entry->func : NULL;
+  }
+
+  LLVMValueRef existing = LLVMGetNamedFunction(module, entry->jit_name);
+  if (existing) {
+    return existing;
+  }
+
+  if (!llvm_fn_type) {
+    return NULL;
+  }
+
+  LLVMValueRef decl = LLVMAddFunction(module, entry->jit_name, llvm_fn_type);
+  LLVMSetLinkage(decl, LLVMExternalLinkage);
+  return decl;
+}
+
+LLVMValueRef specific_fns_lookup_decl(SpecificFns *fns, Type *key,
+                                      LLVMTypeRef llvm_fn_type,
+                                      LLVMModuleRef module) {
+  SpecificFns *entry = specific_fns_lookup_entry(fns, key);
+  if (!entry) {
+    return NULL;
+  }
+  return declare_cached_specific_fn(entry, llvm_fn_type, module);
 }
 
 LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
                                    JITLangCtx *ctx, LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
 
-  LLVMValueRef func = specific_fns_lookup(
-      sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type);
+  int args_len = fn_type_args_len(expected_fn_type);
+  LLVMTypeRef fn_type =
+      codegen_fn_type(NULL, expected_fn_type, args_len, ctx, module);
 
-  if (func) {
-    return func;
+  LLVMValueRef cached = specific_fns_lookup_decl(
+      sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, expected_fn_type,
+      fn_type, module);
+
+  if (cached) {
+    return cached;
   }
 
   LLVMValueRef specific_fn =
       compile_specific_fn(expected_fn_type, sym, ctx, module, builder);
+  assign_unique_specific_fn_name(specific_fn);
 
   sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns =
       specific_fns_extend(sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns,
@@ -590,7 +695,8 @@ LLVMValueRef codegen_compose_functions(int len, LLVMValueRef *funcs,
   LLVMValueRef func = LLVMAddFunction(module, "composition", fn_type);
 
   LLVMSetLinkage(func, LLVMExternalLinkage);
-  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef block =
+      LLVMAppendBasicBlockInContext(module_context(module), func, "entry");
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
   LLVMPositionBuilderAtEnd(builder, block);
   LLVMValueRef input = LLVMGetParam(func, 0);

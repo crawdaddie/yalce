@@ -18,6 +18,8 @@ LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
 LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);
 
+static int const_curried_fn_counter = 0;
+
 LLVMValueRef find_callable_from_generic(Ast *expr, Type *callable_type,
                                         Type *ftype, JITLangCtx *ctx,
                                         LLVMModuleRef module,
@@ -334,8 +336,9 @@ build_generic_closure_value(JITSymbol *sym, Type *expected_fn_type,
     LLVMTypeRef llvm_fn_type =
         closure_fn_type(clos_type, llvm_rec_type, &compilation_ctx, module);
 
-    LLVMValueRef wrapper = specific_fns_lookup(
-        sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, clos_type);
+    LLVMValueRef wrapper = specific_fns_lookup_decl(
+        sym->symbol_data.STYPE_GENERIC_FUNCTION.specific_fns, clos_type,
+        llvm_fn_type, module);
 
     if (!wrapper) {
       wrapper =
@@ -490,11 +493,19 @@ LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
     return NULL;
   }
 
-  START_FUNC(module, "curried_fn_with_const_params", prototype)
+  char fn_name[64];
+  snprintf(fn_name, sizeof(fn_name), "curried_fn_with_const_params.%d",
+           const_curried_fn_counter++);
+
+  START_FUNC(module, fn_name, prototype)
 
   STACK_ALLOC_CTX_PUSH(fn_ctx, ctx)
 
   Type *inner_fn_type = ast->data.AST_APPLICATION.function->type;
+  JITSymbol *inner_sym = lookup_id_ast(ast->data.AST_APPLICATION.function, ctx);
+  if (inner_sym && inner_sym->symbol_type) {
+    inner_fn_type = inner_sym->symbol_type;
+  }
   inner_fn_type = resolve_type_in_env(inner_fn_type, ctx->env);
   int inner_args_len = fn_type_args_len(inner_fn_type);
 
@@ -510,7 +521,8 @@ LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
   }
 
   int const_args_len = ast->data.AST_APPLICATION.len;
-  for (i = 0; i < fn_len; i++) {
+  int remaining_inner_args = inner_args_len - const_args_len;
+  for (i = 0; i < fn_len && i < remaining_inner_args; i++) {
     // Runtime parameters should follow the already-materialized const args.
     inner_args[const_args_len + i] = LLVMGetParam(func, i);
   }
@@ -519,11 +531,38 @@ LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
       codegen(ast->data.AST_APPLICATION.function, ctx, module, builder);
 
   LLVMTypeRef llvm_inner_fn_type =
-      type_to_llvm_type(inner_fn_type, ctx, module);
+      LLVMGlobalGetValueType(inner_fn);
+
+  unsigned actual_inner_args_len = LLVMCountParamTypes(llvm_inner_fn_type);
+  LLVMTypeRef actual_param_types[actual_inner_args_len
+                                     ? actual_inner_args_len
+                                     : 1];
+  if (actual_inner_args_len) {
+    LLVMGetParamTypes(llvm_inner_fn_type, actual_param_types);
+  }
+
+  unsigned call_args_len = (unsigned)inner_args_len;
+  if (actual_inner_args_len < call_args_len) {
+    call_args_len = actual_inner_args_len;
+  }
+
+  for (unsigned j = 0; j < call_args_len; j++) {
+    if (LLVMTypeOf(inner_args[j]) == actual_param_types[j]) {
+      continue;
+    }
+
+    Type *fallback_to = fn_return_type(fn_type);
+    Type *from_type = NULL;
+    if (j < ast->data.AST_APPLICATION.len) {
+      from_type = ast->data.AST_APPLICATION.args[j].type;
+    }
+    inner_args[j] = handle_type_conversions(inner_args[j], from_type,
+                                            fallback_to, ctx, module, builder);
+  }
 
   LLVMValueRef body =
       LLVMBuildCall2(builder, llvm_inner_fn_type, inner_fn, inner_args,
-                     inner_args_len, "curried_fn_inner_call");
+                     call_args_len, "curried_fn_inner_call");
 
   Type *res_type = fn_return_type(fn_type);
   if (res_type->kind == T_VOID) {

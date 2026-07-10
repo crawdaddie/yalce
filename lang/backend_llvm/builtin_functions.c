@@ -22,11 +22,46 @@
 #include "llvm-c/Target.h"
 #include <dlfcn.h>
 #include <llvm-c/Core.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 typedef LLVMValueRef (*ConsMethod)(LLVMValueRef, Type *, LLVMModuleRef,
                                    LLVMBuilderRef);
+
+static LLVMContextRef module_context(LLVMModuleRef module) {
+  return LLVMGetModuleContext(module);
+}
+
+static LLVMTypeRef module_i1_type(LLVMModuleRef module) {
+  return LLVMInt1TypeInContext(module_context(module));
+}
+
+static LLVMTypeRef module_i8_type(LLVMModuleRef module) {
+  return LLVMInt8TypeInContext(module_context(module));
+}
+
+static LLVMTypeRef module_i32_type(LLVMModuleRef module) {
+  return LLVMInt32TypeInContext(module_context(module));
+}
+
+static LLVMTypeRef module_double_type(LLVMModuleRef module) {
+  return LLVMDoubleTypeInContext(module_context(module));
+}
+
+static LLVMTypeRef module_byte_ptr_type(LLVMModuleRef module) {
+  return LLVMPointerType(module_i8_type(module), 0);
+}
+
+static LLVMValueRef module_bool_const(LLVMModuleRef module, int value) {
+  return LLVMConstInt(module_i1_type(module), value, 0);
+}
+
+static LLVMBasicBlockRef append_block_in_module(LLVMModuleRef module,
+                                                LLVMValueRef function,
+                                                const char *name) {
+  return LLVMAppendBasicBlockInContext(module_context(module), function, name);
+}
 
 static Type *builtin_operand_type(Ast *operand_ast, JITLangCtx *ctx) {
   if (!operand_ast) {
@@ -86,6 +121,59 @@ LLVMValueRef create_arithmetic_typeclass_methods(Ast *trait, JITLangCtx *ctx,
                               hash_string(chars, total_chars), method_sym);
                 }));
   return NULL;
+}
+
+static void from_trait_module_key(char *buf, size_t buf_size,
+                                  const char *type_name) {
+  snprintf(buf, buf_size, "__ylc_from.%s", type_name);
+}
+
+static LLVMValueRef FromConstructorHandler(Ast *ast, JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
+  Ast *arg = ast->data.AST_APPLICATION.args;
+  LLVMValueRef val = codegen(arg, ctx, module, builder);
+  Type *from_type = specialize_type_for_codegen(arg->type, ctx);
+  Type *to_type = specialize_type_for_codegen(ast->type, ctx);
+  return handle_type_conversions(val, from_type, to_type, ctx, module,
+                                 builder);
+}
+
+LLVMValueRef create_from_typeclass_methods(Ast *trait, JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
+  Ast *module_ast = trait->data.AST_TRAIT_IMPL.impl;
+  if (module_ast->tag != AST_MODULE) {
+    fprintf(stderr, "From trait for %s not correctly implemented\n",
+            trait->data.AST_TRAIT_IMPL.type.chars);
+    return NULL;
+  }
+
+  ObjString type_name = trait->data.AST_TRAIT_IMPL.type;
+  Type *module_type = module_ast->type;
+  JITSymbol *module_symbol =
+      create_module_symbol(module_type, NULL, module_ast, ctx, module);
+  compile_module(module_symbol, module_ast, module, builder);
+
+  char module_key[256];
+  from_trait_module_key(module_key, sizeof(module_key), type_name.chars);
+  ht_set_hash(ctx->frame->table, module_key,
+              hash_string(module_key, strlen(module_key)), module_symbol);
+
+  Type *constructor_type = env_lookup(ctx->env, type_name.chars);
+  if (!constructor_type) {
+    constructor_type = lookup_builtin_type(type_name.chars);
+  }
+
+  JITSymbol *constructor =
+      new_symbol(STYPE_GENERIC_FUNCTION, constructor_type, NULL, NULL);
+  constructor->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler =
+      FromConstructorHandler;
+  ht_set_hash(ctx->frame->table, type_name.chars,
+              hash_string(type_name.chars, type_name.length), constructor);
+
+  return LLVMConstInt(LLVMInt32TypeInContext(LLVMGetModuleContext(module)), 0,
+                      0);
 }
 
 JITSymbol *get_typeclass_method(char *type_name, char *op, JITLangCtx *ctx) {
@@ -256,7 +344,7 @@ LLVMValueRef curried_comparison_binop(Ast *saved_arg_ast,
   Type *saved_arg_type = specialize_type_for_codegen(saved_arg_ast->type, ctx);
   Type *target_type = resolve_ord_target_type(saved_arg_type, free_arg_type);
 
-  LLVMTypeRef llvm_return_type_ref = LLVMInt1Type();
+  LLVMTypeRef llvm_return_type_ref = module_i1_type(module);
   LLVMTypeRef llvm_from_type_ref =
       type_to_llvm_type(type->data.T_FN.from, ctx, module);
 
@@ -299,7 +387,7 @@ LLVMValueRef HandleCreateEmptyInitializer(Ast *ast, JITLangCtx *ctx,
       ast->data.AST_APPLICATION.args->data.AST_EXTERN_FN.fn_name.chars;
   LLVMValueRef func = LLVMAddFunction(module, name, llvm_ftype);
 
-  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef block = append_block_in_module(module, func, "entry");
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
   LLVMPositionBuilderAtEnd(builder, block);
   LLVMBuildRet(builder, LLVMConstNull(lt));
@@ -510,9 +598,9 @@ LLVMValueRef array_eq(LLVMValueRef arr1, LLVMValueRef arr2, Type *arr_type,
   LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
   LLVMValueRef parent_func = LLVMGetBasicBlockParent(entry_block);
   LLVMBasicBlockRef cmp_block =
-      LLVMAppendBasicBlock(parent_func, "array_eq.cmp");
+      append_block_in_module(module, parent_func, "array_eq.cmp");
   LLVMBasicBlockRef merge_block =
-      LLVMAppendBasicBlock(parent_func, "array_eq.merge");
+      append_block_in_module(module, parent_func, "array_eq.merge");
 
   LLVMBuildCondBr(builder, sizes_equal, cmp_block, merge_block);
 
@@ -527,12 +615,12 @@ LLVMValueRef array_eq(LLVMValueRef arr1, LLVMValueRef arr2, Type *arr_type,
 
   // Get or declare strncmp function
   LLVMTypeRef strncmp_args[] = {
-      LLVMPointerType(LLVMInt8Type(), 0), // const char*
-      LLVMPointerType(LLVMInt8Type(), 0), // const char*
-      LLVMInt32Type()                     // size_t (using i32)
+      module_byte_ptr_type(module), // const char*
+      module_byte_ptr_type(module), // const char*
+      module_i32_type(module)       // size_t (using i32)
   };
   LLVMTypeRef strncmp_type =
-      LLVMFunctionType(LLVMInt32Type(), strncmp_args, 3, 0);
+      LLVMFunctionType(module_i32_type(module), strncmp_args, 3, 0);
   LLVMValueRef strncmp_func = LLVMGetNamedFunction(module, "strncmp");
   if (!strncmp_func) {
     strncmp_func = LLVMAddFunction(module, "strncmp", strncmp_type);
@@ -540,9 +628,9 @@ LLVMValueRef array_eq(LLVMValueRef arr1, LLVMValueRef arr2, Type *arr_type,
 
   // Cast data pointers to i8* for strncmp
   LLVMValueRef data1_i8 = LLVMBuildPointerCast(
-      builder, data1, LLVMPointerType(LLVMInt8Type(), 0), "data1_i8");
+      builder, data1, module_byte_ptr_type(module), "data1_i8");
   LLVMValueRef data2_i8 = LLVMBuildPointerCast(
-      builder, data2, LLVMPointerType(LLVMInt8Type(), 0), "data2_i8");
+      builder, data2, module_byte_ptr_type(module), "data2_i8");
 
   // Call strncmp(data1, data2, size1)
   LLVMValueRef strncmp_args_vals[] = {data1_i8, data2_i8, size1};
@@ -551,7 +639,7 @@ LLVMValueRef array_eq(LLVMValueRef arr1, LLVMValueRef arr2, Type *arr_type,
                      "strncmp_result");
 
   // Check if strncmp returned 0 (strings are equal)
-  LLVMValueRef zero = LLVMConstInt(LLVMInt32Type(), 0, 0);
+  LLVMValueRef zero = LLVMConstInt(module_i32_type(module), 0, 0);
   LLVMValueRef contents_equal =
       LLVMBuildICmp(builder, LLVMIntEQ, strncmp_result, zero, "contents_equal");
 
@@ -560,9 +648,10 @@ LLVMValueRef array_eq(LLVMValueRef arr1, LLVMValueRef arr2, Type *arr_type,
 
   // --- merge block ---
   LLVMPositionBuilderAtEnd(builder, merge_block);
-  LLVMValueRef result = LLVMBuildPhi(builder, LLVMInt1Type(), "arrays_equal");
+  LLVMValueRef result =
+      LLVMBuildPhi(builder, module_i1_type(module), "arrays_equal");
 
-  LLVMValueRef false_val = LLVMConstInt(LLVMInt1Type(), 0, 0);
+  LLVMValueRef false_val = module_bool_const(module, 0);
   LLVMValueRef incoming_vals[] = {contents_equal, false_val};
   LLVMBasicBlockRef incoming_blocks[] = {cmp_end_block, entry_block};
   LLVMAddIncoming(result, incoming_vals, incoming_blocks, 2);
@@ -583,11 +672,13 @@ LLVMValueRef cons_equality(Type *type, LLVMValueRef tuple1, LLVMValueRef tuple2,
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
 
-  LLVMBasicBlockRef end_block = LLVMAppendBasicBlock(function, "tuple_eq_end");
-  LLVMValueRef result_phi = LLVMBuildPhi(builder, LLVMInt1Type(), "eq_result");
+  LLVMBasicBlockRef end_block =
+      append_block_in_module(module, function, "tuple_eq_end");
+  LLVMValueRef result_phi =
+      LLVMBuildPhi(builder, module_i1_type(module), "eq_result");
 
   // Initialize result to true
-  LLVMValueRef is_equal = LLVMConstInt(LLVMInt1Type(), 1, 0); // true
+  LLVMValueRef is_equal = module_bool_const(module, 1);
   unsigned element_count = type->data.T_CONS.num_args;
 
   for (unsigned i = 0; i < element_count; i++) {
@@ -604,7 +695,7 @@ LLVMValueRef cons_equality(Type *type, LLVMValueRef tuple1, LLVMValueRef tuple2,
     // Create a new block for the next comparison (if needed)
     LLVMBasicBlockRef next_block = NULL;
     if (i < element_count - 1) {
-      next_block = LLVMAppendBasicBlock(function, "tuple_eq_next");
+      next_block = append_block_in_module(module, function, "tuple_eq_next");
     }
 
     // If elements are not equal, short-circuit to end with false
@@ -637,19 +728,52 @@ LLVMValueRef option_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
     *t = t_int;
   }
 
-  LLVMValueRef tag1 =
-      LLVMBuildExtractValue(builder, l, 0, "option_eq_get_tag_l");
-  LLVMValueRef tag2 =
-      LLVMBuildExtractValue(builder, r, 0, "option_eq_get_tag_r");
-  LLVMValueRef phi = LLVM_IF_ELSE(
-      builder, codegen_option_is_none(r, builder),
-      LLVMBuildICmp(builder, LLVMIntEQ, tag1, tag2, "none-type-tags-equal"),
-      _codegen_equality(
-          t, LLVMBuildExtractValue(builder, l, 1, "option_eq_get_val_l"),
-          LLVMBuildExtractValue(builder, r, 1, "option_eq_get_val_r"), ctx,
-          module, builder));
+  LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
+  LLVMBasicBlockRef r_none_block =
+      append_block_in_module(module, function, "option_eq.r_none");
+  LLVMBasicBlockRef r_some_block =
+      append_block_in_module(module, function, "option_eq.r_some");
+  LLVMBasicBlockRef l_none_block =
+      append_block_in_module(module, function, "option_eq.l_none");
+  LLVMBasicBlockRef compare_block =
+      append_block_in_module(module, function, "option_eq.compare");
+  LLVMBasicBlockRef merge_block =
+      append_block_in_module(module, function, "option_eq.merge");
 
-  return phi;
+  LLVMBuildCondBr(builder, codegen_option_is_none(r, builder), r_none_block,
+                  r_some_block);
+
+  LLVMPositionBuilderAtEnd(builder, r_none_block);
+  LLVMValueRef r_none_result = codegen_option_is_none(l, builder);
+  LLVMBuildBr(builder, merge_block);
+  LLVMBasicBlockRef r_none_end = LLVMGetInsertBlock(builder);
+
+  LLVMPositionBuilderAtEnd(builder, r_some_block);
+  LLVMBuildCondBr(builder, codegen_option_is_none(l, builder), l_none_block,
+                  compare_block);
+
+  LLVMPositionBuilderAtEnd(builder, l_none_block);
+  LLVMValueRef l_none_result = module_bool_const(module, 0);
+  LLVMBuildBr(builder, merge_block);
+  LLVMBasicBlockRef l_none_end = LLVMGetInsertBlock(builder);
+
+  LLVMPositionBuilderAtEnd(builder, compare_block);
+  LLVMValueRef values_equal = _codegen_equality(
+      t, LLVMBuildExtractValue(builder, l, 1, "option_eq_get_val_l"),
+      LLVMBuildExtractValue(builder, r, 1, "option_eq_get_val_r"), ctx, module,
+      builder);
+  LLVMBuildBr(builder, merge_block);
+  LLVMBasicBlockRef compare_end = LLVMGetInsertBlock(builder);
+
+  LLVMPositionBuilderAtEnd(builder, merge_block);
+  LLVMValueRef result = LLVMBuildPhi(builder, module_i1_type(module),
+                                     "option_eq.result");
+  LLVMValueRef incoming_values[] = {r_none_result, l_none_result, values_equal};
+  LLVMBasicBlockRef incoming_blocks[] = {r_none_end, l_none_end, compare_end};
+  LLVMAddIncoming(result, incoming_values, incoming_blocks, 3);
+
+  return result;
 }
 
 #define MUT_VAL(_llvm_type, _val)                                              \
@@ -673,16 +797,16 @@ LLVMValueRef list_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
 
   LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
   LLVMBasicBlockRef cond_block =
-      LLVMAppendBasicBlock(current_function, "loop.cond");
+      append_block_in_module(module, current_function, "loop.cond");
   LLVMBasicBlockRef body_block =
-      LLVMAppendBasicBlock(current_function, "loop.body");
+      append_block_in_module(module, current_function, "loop.body");
   LLVMBasicBlockRef inc_block =
-      LLVMAppendBasicBlock(current_function, "loop.inc");
+      append_block_in_module(module, current_function, "loop.inc");
   LLVMBasicBlockRef after_block =
-      LLVMAppendBasicBlock(current_function, "loop.after");
+      append_block_in_module(module, current_function, "loop.after");
 
   LLVMValueRef is_eq_alloca =
-      MUT_VAL(LLVMInt1Type(), LLVMConstInt(LLVMInt1Type(), 1, 0));
+      MUT_VAL(module_i1_type(module), module_bool_const(module, 1));
 
   LLVMValueRef l_iterator = MUT_VAL(LLVMPointerType(llvm_list_node_type, 0), l);
   LLVMValueRef r_iterator = MUT_VAL(LLVMPointerType(llvm_list_node_type, 0), r);
@@ -712,14 +836,14 @@ LLVMValueRef list_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
       LLVMBuildXor(builder, l_is_null, r_is_null, "one_null");
 
   LLVMBasicBlockRef compare_elements_block =
-      LLVMAppendBasicBlock(current_function, "compare_elements");
+      append_block_in_module(module, current_function, "compare_elements");
   LLVMBasicBlockRef set_false_block =
-      LLVMAppendBasicBlock(current_function, "set_false");
+      append_block_in_module(module, current_function, "set_false");
 
   LLVMBuildCondBr(builder, one_null, set_false_block, compare_elements_block);
 
   LLVMPositionBuilderAtEnd(builder, set_false_block);
-  LLVMBuildStore(builder, LLVMConstInt(LLVMInt1Type(), 0, 0), is_eq_alloca);
+  LLVMBuildStore(builder, module_bool_const(module, 0), is_eq_alloca);
   LLVMBuildBr(builder, after_block);
 
   LLVMPositionBuilderAtEnd(builder, compare_elements_block);
@@ -737,7 +861,8 @@ LLVMValueRef list_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
       _codegen_equality(el_type, l_data, r_data, ctx, module, builder);
 
   LLVMValueRef current_eq =
-      LLVMBuildLoad2(builder, LLVMInt1Type(), is_eq_alloca, "current_eq");
+      LLVMBuildLoad2(builder, module_i1_type(module), is_eq_alloca,
+                     "current_eq");
 
   printf("\n");
   LLVMValueRef new_eq =
@@ -760,7 +885,8 @@ LLVMValueRef list_eq(Type *type, LLVMValueRef l, LLVMValueRef r,
 
   LLVMPositionBuilderAtEnd(builder, after_block);
 
-  return LLVMBuildLoad2(builder, LLVMInt1Type(), is_eq_alloca, "list_els_eq");
+  return LLVMBuildLoad2(builder, module_i1_type(module), is_eq_alloca,
+                        "list_els_eq");
 }
 
 LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
@@ -779,7 +905,7 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
     //   return _codegen_equality(&t, l, r, ctx, module, builder);
     // }
 
-    return _FALSE;
+    return module_bool_const(module, 0);
   }
   case T_BOOL:
   case T_INT:
@@ -812,7 +938,7 @@ LLVMValueRef _codegen_equality(Type *type, LLVMValueRef l, LLVMValueRef r,
   }
   }
 
-  return _FALSE;
+  return module_bool_const(module, 0);
 }
 
 LLVMValueRef EqAppHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -886,12 +1012,12 @@ LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
   }
 
   case T_INT: {
-    return LLVMBuildSIToFP(builder, val, LLVMDoubleType(),
+    return LLVMBuildSIToFP(builder, val, module_double_type(module),
                            "cast_int_to_double");
   }
 
   case T_UINT64: {
-    return LLVMBuildUIToFP(builder, val, LLVMDoubleType(),
+    return LLVMBuildUIToFP(builder, val, module_double_type(module),
                            "cast_uint64_to_double");
   }
 
@@ -906,15 +1032,17 @@ LLVMValueRef int_constructor(LLVMValueRef val, Type *from_type,
   switch (from_type->kind) {
 
   case T_BOOL: {
-    return LLVMBuildZExt(builder, val, LLVMInt32Type(), "cast_bool_to_int32");
+    return LLVMBuildZExt(builder, val, module_i32_type(module),
+                         "cast_bool_to_int32");
   }
 
   case T_CHAR: {
-    return LLVMBuildZExt(builder, val, LLVMInt32Type(), "cast_char_to_int32");
+    return LLVMBuildZExt(builder, val, module_i32_type(module),
+                         "cast_char_to_int32");
   }
 
   case T_NUM: {
-    return LLVMBuildFPToSI(builder, val, LLVMInt32Type(),
+    return LLVMBuildFPToSI(builder, val, module_i32_type(module),
                            "cast_double_to_int32");
   }
 
@@ -926,7 +1054,8 @@ LLVMValueRef int_constructor(LLVMValueRef val, Type *from_type,
     // return LLVMBuildUIToFP(builder, val, LLVMDoubleType(),
     //                        "cast_uint64_to_double");
     //
-    return LLVMBuildTrunc(builder, val, LLVMInt32Type(), "trunc_to_i32");
+    return LLVMBuildTrunc(builder, val, module_i32_type(module),
+                          "trunc_to_i32");
   }
 
   default:
@@ -945,7 +1074,7 @@ LLVMValueRef char_constructor(LLVMValueRef val, Type *from_type,
 
   case T_INT: {
     // return LLVMBuildI;
-    return LLVMBuildTrunc(builder, val, LLVMInt8Type(), "trunc_to_i8");
+    return LLVMBuildTrunc(builder, val, module_i8_type(module), "trunc_to_i8");
   }
 
   case T_UINT64: {
@@ -995,7 +1124,7 @@ LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
                                 LLVMModuleRef module, LLVMBuilderRef builder) {
   switch (from_type->kind) {
   case T_INT: {
-    LLVMTypeRef uint64Type = LLVMInt64Type();
+    LLVMTypeRef uint64Type = LLVMInt64TypeInContext(module_context(module));
 
     // Perform zero extension to convert i32 to i64
     // Zero extension is appropriate for unsigned integers
@@ -1004,7 +1133,9 @@ LLVMValueRef uint64_constructor(LLVMValueRef val, Type *from_type,
   }
 
   case T_CHAR: {
-    return LLVMBuildZExt(builder, val, LLVMInt64Type(), "cast_char_to_uint64");
+    return LLVMBuildZExt(builder, val,
+                         LLVMInt64TypeInContext(module_context(module)),
+                         "cast_char_to_uint64");
   }
 
   default:
@@ -1041,7 +1172,7 @@ LLVMValueRef ArrayAtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   if (el_type->kind == T_FN || is_coroutine_type(el_type)) {
-    return get_array_element(builder, array, idx, GENERIC_PTR);
+    return get_array_element(builder, array, idx, module_byte_ptr_type(module));
   }
 
   LLVMTypeRef llvm_el_type = type_to_llvm_type(el_type, ctx, module);
@@ -1073,7 +1204,7 @@ LLVMValueRef ArraySetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   return set_array_element(builder, array, idx, val,
                            el_type->kind == T_FN || is_coroutine_type(el_type)
-                               ? GENERIC_PTR
+                               ? module_byte_ptr_type(module)
                                : type_to_llvm_type(el_type, ctx, module));
 }
 
@@ -1086,18 +1217,17 @@ LLVMValueRef SomeConsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   return res;
 }
 
-#define _TRUE LLVMConstInt(LLVMInt1Type(), 1, 0)
-
-#define _FALSE LLVMConstInt(LLVMInt1Type(), 0, 0)
-
 // short-circuiting and-operator
 LLVMValueRef LogicalAndHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder) {
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
-  LLVMBasicBlockRef then_block = LLVMAppendBasicBlock(function, "then");
-  LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(function, "else");
-  LLVMBasicBlockRef merge_block = LLVMAppendBasicBlock(function, "merge");
+  LLVMBasicBlockRef then_block =
+      append_block_in_module(module, function, "then");
+  LLVMBasicBlockRef else_block =
+      append_block_in_module(module, function, "else");
+  LLVMBasicBlockRef merge_block =
+      append_block_in_module(module, function, "merge");
   LLVMValueRef arg1 =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
 
@@ -1110,7 +1240,7 @@ LLVMValueRef LogicalAndHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBasicBlockRef then_end_block = LLVMGetInsertBlock(builder);
 
   LLVMPositionBuilderAtEnd(builder, else_block);
-  LLVMValueRef else_result = _FALSE;
+  LLVMValueRef else_result = module_bool_const(module, 0);
   LLVMBuildBr(builder, merge_block);
   LLVMBasicBlockRef else_end_block = LLVMGetInsertBlock(builder);
 
@@ -1128,9 +1258,12 @@ LLVMValueRef LogicalOrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder) {
   LLVMBasicBlockRef current_block = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(current_block);
-  LLVMBasicBlockRef then_block = LLVMAppendBasicBlock(function, "then");
-  LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(function, "else");
-  LLVMBasicBlockRef merge_block = LLVMAppendBasicBlock(function, "merge");
+  LLVMBasicBlockRef then_block =
+      append_block_in_module(module, function, "then");
+  LLVMBasicBlockRef else_block =
+      append_block_in_module(module, function, "else");
+  LLVMBasicBlockRef merge_block =
+      append_block_in_module(module, function, "merge");
 
   LLVMValueRef arg1 =
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
@@ -1138,7 +1271,7 @@ LLVMValueRef LogicalOrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildCondBr(builder, arg1, then_block, else_block);
 
   LLVMPositionBuilderAtEnd(builder, then_block);
-  LLVMValueRef then_result = _TRUE; // Short circuit with true
+  LLVMValueRef then_result = module_bool_const(module, 1);
   LLVMBuildBr(builder, merge_block);
   LLVMBasicBlockRef then_end_block = LLVMGetInsertBlock(builder);
 
@@ -1217,7 +1350,7 @@ LLVMValueRef char_cons_handler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   switch (from_type->kind) {
   case T_INT: {
-    LLVMTypeRef char_type = LLVMInt8Type();
+    LLVMTypeRef char_type = module_i8_type(module);
 
     LLVMValueRef ext =
         LLVMBuildTrunc(builder, val, char_type, "trunc_int_to_char");
@@ -1282,13 +1415,13 @@ LLVMValueRef DlOpenHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   if (!handle) {
     fprintf(stderr, "Failed to load library globally: %s\n", dlerror());
     free(full_path);
-    return LLVMConstInt(LLVMInt32Type(), 0, 0);
+    return LLVMConstInt(module_i32_type(module), 0, 0);
   }
 
   fprintf(stderr, "loaded %s\n", full_path);
 
   free(full_path);
-  return LLVMConstInt(LLVMInt32Type(), 1, 0);
+  return LLVMConstInt(module_i32_type(module), 1, 0);
 }
 
 // LLVMValueRef DFAtOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef
@@ -1369,7 +1502,8 @@ LLVMValueRef DFAtOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     LLVMValueRef is_valid_offset = LLVMBuildICmp(
         builder, LLVMIntSLT, offset_val, current_size, "is_valid_offset");
     LLVMValueRef offset_mask =
-        LLVMBuildZExt(builder, is_valid_offset, LLVMInt32Type(), "offset_mask");
+        LLVMBuildZExt(builder, is_valid_offset, module_i32_type(module),
+                      "offset_mask");
 
     LLVMValueRef effective_offset =
         LLVMBuildMul(builder, offset_val, offset_mask, "effective_offset");
@@ -1421,9 +1555,9 @@ LLVMValueRef DFRawFieldsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   unsigned num_fields = t->data.T_CONS.num_args;
 
   // Create a void pointer type (i8*)
-  LLVMTypeRef void_ptr_type = LLVMPointerType(LLVMInt8Type(), 0);
+  LLVMTypeRef void_ptr_type = module_byte_ptr_type(module);
 
-  LLVMValueRef size_const = LLVMConstInt(LLVMInt32Type(), num_fields, 0);
+  LLVMValueRef size_const = LLVMConstInt(module_i32_type(module), num_fields, 0);
   LLVMValueRef result_array = LLVMBuildArrayAlloca(
       builder, void_ptr_type, size_const, "raw_fields_array");
 
@@ -1439,8 +1573,9 @@ LLVMValueRef DFRawFieldsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     LLVMValueRef ptr_slot =
         LLVMBuildGEP2(builder, void_ptr_type, result_array,
-                      (LLVMValueRef[]){LLVMConstInt(LLVMInt32Type(), i, 0)}, 1,
-                      "element_ptr");
+                      (LLVMValueRef[]){LLVMConstInt(module_i32_type(module), i,
+                                                    0)},
+                      1, "element_ptr");
 
     LLVMBuildStore(builder, void_data_ptr, ptr_slot);
   }
@@ -1489,7 +1624,7 @@ LLVMValueRef SizeOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     size = LLVMStoreSizeOfType(target_data, llvm_type);
   }
 
-  return LLVMConstInt(LLVMInt32Type(), size, 0);
+  return LLVMConstInt(module_i32_type(module), size, 0);
 }
 
 LLVMValueRef TypeOfHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -1507,7 +1642,7 @@ LLVMValueRef AsBytesHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     on_stack = true;
   }
 
-  LLVMTypeRef char_type = LLVMInt8Type();
+  LLVMTypeRef char_type = module_i8_type(module);
   LLVMTypeRef struct_type = string_struct_type(LLVMPointerType(char_type, 0));
   LLVMValueRef str = LLVMGetUndef(struct_type);
 
@@ -1523,7 +1658,9 @@ LLVMValueRef AsBytesHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     if (t->kind == T_NUM) {
       value =
-          LLVMBuildBitCast(builder, value, LLVMInt64Type(), "double_as_int");
+          LLVMBuildBitCast(builder, value,
+                           LLVMInt64TypeInContext(module_context(module)),
+                           "double_as_int");
     }
 
     LLVMTypeRef value_llvm_type = type_to_llvm_type(t, ctx, module);
@@ -1549,7 +1686,8 @@ LLVMValueRef AsBytesHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     str = LLVMBuildInsertValue(builder, str, byte_ptr, 1, "insert_data");
     str = LLVMBuildInsertValue(builder, str,
-                               LLVMConstInt(LLVMInt32Type(), width, 0), 0,
+                               LLVMConstInt(module_i32_type(module), width, 0),
+                               0,
                                "insert_size");
     return str;
   }

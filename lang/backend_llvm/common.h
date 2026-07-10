@@ -50,6 +50,7 @@ typedef struct {
 typedef struct SpecificFns {
   Type *arg_types_key;
   LLVMValueRef func;
+  char *jit_name;
   struct SpecificFns *next;
 } SpecificFns;
 
@@ -108,6 +109,7 @@ typedef struct {
   LLVMTypeRef llvm_type;
   LLVMValueRef val;
   LLVMValueRef storage;
+  char *jit_name;
   union {
     int STYPE_TOP_LEVEL_VAR;
 

@@ -117,10 +117,151 @@ static Type *resolve_sym_type(Type *exp, Type *sym_type, JITLangCtx *ctx) {
   return specialize_type_for_codegen(sym_copy, &spec_ctx);
 }
 
+static const char *from_trait_type_name(Type *type) {
+  if (!type) {
+    return NULL;
+  }
+  if (type->alias) {
+    return type->alias;
+  }
+
+  switch (type->kind) {
+  case T_INT:
+    return TYPE_NAME_INT;
+  case T_UINT64:
+    return TYPE_NAME_UINT64;
+  case T_NUM:
+    return TYPE_NAME_DOUBLE;
+  case T_CHAR:
+    return TYPE_NAME_CHAR;
+  case T_BOOL:
+    return TYPE_NAME_BOOL;
+  case T_STRING:
+    return TYPE_NAME_STRING;
+  case T_VOID:
+    return TYPE_NAME_VOID;
+  case T_CONS:
+  case T_SUM:
+    return type->data.T_CONS.name;
+  default:
+    return NULL;
+  }
+}
+
+static void from_trait_module_key(char *buf, size_t buf_size,
+                                  const char *type_name) {
+  snprintf(buf, buf_size, "__ylc_from.%s", type_name);
+}
+
+static const char *from_method_for_instance(TypeClass *instance,
+                                            Type *from_type) {
+  if (!instance || !instance->module || instance->module->kind != T_MODULE) {
+    return NULL;
+  }
+
+  for (TypeEnv *e = instance->module->data.T_MODULE.env; e; e = e->next) {
+    if (!e->name || strncmp(e->name, "from_", 5) != 0 || !e->type ||
+        e->type->kind != T_FN) {
+      continue;
+    }
+
+    Type *method_from_type = e->type->data.T_FN.from;
+    if (types_equal(method_from_type, from_type) ||
+        types_match(method_from_type, from_type) ||
+        types_match(from_type, method_from_type)) {
+      return e->name;
+    }
+  }
+
+  return NULL;
+}
+
+static LLVMValueRef materialize_from_method(JITSymbol *sym, Type *method_type,
+                                            JITLangCtx *ctx,
+                                            LLVMModuleRef module,
+                                            LLVMBuilderRef builder) {
+  if (!sym) {
+    return NULL;
+  }
+
+  if (sym->type == STYPE_LAZY_EXTERN_FUNCTION) {
+    return instantiate_extern_fn_sym(sym, ctx, module, builder);
+  }
+
+  if (sym->type == STYPE_FUNCTION) {
+    return rematerialize_function_symbol(sym, ctx, module);
+  }
+
+  if (sym->type == STYPE_GENERIC_FUNCTION) {
+    return get_specific_callable(sym, method_type, ctx, module, builder);
+  }
+
+  return sym->val;
+}
+
+static LLVMValueRef handle_from_type_conversion(LLVMValueRef val,
+                                                Type *from_type, Type *to_type,
+                                                JITLangCtx *ctx,
+                                                LLVMModuleRef module,
+                                                LLVMBuilderRef builder) {
+  if (!from_type || !to_type) {
+    return NULL;
+  }
+
+  TypeList from_params = {.type = from_type, .next = NULL};
+  TypeClass *instance =
+      get_typeclass_instance(to_type, TYPE_NAME_TYPECLASS_FROM, &from_params);
+  if (!instance) {
+    return NULL;
+  }
+
+  const char *method_name = from_method_for_instance(instance, from_type);
+  const char *target_name = from_trait_type_name(to_type);
+  if (!method_name || !target_name) {
+    return NULL;
+  }
+
+  char module_key[256];
+  from_trait_module_key(module_key, sizeof(module_key), target_name);
+  JITSymbol *module_sym = find_in_ctx(module_key, strlen(module_key), ctx);
+  if (!module_sym || module_sym->type != STYPE_MODULE) {
+    fprintf(stderr, "Error: From module for %s not found\n", target_name);
+    return NULL;
+  }
+
+  JITSymbol *method_sym =
+      find_in_ctx(method_name, strlen(method_name),
+                  module_sym->symbol_data.STYPE_MODULE.ctx);
+  if (!method_sym) {
+    fprintf(stderr, "Error: From method %s for %s not found\n", method_name,
+            target_name);
+    return NULL;
+  }
+
+  Type method_type = (Type){
+      T_FN, .data = {.T_FN = {.from = from_type, .to = to_type}}};
+  LLVMValueRef method = materialize_from_method(method_sym, &method_type, ctx,
+                                                module, builder);
+  if (!method) {
+    return NULL;
+  }
+
+  LLVMTypeRef llvm_method_type = LLVMGlobalGetValueType(method);
+  return LLVMBuildCall2(builder, llvm_method_type, method, &val, 1,
+                        "from.convert");
+}
+
 LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
                                      Type *to_type, JITLangCtx *ctx,
                                      LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
+  if (from_type && is_generic(from_type) && ctx->env) {
+    from_type = resolve_type_in_env(from_type, ctx->env);
+  }
+  if (to_type && is_generic(to_type) && ctx->env) {
+    to_type = resolve_type_in_env(to_type, ctx->env);
+  }
+
   if (types_equal(from_type, to_type)) {
     return val;
   }
@@ -146,6 +287,12 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
     }
     return constructor(val, resolved_from ? resolved_from : from_type, module,
                       builder);
+  }
+
+  LLVMValueRef from_conversion =
+      handle_from_type_conversion(val, from_type, to_type, ctx, module, builder);
+  if (from_conversion) {
+    return from_conversion;
   }
 
   return val;
@@ -262,7 +409,8 @@ static LLVMValueRef call_generic_constructor(Ast *app, Type *expected_fn_type,
 static LLVMValueRef call_direct_symbol(Ast *app, JITSymbol *sym,
                                        JITLangCtx *ctx, LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
-  return call_callable(app, sym->symbol_type, sym->val, ctx, module, builder);
+  LLVMValueRef callable = rematerialize_function_symbol(sym, ctx, module);
+  return call_callable(app, sym->symbol_type, callable, ctx, module, builder);
 }
 
 static LLVMValueRef call_lazy_extern_symbol(Ast *app, JITSymbol *sym,
@@ -273,12 +421,27 @@ static LLVMValueRef call_lazy_extern_symbol(Ast *app, JITSymbol *sym,
   return call_callable(app, sym->symbol_type, callable, ctx, module, builder);
 }
 
+static LLVMValueRef call_coroutine_value(Ast *app, JITSymbol *sym,
+                                         JITLangCtx *ctx, LLVMModuleRef module,
+                                         LLVMBuilderRef builder) {
+  LLVMValueRef handle =
+      codegen(app->data.AST_APPLICATION.function, ctx, module, builder);
+  if (!handle) {
+    return NULL;
+  }
+
+  Type *yield_type = sym->symbol_type->data.T_CONS.args[0];
+  LLVMTypeRef llvm_yield_type = type_to_llvm_type(yield_type, ctx, module);
+  return codegen_handle_resume(handle, llvm_yield_type, ctx, module, builder);
+}
+
 LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder) {
   ast = maybe_optimise_application(ast);
 
   if (ast->tag == AST_APPLICATION &&
-      ast->data.AST_APPLICATION.is_curried_with_constants) {
+      ast->data.AST_APPLICATION.is_curried_with_constants && ast->type &&
+      ast->type->kind == T_FN) {
     return codegen_const_curried_fn(ast, ctx, module, builder);
   }
 
@@ -303,7 +466,7 @@ LLVMValueRef codegen_application(Ast *ast, JITLangCtx *ctx,
   }
 
   if (sym->symbol_type && is_coroutine_type(sym->symbol_type)) {
-    return coro_symbol_resume(sym, ctx, module, builder);
+    return call_coroutine_value(ast, sym, ctx, module, builder);
   }
 
   if (is_closure_symbol(sym)) {

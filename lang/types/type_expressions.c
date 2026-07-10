@@ -124,7 +124,9 @@ static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
       if ((type_ref->md.type == BT_TYPE_DECL ||
            type_ref->md.type == BT_TYPE_CONSTRUCTOR) &&
           type_ref->type) {
-        return resolve_type_in_env(deep_copy_type(type_ref->type), ctx->env);
+        return resolve_type_in_env(
+            // deep_copy_type(type_ref->type),
+            type_ref->type, ctx->env);
       }
       return type_ref->type;
     }

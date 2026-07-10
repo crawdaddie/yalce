@@ -13,7 +13,9 @@ LLVMValueRef build_ret(LLVMValueRef val, Type *type, LLVMBuilderRef builder);
     return NULL;                                                               \
   }                                                                            \
   LLVMSetLinkage(func, LLVMExternalLinkage);                                   \
-  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");               \
+  LLVMBasicBlockRef block =                                                    \
+      LLVMAppendBasicBlockInContext(LLVMGetModuleContext(_module), func,       \
+                                    "entry");                                  \
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);                  \
   LLVMPositionBuilderAtEnd(builder, block);
 
@@ -33,6 +35,9 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
                                    LLVMBuilderRef builder);
 
 LLVMValueRef specific_fns_lookup(SpecificFns *fns, Type *key);
+LLVMValueRef specific_fns_lookup_decl(SpecificFns *fns, Type *key,
+                                      LLVMTypeRef llvm_fn_type,
+                                      LLVMModuleRef module);
 
 bool fn_types_match(Type *t1, Type *t2);
 

@@ -36,8 +36,8 @@ static Type *record_access_type_view(Type *type) {
 LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  Type *t = ast->type;
-  LLVMTypeRef ret = LLVMVoidType();
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef ret = LLVMVoidTypeInContext(llvm_ctx);
 
   LLVMTypeRef funcType = LLVMFunctionType(ret, NULL, 0, 0);
 
@@ -48,10 +48,15 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
   }
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
-  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, func, "entry");
   LLVMPositionBuilderAtEnd(builder, block);
 
   LLVMValueRef body = codegen(ast, ctx, module, builder);
+  if (!body && VALUE_IS_PRINTABLE(ast->type)) {
+    LLVMDeleteFunction(func);
+    return NULL;
+  }
 
   LLVMBuildRetVoid(builder);
 
@@ -62,8 +67,8 @@ LLVMValueRef codegen_repl_top_level(Ast *ast, LLVMTypeRef *ret_type,
                                     JITLangCtx *ctx, LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
-  Type *t = ast->type;
-  LLVMTypeRef ret = LLVMVoidType();
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef ret = LLVMVoidTypeInContext(llvm_ctx);
 
   LLVMTypeRef funcType = LLVMFunctionType(ret, NULL, 0, 0);
 
@@ -74,10 +79,15 @@ LLVMValueRef codegen_repl_top_level(Ast *ast, LLVMTypeRef *ret_type,
   }
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
-  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, func, "entry");
   LLVMPositionBuilderAtEnd(builder, block);
 
   LLVMValueRef body = codegen(ast, ctx, module, builder);
+  if (!body && VALUE_IS_PRINTABLE(ast->type)) {
+    LLVMDeleteFunction(func);
+    return NULL;
+  }
 
   if (VALUE_IS_PRINTABLE(ast->type)) {
 
@@ -98,6 +108,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   __current_ast = ast;
   LLVMValueRef res = NULL;
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
 
   switch (ast->tag) {
 
@@ -113,17 +124,20 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_INT: {
-    res = LLVMConstInt(LLVMInt32Type(), ast->data.AST_INT.value, true);
+    res = LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx),
+                       ast->data.AST_INT.value, true);
     break;
   }
 
   case AST_UINT64: {
-    res = LLVMConstInt(LLVMInt64Type(), ast->data.AST_UINT64.value, false);
+    res = LLVMConstInt(LLVMInt64TypeInContext(llvm_ctx),
+                       ast->data.AST_UINT64.value, false);
     break;
   }
 
   case AST_DOUBLE: {
-    res = LLVMConstReal(LLVMDoubleType(), ast->data.AST_DOUBLE.value);
+    res = LLVMConstReal(LLVMDoubleTypeInContext(llvm_ctx),
+                        ast->data.AST_DOUBLE.value);
     break;
   }
 
@@ -134,7 +148,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_CHAR: {
     const char ch = ast->data.AST_CHAR.value;
-    res = LLVMConstInt(LLVMInt8Type(), ch, 0);
+    res = LLVMConstInt(LLVMInt8TypeInContext(llvm_ctx), ch, 0);
     break;
   }
 
@@ -165,7 +179,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_BOOL: {
-    res = LLVMConstInt(LLVMInt1Type(), ast->data.AST_BOOL.value, false);
+    res = LLVMConstInt(LLVMInt1TypeInContext(llvm_ctx),
+                       ast->data.AST_BOOL.value, false);
     break;
   }
 
@@ -227,7 +242,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     break;
   }
   case AST_VOID: {
-    res = LLVMGetUndef(LLVMVoidType());
+    res = LLVMGetUndef(LLVMVoidTypeInContext(llvm_ctx));
     break;
   }
 
@@ -376,7 +391,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_IMPORT: {
     codegen_import(ast, NULL, ctx, module, builder);
-    res = LLVMConstInt(LLVMInt32Type(), 1, 0);
+    res = LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 1, 0);
     break;
   }
 
@@ -415,6 +430,11 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     if (CHARS_EQ(ast->data.AST_TRAIT_IMPL.trait_name.chars, "Arithmetic")) {
       res = create_arithmetic_typeclass_methods(ast, ctx, module, builder);
+      break;
+    }
+
+    if (CHARS_EQ(ast->data.AST_TRAIT_IMPL.trait_name.chars, "From")) {
+      res = create_from_typeclass_methods(ast, ctx, module, builder);
       break;
     }
 

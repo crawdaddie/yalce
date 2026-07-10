@@ -21,17 +21,19 @@ LLVMValueRef codegen_loop_range(Ast *binding, Ast *range, Ast *body,
 
   LLVMValueRef current_function =
       LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef i32_type = LLVMInt32TypeInContext(llvm_ctx);
   const char *loop_var_name = binding->data.AST_IDENTIFIER.value;
 
   LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
   LLVMBasicBlockRef cond_block =
-      LLVMAppendBasicBlock(current_function, "loop.cond");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "loop.cond");
   LLVMBasicBlockRef body_block =
-      LLVMAppendBasicBlock(current_function, "loop.body");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "loop.body");
   LLVMBasicBlockRef inc_block =
-      LLVMAppendBasicBlock(current_function, "loop.inc");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "loop.inc");
   LLVMBasicBlockRef after_block =
-      LLVMAppendBasicBlock(current_function, "loop.after");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "loop.after");
 
   LLVMValueRef start_val =
       codegen(range->data.AST_RANGE_EXPRESSION.from, ctx, module, builder);
@@ -45,10 +47,10 @@ LLVMValueRef codegen_loop_range(Ast *binding, Ast *range, Ast *body,
     return NULL;
 
   LLVMValueRef loop_var_alloca =
-      LLVMBuildAlloca(builder, LLVMInt32Type(), loop_var_name);
+      LLVMBuildAlloca(builder, i32_type, loop_var_name);
   LLVMBuildStore(builder, start_val, loop_var_alloca);
 
-  LLVMTypeRef llvm_type = LLVMInt32Type();
+  LLVMTypeRef llvm_type = i32_type;
 
   JITSymbol *sym = new_symbol(STYPE_LOCAL_VAR, &t_int, start_val, llvm_type);
   sym->storage = loop_var_alloca;
@@ -63,7 +65,7 @@ LLVMValueRef codegen_loop_range(Ast *binding, Ast *range, Ast *body,
   LLVMPositionBuilderAtEnd(builder, cond_block);
 
   LLVMValueRef current_val =
-      LLVMBuildLoad2(builder, LLVMInt32Type(), loop_var_alloca, "current");
+      LLVMBuildLoad2(builder, i32_type, loop_var_alloca, "current");
 
   LLVMValueRef cond =
       LLVMBuildICmp(builder, LLVMIntULT, current_val, end_val, "loopcond");
@@ -78,14 +80,14 @@ LLVMValueRef codegen_loop_range(Ast *binding, Ast *range, Ast *body,
   LLVMPositionBuilderAtEnd(builder, inc_block);
 
   LLVMValueRef inc_val = LLVMBuildAdd(
-      builder, current_val, LLVMConstInt(LLVMInt32Type(), 1, 0), "inc");
+      builder, current_val, LLVMConstInt(i32_type, 1, 0), "inc");
   LLVMBuildStore(builder, inc_val, loop_var_alloca);
 
   LLVMBuildBr(builder, cond_block);
 
   LLVMPositionBuilderAtEnd(builder, after_block);
 
-  return LLVMConstInt(LLVMInt32Type(), 0, 0);
+  return LLVMConstInt(i32_type, 0, 0);
 }
 
 LLVMValueRef codegen_loop_iter_array(Ast *binding, Ast *iter_array_expr,
@@ -95,18 +97,20 @@ LLVMValueRef codegen_loop_iter_array(Ast *binding, Ast *iter_array_expr,
 
   LLVMValueRef current_function =
       LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef i32_type = LLVMInt32TypeInContext(llvm_ctx);
   const char *loop_var_name = binding->data.AST_IDENTIFIER.value;
 
   LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
   LLVMBasicBlockRef cond_block =
-      LLVMAppendBasicBlock(current_function, "loop.cond");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "loop.cond");
 
   LLVMBasicBlockRef body_block =
-      LLVMAppendBasicBlock(current_function, "loop.body");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "loop.body");
   LLVMBasicBlockRef inc_block =
-      LLVMAppendBasicBlock(current_function, "loop.inc");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "loop.inc");
   LLVMBasicBlockRef after_block =
-      LLVMAppendBasicBlock(current_function, "loop.after");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "loop.after");
 
   Type *arr_type = iter_array_expr->data.AST_APPLICATION.args->type;
   Type *_type = arr_type->data.T_CONS.args[0];
@@ -124,10 +128,10 @@ LLVMValueRef codegen_loop_iter_array(Ast *binding, Ast *iter_array_expr,
   LLVMValueRef loop_var_alloca =
       LLVMBuildAlloca(builder, loop_var_type, loop_var_name);
 
-  LLVMValueRef start_idx = LLVMConstInt(LLVMInt32Type(), 0, 0);
+  LLVMValueRef start_idx = LLVMConstInt(i32_type, 0, 0);
 
   LLVMValueRef loop_iter_alloca =
-      LLVMBuildAlloca(builder, LLVMInt32Type(), "iterator");
+      LLVMBuildAlloca(builder, i32_type, "iterator");
 
   LLVMBuildStore(builder, start_idx, loop_iter_alloca);
 
@@ -152,10 +156,10 @@ LLVMValueRef codegen_loop_iter_array(Ast *binding, Ast *iter_array_expr,
   LLVMPositionBuilderAtEnd(builder, cond_block);
 
   LLVMValueRef current_val =
-      LLVMBuildLoad2(builder, LLVMInt32Type(), loop_var_alloca, "current");
+      LLVMBuildLoad2(builder, loop_var_type, loop_var_alloca, "current");
 
   LLVMValueRef current_idx_val =
-      LLVMBuildLoad2(builder, LLVMInt32Type(), loop_iter_alloca, "current");
+      LLVMBuildLoad2(builder, i32_type, loop_iter_alloca, "current");
 
   LLVMValueRef cond =
       LLVMBuildICmp(builder, LLVMIntULT, current_idx_val, end_val, "loopcond");
@@ -170,7 +174,7 @@ LLVMValueRef codegen_loop_iter_array(Ast *binding, Ast *iter_array_expr,
   LLVMPositionBuilderAtEnd(builder, inc_block);
 
   LLVMValueRef inc_val = LLVMBuildAdd(
-      builder, current_idx_val, LLVMConstInt(LLVMInt32Type(), 1, 0), "inc");
+      builder, current_idx_val, LLVMConstInt(i32_type, 1, 0), "inc");
 
   LLVMBuildStore(builder, inc_val, loop_iter_alloca);
   LLVMValueRef next_arr_el =
@@ -181,7 +185,7 @@ LLVMValueRef codegen_loop_iter_array(Ast *binding, Ast *iter_array_expr,
 
   LLVMPositionBuilderAtEnd(builder, after_block);
 
-  return LLVMConstInt(LLVMInt32Type(), 0, 0);
+  return LLVMConstInt(i32_type, 0, 0);
 }
 
 LLVMValueRef codegen_loop_iter_list(Ast *binding, Ast *iter_expr, Ast *body,
@@ -190,17 +194,18 @@ LLVMValueRef codegen_loop_iter_list(Ast *binding, Ast *iter_expr, Ast *body,
 
   LLVMValueRef current_function =
       LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
   const char *loop_var_name = binding->data.AST_IDENTIFIER.value;
 
   LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
   LLVMBasicBlockRef cond_block =
-      LLVMAppendBasicBlock(current_function, "loop.cond");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "loop.cond");
   LLVMBasicBlockRef body_block =
-      LLVMAppendBasicBlock(current_function, "loop.body");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "loop.body");
   LLVMBasicBlockRef inc_block =
-      LLVMAppendBasicBlock(current_function, "loop.inc");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "loop.inc");
   LLVMBasicBlockRef after_block =
-      LLVMAppendBasicBlock(current_function, "loop.after");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "loop.after");
 
   Type *ltype = iter_expr->data.AST_APPLICATION.args->type;
 
@@ -222,7 +227,7 @@ LLVMValueRef codegen_loop_iter_list(Ast *binding, Ast *iter_expr, Ast *body,
   LLVMValueRef is_null = LLVMBuildIsNull(builder, list_val, "is_null_check");
 
   LLVMBasicBlockRef init_var_block =
-      LLVMAppendBasicBlock(current_function, "init_var");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "init_var");
 
   LLVMBuildCondBr(builder, is_null, after_block, init_var_block);
 
@@ -277,9 +282,9 @@ LLVMValueRef codegen_loop_iter_list(Ast *binding, Ast *iter_expr, Ast *body,
       LLVMBuildIsNull(builder, next_node, "is_next_null");
 
   LLVMBasicBlockRef update_var_block =
-      LLVMAppendBasicBlock(current_function, "update_var");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "update_var");
   LLVMBasicBlockRef continue_block =
-      LLVMAppendBasicBlock(current_function, "continue");
+      LLVMAppendBasicBlockInContext(llvm_ctx, current_function, "continue");
 
   LLVMBuildCondBr(builder, is_next_null, continue_block, update_var_block);
 

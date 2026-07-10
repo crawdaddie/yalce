@@ -113,11 +113,6 @@ LLVMValueRef bind_value(Ast *id, LLVMValueRef val, Type *val_type,
   uint64_t id_hash = hash_string(chars, id->data.AST_IDENTIFIER.length);
 
   LLVMTypeRef llvm_type = type_to_llvm_type(val_type, ctx, module);
-  if (is_coroutine_type(val_type)) {
-    // NB: convert bare handle type to 'fat handle' struct
-    llvm_type = LLVMStructType(
-        (LLVMTypeRef[]){llvm_type, GENERIC_PTR, GENERIC_PTR}, 3, 0);
-  }
 
   upsert_identifier_symbol(chars, id_hash, STYPE_TOP_LEVEL_VAR, STYPE_LOCAL_VAR,
                            val_type, val, llvm_type, ctx, module, builder);

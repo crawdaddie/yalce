@@ -7,6 +7,7 @@ RTConfig ylc_config = {
     .gui_mode = false,
     .debug_codegen = false,
     .debug_symbols = false,
+    .num_input_scripts = 0,
 };
 
 void print_config() {

@@ -166,7 +166,14 @@ LLVMValueRef create_constructor_module(Ast *trait, JITLangCtx *ctx,
 JITSymbol *create_module_symbol(Type *module_type, TypeEnv *module_type_env,
                                 Ast *module_ast, JITLangCtx *ctx,
                                 LLVMModuleRef llvm_module_ref) {
-  int mod_len = module_type->data.T_CONS.num_args;
+  int mod_len = 0;
+  if (module_type) {
+    if (module_type->kind == T_MODULE) {
+      mod_len = module_type->data.T_MODULE.size;
+    } else if (module_type->kind == T_CONS || module_type->kind == T_SUM) {
+      mod_len = module_type->data.T_CONS.num_args;
+    }
+  }
 
   JITSymbol *module_symbol = malloc(sizeof(JITSymbol) + mod_len * sizeof(int));
 
@@ -311,7 +318,11 @@ LLVMValueRef codegen_module_access(Ast *record_ast, Type *record_type,
 
   if (sym->type == STYPE_TOP_LEVEL_VAR) {
     const char *member_name = member->data.AST_IDENTIFIER.value;
-    return codegen_get_global(member_name, sym, llvm_module_ref, builder);
+    return codegen_get_global(member_name, sym, ctx, llvm_module_ref, builder);
+  }
+
+  if (sym->type == STYPE_FUNCTION) {
+    return rematerialize_function_symbol(sym, ctx, llvm_module_ref);
   }
 
   return sym->val;

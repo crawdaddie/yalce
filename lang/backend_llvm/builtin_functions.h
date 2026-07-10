@@ -20,6 +20,10 @@ LLVMValueRef create_arithmetic_typeclass_methods(Ast *trait, JITLangCtx *ctx,
                                                  LLVMModuleRef module,
                                                  LLVMBuilderRef builder);
 
+LLVMValueRef create_from_typeclass_methods(Ast *trait, JITLangCtx *ctx,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder);
+
 LLVMValueRef gte_val(LLVMValueRef val, LLVMValueRef from, Type *type,
                      JITLangCtx *ctx, LLVMModuleRef module,
                      LLVMBuilderRef builder);

@@ -5,6 +5,18 @@
 #define MAX_CORO_FRAME_SIZE 512
 #include "../common.h"
 
+#define CORO_CONTEXT LLVMGetModuleContext(module)
+#define CORO_I1 LLVMInt1TypeInContext(CORO_CONTEXT)
+#define CORO_I8 LLVMInt8TypeInContext(CORO_CONTEXT)
+#define CORO_I32 LLVMInt32TypeInContext(CORO_CONTEXT)
+#define CORO_I64 LLVMInt64TypeInContext(CORO_CONTEXT)
+#define CORO_DOUBLE LLVMDoubleTypeInContext(CORO_CONTEXT)
+#define CORO_VOID LLVMVoidTypeInContext(CORO_CONTEXT)
+#define CORO_GENERIC_PTR LLVMPointerType(CORO_I8, 0)
+#define CORO_TOKEN_NONE LLVMGetUndef(LLVMTokenTypeInContext(CORO_CONTEXT))
+#define CORO_APPEND_BLOCK(fn, name)                                            \
+  LLVMAppendBasicBlockInContext(CORO_CONTEXT, fn, name)
+
 typedef struct {
   // Common fields
   Type *cons_type;
@@ -42,6 +54,10 @@ typedef struct {
 
 LLVMValueRef compile_coroutine(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                                LLVMBuilderRef builder);
+
+LLVMTypeRef codegen_coro_fn_type(LLVMTypeRef opt_ret_type, Type *fn_type,
+                                 int fn_len, JITLangCtx *ctx,
+                                 LLVMModuleRef module);
 
 LLVMValueRef coro_create(JITSymbol *sym, Type *expected_fn_type, Ast *app,
                          JITLangCtx *ctx, LLVMModuleRef module,
@@ -100,7 +116,7 @@ LLVMValueRef get_coro_suspend_intrinsic(LLVMModuleRef module);
 
 /**
  * Get or declare llvm.coro.end intrinsic
- * Signature: i1 @llvm.coro.end(i8* handle, i1 unwind)
+ * Signature: i1 @llvm.coro.end(ptr handle, i1 unwind, token)
  */
 LLVMValueRef get_coro_end_intrinsic(LLVMModuleRef module);
 
@@ -129,12 +145,12 @@ LLVMValueRef get_coro_promise_intrinsic(LLVMModuleRef module);
 LLVMValueRef get_coro_destroy_intrinsic(LLVMModuleRef module);
 
 #define COROUTINE_BASIC_BLOCKS(coro_fn)                                        \
-  LLVMBasicBlockRef entry_bb = LLVMAppendBasicBlock(coro_fn, "entry");         \
-  LLVMBasicBlockRef cleanup_bb = LLVMAppendBasicBlock(coro_fn, "cleanup");     \
-  LLVMBasicBlockRef suspend_bb = LLVMAppendBasicBlock(coro_fn, "suspend");     \
+  LLVMBasicBlockRef entry_bb = CORO_APPEND_BLOCK(coro_fn, "entry");           \
+  LLVMBasicBlockRef cleanup_bb = CORO_APPEND_BLOCK(coro_fn, "cleanup");       \
+  LLVMBasicBlockRef suspend_bb = CORO_APPEND_BLOCK(coro_fn, "suspend");       \
   LLVMBasicBlockRef initial_return_bb =                                        \
-      LLVMAppendBasicBlock(coro_fn, "initial.return");                         \
-  LLVMBasicBlockRef start_bb = LLVMAppendBasicBlock(coro_fn, "start");
+      CORO_APPEND_BLOCK(coro_fn, "initial.return");                           \
+  LLVMBasicBlockRef start_bb = CORO_APPEND_BLOCK(coro_fn, "start");
 
 #define COROUTINE_ATTR_MARKING(coro_fn)                                        \
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);                      \
@@ -237,22 +253,22 @@ LLVMBasicBlockRef coro_emit_yield_from_loop(
 );
 #define CORO_RESET_FN_TYPE                                                     \
   LLVMFunctionType(                                                            \
-      GENERIC_PTR,                                                             \
-      (LLVMTypeRef[]){LLVMPointerType(LLVMInt64Type(), 0), GENERIC_PTR}, 2, 0)
+      CORO_GENERIC_PTR,                                                             \
+      (LLVMTypeRef[]){LLVMPointerType(CORO_I64, 0), CORO_GENERIC_PTR}, 2, 0)
 
 #define GET_PROMISE_PTR_RAW(handle)                                            \
   LLVMBuildCall2(builder,                                                      \
                  LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),   \
                  get_coro_promise_intrinsic(module),                           \
-                 (LLVMValueRef[]){handle, LLVMConstInt(LLVMInt32Type(), 0, 0), \
-                                  LLVMConstInt(LLVMInt1Type(), 0, 0)},         \
+                 (LLVMValueRef[]){handle, LLVMConstInt(CORO_I32, 0, 0), \
+                                  LLVMConstInt(CORO_I1, 0, 0)},         \
                  3, "promise.raw")
 
 // Promise layout: {T yield_val, i1 is_done, ptr reset_fn, ptr args_ptr}
 //                  field 0       field 1     field 2       field 3
 #define CORO_PROMISE_TYPE(yield_type)                                          \
-  LLVMStructType(                                                              \
-      (LLVMTypeRef[]){yield_type, LLVMInt1Type(), GENERIC_PTR, GENERIC_PTR},   \
+  LLVMStructTypeInContext(CORO_CONTEXT,                                                               \
+      (LLVMTypeRef[]){yield_type, CORO_I1, CORO_GENERIC_PTR, CORO_GENERIC_PTR},   \
       4, 0)
 
 // Get a typed pointer to a coroutine's promise given its handle.
@@ -270,21 +286,21 @@ LLVMBasicBlockRef coro_emit_yield_from_loop(
 
 // Read the is_done flag (field 1) from a coroutine's promise
 #define PROMISE_GET_IS_DONE(promise_ptr, prom_type)                            \
-  LLVMBuildLoad2(builder, LLVMInt1Type(),                                      \
+  LLVMBuildLoad2(builder, CORO_I1,                                      \
                  LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 1,       \
                                      "prom.is_done.gep"),                      \
                  "prom.is_done")
 
 // Read the reset_fn (field 2) from a coroutine's promise
 #define PROMISE_GET_RESET_FN(promise_ptr, prom_type)                           \
-  LLVMBuildLoad2(builder, GENERIC_PTR,                                         \
+  LLVMBuildLoad2(builder, CORO_GENERIC_PTR,                                         \
                  LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 2,       \
                                      "prom.reset_fn.gep"),                     \
                  "prom.reset_fn")
 
 // Read the args_ptr (field 3) from a coroutine's promise
 #define PROMISE_GET_ARGS_PTR(promise_ptr, prom_type)                           \
-  LLVMBuildLoad2(builder, GENERIC_PTR,                                         \
+  LLVMBuildLoad2(builder, CORO_GENERIC_PTR,                                         \
                  LLVMBuildStructGEP2(builder, prom_type, promise_ptr, 3,       \
                                      "prom.args_ptr.gep"),                     \
                  "prom.args_ptr")
@@ -317,9 +333,9 @@ void coro_emit_memcpy_restore(LLVMValueRef dst_handle,
                               LLVMValueRef src_snapshot,
                               LLVMValueRef frame_size, LLVMBuilderRef builder);
 // #define FAT_HANDLE_TY \
-//   LLVMStructType( \
-//       (LLVMTypeRef[]){GENERIC_PTR, GENERIC_PTR, GENERIC_PTR,
-//       LLVMInt64Type()}, \ 4, 0)
+//   LLVMStructTypeInContext(CORO_CONTEXT,  \
+//       (LLVMTypeRef[]){CORO_GENERIC_PTR, CORO_GENERIC_PTR, CORO_GENERIC_PTR,
+//       CORO_I64}, \ 4, 0)
 //
 // #define FAT_HANDLE(handle, closure, args_ptr, size) \
 //   ({ \

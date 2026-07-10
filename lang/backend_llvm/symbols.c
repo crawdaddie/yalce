@@ -19,8 +19,11 @@
 #include "types/type_ser.h"
 #include "llvm-c/Core.h"
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static int concrete_fn_name_counter = 0;
 
 void mark_invariant(LLVMValueRef load_inst) {
   // unsigned kind = LLVMGetMDKindID("invariant.load", 14);
@@ -36,6 +39,69 @@ LLVMValueRef create_lazy_extern_fn_binding(Ast *binding, Ast *expr,
                                            JITLangCtx *ctx,
                                            LLVMModuleRef module,
                                            LLVMBuilderRef builder);
+
+static char *copy_string_len(const char *chars, size_t len) {
+  if (!chars) {
+    return NULL;
+  }
+  char *copy = malloc(len + 1);
+  if (!copy) {
+    return NULL;
+  }
+  memcpy(copy, chars, len);
+  copy[len] = '\0';
+  return copy;
+}
+
+static char *copy_llvm_value_name(LLVMValueRef value) {
+  if (!value) {
+    return NULL;
+  }
+  size_t len = 0;
+  const char *name = LLVMGetValueName2(value, &len);
+  return copy_string_len(name, len);
+}
+
+static char *make_unique_function_name(const char *binding_name) {
+  if (!binding_name) {
+    binding_name = "anonymous";
+  }
+
+  int len = snprintf(NULL, 0, "__ylc_fn.%s.%d", binding_name,
+                     concrete_fn_name_counter++);
+  if (len < 0) {
+    return NULL;
+  }
+
+  char *name = malloc((size_t)len + 1);
+  if (!name) {
+    return NULL;
+  }
+
+  snprintf(name, (size_t)len + 1, "__ylc_fn.%s.%d", binding_name,
+           concrete_fn_name_counter - 1);
+  return name;
+}
+
+static void assign_top_level_function_jit_name(JITSymbol *sym,
+                                               LLVMValueRef value,
+                                               const char *binding_name,
+                                               JITLangCtx *ctx) {
+  if (!sym || !value || !LLVMIsAFunction(value)) {
+    return;
+  }
+
+  if (ctx && ctx->stack_ptr == 0) {
+    char *name = make_unique_function_name(binding_name);
+    if (name) {
+      LLVMSetValueName2(value, name, strlen(name));
+      sym->jit_name = name;
+      return;
+    }
+  }
+
+  sym->jit_name = copy_llvm_value_name(value);
+}
 
 static void specialize_ast_types_for_codegen(Ast *ast, JITLangCtx *ctx) {
   if (!ast) {
@@ -305,6 +371,45 @@ JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
   return sym;
 }
 
+LLVMValueRef rematerialize_function_symbol(JITSymbol *sym, JITLangCtx *ctx,
+                                           LLVMModuleRef module) {
+  if (!sym) {
+    return NULL;
+  }
+
+  if (!sym->symbol_type || is_closure(sym->symbol_type)) {
+    return sym->val;
+  }
+
+  if (!sym->jit_name) {
+    return sym->val;
+  }
+
+  LLVMValueRef existing = LLVMGetNamedFunction(module, sym->jit_name);
+  if (existing) {
+    return existing;
+  }
+
+  int fn_len = fn_type_args_len(sym->symbol_type);
+  LLVMTypeRef fn_type = NULL;
+  if (is_coroutine_constructor_type(sym->symbol_type)) {
+    LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+    LLVMTypeRef generic_ptr =
+        LLVMPointerType(LLVMInt8TypeInContext(llvm_ctx), 0);
+    fn_type =
+        codegen_coro_fn_type(generic_ptr, sym->symbol_type, fn_len, ctx, module);
+  } else {
+    fn_type = codegen_fn_type(NULL, sym->symbol_type, fn_len, ctx, module);
+  }
+  if (!fn_type) {
+    return NULL;
+  }
+
+  LLVMValueRef decl = LLVMAddFunction(module, sym->jit_name, fn_type);
+  LLVMSetLinkage(decl, LLVMExternalLinkage);
+  return decl;
+}
+
 // Resolve identifier-like AST nodes to an existing backend symbol.
 JITSymbol *lookup_id_ast(Ast *ast, JITLangCtx *ctx) {
 
@@ -387,16 +492,12 @@ static LLVMValueRef load_identifier_symbol(Ast *ast, const char *chars,
                                            LLVMBuilderRef builder) {
   switch (sym->type) {
   case STYPE_TOP_LEVEL_VAR:
-    return codegen_get_global(chars, sym, module, builder);
+    return codegen_get_global(chars, sym, ctx, module, builder);
 
   case STYPE_FUNCTION:
-    return sym->val;
+    return rematerialize_function_symbol(sym, ctx, module);
 
   case STYPE_LAZY_EXTERN_FUNCTION:
-    if (sym->val) {
-      return sym->val;
-    }
-
     sym->val = codegen_extern_fn(
         sym->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast, ctx, module, builder);
     return sym->val;
@@ -521,6 +622,10 @@ LLVMValueRef create_fn_binding(Ast *binding, Type *fn_type, LLVMValueRef fn,
                                LLVMBuilderRef builder) {
 
   JITSymbol *sym = new_symbol(STYPE_FUNCTION, fn_type, fn, NULL);
+  if (binding && binding->tag == AST_IDENTIFIER) {
+    assign_top_level_function_jit_name(sym, fn,
+                                       binding->data.AST_IDENTIFIER.value, ctx);
+  }
   install_identifier_symbol(binding, sym, ctx);
   return fn;
 }
@@ -539,6 +644,8 @@ LLVMValueRef create_lazy_extern_fn_binding(Ast *binding, Ast *expr,
   sym->symbol_type = fn_type;
   sym->val = NULL;
   sym->llvm_type = NULL;
+  sym->jit_name = copy_string_len(expr->data.AST_EXTERN_FN.fn_name.chars,
+                                  expr->data.AST_EXTERN_FN.fn_name.length);
   sym->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast = expr;
   install_identifier_symbol(binding, sym, ctx);
   return fn;

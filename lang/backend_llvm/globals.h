@@ -9,7 +9,8 @@ void codegen_set_global(const char *sym_name, JITSymbol *sym,
                         LLVMBuilderRef builder);
 
 LLVMValueRef codegen_get_global(const char *sym_name, JITSymbol *sym,
-                                LLVMModuleRef module, LLVMBuilderRef builder);
+                                JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder);
 
 void setup_global_storage(LLVMModuleRef module, LLVMBuilderRef builder);
 
