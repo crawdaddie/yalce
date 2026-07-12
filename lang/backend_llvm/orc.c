@@ -8,6 +8,7 @@
 #include "function.h"
 #include "globals.h"
 #include "input.h"
+#include "mir/mir.h"
 #include "module.h"
 #include "modules.h"
 #include "parse.h"
@@ -328,6 +329,13 @@ static ORCCompiledModule compile_source(const char *filename,
   escape_analysis(prog);
 
   *env = ti_ctx.env;
+  MirArena *mir_arena = mir_arena_create();
+  MirProgram *mir_program = mir_build_program(mir_arena, prog, ti_ctx.env);
+  mir_run_passes(mir_program);
+  if (ylc_config.dump_mir) {
+    mir_dump_program(mir_program, stdout);
+  }
+  mir_arena_destroy(mir_arena);
   ctx->env = ti_ctx.env;
   ctx->module_name = filename;
 

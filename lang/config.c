@@ -31,6 +31,10 @@ void print_config() {
     printf("dump LLVM IR pre-opt\n");
   }
 
+  if (ylc_config.dump_mir) {
+    printf("dump YLC MIR\n");
+  }
+
   if (ylc_config.debug_symbols) {
     printf("debug mode\n");
   }

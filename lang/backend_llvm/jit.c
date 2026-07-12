@@ -359,6 +359,9 @@ int jit(int argc, char **argv) {
     } else if (strcmp(argv[arg_counter], "--debug-ir-pre") == 0) {
       ylc_config.debug_ir_pre = true;
       arg_counter++;
+    } else if (strcmp(argv[arg_counter], "--dump-mir") == 0) {
+      ylc_config.dump_mir = true;
+      arg_counter++;
     } else if (strcmp(argv[arg_counter], "--test") == 0) {
       // run top-level tests for input module
       ylc_config.test_mode = true;

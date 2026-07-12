@@ -9,6 +9,7 @@ typedef struct RTConfig {
   bool debug_codegen;
   bool debug_ir;
   bool debug_ir_pre;
+  bool dump_mir;
   bool debug_symbols;
   bool verify_ir;
   const char *base_libs_dir;
