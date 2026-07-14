@@ -1,5 +1,6 @@
 #include "./orc.h"
 #include "./codegen.h"
+#include "./llvm/lowering.h"
 #include "builtin_functions.h"
 #include "config.h"
 #include "debugging.h"
@@ -329,13 +330,6 @@ static ORCCompiledModule compile_source(const char *filename,
   escape_analysis(prog);
 
   *env = ti_ctx.env;
-  MirArena *mir_arena = mir_arena_create();
-  MirProgram *mir_program = mir_build_program(mir_arena, prog, ti_ctx.env);
-  mir_run_passes(mir_program);
-  if (ylc_config.dump_mir) {
-    mir_dump_program(mir_program, stdout);
-  }
-  mir_arena_destroy(mir_arena);
   ctx->env = ti_ctx.env;
   ctx->module_name = filename;
 
@@ -349,20 +343,33 @@ static ORCCompiledModule compile_source(const char *filename,
     return dispose_compile_artifacts(context, module, builder);
   }
 
+  MirArena *mir_arena = mir_arena_create();
+  MirProgram *mir_program = mir_build_program(mir_arena, prog, ti_ctx.env);
+  mir_run_passes(mir_program);
+  // if (ylc_config.dump_mir) {
+  //   mir_dump_program(mir_program, stdout);
+  // }
+
   LLVMTypeRef top_level_ret_type;
   LLVMValueRef top_level_func = NULL;
-  if (ylc_config.test_mode) {
-    printf("\n# Test %s\n"
-           "-----------------------------------------\n",
-           filename);
-    top_level_func = codegen_orc_test_module(prog, ctx, module, builder);
-  } else {
-    top_level_func = print_result
-                         ? codegen_repl_top_level(prog, &top_level_ret_type,
-                                                  ctx, module, builder)
-                         : codegen_top_level(prog, &top_level_ret_type, ctx,
-                                             module, builder);
-  }
+
+  top_level_func = lower_mir(mir_program, module, builder);
+  mir_arena_destroy(mir_arena);
+
+  // if (ylc_config.test_mode) {
+  //   printf("\n# Test %s\n"
+  //          "-----------------------------------------\n",
+  //          filename);
+  //   top_level_func = codegen_orc_test_module(prog, ctx, module, builder);
+  // } else {
+  //   top_level_func = print_result
+  //                        ? codegen_repl_top_level(prog,
+  //                        &top_level_ret_type,
+  //                                                 ctx, module, builder)
+  //                        : codegen_top_level(prog, &top_level_ret_type,
+  //                        ctx,
+  //                                            module, builder);
+  // }
 
   if (top_level_func == NULL) {
     return dispose_compile_artifacts(context, module, builder);

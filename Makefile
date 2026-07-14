@@ -22,6 +22,7 @@ LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wi
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/mir/*.c)
+LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/llvm/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/coroutines/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/runtime/*.c)
@@ -112,6 +113,7 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)/runtime
 	mkdir -p $(BUILD_DIR)/tools
 	mkdir -p $(BUILD_DIR)/mir
+	mkdir -p $(BUILD_DIR)/llvm
 
 # Define Linux-specific YACC flags
 ifeq ($(shell uname -s),Linux)
