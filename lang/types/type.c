@@ -63,9 +63,8 @@ static void extend_array_from_instances(Type *array, Type *element) {
   TypeList *list_params = t_alloc(sizeof(TypeList));
   list_params->type = create_list_type_of_type(element);
   list_params->next = NULL;
-  typeclasses_extend(
-      array,
-      make_typeclass_instance(TYPE_NAME_TYPECLASS_FROM, 1000.0, list_params));
+  typeclasses_extend(array, make_typeclass_instance(TYPE_NAME_TYPECLASS_FROM,
+                                                    1000.0, list_params));
 }
 
 static bool module_matches_cons(Type *mod, Type *cons, bool exact) {
@@ -638,7 +637,8 @@ Type *create_list_type_of_type(Type *of) {
   Type **contained = t_alloc(sizeof(Type *) * 2);
   contained[0] = of;
   contained[1] = trec(TYPE_NAME_LIST, decl);
-  variant_members[1] = create_cons_type(TYPE_NAME_OP_LIST_PREPEND, 2, contained);
+  variant_members[1] =
+      create_cons_type(TYPE_NAME_OP_LIST_PREPEND, 2, contained);
 
   typeclasses_extend(gen_list, &_GenericEq);
   return gen_list;

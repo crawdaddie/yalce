@@ -1,0 +1,44 @@
+let consume_array = fn xs -> 0;;
+
+let returned_array = fn n ->
+  [| n, n + 1 |]
+;;
+
+let maybe_array = fn flag n ->
+  if flag then Some (returned_array n) else None
+;;
+
+let variant_payload_return = fn flag n ->
+  let opt = maybe_array flag n;
+  match opt with
+    | Some xs -> xs
+    | None -> returned_array (n + 2)
+;;
+
+let variant_payload_discard = fn flag n ->
+  let opt = maybe_array flag n;
+  match opt with
+    | Some xs -> 0
+    | None -> 1
+;;
+
+let variant_payload_consume = fn flag n ->
+  let opt = maybe_array flag n;
+  match opt with
+    | Some xs -> consume_array xs
+    | None -> 0
+;;
+
+let maybe_array_list = fn flag n ->
+  if flag then Some [returned_array n, returned_array (n + 1), ] else None
+;;
+
+let variant_list_payload_consume_head = fn flag n ->
+  let opt = maybe_array_list flag n;
+  match opt with
+    | Some (h :: rest) -> consume_array h
+    | Some [] -> 0
+    | None -> 0
+;;
+
+0

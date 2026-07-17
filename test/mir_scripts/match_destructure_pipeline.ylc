@@ -1,0 +1,170 @@
+let consume_array = fn xs -> 0;;
+let consume_list = fn xs -> 0;;
+
+let returned_array = fn n ->
+  [| n, n + 1 |]
+;;
+
+let returned_record_array_payload_list = fn n: (Int) ->
+  [(payload: returned_array n,), ]
+;;
+
+let returned_record_array_payload_array = fn n: (Int) ->
+  [| (payload: returned_array n,), |]
+;;
+
+let tuple_option_payload_match = fn flag n ->
+  let opt = if flag then Some (returned_array n, returned_array (n + 1)) else None;
+  match opt with
+    | Some (left, right) -> consume_array left
+    | None -> 0
+;;
+
+let tuple_option_literal_match = fn opt ->
+  match opt with
+    | Some (1, 1.) -> 1
+    | _ -> 0
+;;
+
+let record_list_head_match = fn a_value b_value ->
+  let kids = [(value: a_value,), (value: b_value,), ];
+  match kids with
+    | x :: rest -> x.value
+    | [] -> 0
+;;
+
+let record_list_exact_pair_match = fn a_value b_value ->
+  let kids = [(value: a_value,), (value: b_value,), ];
+  match kids with
+    | x :: y :: [] -> x.value + y.value
+    | _ -> 0
+;;
+
+let record_array_match = fn a_value b_value ->
+  let kids = [| (value: a_value,), (value: b_value,) |];
+  match kids with
+    | [| x, y |] -> x.value + y.value
+    | _ -> 0
+;;
+
+let nested_record_list_match = fn a_value: (Int) b_value: (Int) ->
+  let kids = [(node: (value: a_value,),), (node: (value: b_value,),), ];
+  match kids with
+    | x :: y :: [] -> x.node.value + y.node.value
+    | _ -> 0
+;;
+
+let nested_record_array_match = fn a_value: (Int) b_value: (Int) ->
+  let kids = [| (node: (value: a_value,),), (node: (value: b_value,),) |];
+  match kids with
+    | [| x, y |] -> x.node.value + y.node.value
+    | _ -> 0
+;;
+
+let tuple_let_record_destructure = fn a_value: (Int) b_value: (Int) ->
+  let left, right = ((value: a_value,), (value: b_value,));
+  left.value + right.value
+;;
+
+let tuple_let_pair_destructure = fn a_value: (Int) b_value: (Int) ->
+  let pair = (a_value, b_value);
+  let x, y = pair;
+  x + y
+;;
+
+let tuple_let_nested_record_destructure = fn a_value: (Int) b_value: (Int) ->
+  let pair = ((node: (value: a_value,),), (node: (value: b_value,),));
+  let x, y = pair;
+  x.node.value + y.node.value
+;;
+
+let tuple_let_managed_record_payload = fn n: (Int) ->
+  let left, right = ((payload: returned_array n,), (payload: returned_array (n + 1),));
+  consume_array left.payload
+;;
+
+let list_record_array_payload_match = fn n: (Int) ->
+  let kids = [(payload: returned_array n,), (payload: returned_array (n + 1),), ];
+  match kids with
+    | x :: rest -> consume_array x.payload
+    | [] -> 0
+;;
+
+let array_record_list_payload_match = fn n: (Int) ->
+  let kids = [| (payload: [returned_array n, ],), |];
+  match kids with
+    | [| x |] -> consume_list x.payload
+    | _ -> 0
+;;
+
+let variant_record_payload_match = fn flag: (Bool) n: (Int) ->
+  let opt = if flag then Some (payload: returned_array n, label: n,) else None;
+  match opt with
+    | Some rec -> consume_array rec.payload
+    | None -> 0
+;;
+
+let variant_tuple_literal_failure_match = fn flag: (Bool) n: (Int) ->
+  let opt = if flag then Some (returned_array n, 1) else None;
+  match opt with
+    | Some (xs, 2) -> consume_array xs
+    | Some (xs, _) -> consume_array xs
+    | None -> 0
+;;
+
+let variant_first_field_failure_payload_match = fn flag: (Bool) n: (Int) ->
+  let opt = if flag then Some (1, returned_array n) else None;
+  match opt with
+    | Some (2, xs) -> consume_array xs
+    | Some (_, xs) -> consume_array xs
+    | None -> 0
+;;
+
+let array_pattern_failure_then_payload_match = fn n: (Int) ->
+  let kids = [| (payload: returned_array n,), |];
+  match kids with
+    | [| x, y |] -> consume_array x.payload
+    | [| x |] -> consume_array x.payload
+    | _ -> 0
+;;
+
+let list_pattern_failure_then_payload_match = fn n: (Int) ->
+  let kids = [(payload: returned_array n,), ];
+  match kids with
+    | x :: y :: [] -> consume_array x.payload
+    | x :: [] -> consume_array x.payload
+    | _ -> 0
+;;
+
+let heap_array_pattern_failure_then_payload_match = fn n: (Int) ->
+  let kids = returned_record_array_payload_array n;
+  match kids with
+    | [| x, y |] -> consume_array x.payload
+    | [| x |] -> consume_array x.payload
+    | _ -> 0
+;;
+
+let heap_list_pattern_failure_then_payload_match = fn n: (Int) ->
+  let kids = returned_record_array_payload_list n;
+  match kids with
+    | x :: y :: [] -> consume_array x.payload
+    | x :: [] -> consume_array x.payload
+    | _ -> 0
+;;
+
+tuple_let_record_destructure 1 2;
+tuple_let_pair_destructure 1 2;
+tuple_let_nested_record_destructure 1 2;
+tuple_let_managed_record_payload 1;
+nested_record_list_match 1 2;
+nested_record_array_match 1 2;
+list_record_array_payload_match 1;
+array_record_list_payload_match 1;
+variant_record_payload_match true 1;
+variant_tuple_literal_failure_match true 1;
+variant_first_field_failure_payload_match true 1;
+array_pattern_failure_then_payload_match 1;
+list_pattern_failure_then_payload_match 1;
+heap_array_pattern_failure_then_payload_match 1;
+heap_list_pattern_failure_then_payload_match 1;
+0

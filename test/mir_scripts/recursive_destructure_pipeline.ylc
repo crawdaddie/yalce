@@ -1,0 +1,108 @@
+type DirectNode = (
+  value: Int,
+  kids: List of DirectNode
+);
+
+type DirectArrayNode = (
+  value: Int,
+  kids: Array of DirectArrayNode
+);
+
+type TensorRef = Array of TensorNode;
+
+type TensorNode = (
+  data: Array of Double,
+  grad: Array of Double,
+  shape: Array of Int,
+  op: TensOp
+);
+
+type TensOp =
+  | TensOpLeaf
+  | TensOpAdd of (TensorRef, TensorRef)
+  | TensOpMul of (TensorRef, TensorRef)
+  | TensOpNeg of TensorRef
+  | TensOpDiv of (TensorRef, TensorRef)
+  | TensOpSum of TensorRef
+  | TensOpMatMul of (TensorRef, TensorRef)
+;
+
+let consume_tensor = fn t -> 0;;
+
+let tensor_make = fn data: (Array of Double) shape: (Array of Int) ->
+  [| TensorNode data [| 0. |] shape TensOpLeaf |]
+;;
+
+let tensor_add = fn a: (TensorRef) b: (TensorRef) ->
+  [| TensorNode [| 0. |] [| 0. |] [| 1 |] (TensOpAdd (a, b)) |]
+;;
+
+let tensor_op = fn t: (TensorRef) ->
+  let node = t[0];
+  node.op
+;;
+
+let direct_leaf = fn value: (Int) ->
+  DirectNode value []
+;;
+
+let direct_pair = fn a: (DirectNode) b: (DirectNode) ->
+  DirectNode 3 [a, b]
+;;
+
+let direct_array_leaf = fn value: (Int) ->
+  DirectArrayNode value [| |]
+;;
+
+let direct_array_pair = fn a: (DirectArrayNode) b: (DirectArrayNode) ->
+  DirectArrayNode 3 [| a, b |]
+;;
+
+let direct_recursive_record_list_match = fn a_value: (Int) b_value: (Int) ->
+  let a = direct_leaf a_value;
+  let b = direct_leaf b_value;
+  let p = direct_pair a b;
+  match p.kids with
+    | x :: y :: [] -> x.value + y.value
+    | _ -> 0
+;;
+
+let direct_recursive_record_array_match = fn a_value: (Int) b_value: (Int) ->
+  let a = direct_array_leaf a_value;
+  let b = direct_array_leaf b_value;
+  let p = direct_array_pair a b;
+  match p.kids with
+    | [| x, y |] -> x.value + y.value
+    | _ -> 0
+;;
+
+let tensor_add_constructor = fn n: (Int) ->
+  let a = tensor_make [| 1. |] [| n |];
+  let b = tensor_make [| 2. |] [| n |];
+  tensor_add a b
+;;
+
+let tensor_op_add_payload_match = fn n: (Int) ->
+  let a = tensor_make [| 1. |] [| n |];
+  let b = tensor_make [| 2. |] [| n |];
+  let t = tensor_add a b;
+  match tensor_op t with
+    | TensOpAdd (left, right) -> array_size left + array_size right
+    | _ -> 0
+;;
+
+let tensor_op_add_payload_consume = fn n: (Int) ->
+  let a = tensor_make [| 1. |] [| n |];
+  let b = tensor_make [| 2. |] [| n |];
+  let t = tensor_add a b;
+  match tensor_op t with
+    | TensOpAdd (left, right) -> consume_tensor left
+    | _ -> 0
+;;
+
+direct_recursive_record_list_match 1 2;
+direct_recursive_record_array_match 1 2;
+tensor_add_constructor 1;
+tensor_op_add_payload_match 1;
+tensor_op_add_payload_consume 1;
+0

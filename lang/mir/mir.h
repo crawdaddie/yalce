@@ -36,56 +36,69 @@ typedef struct MirCtx {
 } MirCtx;
 
 typedef enum {
-  MIR_CONST_INT,
-  MIR_CONST_UINT64,
-  MIR_CONST_FLOAT,
-  MIR_CONST_DOUBLE,
-  MIR_CONST_CHAR,
-  MIR_CONST_BOOL,
-  MIR_CONST_STRING,
-  MIR_CONST_VOID,
-  MIR_PRIMITIVE_CAST,
-  MIR_TUPLE,
-  MIR_TUPLE_GET,
-  MIR_MATCH,
-  MIR_VARIANT,
-  MIR_VARIANT_TAG,
-  MIR_TAG_EQ,
-  MIR_VARIANT_PAYLOAD,
-  MIR_LIST_EMPTY,
-  MIR_LIST_CONS,
-  MIR_LIST_IS_EMPTY,
-  MIR_LIST_HEAD,
-  MIR_LIST_TAIL,
-  MIR_ARRAY_LITERAL,
-  MIR_ARRAY_SIZE,
-  MIR_ARRAY_AT,
-  MIR_ARRAY_SET,
-  MIR_ARRAY_FILL_CONST,
-  MIR_ARRAY_FILL,
-  MIR_ARRAY_RANGE,
-  MIR_ARRAY_SUCC,
-  MIR_ARRAY_OFFSET,
-  MIR_STR,
-  MIR_PRINT,
-  MIR_CSTR,
-  MIR_SIZEOF,
-  MIR_DLOPEN,
-  MIR_AS_BYTES,
-  MIR_TYPEOF,
-  MIR_PRIMITIVE,
-  MIR_LOGICAL_AND,
-  MIR_LOGICAL_OR,
-  MIR_CLOSURE_ENV,
-  MIR_CLOSURE,
-  MIR_CLOSURE_GET,
-  MIR_CLOSURE_FN,
-  MIR_CLOSURE_GET_ENV,
-  MIR_DUP,
-  MIR_DROP,
+  MIR_CONST,
+  MIR_OP,
+  MIR_PHI,
+  MIR_EXTRACT,
+  MIR_CONSTRUCT,
   MIR_FN_REF,
   MIR_CALL,
 } MirInstrKind;
+
+typedef enum {
+  MIR_CONST_KIND_INT,
+  MIR_CONST_KIND_UINT64,
+  MIR_CONST_KIND_FLOAT,
+  MIR_CONST_KIND_DOUBLE,
+  MIR_CONST_KIND_CHAR,
+  MIR_CONST_KIND_BOOL,
+  MIR_CONST_KIND_STRING,
+  MIR_CONST_KIND_VOID,
+} MirConstKind;
+
+typedef enum {
+  MIR_OP_KIND_PRIMITIVE,
+  MIR_OP_KIND_CAST,
+  MIR_OP_KIND_TAG_EQ,
+  MIR_OP_KIND_LIST_IS_EMPTY,
+  MIR_OP_KIND_ARRAY_SIZE,
+  MIR_OP_KIND_ARRAY_SET,
+  MIR_OP_KIND_STR,
+  MIR_OP_KIND_PRINT,
+  MIR_OP_KIND_CSTR,
+  MIR_OP_KIND_SIZEOF,
+  MIR_OP_KIND_DLOPEN,
+  MIR_OP_KIND_AS_BYTES,
+  MIR_OP_KIND_TYPEOF,
+  MIR_OP_KIND_DUP,
+  MIR_OP_KIND_DROP,
+} MirOpKind;
+
+typedef enum {
+  MIR_EXTRACT_FIELD,
+  MIR_EXTRACT_VARIANT_TAG,
+  MIR_EXTRACT_VARIANT_PAYLOAD,
+  MIR_EXTRACT_LIST_HEAD,
+  MIR_EXTRACT_LIST_TAIL,
+  MIR_EXTRACT_ARRAY_AT,
+  MIR_EXTRACT_ARRAY_SUCC,
+  MIR_EXTRACT_ARRAY_OFFSET,
+  MIR_EXTRACT_CLOSURE_FN,
+  MIR_EXTRACT_CLOSURE_ENV,
+} MirExtractKind;
+
+typedef enum {
+  MIR_CONSTRUCT_TUPLE,
+  MIR_CONSTRUCT_VARIANT,
+  MIR_CONSTRUCT_LIST_EMPTY,
+  MIR_CONSTRUCT_LIST_CONS,
+  MIR_CONSTRUCT_ARRAY_LITERAL,
+  MIR_CONSTRUCT_ARRAY_FILL_CONST,
+  MIR_CONSTRUCT_ARRAY_FILL,
+  MIR_CONSTRUCT_ARRAY_RANGE,
+  MIR_CONSTRUCT_CLOSURE_ENV,
+  MIR_CONSTRUCT_CLOSURE,
+} MirConstructKind;
 
 typedef enum {
   MIR_OP_IEQ,
@@ -130,7 +143,6 @@ typedef enum {
 typedef enum {
   MIR_TERM_NONE,
   MIR_TERM_RETURN,
-  MIR_TERM_ARM_RETURN,
   MIR_TERM_BR,
   MIR_TERM_COND,
   MIR_TERM_UNREACHABLE,
@@ -168,17 +180,16 @@ typedef struct {
   size_t cap;
 } MirValueIdVec;
 
-typedef struct MirMatchArm {
-  Ast *pattern;
-  MirBlockId test_block;
-  MirBlockId body_block;
-} MirMatchArm;
+typedef struct {
+  MirBlockId block;
+  MirValueId value;
+} MirPhiIncoming;
 
 typedef struct {
-  MirMatchArm *items;
+  MirPhiIncoming *items;
   size_t len;
   size_t cap;
-} MirMatchArmVec;
+} MirPhiIncomingVec;
 
 typedef struct MirParam {
   MirValueId value;
@@ -229,6 +240,55 @@ typedef struct {
 } MirOperandUseVec;
 
 typedef struct {
+  MirConstKind kind;
+  union {
+    int int_value;
+    uint64_t uint64_value;
+    float float_value;
+    double double_value;
+    char char_value;
+    bool bool_value;
+    struct {
+      const char *chars;
+      size_t len;
+    } string_value;
+  } as;
+} MirConst;
+
+typedef struct {
+  MirOpKind kind;
+  uint8_t argc;
+  MirValueId operands[3];
+  MirPrimitiveOp primitive;
+  Type *from_type;
+  Type *to_type;
+  int constructor_index;
+  const char *constructor_name;
+} MirOp;
+
+typedef struct {
+  MirExtractKind kind;
+  MirValueId value;
+  MirValueId index_value;
+  size_t index;
+  const char *name;
+  Type *constructor_type;
+  int constructor_index;
+  const char *constructor_name;
+} MirExtract;
+
+typedef struct {
+  MirConstructKind kind;
+  MirValueIdVec items;
+  MirValueId operands[3];
+  Type *constructor_type;
+  int constructor_index;
+  const char *constructor_name;
+  MirFunctionId impl_fn;
+  const char *impl_name;
+} MirConstruct;
+
+typedef struct {
   MirValueId value;
   MirOperandRole role;
   MirOperandUse use;
@@ -259,152 +319,15 @@ typedef struct MirInstr {
   Type *type;
   Ast *origin;
   union {
-    int int_value;
-    uint64_t uint64_value;
-    float float_value;
-    double double_value;
-    char char_value;
-    bool bool_value;
-    struct {
-      const char *chars;
-      size_t len;
-    } string_value;
+    MirConst const_value;
+    MirOp op;
 
     struct {
-      MirValueId value;
-      Type *from_type;
-      Type *to_type;
-    } primitive_cast;
+      MirPhiIncomingVec incoming;
+    } phi;
 
-    struct {
-      MirPrimitiveOp op;
-      uint8_t argc;
-      MirValueId operands[3];
-    } primitive;
-
-    struct {
-      MirValueId value;
-    } value_op;
-
-    struct {
-      MirValueId lhs;
-      MirBlockId rhs_block;
-      MirBlockId short_block;
-      MirBlockId continuation_block;
-      bool short_value;
-    } logical;
-
-    struct {
-      MirValueIdVec items;
-    } tuple;
-
-    struct {
-      MirValueId tuple;
-      size_t index;
-    } tuple_get;
-
-    struct {
-      MirValueId scrutinee;
-      MirMatchArmVec arms;
-      MirBlockId first_test_block;
-      MirBlockId no_match_block;
-      MirBlockId continuation_block;
-      bool allow_no_match;
-    } match;
-
-    struct {
-      Type *constructor_type;
-      const char *constructor_name;
-      int constructor_index;
-      MirValueIdVec fields;
-    } variant;
-
-    struct {
-      MirValueId value;
-    } variant_tag;
-
-    struct {
-      MirValueId tag;
-      int constructor_index;
-      const char *constructor_name;
-    } tag_eq;
-
-    struct {
-      MirValueId value;
-      Type *constructor_type;
-      const char *constructor_name;
-      int constructor_index;
-    } variant_payload;
-
-    struct {
-      MirValueId head;
-      MirValueId tail;
-    } list_cons;
-
-    struct {
-      MirValueId list;
-    } list_op;
-
-    struct {
-      MirValueIdVec items;
-    } array_literal;
-
-    struct {
-      MirValueId array;
-    } array_unop;
-
-    struct {
-      MirValueId array;
-      MirValueId index;
-    } array_at;
-
-    struct {
-      MirValueId array;
-      MirValueId index;
-      MirValueId value;
-    } array_set;
-
-    struct {
-      MirValueId size;
-      MirValueId value;
-    } array_fill_const;
-
-    struct {
-      MirValueId size;
-      MirValueId fill_fn;
-    } array_fill;
-
-    struct {
-      MirValueId offset;
-      MirValueId size;
-      MirValueId array;
-    } array_range;
-
-    struct {
-      MirValueId offset;
-      MirValueId array;
-    } array_offset;
-
-    struct {
-      MirValueIdVec fields;
-    } closure_env;
-
-    struct {
-      MirValueId fn;
-      MirValueId env;
-      MirFunctionId impl_fn;
-      const char *impl_name;
-    } closure;
-
-    struct {
-      MirValueId env;
-      size_t index;
-      const char *name;
-    } closure_get;
-
-    struct {
-      MirValueId closure;
-    } closure_part;
+    MirExtract extract;
+    MirConstruct construct;
 
     struct {
       MirFunctionId fn;
@@ -492,10 +415,10 @@ char *mir_arena_strdup(MirArena *arena, const char *str);
 char *mir_arena_strndup(MirArena *arena, const char *str, size_t len);
 void mir_value_id_vec_push(MirArena *arena, MirValueIdVec *vec,
                            MirValueId value);
+void mir_phi_incoming_vec_push(MirArena *arena, MirPhiIncomingVec *vec,
+                               MirPhiIncoming value);
 void mir_operand_use_vec_push(MirArena *arena, MirOperandUseVec *vec,
                               MirOperandUse value);
-void mir_match_arm_vec_push(MirArena *arena, MirMatchArmVec *vec,
-                            MirMatchArm value);
 void mir_instr_vec_push(MirArena *arena, MirInstrVec *vec, MirInstr value);
 
 void mir_stack_frame_init(MirArena *arena, ht *table, MirStackFrame *frame,
@@ -503,12 +426,12 @@ void mir_stack_frame_init(MirArena *arena, ht *table, MirStackFrame *frame,
 bool mir_ctx_bind_value(MirCtx *ctx, const char *name, MirValueId value);
 bool mir_ctx_lookup_value(MirCtx *ctx, const char *name, MirValueId *out);
 
-#define MIR_STACK_ALLOC_CTX_PUSH(_ctx_name, _builder, _ctx)                     \
-  MirCtx _ctx_name = *(_ctx);                                                    \
-  ht _ctx_name##_table;                                                          \
-  MirStackFrame _ctx_name##_frame;                                               \
-  mir_stack_frame_init((_builder)->fn->arena, &_ctx_name##_table,                \
-                       &_ctx_name##_frame, _ctx_name.frame);                     \
+#define MIR_STACK_ALLOC_CTX_PUSH(_ctx_name, _builder, _ctx)                    \
+  MirCtx _ctx_name = *(_ctx);                                                  \
+  ht _ctx_name##_table;                                                        \
+  MirStackFrame _ctx_name##_frame;                                             \
+  mir_stack_frame_init((_builder)->fn->arena, &_ctx_name##_table,              \
+                       &_ctx_name##_frame, _ctx_name.frame);                   \
   _ctx_name.frame = &_ctx_name##_frame;
 
 MirProgram *mir_build_program(MirArena *arena, Ast *prog, MirCtx *ctx);
@@ -531,8 +454,6 @@ void mir_builder_init(MirBuilder *builder, MirProgram *program,
                       MirFunction *fn);
 void mir_builder_position_at_end(MirBuilder *builder, MirBlock *block);
 void mir_builder_set_return(MirBuilder *builder, MirValueId value);
-void mir_builder_set_arm_return(MirBuilder *builder, MirValueId value,
-                                MirBlockId target);
 void mir_builder_set_br(MirBuilder *builder, MirBlockId target);
 void mir_builder_set_cond(MirBuilder *builder, MirValueId cond,
                           MirBlockId then_block, MirBlockId else_block);
@@ -566,16 +487,14 @@ MirValueId mir_const_bool(MirBuilder *builder, Type *type, Ast *origin,
 MirValueId mir_const_string(MirBuilder *builder, Type *type, Ast *origin,
                             const char *chars, size_t len);
 MirValueId mir_const_void(MirBuilder *builder, Type *type, Ast *origin);
+MirValueId mir_phi(MirBuilder *builder, Type *type, Ast *origin,
+                   MirPhiIncomingVec incoming);
 MirValueId mir_primitive_cast(MirBuilder *builder, Type *from_type,
                               Type *to_type, Ast *origin, MirValueId value);
 MirValueId mir_tuple(MirBuilder *builder, Type *type, Ast *origin,
                      MirValueIdVec items);
 MirValueId mir_tuple_get(MirBuilder *builder, Type *type, Ast *origin,
                          MirValueId tuple, size_t index);
-MirValueId mir_match(MirBuilder *builder, Type *type, Ast *origin,
-                     MirValueId scrutinee, MirMatchArmVec arms,
-                     MirBlockId first_test_block, MirBlockId no_match_block,
-                     MirBlockId continuation_block, bool allow_no_match);
 MirValueId mir_variant(MirBuilder *builder, Type *type, Ast *origin,
                        Type *constructor_type, int constructor_index,
                        const char *constructor_name, MirValueIdVec fields);

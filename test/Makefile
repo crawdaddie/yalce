@@ -30,7 +30,7 @@ LANG_SRCS := $(LANG_SRC_DIR)/parse.c \
              $(YACC_OUTPUT)
 
 # Phony targets
-.PHONY: all clean test_parse test_typecheck test_inference test_inference_benchmarking test_scripts test_unification test_range_server test_range_server_tool test_lsp_server_tool
+.PHONY: all clean test_parse test_typecheck test_inference test_inference_benchmarking test_scripts test_mir_pipeline test_unification test_range_server test_range_server_tool test_lsp_server_tool
 
 all:
 	-$(MAKE) test_parse
@@ -39,6 +39,7 @@ all:
 	-$(MAKE) test_range_server_tool
 	-$(MAKE) test_lsp_server_tool
 	-$(MAKE) test_scripts
+	-$(MAKE) test_mir_pipeline
 	-$(MAKE) test_unification
 
 $(BUILD_DIR):
@@ -101,6 +102,11 @@ test_lsp_server_tool:
 
 test_scripts: 
 	./run_test_scripts.sh ./test_scripts
+
+test_mir_pipeline:
+	$(MAKE) -C ../
+	$(MAKE) -C ../ test_mir_operand_metadata
+	./test_mir_pipeline.sh
 
 # test_unification:
 #

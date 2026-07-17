@@ -1,0 +1,89 @@
+let consume_array = fn xs -> 0;;
+let consume_list = fn xs -> 0;;
+let consume_value = fn x -> 0;;
+
+let returned_array = fn n ->
+  [| n, n + 1 |]
+;;
+
+let tuple_local_dead = fn n ->
+  let xs = [| n, n + 1 |];
+  let pair = (xs, n);
+  n
+;;
+
+let tuple_return_contains_array = fn n ->
+  let xs = [| n, n + 1 |];
+  (xs, n)
+;;
+
+let tuple_passed_to_owner = fn n ->
+  let xs = [| n, n + 1 |];
+  consume_value (xs, n)
+;;
+
+let tuple_stored_in_aggregate = fn n ->
+  let xs = [| n, n + 1 |];
+  let pair = (xs, n);
+  let box = [| pair |];
+  n
+;;
+
+let variant_local_dead = fn n ->
+  let v = Some [| n, n + 1 |];
+  0
+;;
+
+let variant_returned = fn n ->
+  Some [| n, n + 1 |]
+;;
+
+let variant_passed_to_owner = fn n ->
+  consume_value (Some [| n, n + 1 |])
+;;
+
+let variant_stored_in_aggregate = fn n ->
+  let v = Some [| n, n + 1 |];
+  (v, n)
+;;
+
+let list_local_dead = fn n ->
+  let xs = [[| n |], ];
+  0
+;;
+
+let list_returned = fn n ->
+  [[| n |], ]
+;;
+
+let list_passed_to_owner = fn n ->
+  consume_list [[| n |], ]
+;;
+
+let list_stored_in_aggregate = fn n ->
+  let xs = [[| n |], ];
+  (xs, n)
+;;
+
+let record_nested_array_extract = fn n ->
+  let xs = returned_array n;
+  let wrapper = ([| xs |], n);
+  let items, count = wrapper;
+  consume_array (items[0])
+;;
+
+let tuple_destructure_extract = fn n ->
+  let xs = returned_array n;
+  let pair = (xs, n);
+  let first, second = pair;
+  consume_array first
+;;
+
+let list_head_extract = fn n ->
+  let xs = [returned_array n, returned_array (n + 1), ];
+  match xs with
+    | h :: rest -> consume_array h
+    | [] -> 0
+;;
+
+0
