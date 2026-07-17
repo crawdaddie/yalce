@@ -94,6 +94,13 @@ void print_type_to_stream(Type *t, FILE *stream) {
       break;
     }
 
+    if (is_array_type(t)) {
+      fprintf(stream, "Array of ");
+      print_type_to_stream(t->data.T_CONS.args[0], stream);
+      // fprintf(stream, "[]");
+      break;
+    }
+
     if (strcmp(t->data.T_CONS.name, "Module") == 0) {
 
       // print_type_to_stream(t->data.T_CONS.args[0], stream);
@@ -121,12 +128,12 @@ void print_type_to_stream(Type *t, FILE *stream) {
           fprintf(stream, "%s: ", t->data.T_CONS.names[i]);
         }
         print_type_to_stream(t->data.T_CONS.args[i], stream);
-        if (i < t->data.T_CONS.num_args - 1) {
-          fprintf(stream, " * ");
-        }
+        // if (i < t->data.T_CONS.num_args - 1) {
+        fprintf(stream, ", ");
+        // }
       }
 
-      fprintf(stream, " )");
+      fprintf(stream, ")");
       break;
     }
 

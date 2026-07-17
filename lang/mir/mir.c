@@ -1,15 +1,22 @@
 #include "./mir.h"
 #include "config.h"
 #include "escape_analysis.h"
+#include "format_utils.h"
+#include "ht.h"
 #include "types/builtins.h"
-#include "types/type_ser.h"
-#include <stdio.h>
-#include <stdint.h>
+#include "types/inference.h"
+#include <ctype.h>
+#include <inttypes.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define MIR_ARENA_DEFAULT_BLOCK_SIZE 32768
 #define MIR_ALIGNOF(T) __alignof__(T)
+
+void print_type_to_stream(Type *t, FILE *stream);
+
+static Type *mir_closure_callable_type(MirArena *arena, Type *closure_type);
 
 static size_t align_forward(size_t value, size_t align) {
   size_t mask = align - 1;
@@ -41,6 +48,7 @@ void mir_arena_destroy(MirArena *arena) {
   if (!arena) {
     return;
   }
+
   MirArenaBlock *block = arena->blocks;
   while (block) {
     MirArenaBlock *next = block->next;
@@ -90,17 +98,51 @@ void *mir_arena_alloc(MirArena *arena, size_t size, size_t align) {
   return ptr;
 }
 
-char *mir_arena_strdup(MirArena *arena, const char *str) {
+char *mir_arena_strndup(MirArena *arena, const char *str, size_t len) {
   if (!str) {
     return NULL;
   }
-  size_t len = strlen(str);
+
   char *copy = mir_arena_alloc(arena, len + 1, MIR_ALIGNOF(char));
   if (!copy) {
     return NULL;
   }
-  memcpy(copy, str, len + 1);
+  memcpy(copy, str, len);
+  copy[len] = '\0';
   return copy;
+}
+
+char *mir_arena_strdup(MirArena *arena, const char *str) {
+  return str ? mir_arena_strndup(arena, str, strlen(str)) : NULL;
+}
+
+static char *mir_arena_printf(MirArena *arena, const char *fmt, ...) {
+  if (!arena || !fmt) {
+    return NULL;
+  }
+
+  va_list args;
+  va_start(args, fmt);
+
+  va_list measure_args;
+  va_copy(measure_args, args);
+  int len = vsnprintf(NULL, 0, fmt, measure_args);
+  va_end(measure_args);
+
+  if (len < 0) {
+    va_end(args);
+    return NULL;
+  }
+
+  char *str = mir_arena_alloc(arena, (size_t)len + 1, MIR_ALIGNOF(char));
+  if (!str) {
+    va_end(args);
+    return NULL;
+  }
+
+  vsnprintf(str, (size_t)len + 1, fmt, args);
+  va_end(args);
+  return str;
 }
 
 static void *mir_vec_grow(MirArena *arena, void *items, size_t len, size_t *cap,
@@ -109,6 +151,7 @@ static void *mir_vec_grow(MirArena *arena, void *items, size_t len, size_t *cap,
   while (new_cap < min_cap) {
     new_cap *= 2;
   }
+
   void *new_items = mir_arena_alloc(arena, elem_size * new_cap, align);
   if (!new_items) {
     return NULL;
@@ -116,6 +159,7 @@ static void *mir_vec_grow(MirArena *arena, void *items, size_t len, size_t *cap,
   if (items && len > 0) {
     memcpy(new_items, items, elem_size * len);
   }
+
   *cap = new_cap;
   return new_items;
 }
@@ -127,95 +171,1839 @@ static void *mir_vec_grow(MirArena *arena, void *items, size_t len, size_t *cap,
           mir_vec_grow((arena), (vec)->items, (vec)->len, &(vec)->cap,         \
                        sizeof(T), MIR_ALIGNOF(T), (vec)->len + 1);             \
     }                                                                          \
-    (vec)->items[(vec)->len++] = (value);                                      \
+    if ((vec)->items) {                                                        \
+      (vec)->items[(vec)->len++] = (value);                                    \
+    }                                                                          \
   } while (0)
 
-static const char *ast_tag_name(ast_tag tag) {
-  switch (tag) {
-  case AST_INT:
-    return "AST_INT";
-  case AST_FLOAT:
-    return "AST_FLOAT";
-  case AST_DOUBLE:
-    return "AST_DOUBLE";
-  case AST_STRING:
-    return "AST_STRING";
-  case AST_CHAR:
-    return "AST_CHAR";
-  case AST_BOOL:
-    return "AST_BOOL";
-  case AST_UINT64:
-    return "AST_UINT64";
-  case AST_IDENTIFIER:
-    return "AST_IDENTIFIER";
-  case AST_BODY:
-    return "AST_BODY";
-  case AST_LET:
-    return "AST_LET";
-  case AST_BINOP:
-    return "AST_BINOP";
-  case AST_UNOP:
-    return "AST_UNOP";
-  case AST_APPLICATION:
-    return "AST_APPLICATION";
-  case AST_TUPLE:
-    return "AST_TUPLE";
-  case AST_LAMBDA:
-    return "AST_LAMBDA";
-  case AST_VOID:
-    return "AST_VOID";
-  case AST_EXTERN_FN:
-    return "AST_EXTERN_FN";
-  case AST_LIST:
-    return "AST_LIST";
-  case AST_EMPTY_CONTAINER:
-    return "AST_EMPTY_CONTAINER";
-  case AST_ARRAY:
-    return "AST_ARRAY";
-  case AST_MATCH:
-    return "AST_MATCH";
-  case AST_PLACEHOLDER_ID:
-    return "AST_PLACEHOLDER_ID";
-  case AST_IMPORT:
-    return "AST_IMPORT";
-  case AST_RECORD_ACCESS:
-    return "AST_RECORD_ACCESS";
-  case AST_FMT_STRING:
-    return "AST_FMT_STRING";
-  case AST_TYPE_DECL:
-    return "AST_TYPE_DECL";
-  case AST_ASSOC:
-    return "AST_ASSOC";
-  case AST_EXTERN_VARIANTS:
-    return "AST_EXTERN_VARIANTS";
-  case AST_FN_SIGNATURE:
-    return "AST_FN_SIGNATURE";
-  case AST_MATCH_GUARD_CLAUSE:
-    return "AST_MATCH_GUARD_CLAUSE";
-  case AST_YIELD:
-    return "AST_YIELD";
-  case AST_SPREAD_OP:
-    return "AST_SPREAD_OP";
-  case AST_IMPLEMENTS:
-    return "AST_IMPLEMENTS";
-  case AST_MODULE:
-    return "AST_MODULE";
-  case AST_RANGE_EXPRESSION:
-    return "AST_RANGE_EXPRESSION";
-  case AST_LOOP:
-    return "AST_LOOP";
-  case AST_GET_ARG:
-    return "AST_GET_ARG";
-  case AST_TRAIT_IMPL:
-    return "AST_TRAIT_IMPL";
+void mir_value_id_vec_push(MirArena *arena, MirValueIdVec *vec,
+                           MirValueId value) {
+  if (!arena || !vec) {
+    return;
   }
-  return "AST_UNKNOWN";
+
+  MIR_VEC_PUSH(arena, vec, MirValueId, value);
 }
 
-static const char *type_kind_name(Type *type) {
-  if (!type) {
-    return "<no-type>";
+void mir_operand_use_vec_push(MirArena *arena, MirOperandUseVec *vec,
+                              MirOperandUse value) {
+  if (!arena || !vec) {
+    return;
   }
+
+  MIR_VEC_PUSH(arena, vec, MirOperandUse, value);
+}
+
+static MirResultOwnership mir_default_result_ownership(Type *type) {
+  Type *result_type = type && type->kind == T_FN ? fn_return_type(type) : type;
+  if (!result_type || result_type->kind == T_VOID) {
+    return MIR_RESULT_NONE;
+  }
+  return MIR_RESULT_OWNED;
+}
+
+static MirOperandUse mir_default_param_use(const char *name, Type *type) {
+  if ((name && strcmp(name, "$env") == 0) || (type && type->kind == T_VOID)) {
+    return MIR_OPERAND_USE_BORROW;
+  }
+  return MIR_OPERAND_USE_CONSUME;
+}
+
+static void mir_fn_summary_init(MirArena *arena, MirFnSummary *summary,
+                                Type *type) {
+  if (!summary) {
+    return;
+  }
+
+  *summary = (MirFnSummary){
+      .param_uses = {0},
+      .result = mir_default_result_ownership(type),
+  };
+
+  for (Type *cursor = type; cursor && cursor->kind == T_FN;
+       cursor = cursor->data.T_FN.to) {
+    mir_operand_use_vec_push(arena, &summary->param_uses,
+                             mir_default_param_use(NULL,
+                                                     cursor->data.T_FN.from));
+  }
+}
+
+static MirFnSummary *mir_fn_summary_copy(MirArena *arena,
+                                         const MirFnSummary *source) {
+  if (!arena || !source) {
+    return NULL;
+  }
+
+  MirFnSummary *copy =
+      mir_arena_alloc(arena, sizeof(MirFnSummary), MIR_ALIGNOF(MirFnSummary));
+  if (!copy) {
+    return NULL;
+  }
+
+  *copy = (MirFnSummary){
+      .param_uses = {0},
+      .result = source->result,
+  };
+  for (size_t i = 0; i < source->param_uses.len; i++) {
+    mir_operand_use_vec_push(arena, &copy->param_uses,
+                             source->param_uses.items[i]);
+  }
+  return copy;
+}
+
+static MirFnSummary *mir_fn_summary_from_type(MirArena *arena, Type *type) {
+  if (!arena || !type || type->kind != T_FN) {
+    return NULL;
+  }
+
+  MirFnSummary *summary =
+      mir_arena_alloc(arena, sizeof(MirFnSummary), MIR_ALIGNOF(MirFnSummary));
+  if (!summary) {
+    return NULL;
+  }
+  mir_fn_summary_init(arena, summary, type);
+  return summary;
+}
+
+static MirFnSummary *mir_callable_summary_from_type(MirArena *arena,
+                                                    Type *type) {
+  if (!arena || !type || type->kind != T_FN) {
+    return NULL;
+  }
+
+  bool closure = is_closure(type) && type->closure_meta;
+  Type *callable_type = closure ? mir_closure_callable_type(arena, type) : type;
+  MirFnSummary *summary = mir_fn_summary_from_type(arena, callable_type);
+  if (closure && summary && summary->param_uses.len > 0 &&
+      summary->param_uses.items) {
+    summary->param_uses.items[0] = MIR_OPERAND_USE_BORROW;
+  }
+  return summary;
+}
+
+static const MirFnSummary *mir_value_callable_summary(MirFunction *fn,
+                                                      MirValueId value) {
+  if (!fn || value == MIR_NO_VALUE || value >= fn->values.len) {
+    return NULL;
+  }
+  return fn->values.items[value].callable_summary;
+}
+
+static void mir_function_set_value_callable_summary(
+    MirFunction *fn, MirValueId value, const MirFnSummary *summary) {
+  if (!fn || value == MIR_NO_VALUE || value >= fn->values.len) {
+    return;
+  }
+  fn->values.items[value].callable_summary =
+      mir_fn_summary_copy(fn->arena, summary);
+}
+
+void mir_match_arm_vec_push(MirArena *arena, MirMatchArmVec *vec,
+                            MirMatchArm value) {
+  if (!arena || !vec) {
+    return;
+  }
+
+  MIR_VEC_PUSH(arena, vec, MirMatchArm, value);
+}
+
+void mir_instr_vec_push(MirArena *arena, MirInstrVec *vec, MirInstr value) {
+  if (!arena || !vec) {
+    return;
+  }
+
+  MIR_VEC_PUSH(arena, vec, MirInstr, value);
+}
+
+static void *mir_value_binding_encode(MirValueId value) {
+  return (void *)(uintptr_t)(value + 1u);
+}
+
+static MirValueId mir_value_binding_decode(void *value) {
+  return (MirValueId)((uintptr_t)value - 1u);
+}
+
+static void *mir_ht_alloc(void *ctx, size_t size, size_t align) {
+  return mir_arena_alloc(ctx, size, align);
+}
+
+void mir_stack_frame_init(MirArena *arena, ht *table, MirStackFrame *frame,
+                          MirStackFrame *next) {
+  if (!table || !frame) {
+    return;
+  }
+
+  ht_init_with_allocator(
+      table, (ht_allocator){.alloc = mir_ht_alloc, .free = NULL, .ctx = arena});
+  *frame = (MirStackFrame){.table = table, .next = next};
+}
+
+bool mir_ctx_bind_value(MirCtx *ctx, const char *name, MirValueId value) {
+  if (!ctx || !ctx->frame || !ctx->frame->table || !name ||
+      value == MIR_NO_VALUE) {
+    return false;
+  }
+  return ht_set(ctx->frame->table, name, mir_value_binding_encode(value)) !=
+         NULL;
+}
+
+bool mir_ctx_lookup_value(MirCtx *ctx, const char *name, MirValueId *out) {
+  if (!ctx || !name) {
+    return false;
+  }
+
+  for (MirStackFrame *frame = ctx->frame; frame; frame = frame->next) {
+    if (!frame->table) {
+      continue;
+    }
+    void *encoded = ht_get(frame->table, name);
+    if (encoded) {
+      if (out) {
+        *out = mir_value_binding_decode(encoded);
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool mir_bind_identifier(MirCtx *ctx, Ast *binding, MirValueId value) {
+  if (!binding || binding->tag != AST_IDENTIFIER ||
+      ast_is_placeholder_id(binding)) {
+    return false;
+  }
+  return mir_ctx_bind_value(ctx, binding->data.AST_IDENTIFIER.value, value);
+}
+
+static Type *mir_tuple_field_type(Type *type, size_t index) {
+  if (!type || !(type->kind == T_CONS || type->kind == T_SUM) ||
+      !type->data.T_CONS.args || index >= (size_t)type->data.T_CONS.num_args) {
+    return NULL;
+  }
+  return type->data.T_CONS.args[index];
+}
+
+static Type *mir_sum_constructor_by_name(Type *sum_type, const char *name,
+                                         int *idx) {
+  if (idx) {
+    *idx = -1;
+  }
+  if (!sum_type || sum_type->kind != T_SUM || !name ||
+      !sum_type->data.T_CONS.args) {
+    return NULL;
+  }
+
+  for (int i = 0; i < sum_type->data.T_CONS.num_args; i++) {
+    Type *constructor = sum_type->data.T_CONS.args[i];
+    if (constructor &&
+        (constructor->kind == T_CONS || constructor->kind == T_SUM) &&
+        constructor->data.T_CONS.name &&
+        CHARS_EQ(constructor->data.T_CONS.name, name)) {
+      if (idx) {
+        *idx = i;
+      }
+      return constructor;
+    }
+  }
+
+  return NULL;
+}
+
+static bool mir_bind_pattern(MirBuilder *builder, MirCtx *ctx, Ast *pattern,
+                             MirValueId value, Type *value_type) {
+  if (!ctx || !pattern) {
+    return false;
+  }
+
+  if (pattern->tag == AST_LET) {
+    pattern = pattern->data.AST_LET.binding;
+  }
+
+  switch (pattern->tag) {
+  case AST_PLACEHOLDER_ID:
+    return true;
+  case AST_INT:
+  case AST_UINT64:
+  case AST_FLOAT:
+  case AST_DOUBLE:
+  case AST_STRING:
+  case AST_CHAR:
+  case AST_BOOL:
+  case AST_VOID:
+    return true;
+  case AST_IDENTIFIER:
+    if (ast_is_placeholder_id(pattern)) {
+      return true;
+    }
+    return mir_bind_identifier(ctx, pattern, value);
+  case AST_MATCH_GUARD_CLAUSE:
+    return mir_bind_pattern(builder, ctx,
+                            pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr,
+                            value, value_type);
+  case AST_TUPLE:
+    if (!builder || value == MIR_NO_VALUE) {
+      return false;
+    }
+    for (size_t i = 0; i < pattern->data.AST_LIST.len; i++) {
+      Ast *item = pattern->data.AST_LIST.items + i;
+      Type *item_type = mir_tuple_field_type(value_type, i);
+      if (!item_type) {
+        item_type = item->type;
+      }
+      MirValueId item_value = mir_tuple_get(builder, item_type, item, value, i);
+      if (item_value == MIR_NO_VALUE ||
+          !mir_bind_pattern(builder, ctx, item, item_value, item_type)) {
+        return false;
+      }
+    }
+    return true;
+  default:
+    return false;
+  }
+}
+
+static const char *mir_obj_name(MirArena *arena, ObjString name,
+                                const char *fallback) {
+  if (name.chars && name.length > 0) {
+    return mir_arena_strndup(arena, name.chars, (size_t)name.length);
+  }
+  return mir_arena_strdup(arena, fallback ? fallback : "<anonymous>");
+}
+
+static const char *mir_lambda_name(MirArena *arena, Ast *ast,
+                                   const char *fallback) {
+  if (!ast || (ast->tag != AST_LAMBDA && ast->tag != AST_MODULE)) {
+    return mir_arena_strdup(arena, fallback ? fallback : "<anonymous>");
+  }
+  return mir_obj_name(arena, ast->data.AST_LAMBDA.fn_name, fallback);
+}
+
+MirValueId mir_function_add_value(MirFunction *fn, Type *type, Ast *origin);
+static MirFunction *mir_builder_function(MirProgram *program, Ast *fn_ast,
+                                         const char *name, MirCtx *ctx);
+
+MirInstr *mir_function_find_def_instr(MirFunction *fn, MirValueId value) {
+  if (!fn || value == MIR_NO_VALUE) {
+    return NULL;
+  }
+
+  for (size_t i = 0; i < fn->blocks.len; i++) {
+    MirBlock *block = fn->blocks.items[i];
+    if (!block) {
+      continue;
+    }
+    for (size_t j = 0; j < block->instrs.len; j++) {
+      MirInstr *instr = &block->instrs.items[j];
+      if (instr->result == value) {
+        return instr;
+      }
+    }
+  }
+
+  return NULL;
+}
+
+static MirFunction *mir_program_get_function(MirProgram *program,
+                                             MirFunctionId id) {
+  if (!program || id == MIR_NO_FUNCTION || id >= program->functions.len) {
+    return NULL;
+  }
+  return program->functions.items[id];
+}
+
+static MirFunction *mir_program_find_function_by_name(MirProgram *program,
+                                                      const char *name) {
+  if (!program || !name) {
+    return NULL;
+  }
+
+  for (size_t i = 0; i < program->functions.len; i++) {
+    MirFunction *fn = program->functions.items[i];
+    if (fn && fn->name && CHARS_EQ(fn->name, name)) {
+      return fn;
+    }
+  }
+
+  return NULL;
+}
+
+static MirFunction *mir_program_find_specialization(MirProgram *program,
+                                                    MirFunctionId source_id,
+                                                    Type *type) {
+  if (!program || source_id == MIR_NO_FUNCTION || !type) {
+    return NULL;
+  }
+
+  for (size_t i = 0; i < program->functions.len; i++) {
+    MirFunction *fn = program->functions.items[i];
+    if (fn && fn->specialization_of == source_id && fn->specialization_type &&
+        types_equal(fn->specialization_type, type)) {
+      return fn;
+    }
+  }
+
+  return NULL;
+}
+
+MirFunction *mir_program_add_function(MirProgram *program, const char *name,
+                                      Type *type, Ast *origin) {
+  if (!program || !program->arena) {
+    return NULL;
+  }
+
+  MirFunction *fn = mir_arena_alloc(program->arena, sizeof(MirFunction),
+                                    MIR_ALIGNOF(MirFunction));
+  if (!fn) {
+    return NULL;
+  }
+
+  memset(fn, 0, sizeof(MirFunction));
+  fn->id = (MirFunctionId)program->functions.len;
+  fn->arena = program->arena;
+  fn->name = mir_arena_strdup(program->arena, name ? name : "<anonymous>");
+  fn->type = type;
+  fn->origin = origin;
+  fn->specialization_of = MIR_NO_FUNCTION;
+  fn->specialization_type = NULL;
+  fn->summary.result = mir_default_result_ownership(type);
+
+  MIR_VEC_PUSH(program->arena, &program->functions, MirFunction *, fn);
+  return fn;
+}
+
+MirValueId mir_function_add_param(MirFunction *fn, const char *name, Type *type,
+                                  Ast *origin) {
+  if (!fn || !fn->arena) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId value = mir_function_add_value(fn, type, origin);
+  if (value == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirParam param = {.value = value,
+                    .name = mir_arena_strdup(fn->arena, name ? name : "_"),
+                    .type = type,
+                    .origin = origin};
+  MIR_VEC_PUSH(fn->arena, &fn->params, MirParam, param);
+  mir_operand_use_vec_push(fn->arena, &fn->summary.param_uses,
+                           mir_default_param_use(param.name, type));
+  return value;
+}
+
+static void mir_function_set_param_use(MirFunction *fn, size_t index,
+                                       MirOperandUse use) {
+  if (!fn || index >= fn->summary.param_uses.len ||
+      !fn->summary.param_uses.items) {
+    return;
+  }
+  fn->summary.param_uses.items[index] = use;
+}
+
+MirOperandUse mir_function_param_use(const MirFunction *fn, size_t index) {
+  if (!fn || index >= fn->summary.param_uses.len ||
+      !fn->summary.param_uses.items) {
+    return MIR_OPERAND_USE_CONSUME;
+  }
+  return fn->summary.param_uses.items[index];
+}
+
+MirResultOwnership mir_function_result_ownership(const MirFunction *fn) {
+  return fn ? fn->summary.result : MIR_RESULT_NONE;
+}
+
+MirBlock *mir_function_add_block(MirFunction *fn, const char *name) {
+  if (!fn || !fn->arena) {
+    return NULL;
+  }
+
+  MirBlock *block =
+      mir_arena_alloc(fn->arena, sizeof(MirBlock), MIR_ALIGNOF(MirBlock));
+  if (!block) {
+    return NULL;
+  }
+
+  memset(block, 0, sizeof(MirBlock));
+  block->id = (MirBlockId)fn->blocks.len;
+  block->name = mir_arena_strdup(fn->arena, name ? name : "bb");
+  block->term = (MirTerminator){.kind = MIR_TERM_NONE,
+                                .value = MIR_NO_VALUE,
+                                .cond = MIR_NO_VALUE,
+                                .target = MIR_NO_BLOCK,
+                                .then_block = MIR_NO_BLOCK,
+                                .else_block = MIR_NO_BLOCK};
+
+  MIR_VEC_PUSH(fn->arena, &fn->blocks, MirBlock *, block);
+  return block;
+}
+
+void mir_builder_init(MirBuilder *builder, MirProgram *program,
+                      MirFunction *fn) {
+  if (!builder) {
+    return;
+  }
+
+  builder->program = program;
+  builder->fn = fn;
+  builder->block = NULL;
+}
+
+void mir_builder_position_at_end(MirBuilder *builder, MirBlock *block) {
+  if (!builder) {
+    return;
+  }
+  builder->block = block;
+}
+
+void mir_builder_set_return(MirBuilder *builder, MirValueId value) {
+  if (!builder || !builder->block) {
+    return;
+  }
+  builder->block->term = (MirTerminator){.kind = MIR_TERM_RETURN,
+                                         .value = value,
+                                         .cond = MIR_NO_VALUE,
+                                         .target = MIR_NO_BLOCK,
+                                         .then_block = MIR_NO_BLOCK,
+                                         .else_block = MIR_NO_BLOCK};
+}
+
+void mir_builder_set_arm_return(MirBuilder *builder, MirValueId value,
+                                MirBlockId target) {
+  if (!builder || !builder->block) {
+    return;
+  }
+  builder->block->term = (MirTerminator){.kind = MIR_TERM_ARM_RETURN,
+                                         .value = value,
+                                         .cond = MIR_NO_VALUE,
+                                         .target = target,
+                                         .then_block = MIR_NO_BLOCK,
+                                         .else_block = MIR_NO_BLOCK};
+}
+
+void mir_builder_set_br(MirBuilder *builder, MirBlockId target) {
+  if (!builder || !builder->block) {
+    return;
+  }
+  builder->block->term = (MirTerminator){.kind = MIR_TERM_BR,
+                                         .value = MIR_NO_VALUE,
+                                         .cond = MIR_NO_VALUE,
+                                         .target = target,
+                                         .then_block = MIR_NO_BLOCK,
+                                         .else_block = MIR_NO_BLOCK};
+}
+
+void mir_builder_set_cond(MirBuilder *builder, MirValueId cond,
+                          MirBlockId then_block, MirBlockId else_block) {
+  if (!builder || !builder->block) {
+    return;
+  }
+  builder->block->term = (MirTerminator){.kind = MIR_TERM_COND,
+                                         .value = MIR_NO_VALUE,
+                                         .cond = cond,
+                                         .target = MIR_NO_BLOCK,
+                                         .then_block = then_block,
+                                         .else_block = else_block};
+}
+
+void mir_builder_set_unreachable(MirBuilder *builder) {
+  if (!builder || !builder->block) {
+    return;
+  }
+  builder->block->term = (MirTerminator){.kind = MIR_TERM_UNREACHABLE,
+                                         .value = MIR_NO_VALUE,
+                                         .cond = MIR_NO_VALUE,
+                                         .target = MIR_NO_BLOCK,
+                                         .then_block = MIR_NO_BLOCK,
+                                         .else_block = MIR_NO_BLOCK};
+}
+
+static void mir_builder_set_unreachable_if_open(MirBuilder *builder) {
+  if (!builder || !builder->block ||
+      builder->block->term.kind != MIR_TERM_NONE) {
+    return;
+  }
+  mir_builder_set_unreachable(builder);
+}
+
+MirInstr mir_make_instr(MirInstrKind kind, Type *type, Ast *origin) {
+  return (MirInstr){
+      .kind = kind,
+      .result = MIR_NO_VALUE,
+      .type = type,
+      .origin = origin,
+  };
+}
+
+MirValueId mir_function_add_value(MirFunction *fn, Type *type, Ast *origin) {
+  if (!fn || !fn->arena) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValue value = {
+      .id = (MirValueId)fn->values.len,
+      .type = type,
+      .origin = origin,
+      .ea_md = NULL,
+      .callable_summary = mir_callable_summary_from_type(fn->arena, type),
+  };
+  MIR_VEC_PUSH(fn->arena, &fn->values, MirValue, value);
+  return value.id;
+}
+
+MirValueId mir_append_instr(MirFunction *fn, MirBlock *block, MirInstr instr) {
+  if (!fn || !block) {
+    return MIR_NO_VALUE;
+  }
+
+  instr.result = mir_function_add_value(fn, instr.type, instr.origin);
+  MIR_VEC_PUSH(fn->arena, &block->instrs, MirInstr, instr);
+  return instr.result;
+}
+
+static void mir_attach_value_callable_summary(MirBuilder *builder,
+                                              MirInstr *instr,
+                                              MirValueId result) {
+  if (!builder || !builder->program || !builder->fn || !instr ||
+      result == MIR_NO_VALUE) {
+    return;
+  }
+
+  switch (instr->kind) {
+  case MIR_FN_REF: {
+    MirFunction *target =
+        mir_program_get_function(builder->program, instr->data.fn_ref.fn);
+    if (target) {
+      mir_function_set_value_callable_summary(builder->fn, result,
+                                              &target->summary);
+    }
+    break;
+  }
+  case MIR_CLOSURE: {
+    MirFunction *impl =
+        mir_program_get_function(builder->program, instr->data.closure.impl_fn);
+    if (impl) {
+      mir_function_set_value_callable_summary(builder->fn, result,
+                                              &impl->summary);
+    }
+    break;
+  }
+  case MIR_CLOSURE_FN: {
+    const MirFnSummary *summary = mir_value_callable_summary(
+        builder->fn, instr->data.closure_part.closure);
+    mir_function_set_value_callable_summary(builder->fn, result, summary);
+    break;
+  }
+  default:
+    break;
+  }
+}
+
+MirValueId mir_builder_append_instr(MirBuilder *builder, MirInstr instr) {
+  if (!builder || !builder->fn || !builder->block ||
+      builder->block->term.kind != MIR_TERM_NONE) {
+    return MIR_NO_VALUE;
+  }
+  MirValueId result = mir_append_instr(builder->fn, builder->block, instr);
+  mir_attach_value_callable_summary(builder, &instr, result);
+  return result;
+}
+
+static MirOperand mir_make_operand(MirValueId value, MirOperandRole role,
+                                   MirOperandUse use, size_t index) {
+  return (MirOperand){
+      .value = value,
+      .role = role,
+      .use = use,
+      .index = index,
+  };
+}
+
+static MirOperandUse mir_call_operand_use(const MirInstr *instr, size_t index) {
+  if (!instr || instr->kind != MIR_CALL ||
+      index >= instr->data.call.operand_uses.len ||
+      !instr->data.call.operand_uses.items) {
+    return MIR_OPERAND_USE_CONSUME;
+  }
+  return instr->data.call.operand_uses.items[index];
+}
+
+static bool mir_visit_operand(MirInstr *instr, MirOperandVisitor visitor,
+                              MirOperand operand, void *ctx) {
+  return !visitor || visitor(instr, operand, ctx);
+}
+
+bool mir_instr_for_each_operand(MirInstr *instr, MirOperandVisitor visitor,
+                                void *ctx) {
+  if (!instr) {
+    return false;
+  }
+
+  switch (instr->kind) {
+  case MIR_PRIMITIVE_CAST:
+    return mir_visit_operand(
+        instr, visitor,
+        mir_make_operand(instr->data.primitive_cast.value,
+                         MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+  case MIR_TUPLE:
+    for (size_t i = 0; i < instr->data.tuple.items.len; i++) {
+      if (!mir_visit_operand(
+              instr, visitor,
+              mir_make_operand(instr->data.tuple.items.items[i],
+                               MIR_OPERAND_ROLE_FIELD,
+                               MIR_OPERAND_USE_CONSUME, i),
+              ctx)) {
+        return false;
+      }
+    }
+    return true;
+  case MIR_TUPLE_GET:
+    return mir_visit_operand(
+        instr, visitor,
+        mir_make_operand(instr->data.tuple_get.tuple,
+                         MIR_OPERAND_ROLE_CONTAINER, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+  case MIR_MATCH:
+    return mir_visit_operand(
+        instr, visitor,
+        mir_make_operand(instr->data.match.scrutinee,
+                         MIR_OPERAND_ROLE_SCRUTINEE, MIR_OPERAND_USE_BORROW,
+                         0),
+        ctx);
+  case MIR_VARIANT:
+    for (size_t i = 0; i < instr->data.variant.fields.len; i++) {
+      if (!mir_visit_operand(
+              instr, visitor,
+              mir_make_operand(instr->data.variant.fields.items[i],
+                               MIR_OPERAND_ROLE_FIELD,
+                               MIR_OPERAND_USE_CONSUME, i),
+              ctx)) {
+        return false;
+      }
+    }
+    return true;
+  case MIR_VARIANT_TAG:
+    return mir_visit_operand(
+        instr, visitor,
+        mir_make_operand(instr->data.variant_tag.value,
+                         MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+  case MIR_TAG_EQ:
+    return mir_visit_operand(
+        instr, visitor,
+        mir_make_operand(instr->data.tag_eq.tag, MIR_OPERAND_ROLE_TAG,
+                         MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+  case MIR_VARIANT_PAYLOAD:
+    return mir_visit_operand(
+        instr, visitor,
+        mir_make_operand(instr->data.variant_payload.value,
+                         MIR_OPERAND_ROLE_CONTAINER, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+  case MIR_LIST_CONS:
+    return mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.list_cons.head,
+                                MIR_OPERAND_ROLE_ELEMENT,
+                                MIR_OPERAND_USE_CONSUME, 0),
+               ctx) &&
+           mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.list_cons.tail,
+                                MIR_OPERAND_ROLE_CONTAINER,
+                                MIR_OPERAND_USE_CONSUME, 1),
+               ctx);
+  case MIR_LIST_IS_EMPTY:
+  case MIR_LIST_HEAD:
+  case MIR_LIST_TAIL:
+    return mir_visit_operand(
+        instr, visitor,
+        mir_make_operand(instr->data.list_op.list, MIR_OPERAND_ROLE_CONTAINER,
+                         MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+  case MIR_ARRAY_LITERAL:
+    for (size_t i = 0; i < instr->data.array_literal.items.len; i++) {
+      if (!mir_visit_operand(
+              instr, visitor,
+              mir_make_operand(instr->data.array_literal.items.items[i],
+                               MIR_OPERAND_ROLE_ELEMENT,
+                               MIR_OPERAND_USE_CONSUME, i),
+              ctx)) {
+        return false;
+      }
+    }
+    return true;
+  case MIR_ARRAY_SIZE:
+  case MIR_ARRAY_SUCC:
+    return mir_visit_operand(
+        instr, visitor,
+        mir_make_operand(instr->data.array_unop.array,
+                         MIR_OPERAND_ROLE_CONTAINER, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+  case MIR_ARRAY_AT:
+    return mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_at.array,
+                                MIR_OPERAND_ROLE_CONTAINER,
+                                MIR_OPERAND_USE_BORROW, 0),
+               ctx) &&
+           mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_at.index,
+                                MIR_OPERAND_ROLE_INDEX, MIR_OPERAND_USE_BORROW,
+                                1),
+               ctx);
+  case MIR_ARRAY_SET:
+    return mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_set.array,
+                                MIR_OPERAND_ROLE_CONTAINER,
+                                MIR_OPERAND_USE_BORROW, 0),
+               ctx) &&
+           mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_set.index,
+                                MIR_OPERAND_ROLE_INDEX, MIR_OPERAND_USE_BORROW,
+                                1),
+               ctx) &&
+           mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_set.value,
+                                MIR_OPERAND_ROLE_ELEMENT,
+                                MIR_OPERAND_USE_CONSUME, 2),
+               ctx);
+  case MIR_ARRAY_FILL_CONST:
+    return mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_fill_const.size,
+                                MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW,
+                                0),
+               ctx) &&
+           mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_fill_const.value,
+                                MIR_OPERAND_ROLE_ELEMENT,
+                                MIR_OPERAND_USE_CONSUME, 1),
+               ctx);
+  case MIR_ARRAY_FILL:
+    return mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_fill.size,
+                                MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW,
+                                0),
+               ctx) &&
+           mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_fill.fill_fn,
+                                MIR_OPERAND_ROLE_FUNCTION,
+                                MIR_OPERAND_USE_BORROW, 1),
+               ctx);
+  case MIR_ARRAY_RANGE:
+    return mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_range.offset,
+                                MIR_OPERAND_ROLE_INDEX, MIR_OPERAND_USE_BORROW,
+                                0),
+               ctx) &&
+           mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_range.size,
+                                MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW,
+                                1),
+               ctx) &&
+           mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_range.array,
+                                MIR_OPERAND_ROLE_CONTAINER,
+                                MIR_OPERAND_USE_BORROW, 2),
+               ctx);
+  case MIR_ARRAY_OFFSET:
+    return mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_offset.offset,
+                                MIR_OPERAND_ROLE_INDEX, MIR_OPERAND_USE_BORROW,
+                                0),
+               ctx) &&
+           mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.array_offset.array,
+                                MIR_OPERAND_ROLE_CONTAINER,
+                                MIR_OPERAND_USE_BORROW, 1),
+               ctx);
+  case MIR_STR:
+  case MIR_PRINT:
+  case MIR_CSTR:
+  case MIR_SIZEOF:
+  case MIR_DLOPEN:
+  case MIR_AS_BYTES:
+  case MIR_TYPEOF:
+  case MIR_DUP:
+  case MIR_DROP:
+    return mir_visit_operand(
+        instr, visitor,
+        mir_make_operand(instr->data.value_op.value, MIR_OPERAND_ROLE_VALUE,
+                         MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+  case MIR_PRIMITIVE:
+    for (size_t i = 0; i < instr->data.primitive.argc; i++) {
+      if (!mir_visit_operand(
+              instr, visitor,
+              mir_make_operand(instr->data.primitive.operands[i],
+                               MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW,
+                               i),
+              ctx)) {
+        return false;
+      }
+    }
+    return true;
+  case MIR_LOGICAL_AND:
+  case MIR_LOGICAL_OR:
+    return mir_visit_operand(
+        instr, visitor,
+        mir_make_operand(instr->data.logical.lhs, MIR_OPERAND_ROLE_VALUE,
+                         MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+  case MIR_CLOSURE_ENV:
+    for (size_t i = 0; i < instr->data.closure_env.fields.len; i++) {
+      if (!mir_visit_operand(
+              instr, visitor,
+              mir_make_operand(instr->data.closure_env.fields.items[i],
+                               MIR_OPERAND_ROLE_FIELD,
+                               MIR_OPERAND_USE_CONSUME, i),
+              ctx)) {
+        return false;
+      }
+    }
+    return true;
+  case MIR_CLOSURE:
+    return mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.closure.fn,
+                                MIR_OPERAND_ROLE_FUNCTION,
+                                MIR_OPERAND_USE_BORROW, 0),
+               ctx) &&
+           mir_visit_operand(
+               instr, visitor,
+               mir_make_operand(instr->data.closure.env, MIR_OPERAND_ROLE_ENV,
+                                MIR_OPERAND_USE_CONSUME, 1),
+               ctx);
+  case MIR_CLOSURE_GET:
+    return mir_visit_operand(
+        instr, visitor,
+        mir_make_operand(instr->data.closure_get.env, MIR_OPERAND_ROLE_ENV,
+                         MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+  case MIR_CLOSURE_FN:
+  case MIR_CLOSURE_GET_ENV:
+    return mir_visit_operand(
+        instr, visitor,
+        mir_make_operand(instr->data.closure_part.closure,
+                         MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+  case MIR_CALL:
+    if (!mir_visit_operand(
+            instr, visitor,
+            mir_make_operand(instr->data.call.callee, MIR_OPERAND_ROLE_CALLEE,
+                             MIR_OPERAND_USE_BORROW, 0),
+            ctx)) {
+      return false;
+    }
+    for (size_t i = 0; i < instr->data.call.operands.len; i++) {
+      if (!mir_visit_operand(
+              instr, visitor,
+              mir_make_operand(instr->data.call.operands.items[i],
+                               MIR_OPERAND_ROLE_VALUE,
+                               mir_call_operand_use(instr, i), i),
+              ctx)) {
+        return false;
+      }
+    }
+    return true;
+  default:
+    return true;
+  }
+}
+
+bool mir_term_for_each_operand(MirTerminator *term, MirOperandVisitor visitor,
+                               void *ctx) {
+  if (!term) {
+    return false;
+  }
+
+  switch (term->kind) {
+  case MIR_TERM_RETURN:
+  case MIR_TERM_ARM_RETURN:
+    return mir_visit_operand(
+        NULL, visitor,
+        mir_make_operand(term->value, MIR_OPERAND_ROLE_RETURN,
+                         MIR_OPERAND_USE_CONSUME, 0),
+        ctx);
+  case MIR_TERM_COND:
+    return mir_visit_operand(
+        NULL, visitor,
+        mir_make_operand(term->cond, MIR_OPERAND_ROLE_CONDITION,
+                         MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+  default:
+    return true;
+  }
+}
+
+static MirValueId mir_rewrite_operand(MirInstr *instr,
+                                      MirOperandRewriter rewriter,
+                                      MirOperand operand, void *ctx) {
+  return rewriter ? rewriter(instr, operand, ctx) : operand.value;
+}
+
+void mir_instr_rewrite_operands(MirInstr *instr, MirOperandRewriter rewriter,
+                                void *ctx) {
+  if (!instr || !rewriter) {
+    return;
+  }
+
+  switch (instr->kind) {
+  case MIR_PRIMITIVE_CAST:
+    instr->data.primitive_cast.value = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.primitive_cast.value,
+                         MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    break;
+  case MIR_TUPLE:
+    for (size_t i = 0; i < instr->data.tuple.items.len; i++) {
+      instr->data.tuple.items.items[i] = mir_rewrite_operand(
+          instr, rewriter,
+          mir_make_operand(instr->data.tuple.items.items[i],
+                           MIR_OPERAND_ROLE_FIELD, MIR_OPERAND_USE_CONSUME, i),
+          ctx);
+    }
+    break;
+  case MIR_TUPLE_GET:
+    instr->data.tuple_get.tuple = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.tuple_get.tuple,
+                         MIR_OPERAND_ROLE_CONTAINER, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    break;
+  case MIR_MATCH:
+    instr->data.match.scrutinee = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.match.scrutinee,
+                         MIR_OPERAND_ROLE_SCRUTINEE, MIR_OPERAND_USE_BORROW,
+                         0),
+        ctx);
+    break;
+  case MIR_VARIANT:
+    for (size_t i = 0; i < instr->data.variant.fields.len; i++) {
+      instr->data.variant.fields.items[i] = mir_rewrite_operand(
+          instr, rewriter,
+          mir_make_operand(instr->data.variant.fields.items[i],
+                           MIR_OPERAND_ROLE_FIELD, MIR_OPERAND_USE_CONSUME, i),
+          ctx);
+    }
+    break;
+  case MIR_VARIANT_TAG:
+    instr->data.variant_tag.value = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.variant_tag.value,
+                         MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    break;
+  case MIR_TAG_EQ:
+    instr->data.tag_eq.tag = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.tag_eq.tag, MIR_OPERAND_ROLE_TAG,
+                         MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    break;
+  case MIR_VARIANT_PAYLOAD:
+    instr->data.variant_payload.value = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.variant_payload.value,
+                         MIR_OPERAND_ROLE_CONTAINER, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    break;
+  case MIR_LIST_CONS:
+    instr->data.list_cons.head = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.list_cons.head, MIR_OPERAND_ROLE_ELEMENT,
+                         MIR_OPERAND_USE_CONSUME, 0),
+        ctx);
+    instr->data.list_cons.tail = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.list_cons.tail,
+                         MIR_OPERAND_ROLE_CONTAINER, MIR_OPERAND_USE_CONSUME,
+                         1),
+        ctx);
+    break;
+  case MIR_LIST_IS_EMPTY:
+  case MIR_LIST_HEAD:
+  case MIR_LIST_TAIL:
+    instr->data.list_op.list = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.list_op.list, MIR_OPERAND_ROLE_CONTAINER,
+                         MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    break;
+  case MIR_ARRAY_LITERAL:
+    for (size_t i = 0; i < instr->data.array_literal.items.len; i++) {
+      instr->data.array_literal.items.items[i] = mir_rewrite_operand(
+          instr, rewriter,
+          mir_make_operand(instr->data.array_literal.items.items[i],
+                           MIR_OPERAND_ROLE_ELEMENT,
+                           MIR_OPERAND_USE_CONSUME, i),
+          ctx);
+    }
+    break;
+  case MIR_ARRAY_SIZE:
+  case MIR_ARRAY_SUCC:
+    instr->data.array_unop.array = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_unop.array,
+                         MIR_OPERAND_ROLE_CONTAINER, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    break;
+  case MIR_ARRAY_AT:
+    instr->data.array_at.array = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_at.array,
+                         MIR_OPERAND_ROLE_CONTAINER, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    instr->data.array_at.index = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_at.index, MIR_OPERAND_ROLE_INDEX,
+                         MIR_OPERAND_USE_BORROW, 1),
+        ctx);
+    break;
+  case MIR_ARRAY_SET:
+    instr->data.array_set.array = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_set.array,
+                         MIR_OPERAND_ROLE_CONTAINER, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    instr->data.array_set.index = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_set.index, MIR_OPERAND_ROLE_INDEX,
+                         MIR_OPERAND_USE_BORROW, 1),
+        ctx);
+    instr->data.array_set.value = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_set.value, MIR_OPERAND_ROLE_ELEMENT,
+                         MIR_OPERAND_USE_CONSUME, 2),
+        ctx);
+    break;
+  case MIR_ARRAY_FILL_CONST:
+    instr->data.array_fill_const.size = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_fill_const.size,
+                         MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    instr->data.array_fill_const.value = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_fill_const.value,
+                         MIR_OPERAND_ROLE_ELEMENT, MIR_OPERAND_USE_CONSUME, 1),
+        ctx);
+    break;
+  case MIR_ARRAY_FILL:
+    instr->data.array_fill.size = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_fill.size, MIR_OPERAND_ROLE_VALUE,
+                         MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    instr->data.array_fill.fill_fn = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_fill.fill_fn,
+                         MIR_OPERAND_ROLE_FUNCTION, MIR_OPERAND_USE_BORROW,
+                         1),
+        ctx);
+    break;
+  case MIR_ARRAY_RANGE:
+    instr->data.array_range.offset = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_range.offset,
+                         MIR_OPERAND_ROLE_INDEX, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    instr->data.array_range.size = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_range.size, MIR_OPERAND_ROLE_VALUE,
+                         MIR_OPERAND_USE_BORROW, 1),
+        ctx);
+    instr->data.array_range.array = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_range.array,
+                         MIR_OPERAND_ROLE_CONTAINER, MIR_OPERAND_USE_BORROW, 2),
+        ctx);
+    break;
+  case MIR_ARRAY_OFFSET:
+    instr->data.array_offset.offset = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_offset.offset,
+                         MIR_OPERAND_ROLE_INDEX, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    instr->data.array_offset.array = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.array_offset.array,
+                         MIR_OPERAND_ROLE_CONTAINER, MIR_OPERAND_USE_BORROW, 1),
+        ctx);
+    break;
+  case MIR_STR:
+  case MIR_PRINT:
+  case MIR_CSTR:
+  case MIR_SIZEOF:
+  case MIR_DLOPEN:
+  case MIR_AS_BYTES:
+  case MIR_TYPEOF:
+  case MIR_DUP:
+  case MIR_DROP:
+    instr->data.value_op.value =
+        mir_rewrite_operand(instr, rewriter,
+                            mir_make_operand(instr->data.value_op.value,
+                                             MIR_OPERAND_ROLE_VALUE,
+                                             MIR_OPERAND_USE_BORROW, 0),
+                            ctx);
+    break;
+  case MIR_PRIMITIVE:
+    for (size_t i = 0; i < instr->data.primitive.argc; i++) {
+      instr->data.primitive.operands[i] = mir_rewrite_operand(
+          instr, rewriter,
+          mir_make_operand(instr->data.primitive.operands[i],
+                           MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW, i),
+          ctx);
+    }
+    break;
+  case MIR_LOGICAL_AND:
+  case MIR_LOGICAL_OR:
+    instr->data.logical.lhs = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.logical.lhs, MIR_OPERAND_ROLE_VALUE,
+                         MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    break;
+  case MIR_CLOSURE_ENV:
+    for (size_t i = 0; i < instr->data.closure_env.fields.len; i++) {
+      instr->data.closure_env.fields.items[i] = mir_rewrite_operand(
+          instr, rewriter,
+          mir_make_operand(instr->data.closure_env.fields.items[i],
+                           MIR_OPERAND_ROLE_FIELD, MIR_OPERAND_USE_CONSUME, i),
+          ctx);
+    }
+    break;
+  case MIR_CLOSURE:
+    instr->data.closure.fn = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.closure.fn, MIR_OPERAND_ROLE_FUNCTION,
+                         MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    instr->data.closure.env = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.closure.env, MIR_OPERAND_ROLE_ENV,
+                         MIR_OPERAND_USE_CONSUME, 1),
+        ctx);
+    break;
+  case MIR_CLOSURE_GET:
+    instr->data.closure_get.env = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.closure_get.env, MIR_OPERAND_ROLE_ENV,
+                         MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    break;
+  case MIR_CLOSURE_FN:
+  case MIR_CLOSURE_GET_ENV:
+    instr->data.closure_part.closure = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.closure_part.closure,
+                         MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    break;
+  case MIR_CALL:
+    instr->data.call.callee = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.call.callee, MIR_OPERAND_ROLE_CALLEE,
+                         MIR_OPERAND_USE_BORROW, 0),
+        ctx);
+    for (size_t i = 0; i < instr->data.call.operands.len; i++) {
+      instr->data.call.operands.items[i] = mir_rewrite_operand(
+          instr, rewriter,
+          mir_make_operand(instr->data.call.operands.items[i],
+                           MIR_OPERAND_ROLE_VALUE, mir_call_operand_use(instr, i),
+                           i),
+          ctx);
+    }
+    break;
+  default:
+    break;
+  }
+}
+
+MirValueId mir_const_int(MirBuilder *builder, Type *type, Ast *origin,
+                         int value) {
+  MirInstr instr = mir_make_instr(MIR_CONST_INT, type, origin);
+  instr.data.int_value = value;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_const_uint64(MirBuilder *builder, Type *type, Ast *origin,
+                            uint64_t value) {
+  MirInstr instr = mir_make_instr(MIR_CONST_UINT64, type, origin);
+  instr.data.uint64_value = value;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_const_float(MirBuilder *builder, Type *type, Ast *origin,
+                           float value) {
+  MirInstr instr = mir_make_instr(MIR_CONST_FLOAT, type, origin);
+  instr.data.float_value = value;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_const_double(MirBuilder *builder, Type *type, Ast *origin,
+                            double value) {
+  MirInstr instr = mir_make_instr(MIR_CONST_DOUBLE, type, origin);
+  instr.data.double_value = value;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_const_char(MirBuilder *builder, Type *type, Ast *origin,
+                          char value) {
+  MirInstr instr = mir_make_instr(MIR_CONST_CHAR, type, origin);
+  instr.data.char_value = value;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_const_bool(MirBuilder *builder, Type *type, Ast *origin,
+                          bool value) {
+  MirInstr instr = mir_make_instr(MIR_CONST_BOOL, type, origin);
+  instr.data.bool_value = value;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_const_string(MirBuilder *builder, Type *type, Ast *origin,
+                            const char *chars, size_t len) {
+  MirInstr instr = mir_make_instr(MIR_CONST_STRING, type, origin);
+  if (!chars) {
+    len = 0;
+  }
+  instr.data.string_value.chars =
+      builder && builder->fn && chars
+          ? mir_arena_strndup(builder->fn->arena, chars, len)
+          : NULL;
+  instr.data.string_value.len = len;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_const_void(MirBuilder *builder, Type *type, Ast *origin) {
+  MirInstr instr = mir_make_instr(MIR_CONST_VOID, type, origin);
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_tuple(MirBuilder *builder, Type *type, Ast *origin,
+                     MirValueIdVec items) {
+  MirInstr instr = mir_make_instr(MIR_TUPLE, type, origin);
+  instr.data.tuple.items = items;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_tuple_get(MirBuilder *builder, Type *type, Ast *origin,
+                         MirValueId tuple, size_t index) {
+  if (tuple == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_TUPLE_GET, type, origin);
+  instr.data.tuple_get.tuple = tuple;
+  instr.data.tuple_get.index = index;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_match(MirBuilder *builder, Type *type, Ast *origin,
+                     MirValueId scrutinee, MirMatchArmVec arms,
+                     MirBlockId first_test_block, MirBlockId no_match_block,
+                     MirBlockId continuation_block, bool allow_no_match) {
+  if (scrutinee == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_MATCH, type, origin);
+  instr.data.match.scrutinee = scrutinee;
+  instr.data.match.arms = arms;
+  instr.data.match.first_test_block = first_test_block;
+  instr.data.match.no_match_block = no_match_block;
+  instr.data.match.continuation_block = continuation_block;
+  instr.data.match.allow_no_match = allow_no_match;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_variant(MirBuilder *builder, Type *type, Ast *origin,
+                       Type *constructor_type, int constructor_index,
+                       const char *constructor_name, MirValueIdVec fields) {
+  if (!constructor_type || constructor_index < 0 || !constructor_name) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_VARIANT, type, origin);
+  instr.data.variant.constructor_type = constructor_type;
+  instr.data.variant.constructor_index = constructor_index;
+  instr.data.variant.constructor_name = constructor_name;
+  instr.data.variant.fields = fields;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_variant_tag(MirBuilder *builder, Ast *origin, MirValueId value) {
+  if (value == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_VARIANT_TAG, &t_char, origin);
+  instr.data.variant_tag.value = value;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_tag_eq(MirBuilder *builder, Ast *origin, MirValueId tag,
+                      int constructor_index, const char *constructor_name) {
+  if (tag == MIR_NO_VALUE || constructor_index < 0) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_TAG_EQ, &t_bool, origin);
+  instr.data.tag_eq.tag = tag;
+  instr.data.tag_eq.constructor_index = constructor_index;
+  instr.data.tag_eq.constructor_name = constructor_name;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_variant_payload(MirBuilder *builder, Ast *origin,
+                               MirValueId value, Type *constructor_type,
+                               int constructor_index,
+                               const char *constructor_name) {
+  if (value == MIR_NO_VALUE || !constructor_type || constructor_index < 0) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr =
+      mir_make_instr(MIR_VARIANT_PAYLOAD, constructor_type, origin);
+  instr.data.variant_payload.value = value;
+  instr.data.variant_payload.constructor_type = constructor_type;
+  instr.data.variant_payload.constructor_index = constructor_index;
+  instr.data.variant_payload.constructor_name = constructor_name;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_list_empty(MirBuilder *builder, Type *type, Ast *origin) {
+  if (!type || !is_list_type(type)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_LIST_EMPTY, type, origin);
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_list_cons(MirBuilder *builder, Type *type, Ast *origin,
+                         MirValueId head, MirValueId tail) {
+  if (!type || !is_list_type(type) || head == MIR_NO_VALUE ||
+      tail == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_LIST_CONS, type, origin);
+  instr.data.list_cons.head = head;
+  instr.data.list_cons.tail = tail;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_list_is_empty(MirBuilder *builder, Ast *origin,
+                             MirValueId list) {
+  if (list == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_LIST_IS_EMPTY, &t_bool, origin);
+  instr.data.list_op.list = list;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_list_head(MirBuilder *builder, Type *type, Ast *origin,
+                         MirValueId list) {
+  if (list == MIR_NO_VALUE || !type) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_LIST_HEAD, type, origin);
+  instr.data.list_op.list = list;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_list_tail(MirBuilder *builder, Type *type, Ast *origin,
+                         MirValueId list) {
+  if (list == MIR_NO_VALUE || !type || !is_list_type(type)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_LIST_TAIL, type, origin);
+  instr.data.list_op.list = list;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_primitive_cast(MirBuilder *builder, Type *from_type,
+                              Type *to_type, Ast *origin, MirValueId value) {
+  if (value == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_PRIMITIVE_CAST, to_type, origin);
+  instr.data.primitive_cast.value = value;
+  instr.data.primitive_cast.from_type = from_type;
+  instr.data.primitive_cast.to_type = to_type;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_fn_ref(MirBuilder *builder, Type *type, Ast *origin,
+                      MirFunction *fn) {
+  if (!fn) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_FN_REF, type, origin);
+  instr.data.fn_ref.fn = fn->id;
+  instr.data.fn_ref.name = fn->name;
+  return mir_builder_append_instr(builder, instr);
+}
+
+static MirValueId mir_closure_env(MirBuilder *builder, Type *type, Ast *origin,
+                                  MirValueIdVec fields) {
+  if (!builder || !type) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_CLOSURE_ENV, type, origin);
+  instr.data.closure_env.fields = fields;
+  return mir_builder_append_instr(builder, instr);
+}
+
+static MirValueId mir_closure(MirBuilder *builder, Type *type, Ast *origin,
+                              MirValueId fn, MirValueId env,
+                              MirFunction *impl_fn) {
+  if (!builder || !type || fn == MIR_NO_VALUE || env == MIR_NO_VALUE ||
+      !impl_fn) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_CLOSURE, type, origin);
+  instr.data.closure.fn = fn;
+  instr.data.closure.env = env;
+  instr.data.closure.impl_fn = impl_fn->id;
+  instr.data.closure.impl_name = impl_fn->name;
+  return mir_builder_append_instr(builder, instr);
+}
+
+static MirValueId mir_closure_get(MirBuilder *builder, Type *type, Ast *origin,
+                                  MirValueId env, size_t index,
+                                  const char *name) {
+  if (!builder || !type || env == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_CLOSURE_GET, type, origin);
+  instr.data.closure_get.env = env;
+  instr.data.closure_get.index = index;
+  instr.data.closure_get.name = name;
+  return mir_builder_append_instr(builder, instr);
+}
+
+static MirValueId mir_closure_fn(MirBuilder *builder, Type *type, Ast *origin,
+                                 MirValueId closure) {
+  if (!builder || !type || closure == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_CLOSURE_FN, type, origin);
+  instr.data.closure_part.closure = closure;
+  return mir_builder_append_instr(builder, instr);
+}
+
+static MirValueId mir_closure_get_env(MirBuilder *builder, Type *type,
+                                      Ast *origin, MirValueId closure) {
+  if (!builder || !type || closure == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_CLOSURE_GET_ENV, type, origin);
+  instr.data.closure_part.closure = closure;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_primitive_instr(MirBuilder *builder, MirPrimitiveOp op,
+                               Type *type, Ast *origin,
+                               const MirValueId *operands, size_t argc) {
+  if (!builder || !type || !operands || argc == 0 ||
+      argc > sizeof(((MirInstr *)0)->data.primitive.operands) /
+                 sizeof(((MirInstr *)0)->data.primitive.operands[0])) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_PRIMITIVE, type, origin);
+  instr.data.primitive.op = op;
+  instr.data.primitive.argc = (uint8_t)argc;
+  for (size_t i = 0; i < argc; i++) {
+    if (operands[i] == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+    instr.data.primitive.operands[i] = operands[i];
+  }
+  return mir_builder_append_instr(builder, instr);
+}
+
+static MirValueId mir_primitive_unary(MirBuilder *builder, MirPrimitiveOp op,
+                                      Type *type, Ast *origin,
+                                      MirValueId value) {
+  MirValueId operands[] = {value};
+  return mir_primitive_instr(builder, op, type, origin, operands, 1);
+}
+
+static MirValueId mir_primitive_binary(MirBuilder *builder, MirPrimitiveOp op,
+                                       Type *type, Ast *origin, MirValueId lhs,
+                                       MirValueId rhs) {
+  MirValueId operands[] = {lhs, rhs};
+  return mir_primitive_instr(builder, op, type, origin, operands, 2);
+}
+
+MirValueId mir_iadd(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_IADD, type, origin, lhs, rhs);
+}
+
+MirValueId mir_uadd(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_UADD, type, origin, lhs, rhs);
+}
+
+MirValueId mir_fadd(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_FADD, type, origin, lhs, rhs);
+}
+
+MirValueId mir_isub(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_ISUB, type, origin, lhs, rhs);
+}
+
+MirValueId mir_usub(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_USUB, type, origin, lhs, rhs);
+}
+
+MirValueId mir_fsub(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_FSUB, type, origin, lhs, rhs);
+}
+
+MirValueId mir_imul(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_IMUL, type, origin, lhs, rhs);
+}
+
+MirValueId mir_umul(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_UMUL, type, origin, lhs, rhs);
+}
+
+MirValueId mir_fmul(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_FMUL, type, origin, lhs, rhs);
+}
+
+MirValueId mir_idiv(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_IDIV, type, origin, lhs, rhs);
+}
+
+MirValueId mir_udiv(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_UDIV, type, origin, lhs, rhs);
+}
+
+MirValueId mir_fdiv(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_FDIV, type, origin, lhs, rhs);
+}
+
+MirValueId mir_imod(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_IMOD, type, origin, lhs, rhs);
+}
+
+MirValueId mir_umod(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_UMOD, type, origin, lhs, rhs);
+}
+
+MirValueId mir_fmod(MirBuilder *builder, Type *type, Ast *origin,
+                    MirValueId lhs, MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_FMOD, type, origin, lhs, rhs);
+}
+
+MirValueId mir_ieq(MirBuilder *builder, Ast *origin, MirValueId lhs,
+                   MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_IEQ, &t_bool, origin, lhs, rhs);
+}
+
+MirValueId mir_ueq(MirBuilder *builder, Ast *origin, MirValueId lhs,
+                   MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_UEQ, &t_bool, origin, lhs, rhs);
+}
+
+MirValueId mir_feq(MirBuilder *builder, Ast *origin, MirValueId lhs,
+                   MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_FEQ, &t_bool, origin, lhs, rhs);
+}
+
+MirValueId mir_ceq(MirBuilder *builder, Ast *origin, MirValueId lhs,
+                   MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_CEQ, &t_bool, origin, lhs, rhs);
+}
+
+MirValueId mir_beq(MirBuilder *builder, Ast *origin, MirValueId lhs,
+                   MirValueId rhs) {
+  return mir_primitive_binary(builder, MIR_OP_BEQ, &t_bool, origin, lhs, rhs);
+}
+
+MirValueId mir_lnot(MirBuilder *builder, Ast *origin, MirValueId value) {
+  return mir_primitive_unary(builder, MIR_OP_LNOT, &t_bool, origin, value);
+}
+
+MirBuiltinSymbol *mir_program_register_builtin(MirProgram *program,
+                                               const char *name, Type *type,
+                                               MirBuiltinHandler handler,
+                                               void *data) {
+  if (!program || !program->arena || !name || !handler) {
+    return NULL;
+  }
+
+  MirBuiltinSymbol *symbol = mir_arena_alloc(
+      program->arena, sizeof(MirBuiltinSymbol), MIR_ALIGNOF(MirBuiltinSymbol));
+  if (!symbol) {
+    return NULL;
+  }
+
+  *symbol = (MirBuiltinSymbol){.name = mir_arena_strdup(program->arena, name),
+                               .type = type,
+                               .handler = handler,
+                               .data = data};
+  mir_fn_summary_init(program->arena, &symbol->summary, type);
+  ht_set(&program->builtins, name, symbol);
+  return symbol;
+}
+
+MirBuiltinSymbol *mir_program_lookup_builtin(MirProgram *program,
+                                             const char *name) {
+  if (!program || !name) {
+    return NULL;
+  }
+  return ht_get(&program->builtins, name);
+}
+
+MirValueId mir_constructor_call(MirBuilder *builder, Ast *origin,
+                                Type *result_type, const char *constructor_name,
+                                Ast *args, size_t len, MirCtx *ctx) {
+  if (!builder || !builder->fn || !constructor_name || !result_type ||
+      result_type->kind != T_SUM || is_list_type(result_type)) {
+    return MIR_NO_VALUE;
+  }
+
+  int constructor_index = -1;
+  Type *constructor_type = mir_sum_constructor_by_name(
+      result_type, constructor_name, &constructor_index);
+  if (!constructor_type || constructor_index < 0 ||
+      constructor_type->kind != T_CONS ||
+      (size_t)constructor_type->data.T_CONS.num_args != len) {
+    return MIR_NO_VALUE;
+  }
+
+  MirArena *arena = builder->fn->arena;
+  MirValueIdVec fields = {0};
+  for (size_t i = 0; i < len; i++) {
+    MirValueId field = mir_expr(builder, args + i, ctx);
+    if (field == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+    mir_value_id_vec_push(arena, &fields, field);
+  }
+
+  return mir_variant(builder, result_type, origin, constructor_type,
+                     constructor_index, constructor_name, fields);
+}
+
+static bool mir_type_has_type_vars(Type *type) {
+  if (!type) {
+    return false;
+  }
+
+  switch (type->kind) {
+  case T_VAR:
+    return true;
+  case T_FN:
+    return mir_type_has_type_vars(type->closure_meta) ||
+           mir_type_has_type_vars(type->data.T_FN.from) ||
+           mir_type_has_type_vars(type->data.T_FN.to);
+  case T_CONS:
+  case T_SUM:
+    if (mir_type_has_type_vars(type->closure_meta)) {
+      return true;
+    }
+    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+      if (type->data.T_CONS.args &&
+          mir_type_has_type_vars(type->data.T_CONS.args[i])) {
+        return true;
+      }
+    }
+    return false;
+  default:
+    return false;
+  }
+}
+
+static const char *mir_symbol_sanitize(MirArena *arena, const char *text,
+                                       const char *fallback) {
+  if (!arena) {
+    return NULL;
+  }
+  if (!text || !*text) {
+    return mir_arena_strdup(arena, fallback ? fallback : "Type");
+  }
+
+  size_t len = strlen(text);
+  char *out = mir_arena_alloc(arena, len + 1, MIR_ALIGNOF(char));
+  if (!out) {
+    return NULL;
+  }
+
+  size_t used = 0;
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)text[i];
+    if (isalnum(c) || c == '_') {
+      out[used++] = (char)c;
+    } else if (used > 0 && out[used - 1] != '_') {
+      out[used++] = '_';
+    }
+  }
+
+  while (used > 0 && out[used - 1] == '_') {
+    used--;
+  }
+
+  if (used == 0) {
+    return mir_arena_strdup(arena, fallback ? fallback : "Type");
+  }
+
+  out[used] = '\0';
+  return out;
+}
+
+static const char *mir_type_symbol_fragment(MirArena *arena, Type *type) {
+  if (!arena || !type) {
+    return NULL;
+  }
+
   switch (type->kind) {
   case T_INT:
     return "Int";
@@ -228,1130 +2016,3396 @@ static const char *type_kind_name(Type *type) {
   case T_BOOL:
     return "Bool";
   case T_VOID:
-    return "()";
+    return "Void";
   case T_STRING:
     return "String";
-  case T_FN:
-    return "Fn";
-  case T_CONS:
-    return type->data.T_CONS.name ? type->data.T_CONS.name : "Cons";
-  case T_SUM:
-    return type->data.T_CONS.name ? type->data.T_CONS.name : "Sum";
-  case T_VAR:
-    return type->data.T_VAR.name ? type->data.T_VAR.name : "TypeVar";
-  case T_RECURSIVE_REF:
-    return type->data.T_RECURSIVE_REF.name ? type->data.T_RECURSIVE_REF.name
-                                           : "RecursiveRef";
   case T_EMPTY_LIST:
     return "EmptyList";
   case T_MODULE:
     return "Module";
+  case T_VAR:
+    if (type->data.T_VAR.name) {
+      return mir_symbol_sanitize(arena, type->data.T_VAR.name, "TypeVar");
+    }
+    return mir_arena_printf(arena, "t%d", type->data.T_VAR.id);
+  case T_RECURSIVE_REF:
+    return mir_symbol_sanitize(arena, type->data.T_RECURSIVE_REF.name,
+                               "RecursiveRef");
+  case T_CONS:
+  case T_SUM: {
+    const char *name = type->alias ? type->alias : type->data.T_CONS.name;
+    const char *fragment =
+        mir_symbol_sanitize(arena, name, type->kind == T_SUM ? "Sum" : "Cons");
+    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+      Type *arg = type->data.T_CONS.args ? type->data.T_CONS.args[i] : NULL;
+      const char *arg_fragment = mir_type_symbol_fragment(arena, arg);
+      if (!arg_fragment) {
+        return NULL;
+      }
+      fragment = mir_arena_printf(arena, "%s_%s", fragment, arg_fragment);
+    }
+    return fragment;
   }
+  case T_FN: {
+    const char *fragment = "Fn";
+    Type *cur = type;
+    while (cur && cur->kind == T_FN) {
+      const char *arg_fragment =
+          mir_type_symbol_fragment(arena, cur->data.T_FN.from);
+      if (!arg_fragment) {
+        return NULL;
+      }
+      fragment = mir_arena_printf(arena, "%s_%s", fragment, arg_fragment);
+      cur = cur->data.T_FN.to;
+    }
+    const char *ret_fragment = mir_type_symbol_fragment(arena, cur);
+    return ret_fragment
+               ? mir_arena_printf(arena, "%s_%s", fragment, ret_fragment)
+               : NULL;
+  }
+  }
+
   return "Type";
 }
 
-static const char *token_name(token_type op) {
-  switch (op) {
-  case TOKEN_PLUS:
-    return "+";
-  case TOKEN_MINUS:
-    return "-";
-  case TOKEN_STAR:
-    return "*";
-  case TOKEN_SLASH:
-    return "/";
-  case TOKEN_MODULO:
-    return "%";
-  case TOKEN_LT:
-    return "<";
-  case TOKEN_GT:
-    return ">";
-  case TOKEN_LTE:
-    return "<=";
-  case TOKEN_GTE:
-    return ">=";
-  case TOKEN_EQUALITY:
-    return "==";
-  case TOKEN_NOT_EQUAL:
-    return "!=";
-  case TOKEN_LOGICAL_AND:
-  case TOKEN_DOUBLE_AMP:
-    return "&&";
-  case TOKEN_LOGICAL_OR:
-  case TOKEN_DOUBLE_PIPE:
-    return "||";
-  case TOKEN_BANG:
-    return "!";
-  default:
-    return "?";
-  }
-}
-
-static const char *instr_name(MirInstrKind kind) {
-  switch (kind) {
-  case MIR_CONST_INT:
-    return "const_int";
-  case MIR_CONST_UINT64:
-    return "const_uint64";
-  case MIR_CONST_DOUBLE:
-    return "const_double";
-  case MIR_CONST_CHAR:
-    return "const_char";
-  case MIR_CONST_BOOL:
-    return "const_bool";
-  case MIR_CONST_VOID:
-    return "const_void";
-  case MIR_STRING_LITERAL:
-    return "string_literal";
-  case MIR_PARAM:
-    return "param";
-  case MIR_FN_REF:
-    return "fn_ref";
-  case MIR_LOAD_SYMBOL:
-    return "load_symbol";
-  case MIR_ARRAY_LITERAL:
-    return "array_literal";
-  case MIR_LIST_LITERAL:
-    return "list_literal";
-  case MIR_TUPLE:
-    return "tuple";
-  case MIR_BINOP:
-    return "binop";
-  case MIR_UNOP:
-    return "unop";
-  case MIR_ENV_NEW:
-    return "env_new";
-  case MIR_ENV_GET:
-    return "env_get";
-  case MIR_ENV_SET:
-    return "env_set";
-  case MIR_MAKE_CLOSURE:
-    return "make_closure";
-  case MIR_CLOSURE_FN:
-    return "closure_fn";
-  case MIR_CLOSURE_ENV:
-    return "closure_env";
-  case MIR_CALL_DIRECT:
-    return "call_direct";
-  case MIR_CALL_INDIRECT:
-    return "call_indirect";
-  case MIR_RECORD_GET:
-    return "record_get";
-  case MIR_YIELD:
-    return "yield";
-  case MIR_MOVE:
-    return "move";
-  case MIR_BORROW:
-    return "borrow";
-  case MIR_DUP_IF_MANAGED:
-    return "dup_if_managed";
-  case MIR_DROP_IF_MANAGED:
-    return "drop_if_managed";
-  case MIR_DECREF_IF_MANAGED:
-    return "decref_if_managed";
-  case MIR_DROP_REUSE_IF_UNIQUE:
-    return "drop_reuse_if_unique";
-  case MIR_UNSUPPORTED:
-    return "unsupported";
-  }
-  return "unknown";
-}
-
-static MirValueKind result_kind_for_instr(MirInstrKind kind) {
-  switch (kind) {
-  case MIR_FN_REF:
-  case MIR_CLOSURE_FN:
-    return MIR_VALUE_FN_PTR;
-  case MIR_ENV_NEW:
-  case MIR_CLOSURE_ENV:
-    return MIR_VALUE_ENV_PTR;
-  case MIR_MAKE_CLOSURE:
-    return MIR_VALUE_CLOSURE_OBJ;
-  default:
-    return MIR_VALUE_PLAIN;
-  }
-}
-
-static const char *placement_name(MirPlacement placement) {
-  switch (placement) {
-  case MIR_PLACE_UNKNOWN:
-    return "unknown";
-  case MIR_PLACE_STACK:
-    return "stack";
-  case MIR_PLACE_HEAP:
-    return "heap";
-  case MIR_PLACE_CORO_FRAME:
-    return "coro_frame";
-  }
-  return "unknown";
-}
-
-static MirPlacement placement_from_escape_meta(Ast *ast) {
-  if (!ast || !ast->ea_md) {
-    return MIR_PLACE_UNKNOWN;
-  }
-  if (ast->ea_md->status == EA_STACK_ALLOC) {
-    return MIR_PLACE_STACK;
-  }
-  if (ast->ea_md->status == EA_HEAP_ALLOC) {
-    return MIR_PLACE_HEAP;
-  }
-  return MIR_PLACE_UNKNOWN;
-}
-
-static bool mutable_from_escape_meta(Ast *ast) {
-  return ast && ast->ea_md && (ast->ea_md->attributes & EA_ATTR_MUTABLE);
-}
-
-MirInstr mir_make_instr(MirInstrKind kind, Type *type, Ast *origin) {
-  MirInstr instr;
-  memset(&instr, 0, sizeof(instr));
-  instr.kind = kind;
-  instr.result = MIR_NO_VALUE;
-  instr.type = type;
-  instr.origin = origin;
-  instr.alloc_id = MIR_NO_ALLOC;
-  instr.op = TOKEN_START;
-  instr.member_index = -1;
-  instr.abi = MIR_ABI_YLC;
-  instr.env_layout_id = MIR_NO_ENV_LAYOUT;
-  instr.field_index = 0;
-  return instr;
-}
-
-void mir_value_id_vec_push(MirArena *arena, MirValueIdVec *vec,
-                           MirValueId value) {
-  MIR_VEC_PUSH(arena, vec, MirValueId, value);
-}
-
-MirValueId mir_create_value(MirFunction *fn, Type *type, Ast *origin) {
-  return mir_create_value_kind(fn, type, MIR_VALUE_PLAIN, origin);
-}
-
-MirValueId mir_create_value_kind(MirFunction *fn, Type *type, MirValueKind kind,
-                                 Ast *origin) {
-  if (!fn) {
-    return MIR_NO_VALUE;
-  }
-  MirValueId id = (MirValueId)fn->values.len;
-  MirValue value = {.id = id, .type = type, .kind = kind, .origin = origin};
-  MIR_VEC_PUSH(fn->arena, &fn->values, MirValue, value);
-  return id;
-}
-
-MirAllocId mir_create_alloc_site(MirFunction *fn, Ast *origin) {
-  if (!fn) {
-    return MIR_NO_ALLOC;
-  }
-  MirAllocId id = (MirAllocId)fn->allocs.len;
-  MirAllocSite site = {.id = id,
-                       .placement = placement_from_escape_meta(origin),
-                       .is_mutable = mutable_from_escape_meta(origin),
-                       .origin = origin};
-  MIR_VEC_PUSH(fn->arena, &fn->allocs, MirAllocSite, site);
-  return id;
-}
-
-static MirValueId prepare_inserted_instr(MirFunction *fn, MirInstr *instr) {
-  if (!instr) {
-    return MIR_NO_VALUE;
-  }
-  if (instr->result == MIR_NO_VALUE && instr->type) {
-    instr->result = mir_create_value_kind(
-        fn, instr->type, result_kind_for_instr(instr->kind), instr->origin);
-  }
-  return instr->result;
-}
-
-MirValueId mir_append_instr(MirFunction *fn, MirBlock *block, MirInstr instr) {
-  if (!fn || !block) {
-    return MIR_NO_VALUE;
-  }
-  MirValueId result = prepare_inserted_instr(fn, &instr);
-  MIR_VEC_PUSH(fn->arena, &block->instrs, MirInstr, instr);
-  return result;
-}
-
-MirValueId mir_insert_instr_before(MirFunction *fn, MirBlock *block,
-                                   size_t index, MirInstr instr) {
-  if (!fn || !block) {
-    return MIR_NO_VALUE;
-  }
-  MirValueId result = prepare_inserted_instr(fn, &instr);
-  if (index > block->instrs.len) {
-    index = block->instrs.len;
-  }
-  if (block->instrs.len == block->instrs.cap) {
-    block->instrs.items = mir_vec_grow(
-        fn->arena, block->instrs.items, block->instrs.len, &block->instrs.cap,
-        sizeof(MirInstr), MIR_ALIGNOF(MirInstr), block->instrs.len + 1);
-  }
-  memmove(block->instrs.items + index + 1, block->instrs.items + index,
-          sizeof(MirInstr) * (block->instrs.len - index));
-  block->instrs.items[index] = instr;
-  block->instrs.len++;
-  return result;
-}
-
-MirValueId mir_insert_instr_after(MirFunction *fn, MirBlock *block,
-                                  size_t index, MirInstr instr) {
-  if (!block || index >= block->instrs.len) {
-    return mir_append_instr(fn, block, instr);
-  }
-  return mir_insert_instr_before(fn, block, index + 1, instr);
-}
-
-void mir_run_function_pass(MirProgram *program, MirFunctionPass pass,
-                           void *ctx) {
-  if (!program || !pass) {
-    return;
-  }
-  for (size_t i = 0; i < program->functions.len; i++) {
-    pass(program->functions.items[i], ctx);
-  }
-}
-
-static MirFunction *mir_new_function(MirProgram *program, const char *name,
-                                     Type *type, Ast *origin) {
-  MirFunction *fn = mir_arena_alloc(program->arena, sizeof(MirFunction),
-                                    MIR_ALIGNOF(MirFunction));
-  memset(fn, 0, sizeof(MirFunction));
-  fn->arena = program->arena;
-  fn->name = name && name[0] ? name : "anonymous";
-  fn->type = type;
-  fn->origin = origin;
-  fn->env_param_index = -1;
-  MIR_VEC_PUSH(program->arena, &program->functions, MirFunction *, fn);
-  return fn;
-}
-
-static MirBlock *mir_append_block(MirFunction *fn, const char *name) {
-  MirBlock *block =
-      mir_arena_alloc(fn->arena, sizeof(MirBlock), MIR_ALIGNOF(MirBlock));
-  memset(block, 0, sizeof(MirBlock));
-  block->id = (MirBlockId)fn->blocks.len;
-  block->name = name ? name : "bb";
-  block->term = (MirTerminator){.kind = MIR_TERM_NONE,
-                                .value = MIR_NO_VALUE,
-                                .target = 0,
-                                .then_target = 0,
-                                .else_target = 0};
-  MIR_VEC_PUSH(fn->arena, &fn->blocks, MirBlock *, block);
-  return block;
-}
-
-static MirInstr *mir_find_def_instr(MirFunction *fn, MirValueId id);
-static MirScope mir_scope_create(void);
-static void mir_scope_destroy(MirScope *scope);
-static void mir_builder_destroy_scopes(MirBuilder *builder);
-
-static void mir_builder_init(MirBuilder *builder, MirProgram *program,
-                             MirFunction *fn) {
-  memset(builder, 0, sizeof(*builder));
-  builder->program = program;
-  builder->fn = fn;
-  builder->block = mir_append_block(fn, "entry");
-  MirScope scope = mir_scope_create();
-  MIR_VEC_PUSH(fn->arena, &builder->scopes, MirScope, scope);
-}
-
-static MirEnvLayoutId mir_create_env_layout(MirProgram *program, Ast *ast,
-                                            const char *name) {
-  if (!program || !ast || ast->tag != AST_LAMBDA ||
-      ast->data.AST_LAMBDA.num_closed_vals <= 0) {
-    return MIR_NO_ENV_LAYOUT;
+static const char *mir_specialized_function_name(MirArena *arena,
+                                                 const char *base_name,
+                                                 Type *callee_type) {
+  if (!arena || !base_name || !callee_type ||
+      mir_type_has_type_vars(callee_type)) {
+    return NULL;
   }
 
-  MirEnvLayout layout = {0};
-  layout.id = (MirEnvLayoutId)program->env_layouts.len;
-  layout.name = name ? name : "closure";
-
-  AST_LIST_ITER(ast->data.AST_LAMBDA.closed_vals, ({
-                  (void)i;
-                  Ast *closed = l->ast;
-                  if (!closed || closed->tag != AST_IDENTIFIER) {
-                    continue;
-                  }
-                  MirEnvField field = {
-                      .name = closed->data.AST_IDENTIFIER.value,
-                      .type = closed->type,
-                  };
-                  MIR_VEC_PUSH(program->arena, &layout.fields, MirEnvField,
-                               field);
-                }));
-
-  MIR_VEC_PUSH(program->arena, &program->env_layouts, MirEnvLayout, layout);
-  return layout.id;
-}
-
-static MirValueId mir_new_alloc_site(MirBuilder *builder, Ast *origin) {
-  return mir_create_alloc_site(builder->fn, origin);
-}
-
-static void *mir_binding_encode(MirValueId value) {
-  return (void *)(uintptr_t)(value + 1u);
-}
-
-static MirValueId mir_binding_decode(void *value) {
-  return (MirValueId)((uintptr_t)value - 1u);
-}
-
-static MirScope mir_scope_create(void) {
-  MirScope scope = {.bindings = ht_create()};
-  return scope;
-}
-
-static void mir_scope_destroy(MirScope *scope) {
-  if (!scope || !scope->bindings) {
-    return;
+  const char *name = mir_symbol_sanitize(arena, base_name, "anonymous");
+  Type *cur = callee_type;
+  while (cur && cur->kind == T_FN) {
+    const char *arg_fragment =
+        mir_type_symbol_fragment(arena, cur->data.T_FN.from);
+    if (!arg_fragment) {
+      return NULL;
+    }
+    name = mir_arena_printf(arena, "%s.%s", name, arg_fragment);
+    cur = cur->data.T_FN.to;
   }
-  ht_destroy(scope->bindings);
-  scope->bindings = NULL;
+
+  const char *ret_fragment = mir_type_symbol_fragment(arena, cur);
+  return ret_fragment ? mir_arena_printf(arena, "%s.%s", name, ret_fragment)
+                      : NULL;
 }
 
-static void mir_builder_destroy_scopes(MirBuilder *builder) {
-  if (!builder) {
-    return;
+static MirInstr *mir_call_callee_fn_ref(MirBuilder *builder, MirInstr *call) {
+  if (!builder || !builder->fn || !call || call->kind != MIR_CALL ||
+      call->data.call.builtin || call->data.call.callee == MIR_NO_VALUE) {
+    return NULL;
   }
-  for (size_t i = 0; i < builder->scopes.len; i++) {
-    mir_scope_destroy(&builder->scopes.items[i]);
+
+  MirInstr *callee_def =
+      mir_function_find_def_instr(builder->fn, call->data.call.callee);
+  if (!callee_def || callee_def->kind != MIR_FN_REF) {
+    return NULL;
   }
-  builder->scopes.len = 0;
+
+  return callee_def;
 }
 
-static MirValueId mir_builder_append_instr(MirBuilder *builder,
-                                           MirInstr instr) {
-  if (!builder->block || builder->block->term.kind != MIR_TERM_NONE) {
-    return instr.result;
+static const char *mir_call_specialized_name(MirBuilder *builder,
+                                             MirInstr *call) {
+  MirInstr *callee_def = mir_call_callee_fn_ref(builder, call);
+  if (!callee_def || !callee_def->data.fn_ref.name) {
+    return NULL;
   }
-  return mir_append_instr(builder->fn, builder->block, instr);
+
+  return mir_specialized_function_name(builder->fn->arena,
+                                       callee_def->data.fn_ref.name,
+                                       call->data.call.callee_type);
 }
 
-static void mir_set_return(MirBuilder *builder, MirValueId value) {
-  if (!builder->block || builder->block->term.kind != MIR_TERM_NONE) {
-    return;
-  }
-  builder->block->term = (MirTerminator){.kind = MIR_TERM_RETURN,
-                                         .value = value,
-                                         .target = 0,
-                                         .then_target = 0,
-                                         .else_target = 0};
-}
+static MirFunction *mir_materialize_call_specialization(MirBuilder *builder,
+                                                        MirInstr *call);
+static MirFunction *mir_clone_specialized_function(MirProgram *program,
+                                                   MirFunction *source,
+                                                   const char *name,
+                                                   Type *specialized_type);
+static void mir_call_apply_callee_summary(MirBuilder *builder, MirInstr *call);
 
-static void mir_set_tail_call(MirBuilder *builder, MirTermKind kind,
-                              const char *symbol, MirValueId callee,
-                              MirValueIdVec args) {
-  if (!builder->block || builder->block->term.kind != MIR_TERM_NONE) {
-    return;
-  }
-  builder->block->term = (MirTerminator){
-      .kind = kind,
-      .value = MIR_NO_VALUE,
-      .callee = callee,
-      .args = args,
-      .symbol = symbol,
-      .abi = MIR_ABI_YLC,
-      .target = 0,
-      .then_target = 0,
-      .else_target = 0,
-  };
-}
+typedef struct MirTypeSubst {
+  int id;
+  const char *name;
+  Type *type;
+  struct MirTypeSubst *next;
+} MirTypeSubst;
 
-static void mir_set_return_or_tail_call(MirBuilder *builder, MirValueId value) {
-  // MirInstr *result_def = mir_find_def_instr(builder->fn, value);
-  // if (result_def && result_def->kind == MIR_CALL_DIRECT) {
-  //   mir_set_tail_call(builder, MIR_TERM_TAIL_CALL_DIRECT, result_def->name,
-  //                     MIR_NO_VALUE, result_def->operands);
-  //   return;
-  // }
-  // if (result_def && result_def->kind == MIR_CALL_INDIRECT &&
-  //     result_def->operands.len > 0) {
-  //   MirValueIdVec args = {0};
-  //   for (size_t i = 1; i < result_def->operands.len; i++) {
-  //     mir_value_id_vec_push(builder->fn->arena, &args,
-  //                           result_def->operands.items[i]);
-  //   }
-  //   mir_set_tail_call(builder, MIR_TERM_TAIL_CALL_INDIRECT, NULL,
-  //                     result_def->operands.items[0], args);
-  //   return;
-  // }
-  mir_set_return(builder, value);
-}
-
-static void mir_push_scope(MirBuilder *builder) {
-  MirScope scope = mir_scope_create();
-  MIR_VEC_PUSH(builder->fn->arena, &builder->scopes, MirScope, scope);
-}
-
-static void mir_pop_scope(MirBuilder *builder) {
-  if (builder->scopes.len > 1) {
-    mir_scope_destroy(&builder->scopes.items[builder->scopes.len - 1]);
-    builder->scopes.len--;
-  }
-}
-
-static void mir_bind(MirBuilder *builder, const char *name, MirValueId value) {
-  if (!name || value == MIR_NO_VALUE || builder->scopes.len == 0) {
-    return;
-  }
-  MirScope *scope = &builder->scopes.items[builder->scopes.len - 1];
-  if (!scope->bindings) {
-    return;
-  }
-  uint64_t hash = hash_key(name);
-  ht_set_hash(scope->bindings, name, hash, mir_binding_encode(value));
-}
-
-static bool mir_lookup(MirBuilder *builder, const char *name, MirValueId *out) {
-  if (!name) {
+static bool mir_type_var_matches(Type *var, MirTypeSubst *entry) {
+  if (!var || var->kind != T_VAR || !entry) {
     return false;
   }
-  uint64_t hash = hash_key(name);
-  for (size_t s = builder->scopes.len; s > 0; s--) {
-    MirScope *scope = &builder->scopes.items[s - 1];
-    if (!scope->bindings) {
-      continue;
-    }
-    void *binding = ht_get_hash(scope->bindings, name, hash);
-    if (binding) {
-      *out = mir_binding_decode(binding);
-      return true;
-    }
+  if (var->data.T_VAR.id >= 0 && entry->id >= 0) {
+    return var->data.T_VAR.id == entry->id;
   }
-  return false;
+  return var->data.T_VAR.name && entry->name &&
+         strcmp(var->data.T_VAR.name, entry->name) == 0;
 }
 
-static const char *lambda_name(Ast *ast, const char *fallback) {
-  if (ast && (ast->tag == AST_LAMBDA || ast->tag == AST_MODULE) &&
-      ast->data.AST_LAMBDA.fn_name.chars) {
-    return ast->data.AST_LAMBDA.fn_name.chars;
-  }
-  return fallback ? fallback : "anonymous";
-}
-
-static MirValueId mir_emit_expr(MirBuilder *builder, Ast *ast);
-static MirInstr *mir_find_def_instr(MirFunction *fn, MirValueId id);
-
-static MirValue *mir_find_value(MirFunction *fn, MirValueId id) {
-  if (!fn || id == MIR_NO_VALUE || id >= fn->values.len) {
-    return NULL;
-  }
-  return fn->values.items + id;
-}
-
-static MirInstr *mir_find_def_instr(MirFunction *fn, MirValueId id) {
-  if (!fn || id == MIR_NO_VALUE) {
-    return NULL;
-  }
-  for (size_t b = 0; b < fn->blocks.len; b++) {
-    MirBlock *block = fn->blocks.items[b];
-    for (size_t i = 0; i < block->instrs.len; i++) {
-      if (block->instrs.items[i].result == id) {
-        return block->instrs.items + i;
-      }
+static Type *mir_type_subst_lookup(MirTypeSubst *subst, Type *var) {
+  for (MirTypeSubst *entry = subst; entry; entry = entry->next) {
+    if (mir_type_var_matches(var, entry)) {
+      return entry->type;
     }
   }
   return NULL;
 }
 
-static MirValueId mir_emit_unsupported(MirBuilder *builder, Ast *ast) {
-  MirInstr instr = mir_make_instr(MIR_UNSUPPORTED, ast ? ast->type : NULL, ast);
-  instr.name = ast ? ast_tag_name(ast->tag) : "<null>";
-  return mir_builder_append_instr(builder, instr);
+static bool mir_type_subst_bind(MirArena *arena, MirTypeSubst **subst,
+                                Type *var, Type *concrete) {
+  if (!arena || !subst || !var || var->kind != T_VAR || !concrete) {
+    return false;
+  }
+
+  Type *existing = mir_type_subst_lookup(*subst, var);
+  if (existing) {
+    return types_equal(existing, concrete);
+  }
+
+  MirTypeSubst *entry =
+      mir_arena_alloc(arena, sizeof(MirTypeSubst), MIR_ALIGNOF(MirTypeSubst));
+  if (!entry) {
+    return false;
+  }
+
+  *entry = (MirTypeSubst){.id = var->data.T_VAR.id,
+                          .name = var->data.T_VAR.name,
+                          .type = concrete,
+                          .next = *subst};
+  *subst = entry;
+  return true;
 }
 
-static MirValueId mir_emit_lambda_function(MirProgram *program, Ast *ast,
-                                           const char *name) {
+static bool mir_collect_type_subst(MirArena *arena, MirTypeSubst **subst,
+                                   Type *generic, Type *concrete) {
+  if (!generic || !concrete) {
+    return generic == concrete;
+  }
+
+  if (generic->kind == T_VAR) {
+    return mir_type_subst_bind(arena, subst, generic, concrete);
+  }
+
+  if (generic->kind != concrete->kind) {
+    return false;
+  }
+
+  switch (generic->kind) {
+  case T_FN:
+    return mir_collect_type_subst(arena, subst, generic->closure_meta,
+                                  concrete->closure_meta) &&
+           mir_collect_type_subst(arena, subst, generic->data.T_FN.from,
+                                  concrete->data.T_FN.from) &&
+           mir_collect_type_subst(arena, subst, generic->data.T_FN.to,
+                                  concrete->data.T_FN.to);
+  case T_CONS:
+  case T_SUM:
+    if (generic->data.T_CONS.num_args != concrete->data.T_CONS.num_args) {
+      return false;
+    }
+    for (int i = 0; i < generic->data.T_CONS.num_args; i++) {
+      Type *generic_arg =
+          generic->data.T_CONS.args ? generic->data.T_CONS.args[i] : NULL;
+      Type *concrete_arg =
+          concrete->data.T_CONS.args ? concrete->data.T_CONS.args[i] : NULL;
+      if (!mir_collect_type_subst(arena, subst, generic_arg, concrete_arg)) {
+        return false;
+      }
+    }
+    return mir_collect_type_subst(arena, subst, generic->closure_meta,
+                                  concrete->closure_meta);
+  default:
+    return types_equal(generic, concrete);
+  }
+}
+
+static Type *mir_substitute_type(MirArena *arena, MirTypeSubst *subst,
+                                 Type *type) {
+  if (!arena || !type) {
+    return type;
+  }
+
+  if (type->kind == T_VAR) {
+    Type *replacement = mir_type_subst_lookup(subst, type);
+    return replacement ? replacement : type;
+  }
+
+  switch (type->kind) {
+  case T_FN: {
+    Type *copy = mir_arena_alloc(arena, sizeof(Type), MIR_ALIGNOF(Type));
+    if (!copy) {
+      return type;
+    }
+    *copy = *type;
+    copy->data.T_FN.from =
+        mir_substitute_type(arena, subst, type->data.T_FN.from);
+    copy->data.T_FN.to = mir_substitute_type(arena, subst, type->data.T_FN.to);
+    copy->closure_meta = mir_substitute_type(arena, subst, type->closure_meta);
+    return copy;
+  }
+  case T_CONS:
+  case T_SUM: {
+    Type *copy = mir_arena_alloc(arena, sizeof(Type), MIR_ALIGNOF(Type));
+    if (!copy) {
+      return type;
+    }
+    *copy = *type;
+    if (type->data.T_CONS.num_args > 0) {
+      Type **args = mir_arena_alloc(
+          arena, sizeof(Type *) * (size_t)type->data.T_CONS.num_args,
+          MIR_ALIGNOF(Type *));
+      if (!args) {
+        return type;
+      }
+      for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+        Type *arg = type->data.T_CONS.args ? type->data.T_CONS.args[i] : NULL;
+        args[i] = mir_substitute_type(arena, subst, arg);
+      }
+      copy->data.T_CONS.args = args;
+    }
+    copy->closure_meta = mir_substitute_type(arena, subst, type->closure_meta);
+    return copy;
+  }
+  default:
+    return type;
+  }
+}
+
+static Type *mir_closure_callable_type(MirArena *arena, Type *closure_type) {
+  if (!arena || !closure_type || !is_closure(closure_type) ||
+      !closure_type->closure_meta) {
+    return closure_type;
+  }
+
+  Type *callable_type = mir_substitute_type(arena, NULL, closure_type);
+  if (callable_type && callable_type->kind == T_FN) {
+    callable_type->closure_meta = NULL;
+  }
+
+  if (callable_type && callable_type->kind == T_FN &&
+      callable_type->data.T_FN.from &&
+      callable_type->data.T_FN.from->kind == T_VOID) {
+    callable_type = callable_type->data.T_FN.to;
+  }
+
+  Type *impl_type = mir_arena_alloc(arena, sizeof(Type), MIR_ALIGNOF(Type));
+  if (!impl_type) {
+    return closure_type;
+  }
+  memset(impl_type, 0, sizeof(*impl_type));
+  impl_type->kind = T_FN;
+  impl_type->data.T_FN.from = closure_type->closure_meta;
+  impl_type->data.T_FN.to = callable_type;
+  return impl_type;
+}
+
+static MirFunction *mir_specialize_fn_ref_instr(MirProgram *program,
+                                                MirInstr *fn_ref,
+                                                Type *specialized_type) {
+  if (!program || !fn_ref || fn_ref->kind != MIR_FN_REF ||
+      fn_ref->data.fn_ref.fn == MIR_NO_FUNCTION || !specialized_type ||
+      mir_type_has_type_vars(specialized_type)) {
+    return NULL;
+  }
+
+  fn_ref->type = specialized_type;
+
+  MirFunction *target =
+      mir_program_get_function(program, fn_ref->data.fn_ref.fn);
+  if (!target) {
+    return NULL;
+  }
+
+  if (!mir_type_has_type_vars(target->type)) {
+    return target;
+  }
+
+  MirFunction *specialized =
+      mir_program_find_specialization(program, target->id, specialized_type);
+  if (!specialized) {
+    const char *specialized_name = mir_specialized_function_name(
+        program->arena,
+        fn_ref->data.fn_ref.name ? fn_ref->data.fn_ref.name : target->name,
+        specialized_type);
+    if (specialized_name) {
+      specialized = mir_clone_specialized_function(
+          program, target, specialized_name, specialized_type);
+    }
+  }
+
+  if (specialized) {
+    fn_ref->data.fn_ref.fn = specialized->id;
+    fn_ref->data.fn_ref.name = specialized->name;
+  }
+  return specialized;
+}
+
+Type *mir_function_value_type(MirFunction *fn, MirValueId value) {
+  if (!fn || value == MIR_NO_VALUE || value >= fn->values.len) {
+    return NULL;
+  }
+  return fn->values.items[value].type;
+}
+
+static void mir_function_set_value_type(MirFunction *fn, MirValueId value,
+                                        Type *type) {
+  if (!fn || value == MIR_NO_VALUE || value >= fn->values.len) {
+    return;
+  }
+  fn->values.items[value].type = type;
+  fn->values.items[value].callable_summary =
+      mir_callable_summary_from_type(fn->arena, type);
+}
+
+static MirValueId mir_remap_value(MirValueId *value_map, size_t value_map_len,
+                                  MirValueId value) {
+  if (value == MIR_NO_VALUE || !value_map || value >= value_map_len) {
+    return MIR_NO_VALUE;
+  }
+  return value_map[value];
+}
+
+typedef struct {
+  MirValueId *value_map;
+  size_t value_map_len;
+} MirRemapOperandCtx;
+
+static MirValueId mir_remap_operand(MirInstr *instr, MirOperand operand,
+                                    void *ctx) {
+  (void)instr;
+  MirRemapOperandCtx *remap = ctx;
+  if (!remap) {
+    return MIR_NO_VALUE;
+  }
+  return mir_remap_value(remap->value_map, remap->value_map_len,
+                         operand.value);
+}
+
+static MirInstr mir_clone_instr_with_subst(MirArena *arena, MirTypeSubst *subst,
+                                           MirValueId *value_map,
+                                           size_t value_map_len,
+                                           const MirInstr *instr) {
+  MirInstr clone = *instr;
+  clone.result = MIR_NO_VALUE;
+  clone.type = mir_substitute_type(arena, subst, instr->type);
+
+  switch (instr->kind) {
+  case MIR_PRIMITIVE_CAST:
+    clone.data.primitive_cast.from_type =
+        mir_substitute_type(arena, subst, instr->data.primitive_cast.from_type);
+    clone.data.primitive_cast.to_type =
+        mir_substitute_type(arena, subst, instr->data.primitive_cast.to_type);
+    break;
+  case MIR_TUPLE:
+    clone.data.tuple.items = (MirValueIdVec){0};
+    for (size_t i = 0; i < instr->data.tuple.items.len; i++) {
+      mir_value_id_vec_push(arena, &clone.data.tuple.items,
+                            instr->data.tuple.items.items[i]);
+    }
+    break;
+  case MIR_TUPLE_GET:
+    break;
+  case MIR_VARIANT:
+    clone.data.variant.constructor_type =
+        mir_substitute_type(arena, subst, instr->data.variant.constructor_type);
+    clone.data.variant.fields = (MirValueIdVec){0};
+    for (size_t i = 0; i < instr->data.variant.fields.len; i++) {
+      mir_value_id_vec_push(
+          arena, &clone.data.variant.fields, instr->data.variant.fields.items[i]);
+    }
+    break;
+  case MIR_MATCH:
+    clone.data.match.arms = (MirMatchArmVec){0};
+    for (size_t i = 0; i < instr->data.match.arms.len; i++) {
+      mir_match_arm_vec_push(arena, &clone.data.match.arms,
+                             instr->data.match.arms.items[i]);
+    }
+    break;
+  case MIR_VARIANT_PAYLOAD:
+    clone.data.variant_payload.constructor_type = mir_substitute_type(
+        arena, subst, instr->data.variant_payload.constructor_type);
+    break;
+  case MIR_ARRAY_LITERAL:
+    clone.data.array_literal.items = (MirValueIdVec){0};
+    for (size_t i = 0; i < instr->data.array_literal.items.len; i++) {
+      mir_value_id_vec_push(
+          arena, &clone.data.array_literal.items,
+          instr->data.array_literal.items.items[i]);
+    }
+    break;
+  case MIR_CLOSURE_ENV:
+    clone.data.closure_env.fields = (MirValueIdVec){0};
+    for (size_t i = 0; i < instr->data.closure_env.fields.len; i++) {
+      mir_value_id_vec_push(
+          arena, &clone.data.closure_env.fields,
+          instr->data.closure_env.fields.items[i]);
+    }
+    break;
+  case MIR_CALL:
+    clone.data.call.callee_type =
+        mir_substitute_type(arena, subst, instr->data.call.callee_type);
+    clone.data.call.specialized_name = NULL;
+    clone.data.call.specialized_fn = MIR_NO_FUNCTION;
+    clone.data.call.operands = (MirValueIdVec){0};
+    clone.data.call.operand_uses = (MirOperandUseVec){0};
+    for (size_t i = 0; i < instr->data.call.operands.len; i++) {
+      mir_value_id_vec_push(arena, &clone.data.call.operands,
+                            instr->data.call.operands.items[i]);
+      mir_operand_use_vec_push(arena, &clone.data.call.operand_uses,
+                               mir_call_operand_use(instr, i));
+    }
+    break;
+  default:
+    break;
+  }
+
+  MirRemapOperandCtx remap_ctx = {.value_map = value_map,
+                                  .value_map_len = value_map_len};
+  mir_instr_rewrite_operands(&clone, mir_remap_operand, &remap_ctx);
+
+  return clone;
+}
+
+static MirFunction *mir_clone_specialized_function(MirProgram *program,
+                                                   MirFunction *source,
+                                                   const char *name,
+                                                   Type *specialized_type) {
+  if (!program || !source || !name || !specialized_type) {
+    return NULL;
+  }
+
+  MirTypeSubst *subst = NULL;
+  if (!mir_collect_type_subst(program->arena, &subst, source->type,
+                              specialized_type)) {
+    return NULL;
+  }
+
   MirFunction *fn =
-      mir_new_function(program, lambda_name(ast, name), ast->type, ast);
-  MirBuilder fn_builder;
-  mir_builder_init(&fn_builder, program, fn);
+      mir_program_add_function(program, name, specialized_type, source->origin);
+  if (!fn) {
+    return NULL;
+  }
+  fn->specialization_of = source->id;
+  fn->specialization_type = specialized_type;
 
-  if (is_closure(ast->type)) {
-    fn->is_closure_body = true;
-
-    MirInstr env_instr =
-        mir_make_instr(MIR_PARAM, ast->type->closure_meta, ast);
-    env_instr.name = "env";
-    env_instr.member_index = 0;
-    MirValueId env_param = mir_builder_append_instr(&fn_builder, env_instr);
-    fn->env_param_index = 0;
-
-    AST_LIST_ITER(
-        ast->data.AST_LAMBDA.closed_vals, ({
-          Ast *closed = l->ast;
-          if (!closed || closed->tag != AST_IDENTIFIER) {
-            continue;
-          }
-          MirInstr get_instr =
-              mir_make_instr(MIR_ENV_GET, closed->type, closed);
-          get_instr.name = closed->data.AST_IDENTIFIER.value;
-          get_instr.field_index = (unsigned)i;
-          mir_value_id_vec_push(fn->arena, &get_instr.operands, env_param);
-          MirValueId captured =
-              mir_builder_append_instr(&fn_builder, get_instr);
-          mir_bind(&fn_builder, closed->data.AST_IDENTIFIER.value, captured);
-        }));
+  size_t value_map_len = source->values.len;
+  MirValueId *value_map =
+      mir_arena_alloc(program->arena, sizeof(MirValueId) * value_map_len,
+                      MIR_ALIGNOF(MirValueId));
+  if (!value_map && value_map_len > 0) {
+    return fn;
+  }
+  for (size_t i = 0; i < value_map_len; i++) {
+    value_map[i] = MIR_NO_VALUE;
   }
 
-  Type *fn_type_cursor = ast->type;
-  AST_LIST_ITER(
-      ast->data.AST_LAMBDA.params, ({
-        Ast *param_ast = l->ast;
-        Type *param_type = fn_type_cursor && fn_type_cursor->kind == T_FN
-                               ? fn_type_cursor->data.T_FN.from
-                               : param_ast->type;
-        const char *param_name = param_ast->tag == AST_IDENTIFIER
-                                     ? param_ast->data.AST_IDENTIFIER.value
-                                     : "param";
-        MirInstr instr = mir_make_instr(MIR_PARAM, param_type, param_ast);
-        instr.name = param_name;
-        instr.member_index = fn->env_param_index >= 0 ? (int)i + 1 : (int)i;
-        MirValueId param = mir_builder_append_instr(&fn_builder, instr);
-        mir_bind(&fn_builder, param_name, param);
-        if (fn_type_cursor && fn_type_cursor->kind == T_FN) {
-          fn_type_cursor = fn_type_cursor->data.T_FN.to;
-        }
-      }));
-
-  MirValueId body = mir_emit_expr(&fn_builder, ast->data.AST_LAMBDA.body);
-  mir_set_return_or_tail_call(&fn_builder, body);
-  mir_builder_destroy_scopes(&fn_builder);
-  return MIR_NO_VALUE;
-}
-
-static MirValueId mir_emit_lambda_value(MirBuilder *builder, Ast *ast,
-                                        const char *name) {
-  mir_emit_lambda_function(builder->program, ast, name);
-  if (!is_closure(ast->type)) {
-    MirInstr instr = mir_make_instr(MIR_FN_REF, ast->type, ast);
-    instr.name = lambda_name(ast, name);
-    return mir_builder_append_instr(builder, instr);
+  for (size_t i = 0; i < source->params.len; i++) {
+    MirParam *param = &source->params.items[i];
+    Type *param_type = mir_substitute_type(program->arena, subst, param->type);
+    MirValueId value =
+        mir_function_add_param(fn, param->name, param_type, param->origin);
+    mir_function_set_param_use(fn, i, mir_function_param_use(source, i));
+    mir_function_set_value_callable_summary(
+        fn, value, mir_value_callable_summary(source, param->value));
+    if (param->value < value_map_len) {
+      value_map[param->value] = value;
+    }
   }
 
-  MirEnvLayoutId layout_id =
-      mir_create_env_layout(builder->program, ast, lambda_name(ast, name));
+  for (size_t i = 0; i < source->blocks.len; i++) {
+    MirBlock *source_block = source->blocks.items[i];
+    MirBlock *block = mir_function_add_block(
+        fn, source_block && source_block->name ? source_block->name : "bb");
+    if (!source_block || !block) {
+      continue;
+    }
 
-  MirInstr env_instr =
-      mir_make_instr(MIR_ENV_NEW, ast->type->closure_meta, ast);
-  env_instr.env_layout_id = layout_id;
-  env_instr.alloc_id = mir_new_alloc_site(builder, ast);
-  MirValueId env = mir_builder_append_instr(builder, env_instr);
+    MirBuilder builder;
+    mir_builder_init(&builder, program, fn);
+    mir_builder_position_at_end(&builder, block);
 
-  AST_LIST_ITER(
-      ast->data.AST_LAMBDA.closed_vals, ({
-        Ast *closed = l->ast;
-        if (!closed || closed->tag != AST_IDENTIFIER) {
-          continue;
+    for (size_t j = 0; j < source_block->instrs.len; j++) {
+      MirInstr *instr = &source_block->instrs.items[j];
+      MirInstr clone = mir_clone_instr_with_subst(
+          program->arena, subst, value_map, value_map_len, instr);
+
+      MirValueId result = MIR_NO_VALUE;
+      if (clone.kind == MIR_FN_REF && clone.type &&
+          !mir_type_has_type_vars(clone.type)) {
+        mir_specialize_fn_ref_instr(program, &clone, clone.type);
+      }
+      if (clone.kind == MIR_CLOSURE && clone.type && is_closure(clone.type) &&
+          clone.type->closure_meta && !mir_type_has_type_vars(clone.type)) {
+        Type *impl_type = mir_closure_callable_type(program->arena, clone.type);
+        MirInstr *fn_ref =
+            mir_function_find_def_instr(fn, clone.data.closure.fn);
+        MirFunction *impl =
+            mir_specialize_fn_ref_instr(program, fn_ref, impl_type);
+        if (fn_ref && impl_type) {
+          mir_function_set_value_type(fn, fn_ref->result, impl_type);
         }
-        MirValueId captured = mir_emit_expr(builder, closed);
-        MirInstr set_instr = mir_make_instr(MIR_ENV_SET, closed->type, closed);
-        set_instr.env_layout_id = layout_id;
-        set_instr.field_index = (unsigned)i;
-        set_instr.name = closed->data.AST_IDENTIFIER.value;
-        mir_value_id_vec_push(builder->fn->arena, &set_instr.operands, env);
-        mir_value_id_vec_push(builder->fn->arena, &set_instr.operands,
-                              captured);
-        mir_builder_append_instr(builder, set_instr);
-      }));
+        if (impl) {
+          clone.data.closure.impl_fn = impl->id;
+          clone.data.closure.impl_name = impl->name;
+        }
+      }
+      if (clone.kind == MIR_CALL && clone.data.call.builtin) {
+        result = mir_lower_specialized_builtin_call(&builder, &clone);
+      }
+      if (clone.kind == MIR_CALL && !clone.data.call.builtin) {
+        clone.data.call.specialized_name =
+            mir_call_specialized_name(&builder, &clone);
+        MirFunction *specialized =
+            mir_materialize_call_specialization(&builder, &clone);
+        if (specialized) {
+          clone.data.call.specialized_name = specialized->name;
+          clone.data.call.specialized_fn = specialized->id;
+        }
+        mir_call_apply_callee_summary(&builder, &clone);
+      }
+      if (result == MIR_NO_VALUE) {
+        result = mir_builder_append_instr(&builder, clone);
+      }
+      if (instr->result < value_map_len) {
+        value_map[instr->result] = result;
+      }
+    }
 
-  MirInstr fn_instr = mir_make_instr(MIR_FN_REF, ast->type, ast);
-  fn_instr.name = lambda_name(ast, name);
-  MirValueId fn_ptr = mir_builder_append_instr(builder, fn_instr);
+    switch (source_block->term.kind) {
+    case MIR_TERM_NONE:
+      block->term = (MirTerminator){.kind = MIR_TERM_NONE,
+                                    .value = MIR_NO_VALUE,
+                                    .cond = MIR_NO_VALUE,
+                                    .target = MIR_NO_BLOCK,
+                                    .then_block = MIR_NO_BLOCK,
+                                    .else_block = MIR_NO_BLOCK};
+      break;
+    case MIR_TERM_RETURN:
+      block->term =
+          (MirTerminator){.kind = MIR_TERM_RETURN,
+                          .value = mir_remap_value(value_map, value_map_len,
+                                                   source_block->term.value),
+                          .cond = MIR_NO_VALUE,
+                          .target = MIR_NO_BLOCK,
+                          .then_block = MIR_NO_BLOCK,
+                          .else_block = MIR_NO_BLOCK};
+      break;
+    case MIR_TERM_ARM_RETURN:
+      block->term =
+          (MirTerminator){.kind = MIR_TERM_ARM_RETURN,
+                          .value = mir_remap_value(value_map, value_map_len,
+                                                   source_block->term.value),
+                          .cond = MIR_NO_VALUE,
+                          .target = source_block->term.target,
+                          .then_block = MIR_NO_BLOCK,
+                          .else_block = MIR_NO_BLOCK};
+      break;
+    case MIR_TERM_BR:
+      block->term = (MirTerminator){.kind = MIR_TERM_BR,
+                                    .value = MIR_NO_VALUE,
+                                    .cond = MIR_NO_VALUE,
+                                    .target = source_block->term.target,
+                                    .then_block = MIR_NO_BLOCK,
+                                    .else_block = MIR_NO_BLOCK};
+      break;
+    case MIR_TERM_COND:
+      block->term =
+          (MirTerminator){.kind = MIR_TERM_COND,
+                          .value = MIR_NO_VALUE,
+                          .cond = mir_remap_value(value_map, value_map_len,
+                                                  source_block->term.cond),
+                          .target = MIR_NO_BLOCK,
+                          .then_block = source_block->term.then_block,
+                          .else_block = source_block->term.else_block};
+      break;
+    case MIR_TERM_UNREACHABLE:
+      block->term = (MirTerminator){.kind = MIR_TERM_UNREACHABLE,
+                                    .value = MIR_NO_VALUE,
+                                    .cond = MIR_NO_VALUE,
+                                    .target = MIR_NO_BLOCK,
+                                    .then_block = MIR_NO_BLOCK,
+                                    .else_block = MIR_NO_BLOCK};
+      break;
+    }
+  }
 
-  MirInstr closure_instr = mir_make_instr(MIR_MAKE_CLOSURE, ast->type, ast);
-  closure_instr.env_layout_id = layout_id;
-  mir_value_id_vec_push(builder->fn->arena, &closure_instr.operands, fn_ptr);
-  mir_value_id_vec_push(builder->fn->arena, &closure_instr.operands, env);
-  return mir_builder_append_instr(builder, closure_instr);
+  return fn;
 }
 
-static MirValueId mir_emit_body(MirBuilder *builder, Ast *ast) {
+static MirFunction *mir_materialize_call_specialization(MirBuilder *builder,
+                                                        MirInstr *call) {
+  if (!builder || !builder->program || !call ||
+      !call->data.call.specialized_name) {
+    return NULL;
+  }
+
+  MirInstr *callee_def = mir_call_callee_fn_ref(builder, call);
+  if (!callee_def) {
+    return NULL;
+  }
+
+  MirFunction *source =
+      mir_program_get_function(builder->program, callee_def->data.fn_ref.fn);
+  if (!source) {
+    return NULL;
+  }
+  if (!mir_type_has_type_vars(source->type)) {
+    return NULL;
+  }
+
+  MirFunction *existing = mir_program_find_specialization(
+      builder->program, source->id, call->data.call.callee_type);
+  if (existing) {
+    return existing;
+  }
+
+  return mir_clone_specialized_function(builder->program, source,
+                                        call->data.call.specialized_name,
+                                        call->data.call.callee_type);
+}
+
+static Type *mir_application_expected_callee_type(MirArena *arena, Ast *ast) {
+  if (!arena || !ast || ast->tag != AST_APPLICATION) {
+    return NULL;
+  }
+
+  Type *type = ast->type;
+  for (size_t i = ast->data.AST_APPLICATION.len; i > 0; i--) {
+    Ast *arg = ast->data.AST_APPLICATION.args + (i - 1);
+    Type *fn_type = mir_arena_alloc(arena, sizeof(Type), MIR_ALIGNOF(Type));
+    if (!fn_type) {
+      return NULL;
+    }
+    memset(fn_type, 0, sizeof(*fn_type));
+    fn_type->kind = T_FN;
+    fn_type->data.T_FN.from = arg->type;
+    fn_type->data.T_FN.to = type;
+    type = fn_type;
+  }
+  return type;
+}
+
+static void mir_call_push_operand(MirArena *arena, MirInstr *call,
+                                  MirValueId operand, MirOperandUse use) {
+  if (!arena || !call || call->kind != MIR_CALL || operand == MIR_NO_VALUE) {
+    return;
+  }
+  mir_value_id_vec_push(arena, &call->data.call.operands, operand);
+  mir_operand_use_vec_push(arena, &call->data.call.operand_uses, use);
+}
+
+static MirFunction *mir_call_summary_function(MirBuilder *builder,
+                                              MirInstr *call) {
+  if (!builder || !builder->program || !builder->fn || !call ||
+      call->kind != MIR_CALL || call->data.call.builtin) {
+    return NULL;
+  }
+
+  if (call->data.call.specialized_fn != MIR_NO_FUNCTION) {
+    MirFunction *specialized =
+        mir_program_get_function(builder->program, call->data.call.specialized_fn);
+    if (specialized) {
+      return specialized;
+    }
+  }
+
+  MirInstr *callee = mir_function_find_def_instr(builder->fn,
+                                                 call->data.call.callee);
+  if (!callee || callee->kind != MIR_FN_REF ||
+      callee->data.fn_ref.fn == MIR_NO_FUNCTION) {
+    return NULL;
+  }
+
+  return mir_program_get_function(builder->program, callee->data.fn_ref.fn);
+}
+
+static const MirFnSummary *mir_call_summary(MirBuilder *builder,
+                                            MirInstr *call) {
+  if (!call || call->kind != MIR_CALL) {
+    return NULL;
+  }
+
+  if (call->data.call.builtin) {
+    return &call->data.call.builtin->summary;
+  }
+
+  MirFunction *callee = mir_call_summary_function(builder, call);
+  if (callee) {
+    return &callee->summary;
+  }
+
+  return builder && builder->fn
+             ? mir_value_callable_summary(builder->fn, call->data.call.callee)
+             : NULL;
+}
+
+static void mir_call_apply_callee_summary(MirBuilder *builder, MirInstr *call) {
+  const MirFnSummary *summary = mir_call_summary(builder, call);
+  if (!builder || !builder->program || !call || !summary) {
+    return;
+  }
+
+  while (call->data.call.operand_uses.len < call->data.call.operands.len) {
+    mir_operand_use_vec_push(builder->program->arena,
+                             &call->data.call.operand_uses,
+                             MIR_OPERAND_USE_CONSUME);
+  }
+
+  size_t len = call->data.call.operands.len;
+  if (summary->param_uses.len < len) {
+    len = summary->param_uses.len;
+  }
+  for (size_t i = 0; i < len; i++) {
+    call->data.call.operand_uses.items[i] = summary->param_uses.items[i];
+  }
+}
+
+static bool mir_call_push_application_args(MirBuilder *builder, MirInstr *call,
+                                           Ast *ast, MirCtx *ctx,
+                                           MirArena *arena) {
+  if (!builder || !call || !ast || ast->tag != AST_APPLICATION || !arena) {
+    return false;
+  }
+
+  for (size_t i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+    MirValueId arg = mir_expr(builder, ast->data.AST_APPLICATION.args + i, ctx);
+    if (arg == MIR_NO_VALUE) {
+      return false;
+    }
+    mir_call_push_operand(arena, call, arg, MIR_OPERAND_USE_CONSUME);
+  }
+  return true;
+}
+
+static bool mir_application_is_partial(Ast *ast) {
+  if (!ast || ast->tag != AST_APPLICATION ||
+      !ast->data.AST_APPLICATION.function ||
+      !ast->data.AST_APPLICATION.function->type) {
+    return false;
+  }
+  return application_is_partial(ast);
+}
+
+static size_t mir_fn_param_count(Type *type) {
+  size_t count = 0;
+  for (Type *cursor = type; cursor && cursor->kind == T_FN;
+       cursor = cursor->data.T_FN.to) {
+    count++;
+  }
+  return count;
+}
+
+static Type *mir_fn_type_from_args(MirArena *arena, Type **args, size_t len,
+                                   Type *result_type) {
+  if (!arena) {
+    return result_type;
+  }
+
+  Type *type = result_type;
+  for (size_t i = len; i > 0; i--) {
+    Type *fn_type = mir_arena_alloc(arena, sizeof(Type), MIR_ALIGNOF(Type));
+    if (!fn_type) {
+      return result_type;
+    }
+    memset(fn_type, 0, sizeof(*fn_type));
+    fn_type->kind = T_FN;
+    fn_type->data.T_FN.from = args[i - 1];
+    fn_type->data.T_FN.to = type;
+    type = fn_type;
+  }
+  return type;
+}
+
+static MirFunction *mir_direct_callee_function(MirBuilder *builder,
+                                               Ast *function, MirCtx *ctx) {
+  if (!builder || !builder->program || !function) {
+    return NULL;
+  }
+
+  if (function->tag == AST_IDENTIFIER) {
+    MirValueId value = MIR_NO_VALUE;
+    if (mir_ctx_lookup_value(ctx, function->data.AST_IDENTIFIER.value,
+                             &value)) {
+      MirInstr *def = mir_function_find_def_instr(builder->fn, value);
+      if (def && def->kind == MIR_FN_REF) {
+        return mir_program_get_function(builder->program, def->data.fn_ref.fn);
+      }
+    }
+
+    return mir_program_find_function_by_name(
+        builder->program, function->data.AST_IDENTIFIER.value);
+  }
+
+  return NULL;
+}
+
+static const char *mir_curried_wrapper_name(MirArena *arena,
+                                            MirFunction *callee,
+                                            bool captures_env) {
+  static unsigned counter = 0;
+  const char *callee_name = callee && callee->name ? callee->name : "callable";
+  return mir_arena_printf(arena, "%s.curried.%s.%u",
+                          captures_env ? "closure" : "const", callee_name,
+                          counter++);
+}
+
+static MirValueId
+mir_append_curried_inner_call(MirBuilder *wrapper_builder, Ast *origin,
+                              MirFunction *callee, Type *callee_type,
+                              MirValueIdVec operands, Type **operand_types,
+                              size_t operand_count, Type *result_type) {
+  if (!wrapper_builder || !callee || !callee_type || !result_type) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId callee_ref =
+      mir_fn_ref(wrapper_builder, callee_type, origin, callee);
+  if (callee_ref == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr call = mir_make_instr(MIR_CALL, result_type, origin);
+  call.data.call.callee = callee_ref;
+  call.data.call.builtin = NULL;
+  call.data.call.specialized_fn = MIR_NO_FUNCTION;
+  call.data.call.operands = operands;
+  call.data.call.operand_uses = (MirOperandUseVec){0};
+  for (size_t i = 0; i < operands.len; i++) {
+    mir_operand_use_vec_push(wrapper_builder->program->arena,
+                             &call.data.call.operand_uses,
+                             MIR_OPERAND_USE_CONSUME);
+  }
+  call.data.call.callee_type =
+      mir_fn_type_from_args(wrapper_builder->program->arena, operand_types,
+                            operand_count, result_type);
+  call.data.call.specialized_name =
+      mir_call_specialized_name(wrapper_builder, &call);
+
+  MirFunction *specialized =
+      mir_materialize_call_specialization(wrapper_builder, &call);
+  if (specialized) {
+    call.data.call.specialized_name = specialized->name;
+    call.data.call.specialized_fn = specialized->id;
+  }
+  mir_call_apply_callee_summary(wrapper_builder, &call);
+
+  return mir_builder_append_instr(wrapper_builder, call);
+}
+
+static Type *mir_call_type_from_operand_values(MirBuilder *builder,
+                                               MirInstr *call,
+                                               Type *result_type) {
+  if (!builder || !builder->program || !builder->fn || !call) {
+    return NULL;
+  }
+
+  size_t operand_count = call->data.call.operands.len;
+  Type **operand_types =
+      operand_count
+          ? mir_arena_alloc(builder->program->arena,
+                            sizeof(Type *) * operand_count, MIR_ALIGNOF(Type *))
+          : NULL;
+  if (operand_count && !operand_types) {
+    return NULL;
+  }
+
+  for (size_t i = 0; i < operand_count; i++) {
+    operand_types[i] =
+        mir_function_value_type(builder->fn, call->data.call.operands.items[i]);
+    if (!operand_types[i]) {
+      return NULL;
+    }
+  }
+
+  return mir_fn_type_from_args(builder->program->arena, operand_types,
+                               operand_count, result_type);
+}
+
+static void mir_update_call_result_type(MirBuilder *builder, MirInstr *call,
+                                        Type *result_type) {
+  if (!builder || !builder->fn || !call || call->kind != MIR_CALL ||
+      !result_type) {
+    return;
+  }
+
+  call->type = result_type;
+  mir_function_set_value_type(builder->fn, call->result, result_type);
+  call->data.call.callee_type =
+      mir_call_type_from_operand_values(builder, call, result_type);
+
+  if (call->data.call.builtin) {
+    return;
+  }
+
+  call->data.call.specialized_name = mir_call_specialized_name(builder, call);
+  call->data.call.specialized_fn = MIR_NO_FUNCTION;
+  MirFunction *specialized = mir_materialize_call_specialization(builder, call);
+  if (specialized) {
+    call->data.call.specialized_name = specialized->name;
+    call->data.call.specialized_fn = specialized->id;
+  }
+}
+
+static void mir_update_closure_value_type(MirBuilder *builder,
+                                          MirInstr *closure, Type *type) {
+  if (!builder || !builder->program || !builder->fn || !closure ||
+      closure->kind != MIR_CLOSURE || !type || !is_closure(type) ||
+      !type->closure_meta) {
+    return;
+  }
+
+  closure->type = type;
+  mir_function_set_value_type(builder->fn, closure->result, type);
+
+  MirInstr *env =
+      mir_function_find_def_instr(builder->fn, closure->data.closure.env);
+  if (env && env->kind == MIR_CLOSURE_ENV) {
+    env->type = type->closure_meta;
+    mir_function_set_value_type(builder->fn, env->result, type->closure_meta);
+  }
+
+  MirInstr *fn_ref =
+      mir_function_find_def_instr(builder->fn, closure->data.closure.fn);
+  if (!fn_ref || fn_ref->kind != MIR_FN_REF) {
+    return;
+  }
+
+  Type *impl_type = mir_closure_callable_type(builder->program->arena, type);
+  if (!impl_type || mir_type_has_type_vars(impl_type)) {
+    return;
+  }
+
+  MirFunction *impl =
+      mir_specialize_fn_ref_instr(builder->program, fn_ref, impl_type);
+  mir_function_set_value_type(builder->fn, fn_ref->result, impl_type);
+
+  if (impl) {
+    closure->data.closure.impl_fn = impl->id;
+    closure->data.closure.impl_name = impl->name;
+    mir_function_set_value_callable_summary(builder->fn, fn_ref->result,
+                                            &impl->summary);
+    mir_function_set_value_callable_summary(builder->fn, closure->result,
+                                            &impl->summary);
+  }
+}
+
+static MirFunction *mir_build_const_curried_wrapper(MirBuilder *builder,
+                                                    Ast *app, MirCtx *ctx,
+                                                    MirFunction *callee) {
+  if (!builder || !builder->program || !app || app->tag != AST_APPLICATION ||
+      !callee || !app->type) {
+    return NULL;
+  }
+
+  MirArena *arena = builder->program->arena;
+  const char *name = mir_curried_wrapper_name(arena, callee, false);
+  MirFunction *wrapper =
+      mir_program_add_function(builder->program, name, app->type, app);
+  MirBlock *entry = wrapper ? mir_function_add_block(wrapper, "entry") : NULL;
+  if (!wrapper || !entry) {
+    return NULL;
+  }
+
+  MirBuilder wrapper_builder;
+  mir_builder_init(&wrapper_builder, builder->program, wrapper);
+  mir_builder_position_at_end(&wrapper_builder, entry);
+
+  MirCtx wrapper_ctx = {.env = ctx ? ctx->env : builder->program->type_env,
+                        .frame = NULL};
+  ht table;
+  MirStackFrame frame;
+  mir_stack_frame_init(arena, &table, &frame, NULL);
+  wrapper_ctx.frame = &frame;
+
+  size_t captured_count = app->data.AST_APPLICATION.len;
+  size_t remaining_count = mir_fn_param_count(app->type);
+  size_t operand_count = captured_count + remaining_count;
+  Type **operand_types =
+      operand_count ? mir_arena_alloc(arena, sizeof(Type *) * operand_count,
+                                      MIR_ALIGNOF(Type *))
+                    : NULL;
+  if (operand_count && !operand_types) {
+    return NULL;
+  }
+
+  MirValueIdVec operands = {0};
+  for (size_t i = 0; i < captured_count; i++) {
+    Ast *arg = app->data.AST_APPLICATION.args + i;
+    MirValueId value = mir_expr(&wrapper_builder, arg, &wrapper_ctx);
+    if (value == MIR_NO_VALUE) {
+      mir_builder_set_unreachable_if_open(&wrapper_builder);
+      return wrapper;
+    }
+    operand_types[i] = arg->type;
+    mir_value_id_vec_push(arena, &operands, value);
+  }
+
+  Type *cursor = app->type;
+  for (size_t i = 0; i < remaining_count && cursor && cursor->kind == T_FN;
+       i++, cursor = cursor->data.T_FN.to) {
+    Type *param_type = cursor->data.T_FN.from;
+    MirValueId param = mir_function_add_param(
+        wrapper, mir_arena_printf(arena, "arg%zu", i), param_type, app);
+    operand_types[captured_count + i] = param_type;
+    mir_value_id_vec_push(arena, &operands, param);
+  }
+
+  Type *result_type = cursor ? cursor : fn_return_type(app->type);
+  MirValueId result = mir_append_curried_inner_call(
+      &wrapper_builder, app, callee, app->data.AST_APPLICATION.function->type,
+      operands, operand_types, operand_count, result_type);
+  if (result != MIR_NO_VALUE) {
+    mir_builder_set_return(&wrapper_builder, result);
+  } else {
+    mir_builder_set_unreachable_if_open(&wrapper_builder);
+  }
+
+  return wrapper;
+}
+
+static MirFunction *mir_build_env_curried_wrapper(MirBuilder *builder, Ast *app,
+                                                  MirCtx *ctx,
+                                                  MirFunction *callee,
+                                                  Type *impl_type) {
+  if (!builder || !builder->program || !app || app->tag != AST_APPLICATION ||
+      !callee || !app->type || !app->type->closure_meta || !impl_type) {
+    return NULL;
+  }
+
+  MirArena *arena = builder->program->arena;
+  const char *name = mir_curried_wrapper_name(arena, callee, true);
+  MirFunction *wrapper =
+      mir_program_add_function(builder->program, name, impl_type, app);
+  MirBlock *entry = wrapper ? mir_function_add_block(wrapper, "entry") : NULL;
+  if (!wrapper || !entry) {
+    return NULL;
+  }
+
+  MirBuilder wrapper_builder;
+  mir_builder_init(&wrapper_builder, builder->program, wrapper);
+  mir_builder_position_at_end(&wrapper_builder, entry);
+
+  MirCtx wrapper_ctx = {.env = ctx ? ctx->env : builder->program->type_env,
+                        .frame = NULL};
+  ht table;
+  MirStackFrame frame;
+  mir_stack_frame_init(arena, &table, &frame, NULL);
+  wrapper_ctx.frame = &frame;
+
+  Type *env_type = app->type->closure_meta;
+  MirValueId env_param = mir_function_add_param(wrapper, "$env", env_type, app);
+  if (env_param == MIR_NO_VALUE) {
+    return wrapper;
+  }
+
+  Type *remaining_type = impl_type && impl_type->kind == T_FN
+                             ? impl_type->data.T_FN.to
+                             : app->type;
+  size_t captured_count = app->data.AST_APPLICATION.len;
+  size_t remaining_count = mir_fn_param_count(remaining_type);
+  size_t operand_count = captured_count + remaining_count;
+  Type **operand_types =
+      operand_count ? mir_arena_alloc(arena, sizeof(Type *) * operand_count,
+                                      MIR_ALIGNOF(Type *))
+                    : NULL;
+  if (operand_count && !operand_types) {
+    return NULL;
+  }
+
+  MirValueIdVec operands = {0};
+  for (size_t i = 0; i < captured_count; i++) {
+    Type *field_type = NULL;
+    if (env_type->kind == T_CONS && env_type->data.T_CONS.args &&
+        i < (size_t)env_type->data.T_CONS.num_args) {
+      field_type = env_type->data.T_CONS.args[i];
+    }
+    if (!field_type) {
+      field_type = app->data.AST_APPLICATION.args[i].type;
+    }
+
+    MirValueId captured =
+        mir_closure_get(&wrapper_builder, field_type,
+                        app->data.AST_APPLICATION.args + i, env_param, i, NULL);
+    if (captured == MIR_NO_VALUE) {
+      mir_builder_set_unreachable_if_open(&wrapper_builder);
+      return wrapper;
+    }
+    operand_types[i] = field_type;
+    mir_value_id_vec_push(arena, &operands, captured);
+  }
+
+  Type *cursor = remaining_type;
+  for (size_t i = 0; i < remaining_count && cursor && cursor->kind == T_FN;
+       i++, cursor = cursor->data.T_FN.to) {
+    Type *param_type = cursor->data.T_FN.from;
+    MirValueId param = mir_function_add_param(
+        wrapper, mir_arena_printf(arena, "arg%zu", i), param_type, app);
+    operand_types[captured_count + i] = param_type;
+    mir_value_id_vec_push(arena, &operands, param);
+  }
+
+  Type *result_type = cursor ? cursor : fn_return_type(remaining_type);
+  MirValueId result = mir_append_curried_inner_call(
+      &wrapper_builder, app, callee, app->data.AST_APPLICATION.function->type,
+      operands, operand_types, operand_count, result_type);
+  if (result != MIR_NO_VALUE) {
+    mir_builder_set_return(&wrapper_builder, result);
+  } else {
+    mir_builder_set_unreachable_if_open(&wrapper_builder);
+  }
+
+  return wrapper;
+}
+
+static MirValueId mir_partial_application(MirBuilder *builder, Type *type,
+                                          Ast *app, MirCtx *ctx) {
+  if (!builder || !builder->program || !app || app->tag != AST_APPLICATION) {
+    return MIR_NO_VALUE;
+  }
+
+  MirFunction *callee = mir_direct_callee_function(
+      builder, app->data.AST_APPLICATION.function, ctx);
+  if (!callee) {
+    fprintf(stderr, "MIR lowering only supports partial application of direct "
+                    "functions for now\n");
+    return MIR_NO_VALUE;
+  }
+
+  MirArena *arena = builder->program->arena;
+  if (app->data.AST_APPLICATION.is_curried_with_constants && type &&
+      type->kind == T_FN && !is_closure(type)) {
+    MirFunction *wrapper =
+        mir_build_const_curried_wrapper(builder, app, ctx, callee);
+    return wrapper ? mir_fn_ref(builder, type, app, wrapper) : MIR_NO_VALUE;
+  }
+
+  if (!type || !is_closure(type) || !type->closure_meta) {
+    fprintf(stderr,
+            "MIR lowering expected partial application to produce a closure\n");
+    return MIR_NO_VALUE;
+  }
+
+  Type *impl_type = mir_closure_callable_type(arena, type);
+  MirFunction *wrapper =
+      mir_build_env_curried_wrapper(builder, app, ctx, callee, impl_type);
+  if (!wrapper) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueIdVec fields = {0};
+  for (size_t i = 0; i < app->data.AST_APPLICATION.len; i++) {
+    MirValueId value =
+        mir_expr(builder, app->data.AST_APPLICATION.args + i, ctx);
+    if (value == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+    mir_value_id_vec_push(arena, &fields, value);
+  }
+
+  MirValueId fn = mir_fn_ref(builder, impl_type, app, wrapper);
+  MirValueId env = mir_closure_env(builder, type->closure_meta, app, fields);
+  return mir_closure(builder, type, app, fn, env, wrapper);
+}
+
+MirValueId mir_application(MirBuilder *builder, Type *type, Ast *ast,
+                           MirCtx *ctx) {
+
+  Ast *function = ast->data.AST_APPLICATION.function;
+  Type *function_type = function ? function->type : NULL;
+  MirBuiltinSymbol *builtin = NULL;
+  if (function && function->tag == AST_IDENTIFIER) {
+    builtin = mir_program_lookup_builtin(builder->program,
+                                         function->data.AST_IDENTIFIER.value);
+    if (builtin && builtin->handler) {
+      MirValueId value = builtin->handler(builder, ast, ctx, builtin);
+      if (value != MIR_NO_VALUE) {
+        return value;
+      }
+    }
+
+    MirValueId constructor = mir_constructor_call(
+        builder, ast, ast->type, function->data.AST_IDENTIFIER.value,
+        ast->data.AST_APPLICATION.args, ast->data.AST_APPLICATION.len, ctx);
+    if (constructor != MIR_NO_VALUE) {
+      return constructor;
+    }
+  }
+
+  if (mir_application_is_partial(ast)) {
+    return mir_partial_application(builder, type, ast, ctx);
+  }
+
+  MirInstr call = mir_make_instr(MIR_CALL, type, ast);
+  MirArena *arena = builder->fn->arena;
+
+  call.data.call.callee = MIR_NO_VALUE;
+  call.data.call.builtin = builtin;
+  call.data.call.specialized_fn = MIR_NO_FUNCTION;
+  call.data.call.callee_type = mir_application_expected_callee_type(arena, ast);
+  if (!builtin) {
+    MirValueId callee_value =
+        mir_expr(builder, ast->data.AST_APPLICATION.function, ctx);
+    if (callee_value == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+    if (is_closure(function_type) && function_type->closure_meta) {
+      MirInstr *callee_def =
+          mir_function_find_def_instr(builder->fn, callee_value);
+      if (callee_def && callee_def->kind == MIR_CALL &&
+          callee_def->type != function_type) {
+        mir_update_call_result_type(builder, callee_def, function_type);
+      } else if (callee_def && callee_def->kind == MIR_CLOSURE &&
+                 callee_def->type != function_type) {
+        mir_update_closure_value_type(builder, callee_def, function_type);
+      }
+
+      MirValueId env = mir_closure_get_env(builder, function_type->closure_meta,
+                                           function, callee_value);
+      Type *callable_type = mir_closure_callable_type(arena, function_type);
+      MirValueId fn =
+          mir_closure_fn(builder, callable_type, function, callee_value);
+      if (env == MIR_NO_VALUE || fn == MIR_NO_VALUE) {
+        return MIR_NO_VALUE;
+      }
+
+      call.data.call.callee = fn;
+      call.data.call.callee_type = callable_type;
+      mir_call_push_operand(arena, &call, env, MIR_OPERAND_USE_BORROW);
+
+      bool skip_void_arg = ast->data.AST_APPLICATION.len == 1 &&
+                           ast->data.AST_APPLICATION.args &&
+                           ast->data.AST_APPLICATION.args->tag == AST_VOID &&
+                           function_type->kind == T_FN &&
+                           function_type->data.T_FN.from &&
+                           function_type->data.T_FN.from->kind == T_VOID;
+      if (!skip_void_arg) {
+        if (!mir_call_push_application_args(builder, &call, ast, ctx, arena)) {
+          return MIR_NO_VALUE;
+        }
+      }
+
+      mir_call_apply_callee_summary(builder, &call);
+      return mir_builder_append_instr(builder, call);
+    }
+
+    call.data.call.callee = callee_value;
+    if (!mir_call_push_application_args(builder, &call, ast, ctx, arena)) {
+      return MIR_NO_VALUE;
+    }
+    call.data.call.specialized_name = mir_call_specialized_name(builder, &call);
+    MirFunction *specialized =
+        mir_materialize_call_specialization(builder, &call);
+    if (specialized) {
+      call.data.call.specialized_name = specialized->name;
+      call.data.call.specialized_fn = specialized->id;
+    }
+    mir_call_apply_callee_summary(builder, &call);
+    return mir_builder_append_instr(builder, call);
+  }
+
+  if (!mir_call_push_application_args(builder, &call, ast, ctx, arena)) {
+    return MIR_NO_VALUE;
+  }
+  mir_call_apply_callee_summary(builder, &call);
+  return mir_builder_append_instr(builder, call);
+}
+
+static MirValueId mir_body(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
   MirValueId last = MIR_NO_VALUE;
-  for (AstList *l = ast->data.AST_BODY.stmts; l != NULL; l = l->next) {
-    last = mir_emit_expr(builder, l->ast);
-  }
-  if (last == MIR_NO_VALUE) {
-    return mir_builder_append_instr(
-        builder, mir_make_instr(MIR_CONST_VOID, ast->type, ast));
+  for (AstList *item = ast->data.AST_BODY.stmts; item; item = item->next) {
+    if (builder && builder->block &&
+        builder->block->term.kind != MIR_TERM_NONE) {
+      break;
+    }
+    last = mir_expr(builder, item->ast, ctx);
+    if (last == MIR_NO_VALUE) {
+      break;
+    }
   }
   return last;
 }
 
-static MirValueId mir_emit_loop(MirBuilder *builder, Ast *ast) {
-  (void)builder;
-  (void)ast;
+static MirValueId mir_lambda_value(MirBuilder *builder, Ast *expr, MirCtx *ctx,
+                                   const char *fn_name) {
+  if (!builder || !builder->program || !expr ||
+      (expr->tag != AST_LAMBDA && expr->tag != AST_MODULE)) {
+    return MIR_NO_VALUE;
+  }
+
+  if (!fn_name) {
+    fn_name = mir_lambda_name(builder->program->arena, expr, "<anonymous>");
+  }
+
+  MirFunction *fn = mir_builder_function(builder->program, expr, fn_name, ctx);
+  if (!fn) {
+    return MIR_NO_VALUE;
+  }
+
+  Type *fn_ref_type =
+      is_closure(expr->type)
+          ? mir_closure_callable_type(builder->program->arena, expr->type)
+          : expr->type;
+  MirValueId fn_ref = mir_fn_ref(builder, fn_ref_type, expr, fn);
+  if (!is_closure(expr->type) || !expr->type->closure_meta) {
+    return fn_ref;
+  }
+
+  MirArena *arena = builder->program->arena;
+  MirValueIdVec fields = {0};
+  for (AstList *closed = expr->data.AST_LAMBDA.closed_vals; closed;
+       closed = closed->next) {
+    MirValueId value = mir_expr(builder, closed->ast, ctx);
+    if (value == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+    mir_value_id_vec_push(arena, &fields, value);
+  }
+
+  MirValueId env =
+      mir_closure_env(builder, expr->type->closure_meta, expr, fields);
+  if (env == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+  return mir_closure(builder, expr->type, expr, fn_ref, env, fn);
+}
+
+static MirValueId mir_let_value(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
+  Ast *expr = ast->data.AST_LET.expr;
+
+  if (expr && (expr->tag == AST_LAMBDA || expr->tag == AST_MODULE)) {
+    ObjString name = {0};
+    const char *fn_name = NULL;
+    if (get_let_binding_name(ast, &name) == 0) {
+      fn_name = mir_obj_name(builder->program->arena, name, "<anonymous>");
+    } else {
+      fn_name = mir_lambda_name(builder->program->arena, expr, "<anonymous>");
+    }
+    return mir_lambda_value(builder, expr, ctx, fn_name);
+  } else if (expr) {
+    return mir_expr(builder, expr, ctx);
+  }
+
   return MIR_NO_VALUE;
 }
 
-static MirValueId mir_emit_let(MirBuilder *builder, Ast *ast) {
+static MirValueId mir_let(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
   Ast *binding = ast->data.AST_LET.binding;
   Ast *expr = ast->data.AST_LET.expr;
-  const char *binding_name = binding && binding->tag == AST_IDENTIFIER
-                                 ? binding->data.AST_IDENTIFIER.value
-                                 : NULL;
 
-  MirValueId value = MIR_NO_VALUE;
-  if (expr && (expr->tag == AST_LAMBDA || expr->tag == AST_MODULE)) {
-    value = mir_emit_lambda_value(builder, expr, binding_name);
-  } else {
-    value = mir_emit_expr(builder, expr);
-  }
-
-  if (binding_name) {
-    mir_bind(builder, binding_name, value);
-  }
-
-  if (ast->data.AST_LET.in_expr) {
-    mir_push_scope(builder);
-    if (binding_name) {
-      mir_bind(builder, binding_name, value);
+  if (ast->data.AST_LET.in_expr && ctx) {
+    MIR_STACK_ALLOC_CTX_PUSH(cont_ctx, builder, ctx)
+    MirValueId value = mir_let_value(builder, ast, &cont_ctx);
+    if (value == MIR_NO_VALUE) {
+      mir_builder_set_unreachable_if_open(builder);
+      return MIR_NO_VALUE;
     }
-    MirValueId in_value = mir_emit_expr(builder, ast->data.AST_LET.in_expr);
-    mir_pop_scope(builder);
-    return in_value;
+    if (!mir_bind_pattern(builder, &cont_ctx, binding, value,
+                          expr ? expr->type : binding->type)) {
+      mir_builder_set_unreachable_if_open(builder);
+      return MIR_NO_VALUE;
+    }
+    return mir_expr(builder, ast->data.AST_LET.in_expr, &cont_ctx);
   }
 
-  return value;
+  MirValueId value = mir_let_value(builder, ast, ctx);
+  if (value == MIR_NO_VALUE) {
+    mir_builder_set_unreachable_if_open(builder);
+    return MIR_NO_VALUE;
+  }
+  if (!ast->data.AST_LET.in_expr) {
+    if (!mir_bind_pattern(builder, ctx, binding, value,
+                          expr ? expr->type : binding->type)) {
+      mir_builder_set_unreachable_if_open(builder);
+      return MIR_NO_VALUE;
+    }
+    return value;
+  }
+
+  if (!mir_bind_pattern(builder, ctx, binding, value,
+                        expr ? expr->type : binding->type)) {
+    mir_builder_set_unreachable_if_open(builder);
+    return MIR_NO_VALUE;
+  }
+  return mir_expr(builder, ast->data.AST_LET.in_expr, ctx);
 }
 
-static MirValueId mir_emit_sequence_literal(MirBuilder *builder, Ast *ast,
-                                            MirInstrKind kind) {
+static MirValueId mir_identifier(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
+  MirValueId value = MIR_NO_VALUE;
+
+  if (ast && ast->tag == AST_IDENTIFIER &&
+      mir_ctx_lookup_value(ctx, ast->data.AST_IDENTIFIER.value, &value)) {
+    return value;
+  }
+
+  if (ast && ast->tag == AST_IDENTIFIER) {
+    MirFunction *fn = mir_program_find_function_by_name(
+        builder ? builder->program : NULL, ast->data.AST_IDENTIFIER.value);
+    if (fn) {
+      return mir_fn_ref(builder, ast->type, ast, fn);
+    }
+
+    MirValueId constructor = mir_constructor_call(
+        builder, ast, ast->type, ast->data.AST_IDENTIFIER.value, NULL, 0, ctx);
+    if (constructor != MIR_NO_VALUE) {
+      return constructor;
+    }
+  }
+
+  return MIR_NO_VALUE;
+}
+
+static MirValueId mir_tuple_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
+  if (!builder || !builder->fn || !ast || ast->tag != AST_TUPLE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirArena *arena = builder->fn->arena;
   MirValueIdVec items = {0};
   for (size_t i = 0; i < ast->data.AST_LIST.len; i++) {
-    mir_value_id_vec_push(builder->fn->arena, &items,
-                          mir_emit_expr(builder, ast->data.AST_LIST.items + i));
+    Ast *item = ast->data.AST_LIST.items + i;
+    if (item->tag == AST_SPREAD_OP) {
+      return MIR_NO_VALUE;
+    }
+    MirValueId item_value = mir_expr(builder, item, ctx);
+    if (item_value == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+    mir_value_id_vec_push(arena, &items, item_value);
   }
 
-  MirInstr instr = mir_make_instr(kind, ast->type, ast);
-  instr.operands = items;
-  if (kind != MIR_TUPLE) {
-    instr.alloc_id = mir_new_alloc_site(builder, ast);
-  }
-  return mir_builder_append_instr(builder, instr);
+  return mir_tuple(builder, ast->type, ast, items);
 }
 
-static MirValueId mir_emit_application(MirBuilder *builder, Ast *ast) {
-  Type *ftype = ast->data.AST_APPLICATION.function->type;
-
-  printf("mir application\n");
-  print_type(ftype);
-
-  MirValueIdVec args = {0};
-  for (size_t i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-    mir_value_id_vec_push(
-        builder->fn->arena, &args,
-        mir_emit_expr(builder, ast->data.AST_APPLICATION.args + i));
+static MirValueId mir_list_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
+  if (!builder || !builder->fn || !ast || !is_list_type(ast->type)) {
+    return MIR_NO_VALUE;
   }
 
-  Ast *callee_ast = ast->data.AST_APPLICATION.function;
+  if (ast->tag == AST_EMPTY_CONTAINER) {
+    return mir_list_empty(builder, ast->type, ast);
+  }
+  if (ast->tag != AST_LIST) {
+    return MIR_NO_VALUE;
+  }
 
-  if (callee_ast->tag == AST_IDENTIFIER) {
-    MirValueId bound = MIR_NO_VALUE;
-    if (!mir_lookup(builder, callee_ast->data.AST_IDENTIFIER.value, &bound)) {
-      MirInstr instr = mir_make_instr(MIR_CALL_DIRECT, ast->type, ast);
-      instr.name = callee_ast->data.AST_IDENTIFIER.value;
-      instr.operands = args;
-      return mir_builder_append_instr(builder, instr);
+  MirArena *arena = builder->fn->arena;
+  MirValueIdVec items = {0};
+  for (size_t i = 0; i < ast->data.AST_LIST.len; i++) {
+    Ast *item = ast->data.AST_LIST.items + i;
+    MirValueId item_value = mir_expr(builder, item, ctx);
+    if (item_value == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+    mir_value_id_vec_push(arena, &items, item_value);
+  }
+
+  MirValueId list = mir_list_empty(builder, ast->type, ast);
+  for (size_t i = items.len; i > 0; i--) {
+    list = mir_list_cons(builder, ast->type, ast, items.items[i - 1], list);
+    if (list == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+  }
+  return list;
+}
+
+static MirValueId mir_array_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
+  if (!builder || !builder->fn || !ast || ast->tag != AST_ARRAY ||
+      !is_array_type(ast->type)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirArena *arena = builder->fn->arena;
+  MirValueIdVec items = {0};
+  for (size_t i = 0; i < ast->data.AST_LIST.len; i++) {
+    Ast *item = ast->data.AST_LIST.items + i;
+    MirValueId item_value = mir_expr(builder, item, ctx);
+    if (item_value == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+    mir_value_id_vec_push(arena, &items, item_value);
+  }
+
+  return mir_array_literal(builder, ast->type, ast, items);
+}
+
+static MirBlock *mir_function_block(MirFunction *fn, MirBlockId id) {
+  if (!fn || id == MIR_NO_BLOCK || id >= fn->blocks.len) {
+    return NULL;
+  }
+  return fn->blocks.items[id];
+}
+
+static Ast *mir_sum_constructor_head(Ast *pattern) {
+  if (!pattern) {
+    return NULL;
+  }
+
+  if (pattern->tag == AST_MATCH_GUARD_CLAUSE) {
+    pattern = pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr;
+  }
+
+  while (pattern && pattern->tag == AST_APPLICATION) {
+    Ast *fn = pattern->data.AST_APPLICATION.function;
+    if (!fn) {
+      return NULL;
+    }
+    if (fn->tag == AST_IDENTIFIER) {
+      return fn;
+    }
+    if (fn->tag == AST_RECORD_ACCESS) {
+      Ast *id = fn;
+      while (id->tag == AST_RECORD_ACCESS) {
+        id = id->data.AST_RECORD_ACCESS.member;
+      }
+      return id;
+    }
+    pattern = fn;
+  }
+
+  if (pattern->tag == AST_IDENTIFIER) {
+    return pattern;
+  }
+  if (pattern->tag == AST_RECORD_ACCESS) {
+    Ast *id = pattern;
+    while (id->tag == AST_RECORD_ACCESS) {
+      id = id->data.AST_RECORD_ACCESS.member;
+    }
+    return id;
+  }
+  return NULL;
+}
+
+static Type *mir_resolve_sum_constructor(Type *sum_type, Ast *pattern,
+                                         int *idx) {
+  if (idx) {
+    *idx = -1;
+  }
+  if (!sum_type || sum_type->kind != T_SUM || !pattern) {
+    return NULL;
+  }
+
+  if (pattern->tag == AST_MATCH_GUARD_CLAUSE) {
+    pattern = pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr;
+  }
+
+  if (pattern->tag == AST_LIST && pattern->data.AST_LIST.len == 0) {
+    for (int i = 0; i < sum_type->data.T_CONS.num_args; i++) {
+      Type *mem = sum_type->data.T_CONS.args[i];
+      if (mem && mem->kind == T_CONS &&
+          CHARS_EQ(mem->data.T_CONS.name, TYPE_NAME_EMPTY_LIST)) {
+        if (idx) {
+          *idx = i;
+        }
+        return mem;
+      }
+    }
+    return NULL;
+  }
+
+  Ast *head = mir_sum_constructor_head(pattern);
+  return head ? extract_member_from_sum_type_idx(sum_type, head, idx) : NULL;
+}
+
+static const char *mir_constructor_name(Type *constructor_type) {
+  if (!constructor_type ||
+      !(constructor_type->kind == T_CONS || constructor_type->kind == T_SUM)) {
+    return "<constructor>";
+  }
+  return constructor_type->data.T_CONS.name ? constructor_type->data.T_CONS.name
+                                            : "<constructor>";
+}
+
+static MirValueId mir_eq_for_type(MirBuilder *builder, Ast *origin, Type *type,
+                                  MirValueId lhs, MirValueId rhs) {
+  if (!type) {
+    return MIR_NO_VALUE;
+  }
+
+  switch (type->kind) {
+  case T_INT:
+    return mir_ieq(builder, origin, lhs, rhs);
+  case T_UINT64:
+    return mir_ueq(builder, origin, lhs, rhs);
+  case T_NUM:
+    return mir_feq(builder, origin, lhs, rhs);
+  case T_CHAR:
+    return mir_ceq(builder, origin, lhs, rhs);
+  case T_BOOL:
+    return mir_beq(builder, origin, lhs, rhs);
+  default:
+    return MIR_NO_VALUE;
+  }
+}
+
+static bool mir_lower_pattern_to_cfg(MirBuilder *builder, MirCtx *ctx,
+                                     Ast *pattern, MirValueId value,
+                                     Type *value_type, MirBlockId success_block,
+                                     MirBlockId fail_block);
+
+static bool mir_lower_tuple_pattern_to_cfg(MirBuilder *builder, MirCtx *ctx,
+                                           Ast *pattern, MirValueId value,
+                                           Type *value_type, size_t index,
+                                           MirBlockId success_block,
+                                           MirBlockId fail_block) {
+  if (!builder || !pattern || pattern->tag != AST_TUPLE) {
+    return false;
+  }
+  if (index >= pattern->data.AST_LIST.len) {
+    mir_builder_set_br(builder, success_block);
+    return true;
+  }
+
+  Ast *item = pattern->data.AST_LIST.items + index;
+  Type *item_type = mir_tuple_field_type(value_type, index);
+  if (!item_type) {
+    item_type = item->type;
+  }
+  MirValueId item_value = mir_tuple_get(builder, item_type, item, value, index);
+  if (item_value == MIR_NO_VALUE) {
+    return false;
+  }
+
+  MirBlockId next_success = success_block;
+  MirBlock *next_block = NULL;
+  if (index + 1 < pattern->data.AST_LIST.len) {
+    next_block = mir_function_add_block(
+        builder->fn, mir_arena_printf(builder->fn->arena, "match.tuple.%u.%zu",
+                                      builder->block->id, index + 1));
+    if (!next_block) {
+      return false;
+    }
+    next_success = next_block->id;
+  }
+
+  if (!mir_lower_pattern_to_cfg(builder, ctx, item, item_value, item_type,
+                                next_success, fail_block)) {
+    return false;
+  }
+
+  if (next_block) {
+    mir_builder_position_at_end(builder, next_block);
+    return mir_lower_tuple_pattern_to_cfg(builder, ctx, pattern, value,
+                                          value_type, index + 1, success_block,
+                                          fail_block);
+  }
+
+  return true;
+}
+
+static bool mir_is_list_cons_pattern(Ast *pattern) {
+  if (!pattern || pattern->tag != AST_APPLICATION ||
+      pattern->data.AST_APPLICATION.len != 2 ||
+      !pattern->data.AST_APPLICATION.function ||
+      pattern->data.AST_APPLICATION.function->tag != AST_IDENTIFIER) {
+    return false;
+  }
+
+  const char *name =
+      pattern->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value;
+  return name && CHARS_EQ(name, TYPE_NAME_OP_LIST_PREPEND);
+}
+
+static bool mir_lower_list_cons_pattern_to_cfg(
+    MirBuilder *builder, MirCtx *ctx, Ast *pattern, MirValueId value,
+    Type *value_type, Ast *head_pattern, Ast *tail_pattern,
+    MirBlockId success_block, MirBlockId fail_block) {
+  if (!builder || !ctx || !pattern || value == MIR_NO_VALUE ||
+      !is_list_type(value_type) || !head_pattern || !tail_pattern) {
+    return false;
+  }
+
+  MirValueId is_empty = mir_list_is_empty(builder, pattern, value);
+  if (is_empty == MIR_NO_VALUE) {
+    return false;
+  }
+
+  MirBlock *cons_block = mir_function_add_block(
+      builder->fn, mir_arena_printf(builder->fn->arena, "match.list_cons.bb%u",
+                                    builder->block ? builder->block->id : 0));
+  MirBlock *tail_block = mir_function_add_block(
+      builder->fn, mir_arena_printf(builder->fn->arena, "match.list_tail.bb%u",
+                                    builder->block ? builder->block->id : 0));
+  if (!cons_block || !tail_block) {
+    return false;
+  }
+
+  mir_builder_set_cond(builder, is_empty, fail_block, cons_block->id);
+  mir_builder_position_at_end(builder, cons_block);
+
+  Type *head_type = type_of_list(value_type);
+  if (!head_type) {
+    head_type = head_pattern->type;
+  }
+  MirValueId head = mir_list_head(builder, head_type, head_pattern, value);
+  MirValueId tail = mir_list_tail(builder, value_type, tail_pattern, value);
+  if (head == MIR_NO_VALUE || tail == MIR_NO_VALUE) {
+    return false;
+  }
+
+  if (!mir_lower_pattern_to_cfg(builder, ctx, head_pattern, head, head_type,
+                                tail_block->id, fail_block)) {
+    return false;
+  }
+
+  mir_builder_position_at_end(builder, tail_block);
+  return mir_lower_pattern_to_cfg(builder, ctx, tail_pattern, tail, value_type,
+                                  success_block, fail_block);
+}
+
+static bool mir_lower_list_literal_pattern_to_cfg(
+    MirBuilder *builder, MirCtx *ctx, Ast *pattern, MirValueId value,
+    Type *value_type, size_t index, MirBlockId success_block,
+    MirBlockId fail_block) {
+  if (!builder || !ctx || !pattern || pattern->tag != AST_LIST ||
+      !is_list_type(value_type)) {
+    return false;
+  }
+
+  if (index >= pattern->data.AST_LIST.len) {
+    MirValueId is_empty = mir_list_is_empty(builder, pattern, value);
+    if (is_empty == MIR_NO_VALUE) {
+      return false;
+    }
+    mir_builder_set_cond(builder, is_empty, success_block, fail_block);
+    return true;
+  }
+
+  Ast *head_pattern = pattern->data.AST_LIST.items + index;
+  MirValueId is_empty = mir_list_is_empty(builder, head_pattern, value);
+  if (is_empty == MIR_NO_VALUE) {
+    return false;
+  }
+
+  MirBlock *cons_block = mir_function_add_block(
+      builder->fn,
+      mir_arena_printf(builder->fn->arena, "match.list_item.bb%u.%zu",
+                       builder->block ? builder->block->id : 0, index));
+  MirBlock *tail_block = mir_function_add_block(
+      builder->fn,
+      mir_arena_printf(builder->fn->arena, "match.list_next.bb%u.%zu",
+                       builder->block ? builder->block->id : 0, index));
+  if (!cons_block || !tail_block) {
+    return false;
+  }
+
+  mir_builder_set_cond(builder, is_empty, fail_block, cons_block->id);
+  mir_builder_position_at_end(builder, cons_block);
+
+  Type *head_type = type_of_list(value_type);
+  if (!head_type) {
+    head_type = head_pattern->type;
+  }
+  MirValueId head = mir_list_head(builder, head_type, head_pattern, value);
+  MirValueId tail = mir_list_tail(builder, value_type, pattern, value);
+  if (head == MIR_NO_VALUE || tail == MIR_NO_VALUE) {
+    return false;
+  }
+
+  if (!mir_lower_pattern_to_cfg(builder, ctx, head_pattern, head, head_type,
+                                tail_block->id, fail_block)) {
+    return false;
+  }
+
+  mir_builder_position_at_end(builder, tail_block);
+  return mir_lower_list_literal_pattern_to_cfg(builder, ctx, pattern, tail,
+                                               value_type, index + 1,
+                                               success_block, fail_block);
+}
+
+static bool mir_lower_constructor_pattern_to_cfg(
+    MirBuilder *builder, MirCtx *ctx, Ast *pattern, MirValueId value,
+    Type *value_type, Type *constructor_type, int constructor_index,
+    MirBlockId success_block, MirBlockId fail_block) {
+  if (!builder || !ctx || !pattern || !constructor_type ||
+      constructor_index < 0) {
+    return false;
+  }
+
+  const char *constructor_name = mir_constructor_name(constructor_type);
+  MirValueId tag = mir_variant_tag(builder, pattern, value);
+  MirValueId tags_match =
+      mir_tag_eq(builder, pattern, tag, constructor_index, constructor_name);
+  if (tags_match == MIR_NO_VALUE) {
+    return false;
+  }
+
+  if (pattern->tag != AST_APPLICATION) {
+    mir_builder_set_cond(builder, tags_match, success_block, fail_block);
+    return true;
+  }
+
+  if (pattern->data.AST_APPLICATION.len == 0) {
+    mir_builder_set_cond(builder, tags_match, success_block, fail_block);
+    return true;
+  }
+
+  MirBlock *payload_block = mir_function_add_block(
+      builder->fn, mir_arena_printf(builder->fn->arena, "match.payload.bb%u",
+                                    builder->block ? builder->block->id : 0));
+  if (!payload_block) {
+    return false;
+  }
+  mir_builder_set_cond(builder, tags_match, payload_block->id, fail_block);
+
+  mir_builder_position_at_end(builder, payload_block);
+  MirValueId payload =
+      mir_variant_payload(builder, pattern, value, constructor_type,
+                          constructor_index, constructor_name);
+  if (payload == MIR_NO_VALUE) {
+    return false;
+  }
+
+  MirBlockId next_success = success_block;
+  for (size_t i = pattern->data.AST_APPLICATION.len; i > 0; i--) {
+    size_t arg_index = i - 1;
+    MirBlock *arg_block = payload_block;
+    if (arg_index > 0) {
+      arg_block = mir_function_add_block(
+          builder->fn,
+          mir_arena_printf(builder->fn->arena, "match.payload.bb%u.%zu",
+                           payload_block->id, arg_index));
+      if (!arg_block) {
+        return false;
+      }
+    }
+
+    mir_builder_position_at_end(builder, arg_block);
+    Ast *arg_pattern = pattern->data.AST_APPLICATION.args + arg_index;
+    Type *payload_type = NULL;
+    if (constructor_type->kind == T_CONS &&
+        constructor_type->data.T_CONS.args &&
+        arg_index < (size_t)constructor_type->data.T_CONS.num_args) {
+      payload_type = constructor_type->data.T_CONS.args[arg_index];
+    }
+    if (!payload_type) {
+      payload_type = arg_pattern->type;
+    }
+
+    MirValueId field =
+        mir_tuple_get(builder, payload_type, arg_pattern, payload, arg_index);
+    if (field == MIR_NO_VALUE ||
+        !mir_lower_pattern_to_cfg(builder, ctx, arg_pattern, field,
+                                  payload_type, next_success, fail_block)) {
+      return false;
+    }
+
+    next_success = arg_block->id;
+  }
+
+  return true;
+}
+
+static bool mir_lower_pattern_to_cfg(MirBuilder *builder, MirCtx *ctx,
+                                     Ast *pattern, MirValueId value,
+                                     Type *value_type, MirBlockId success_block,
+                                     MirBlockId fail_block) {
+  if (!builder || !ctx || !pattern) {
+    return false;
+  }
+
+  if (pattern->tag == AST_LET) {
+    pattern = pattern->data.AST_LET.binding;
+  }
+
+  if (pattern->tag == AST_MATCH_GUARD_CLAUSE) {
+    MirBlock *guard_block = mir_function_add_block(builder->fn, "match.guard");
+    if (!guard_block) {
+      return false;
+    }
+    if (!mir_lower_pattern_to_cfg(
+            builder, ctx, pattern->data.AST_MATCH_GUARD_CLAUSE.test_expr, value,
+            value_type, guard_block->id, fail_block)) {
+      return false;
+    }
+    mir_builder_position_at_end(builder, guard_block);
+    MirValueId guard =
+        mir_expr(builder, pattern->data.AST_MATCH_GUARD_CLAUSE.guard_expr, ctx);
+    if (guard == MIR_NO_VALUE) {
+      return false;
+    }
+    mir_builder_set_cond(builder, guard, success_block, fail_block);
+    return true;
+  }
+
+  if (is_list_type(value_type)) {
+    if (pattern->tag == AST_LIST) {
+      return mir_lower_list_literal_pattern_to_cfg(builder, ctx, pattern, value,
+                                                   value_type, 0, success_block,
+                                                   fail_block);
+    }
+    if (mir_is_list_cons_pattern(pattern)) {
+      return mir_lower_list_cons_pattern_to_cfg(
+          builder, ctx, pattern, value, value_type,
+          pattern->data.AST_APPLICATION.args,
+          pattern->data.AST_APPLICATION.args + 1, success_block, fail_block);
     }
   }
 
-  MirValueId callee = mir_emit_expr(builder, callee_ast);
-  MirValue *callee_value = mir_find_value(builder->fn, callee);
-  MirInstr *callee_def = mir_find_def_instr(builder->fn, callee);
-
-  if (callee_def && callee_def->kind == MIR_FN_REF && callee_def->name) {
-    MirInstr instr = mir_make_instr(MIR_CALL_DIRECT, ast->type, ast);
-    instr.name = callee_def->name;
-    instr.operands = args;
-    return mir_builder_append_instr(builder, instr);
+  int constructor_index = -1;
+  Type *constructor_type =
+      mir_resolve_sum_constructor(value_type, pattern, &constructor_index);
+  if (constructor_type) {
+    return mir_lower_constructor_pattern_to_cfg(
+        builder, ctx, pattern, value, value_type, constructor_type,
+        constructor_index, success_block, fail_block);
   }
 
-  if (callee_value && callee_value->kind == MIR_VALUE_CLOSURE_OBJ &&
-      is_closure(ftype)) {
-    MirInstr fn_instr = mir_make_instr(MIR_CLOSURE_FN, ftype, callee_ast);
-    mir_value_id_vec_push(builder->fn->arena, &fn_instr.operands, callee);
-    MirValueId fn_ptr = mir_builder_append_instr(builder, fn_instr);
-
-    MirInstr env_instr =
-        mir_make_instr(MIR_CLOSURE_ENV, ftype->closure_meta, callee_ast);
-    mir_value_id_vec_push(builder->fn->arena, &env_instr.operands, callee);
-    MirValueId env = mir_builder_append_instr(builder, env_instr);
-
-    MirValueIdVec operands = {0};
-    mir_value_id_vec_push(builder->fn->arena, &operands, fn_ptr);
-    mir_value_id_vec_push(builder->fn->arena, &operands, env);
-    for (size_t i = 0; i < args.len; i++) {
-      mir_value_id_vec_push(builder->fn->arena, &operands, args.items[i]);
+  switch (pattern->tag) {
+  case AST_PLACEHOLDER_ID:
+    mir_builder_set_br(builder, success_block);
+    return true;
+  case AST_IDENTIFIER:
+    if (!ast_is_placeholder_id(pattern) &&
+        !mir_bind_identifier(ctx, pattern, value)) {
+      return false;
     }
-
-    MirInstr instr = mir_make_instr(MIR_CALL_INDIRECT, ast->type, ast);
-    instr.operands = operands;
-    return mir_builder_append_instr(builder, instr);
+    mir_builder_set_br(builder, success_block);
+    return true;
+  case AST_INT:
+  case AST_UINT64:
+  case AST_FLOAT:
+  case AST_DOUBLE:
+  case AST_CHAR:
+  case AST_BOOL: {
+    MirValueId literal = mir_expr(builder, pattern, ctx);
+    MirValueId eq =
+        mir_eq_for_type(builder, pattern, value_type, value, literal);
+    if (eq == MIR_NO_VALUE) {
+      return false;
+    }
+    mir_builder_set_cond(builder, eq, success_block, fail_block);
+    return true;
   }
-
-  MirValueIdVec operands = {0};
-  mir_value_id_vec_push(builder->fn->arena, &operands, callee);
-  for (size_t i = 0; i < args.len; i++) {
-    mir_value_id_vec_push(builder->fn->arena, &operands, args.items[i]);
+  case AST_VOID: {
+    MirValueId literal = mir_expr(builder, pattern, ctx);
+    MirValueId eq =
+        mir_eq_for_type(builder, pattern, value_type, value, literal);
+    if (eq == MIR_NO_VALUE) {
+      mir_builder_set_br(builder, success_block);
+    } else {
+      mir_builder_set_cond(builder, eq, success_block, fail_block);
+    }
+    return true;
   }
-
-  MirInstr instr = mir_make_instr(MIR_CALL_INDIRECT, ast->type, ast);
-  instr.operands = operands;
-  return mir_builder_append_instr(builder, instr);
+  case AST_TUPLE:
+    return mir_lower_tuple_pattern_to_cfg(
+        builder, ctx, pattern, value, value_type, 0, success_block, fail_block);
+  default:
+    return false;
+  }
 }
 
-static MirValueId mir_emit_expr(MirBuilder *builder, Ast *ast) {
-  if (!ast) {
+static bool mir_bool_literal_pattern(Ast *pattern, bool *out) {
+  if (!pattern || pattern->tag != AST_BOOL) {
+    return false;
+  }
+  if (out) {
+    *out = pattern->data.AST_BOOL.value;
+  }
+  return true;
+}
+
+static bool mir_match_bool_exhaustive_arms(Ast *ast, size_t *true_index,
+                                           size_t *false_index) {
+  if (!ast || ast->tag != AST_MATCH || ast->data.AST_MATCH.len != 2 ||
+      !ast->data.AST_MATCH.expr || !ast->data.AST_MATCH.expr->type ||
+      ast->data.AST_MATCH.expr->type->kind != T_BOOL) {
+    return false;
+  }
+
+  bool seen_true = false;
+  bool seen_false = false;
+  for (size_t i = 0; i < ast->data.AST_MATCH.len; i++) {
+    Ast *pattern = ast->data.AST_MATCH.branches + (i * 2);
+    bool value = false;
+    if (!mir_bool_literal_pattern(pattern, &value)) {
+      return false;
+    }
+    if (value) {
+      if (seen_true) {
+        return false;
+      }
+      seen_true = true;
+      if (true_index) {
+        *true_index = i;
+      }
+    } else {
+      if (seen_false) {
+        return false;
+      }
+      seen_false = true;
+      if (false_index) {
+        *false_index = i;
+      }
+    }
+  }
+
+  return seen_true && seen_false;
+}
+
+static MirValueId mir_bool_match_expr(MirBuilder *builder, Ast *ast,
+                                      MirCtx *ctx, size_t true_index,
+                                      size_t false_index) {
+  if (!builder || !builder->fn || !builder->block || !ast || !ctx) {
+    return MIR_NO_VALUE;
+  }
+
+  MirArena *arena = builder->fn->arena;
+  MirValueId scrutinee = mir_expr(builder, ast->data.AST_MATCH.expr, ctx);
+  if (scrutinee == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirBlock *match_block = builder->block;
+  MirBlock *continuation_block =
+      mir_function_add_block(builder->fn, "match.cont");
+  MirBlock *true_block = mir_function_add_block(builder->fn, "match.true");
+  MirBlock *false_block = mir_function_add_block(builder->fn, "match.false");
+  if (!continuation_block || !true_block || !false_block) {
+    return MIR_NO_VALUE;
+  }
+
+  MirMatchArmVec arms = {0};
+  MirMatchArm true_arm = {
+      .pattern = ast->data.AST_MATCH.branches + (true_index * 2),
+      .test_block = MIR_NO_BLOCK,
+      .body_block = true_block->id,
+  };
+  MirMatchArm false_arm = {
+      .pattern = ast->data.AST_MATCH.branches + (false_index * 2),
+      .test_block = MIR_NO_BLOCK,
+      .body_block = false_block->id,
+  };
+  mir_match_arm_vec_push(arena, &arms, true_arm);
+  mir_match_arm_vec_push(arena, &arms, false_arm);
+
+  mir_builder_position_at_end(builder, match_block);
+  MirValueId result =
+      mir_match(builder, ast->type, ast, scrutinee, arms, MIR_NO_BLOCK,
+                MIR_NO_BLOCK, continuation_block->id, false);
+  if (result == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+  mir_builder_set_cond(builder, scrutinee, true_block->id, false_block->id);
+
+  Ast *true_body = ast->data.AST_MATCH.branches + (true_index * 2) + 1;
+  Ast *false_body = ast->data.AST_MATCH.branches + (false_index * 2) + 1;
+
+  MIR_STACK_ALLOC_CTX_PUSH(true_ctx, builder, ctx)
+  mir_builder_position_at_end(builder, true_block);
+  MirValueId true_value = mir_expr(builder, true_body, &true_ctx);
+  if (true_value == MIR_NO_VALUE) {
+    mir_builder_set_unreachable_if_open(builder);
+  } else {
+    mir_builder_set_arm_return(builder, true_value, continuation_block->id);
+  }
+
+  MIR_STACK_ALLOC_CTX_PUSH(false_ctx, builder, ctx)
+  mir_builder_position_at_end(builder, false_block);
+  MirValueId false_value = mir_expr(builder, false_body, &false_ctx);
+  if (false_value == MIR_NO_VALUE) {
+    mir_builder_set_unreachable_if_open(builder);
+  } else {
+    mir_builder_set_arm_return(builder, false_value, continuation_block->id);
+  }
+
+  mir_builder_position_at_end(builder, continuation_block);
+  return result;
+}
+
+static MirValueId mir_match_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
+  if (!builder || !builder->fn || !builder->block || !ast ||
+      ast->tag != AST_MATCH || !ctx) {
+    return MIR_NO_VALUE;
+  }
+
+  size_t true_index = 0;
+  size_t false_index = 0;
+  if (mir_match_bool_exhaustive_arms(ast, &true_index, &false_index)) {
+    return mir_bool_match_expr(builder, ast, ctx, true_index, false_index);
+  }
+
+  MirArena *arena = builder->fn->arena;
+  MirValueId scrutinee = mir_expr(builder, ast->data.AST_MATCH.expr, ctx);
+  if (scrutinee == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirBlock *match_block = builder->block;
+  MirBlock *no_match_block =
+      mir_function_add_block(builder->fn, "match.no_match");
+  MirBlock *continuation_block =
+      mir_function_add_block(builder->fn, "match.cont");
+  if (!no_match_block || !continuation_block) {
+    return MIR_NO_VALUE;
+  }
+
+  MirMatchArmVec arms = {0};
+  for (size_t i = 0; i < ast->data.AST_MATCH.len; i++) {
+    MirBlock *test_block = mir_function_add_block(
+        builder->fn, mir_arena_printf(arena, "match.arm.%zu.test", i));
+    MirBlock *body_block = mir_function_add_block(
+        builder->fn, mir_arena_printf(arena, "match.arm.%zu.body", i));
+    if (!test_block || !body_block) {
+      return MIR_NO_VALUE;
+    }
+
+    MirMatchArm arm = {
+        .pattern = ast->data.AST_MATCH.branches + (i * 2),
+        .test_block = test_block->id,
+        .body_block = body_block->id,
+    };
+    mir_match_arm_vec_push(arena, &arms, arm);
+  }
+
+  MirBlockId first_test =
+      arms.len > 0 ? arms.items[0].test_block : no_match_block->id;
+
+  mir_builder_position_at_end(builder, match_block);
+  MirValueId result = mir_match(
+      builder, ast->type, ast, scrutinee, arms, first_test, no_match_block->id,
+      continuation_block->id, ast->data.AST_MATCH.allow_no_match);
+  if (result == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+  mir_builder_set_br(builder, first_test);
+
+  for (size_t i = 0; i < ast->data.AST_MATCH.len; i++) {
+    Ast *pattern = ast->data.AST_MATCH.branches + (i * 2);
+    Ast *body = ast->data.AST_MATCH.branches + (i * 2) + 1;
+
+    MirBlock *test_block =
+        mir_function_block(builder->fn, arms.items[i].test_block);
+    MirBlock *body_block =
+        mir_function_block(builder->fn, arms.items[i].body_block);
+    MirBlockId fail_block =
+        i + 1 < arms.len ? arms.items[i + 1].test_block : no_match_block->id;
+    if (!test_block || !body_block) {
+      return MIR_NO_VALUE;
+    }
+
+    MIR_STACK_ALLOC_CTX_PUSH(branch_ctx, builder, ctx)
+    mir_builder_position_at_end(builder, test_block);
+    if (!mir_lower_pattern_to_cfg(builder, &branch_ctx, pattern, scrutinee,
+                                  ast->data.AST_MATCH.expr->type,
+                                  body_block->id, fail_block)) {
+      return MIR_NO_VALUE;
+    }
+
+    mir_builder_position_at_end(builder, body_block);
+    MirValueId branch_value = mir_expr(builder, body, &branch_ctx);
+    if (branch_value == MIR_NO_VALUE) {
+      mir_builder_set_unreachable_if_open(builder);
+    } else {
+      mir_builder_set_arm_return(builder, branch_value, continuation_block->id);
+    }
+  }
+
+  mir_builder_position_at_end(builder, no_match_block);
+  mir_builder_set_unreachable(builder);
+
+  mir_builder_position_at_end(builder, continuation_block);
+  return result;
+}
+
+MirValueId mir_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
+  if (!builder || !ast) {
     return MIR_NO_VALUE;
   }
 
   switch (ast->tag) {
   case AST_BODY:
-    return mir_emit_body(builder, ast);
+    return mir_body(builder, ast, ctx);
   case AST_LET:
-    return mir_emit_let(builder, ast);
-  case AST_LOOP:
-    return mir_emit_loop(builder, ast);
-  case AST_INT: {
-    MirInstr instr = mir_make_instr(MIR_CONST_INT, ast->type, ast);
-    instr.imm.int_value = ast->data.AST_INT.value;
-    return mir_builder_append_instr(builder, instr);
-  }
-  case AST_UINT64: {
-    MirInstr instr = mir_make_instr(MIR_CONST_UINT64, ast->type, ast);
-    instr.imm.uint64_value = ast->data.AST_UINT64.value;
-    return mir_builder_append_instr(builder, instr);
-  }
-  case AST_DOUBLE: {
-    MirInstr instr = mir_make_instr(MIR_CONST_DOUBLE, ast->type, ast);
-    instr.imm.double_value = ast->data.AST_DOUBLE.value;
-    return mir_builder_append_instr(builder, instr);
-  }
-  case AST_CHAR: {
-    MirInstr instr = mir_make_instr(MIR_CONST_CHAR, ast->type, ast);
-    instr.imm.char_value = ast->data.AST_CHAR.value;
-    return mir_builder_append_instr(builder, instr);
-  }
-  case AST_BOOL: {
-    MirInstr instr = mir_make_instr(MIR_CONST_BOOL, ast->type, ast);
-    instr.imm.bool_value = ast->data.AST_BOOL.value;
-    return mir_builder_append_instr(builder, instr);
-  }
-
-    // case AST_VOID:
-    //   return mir_builder_append_instr(
-    //       builder, mir_make_instr(MIR_CONST_VOID, ast->type, ast));
-
-  case AST_STRING: {
-    MirInstr instr = mir_make_instr(MIR_STRING_LITERAL, ast->type, ast);
-    instr.alloc_id = mir_new_alloc_site(builder, ast);
-    instr.name = ast->data.AST_STRING.value;
-    instr.member_index = (int)ast->data.AST_STRING.length;
-    return mir_builder_append_instr(builder, instr);
-  }
-  case AST_IDENTIFIER: {
-    MirValueId source = MIR_NO_VALUE;
-    const char *name = ast->data.AST_IDENTIFIER.value;
-    if (mir_lookup(builder, name, &source)) {
-      return source;
-    }
-    MirInstr instr = mir_make_instr(MIR_LOAD_SYMBOL, ast->type, ast);
-    instr.name = name;
-    return mir_builder_append_instr(builder, instr);
-  }
-  case AST_ARRAY:
-    return mir_emit_sequence_literal(builder, ast, MIR_ARRAY_LITERAL);
-  case AST_LIST:
-    return mir_emit_sequence_literal(builder, ast, MIR_LIST_LITERAL);
+    return mir_let(builder, ast, ctx);
+  case AST_IDENTIFIER:
+    return mir_identifier(builder, ast, ctx);
+  case AST_INT:
+    return mir_const_int(builder, ast->type, ast, ast->data.AST_INT.value);
+  case AST_UINT64:
+    return mir_const_uint64(builder, ast->type, ast,
+                            ast->data.AST_UINT64.value);
+  case AST_FLOAT:
+    return mir_const_float(builder, ast->type, ast, ast->data.AST_FLOAT.value);
+  case AST_DOUBLE:
+    return mir_const_double(builder, ast->type, ast,
+                            ast->data.AST_DOUBLE.value);
+  case AST_CHAR:
+    return mir_const_char(builder, ast->type, ast, ast->data.AST_CHAR.value);
+  case AST_BOOL:
+    return mir_const_bool(builder, ast->type, ast, ast->data.AST_BOOL.value);
+  case AST_STRING:
+    return mir_const_string(builder, ast->type, ast, ast->data.AST_STRING.value,
+                            ast->data.AST_STRING.length);
+  case AST_VOID:
+    return mir_const_void(builder, ast->type, ast);
   case AST_TUPLE:
-    return mir_emit_sequence_literal(builder, ast, MIR_TUPLE);
-  case AST_BINOP: {
-    MirInstr instr = mir_make_instr(MIR_BINOP, ast->type, ast);
-    instr.op = ast->data.AST_BINOP.op;
-    mir_value_id_vec_push(builder->fn->arena, &instr.operands,
-                          mir_emit_expr(builder, ast->data.AST_BINOP.left));
-    mir_value_id_vec_push(builder->fn->arena, &instr.operands,
-                          mir_emit_expr(builder, ast->data.AST_BINOP.right));
-    return mir_builder_append_instr(builder, instr);
-  }
-  case AST_UNOP: {
-    MirInstr instr = mir_make_instr(MIR_UNOP, ast->type, ast);
-    instr.op = ast->data.AST_UNOP.op;
-    mir_value_id_vec_push(builder->fn->arena, &instr.operands,
-                          mir_emit_expr(builder, ast->data.AST_UNOP.expr));
-    return mir_builder_append_instr(builder, instr);
-  }
-
+    return mir_tuple_expr(builder, ast, ctx);
+  case AST_LIST:
+  case AST_EMPTY_CONTAINER:
+    return mir_list_expr(builder, ast, ctx);
+  case AST_ARRAY:
+    return mir_array_expr(builder, ast, ctx);
+  case AST_MATCH:
+    return mir_match_expr(builder, ast, ctx);
   case AST_APPLICATION:
-    return mir_emit_application(builder, ast);
-
-  case AST_RECORD_ACCESS: {
-    MirInstr instr = mir_make_instr(MIR_RECORD_GET, ast->type, ast);
-    mir_value_id_vec_push(
-        builder->fn->arena, &instr.operands,
-        mir_emit_expr(builder, ast->data.AST_RECORD_ACCESS.record));
-    instr.name =
-        ast->data.AST_RECORD_ACCESS.member &&
-                ast->data.AST_RECORD_ACCESS.member->tag == AST_IDENTIFIER
-            ? ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value
-            : NULL;
-    instr.member_index = ast->data.AST_RECORD_ACCESS.index;
-    return mir_builder_append_instr(builder, instr);
-  }
+    return mir_application(builder, ast->type, ast, ctx);
   case AST_LAMBDA:
   case AST_MODULE:
-    return mir_emit_lambda_value(builder, ast, NULL);
-  case AST_YIELD: {
-    MirInstr instr = mir_make_instr(MIR_YIELD, ast->type, ast);
-    mir_value_id_vec_push(builder->fn->arena, &instr.operands,
-                          mir_emit_expr(builder, ast->data.AST_YIELD.expr));
-    return mir_builder_append_instr(builder, instr);
-  }
+    return mir_lambda_value(
+        builder, ast, ctx,
+        mir_lambda_name(builder->program->arena, ast, "<anonymous>"));
   default:
-    return mir_emit_unsupported(builder, ast);
+    return MIR_NO_VALUE;
   }
+}
+
+static MirFunction *mir_builder_function(MirProgram *program, Ast *fn_ast,
+                                         const char *name, MirCtx *ctx) {
+  if (!program || !fn_ast) {
+    return NULL;
+  }
+
+  MirFunction *fn =
+      mir_program_add_function(program, name, fn_ast->type, fn_ast);
+  if (!fn) {
+    return NULL;
+  }
+  MirBlock *entry = mir_function_add_block(fn, "entry");
+  if (!entry) {
+    return fn;
+  }
+
+  MirBuilder builder;
+  mir_builder_init(&builder, program, fn);
+  mir_builder_position_at_end(&builder, entry);
+
+  MirCtx fn_ctx = {
+      .env = ctx && ctx->env ? ctx->env : program->type_env,
+      .frame = NULL,
+  };
+  ht fn_table;
+  MirStackFrame fn_frame;
+  mir_stack_frame_init(program->arena, &fn_table, &fn_frame, NULL);
+  fn_ctx.frame = &fn_frame;
+
+  Type *fn_type = fn_ast->type;
+  bool is_closure_fn = fn_ast->type && is_closure(fn_ast->type) &&
+                       fn_ast->type->closure_meta != NULL;
+  if (is_closure_fn) {
+    Type *env_type = fn_ast->type->closure_meta;
+    MirValueId env_param = mir_function_add_param(fn, "$env", env_type, fn_ast);
+    AstList *closed = fn_ast->data.AST_LAMBDA.closed_vals;
+    int closed_len = fn_ast->data.AST_LAMBDA.num_closed_vals;
+    for (int i = 0; i < closed_len && closed; i++, closed = closed->next) {
+      Type *field_type = NULL;
+      if (env_type->kind == T_CONS && env_type->data.T_CONS.args &&
+          i < env_type->data.T_CONS.num_args) {
+        field_type = env_type->data.T_CONS.args[i];
+      }
+      if (!field_type && closed->ast) {
+        field_type = closed->ast->type;
+      }
+
+      const char *name = NULL;
+      if (closed->ast && closed->ast->tag == AST_IDENTIFIER) {
+        name = closed->ast->data.AST_IDENTIFIER.value;
+      }
+
+      MirValueId field = mir_closure_get(&builder, field_type, closed->ast,
+                                         env_param, (size_t)i, name);
+      mir_bind_pattern(&builder, &fn_ctx, closed->ast, field, field_type);
+    }
+  }
+
+  AstList *param = fn_ast->data.AST_LAMBDA.params;
+  for (size_t i = 0; i < fn_ast->data.AST_LAMBDA.len && param;
+       i++, param = param->next) {
+    Ast *param_ast = param->ast;
+    Type *param_type = NULL;
+    if (fn_type && fn_type->kind == T_FN) {
+      param_type = fn_type->data.T_FN.from;
+      fn_type = fn_type->data.T_FN.to;
+    }
+    if (!param_type && param_ast) {
+      param_type = param_ast->type;
+    }
+
+    if (is_closure_fn && param_ast && param_ast->tag == AST_VOID) {
+      continue;
+    }
+
+    const char *param_name = "_";
+    if (param_ast && param_ast->tag == AST_IDENTIFIER) {
+      param_name = param_ast->data.AST_IDENTIFIER.value;
+    }
+
+    MirValueId param_value =
+        mir_function_add_param(fn, param_name, param_type, param_ast);
+    mir_bind_pattern(&builder, &fn_ctx, param_ast, param_value, param_type);
+  }
+
+  Ast *body = fn_ast->data.AST_LAMBDA.body;
+  MirValueId result = mir_expr(&builder, body, &fn_ctx);
+  if (result != MIR_NO_VALUE && builder.block &&
+      builder.block->term.kind == MIR_TERM_NONE) {
+    mir_builder_set_return(&builder, result);
+  } else if (result == MIR_NO_VALUE) {
+    mir_builder_set_unreachable_if_open(&builder);
+  }
+  return fn;
+}
+
+static const char *mir_primitive_op_name(MirPrimitiveOp op) {
+  switch (op) {
+  case MIR_OP_IEQ:
+    return "ieq";
+  case MIR_OP_UEQ:
+    return "ueq";
+  case MIR_OP_FEQ:
+    return "feq";
+  case MIR_OP_CEQ:
+    return "ceq";
+  case MIR_OP_BEQ:
+    return "beq";
+  case MIR_OP_IGT:
+    return "igt";
+  case MIR_OP_UGT:
+    return "ugt";
+  case MIR_OP_FGT:
+    return "fgt";
+  case MIR_OP_CGT:
+    return "cgt";
+  case MIR_OP_IGTE:
+    return "igte";
+  case MIR_OP_UGTE:
+    return "ugte";
+  case MIR_OP_FGTE:
+    return "fgte";
+  case MIR_OP_CGTE:
+    return "cgte";
+  case MIR_OP_ILT:
+    return "ilt";
+  case MIR_OP_ULT:
+    return "ult";
+  case MIR_OP_FLT:
+    return "flt";
+  case MIR_OP_CLT:
+    return "clt";
+  case MIR_OP_ILTE:
+    return "ilte";
+  case MIR_OP_ULTE:
+    return "ulte";
+  case MIR_OP_FLTE:
+    return "flte";
+  case MIR_OP_CLTE:
+    return "clte";
+  case MIR_OP_LNOT:
+    return "lnot";
+  case MIR_OP_IADD:
+    return "iadd";
+  case MIR_OP_UADD:
+    return "uadd";
+  case MIR_OP_FADD:
+    return "fadd";
+  case MIR_OP_ISUB:
+    return "isub";
+  case MIR_OP_USUB:
+    return "usub";
+  case MIR_OP_FSUB:
+    return "fsub";
+  case MIR_OP_IMUL:
+    return "imul";
+  case MIR_OP_UMUL:
+    return "umul";
+  case MIR_OP_FMUL:
+    return "fmul";
+  case MIR_OP_IDIV:
+    return "idiv";
+  case MIR_OP_UDIV:
+    return "udiv";
+  case MIR_OP_FDIV:
+    return "fdiv";
+  case MIR_OP_IMOD:
+    return "imod";
+  case MIR_OP_UMOD:
+    return "umod";
+  case MIR_OP_FMOD:
+    return "fmod";
+  }
+  return "primitive.unknown";
+}
+
+static const char *mir_instr_name(MirInstrKind kind) {
+  switch (kind) {
+  case MIR_CONST_INT:
+    return "const.int";
+  case MIR_CONST_UINT64:
+    return "const.uint64";
+  case MIR_CONST_FLOAT:
+    return "const.float";
+  case MIR_CONST_DOUBLE:
+    return "const.double";
+  case MIR_CONST_CHAR:
+    return "const.char";
+  case MIR_CONST_BOOL:
+    return "const.bool";
+  case MIR_CONST_STRING:
+    return "const.string";
+  case MIR_CONST_VOID:
+    return "const.void";
+  case MIR_PRIMITIVE_CAST:
+    return "primitive_cast";
+  case MIR_TUPLE:
+    return "tuple";
+  case MIR_TUPLE_GET:
+    return "tuple_get";
+  case MIR_MATCH:
+    return "match";
+  case MIR_VARIANT:
+    return "variant";
+  case MIR_VARIANT_TAG:
+    return "variant_tag";
+  case MIR_TAG_EQ:
+    return "tag_eq";
+  case MIR_VARIANT_PAYLOAD:
+    return "variant_payload";
+  case MIR_LIST_EMPTY:
+    return "list_empty";
+  case MIR_LIST_CONS:
+    return "list_cons";
+  case MIR_LIST_IS_EMPTY:
+    return "list_is_empty";
+  case MIR_LIST_HEAD:
+    return "list_head";
+  case MIR_LIST_TAIL:
+    return "list_tail";
+  case MIR_ARRAY_LITERAL:
+    return "array_literal";
+  case MIR_ARRAY_SIZE:
+    return "array_size";
+  case MIR_ARRAY_AT:
+    return "array_at";
+  case MIR_ARRAY_SET:
+    return "array_set";
+  case MIR_ARRAY_FILL_CONST:
+    return "array_fill_const";
+  case MIR_ARRAY_FILL:
+    return "array_fill";
+  case MIR_ARRAY_RANGE:
+    return "array_range";
+  case MIR_ARRAY_SUCC:
+    return "array_succ";
+  case MIR_ARRAY_OFFSET:
+    return "array_offset";
+  case MIR_STR:
+    return "str";
+  case MIR_PRINT:
+    return "print";
+  case MIR_CSTR:
+    return "cstr";
+  case MIR_SIZEOF:
+    return "sizeof";
+  case MIR_DLOPEN:
+    return "dlopen";
+  case MIR_AS_BYTES:
+    return "asbytes";
+  case MIR_TYPEOF:
+    return "typeof";
+  case MIR_PRIMITIVE:
+    return "primitive";
+  case MIR_LOGICAL_AND:
+    return "logical_and";
+  case MIR_LOGICAL_OR:
+    return "logical_or";
+  case MIR_CLOSURE_ENV:
+    return "closure_env";
+  case MIR_CLOSURE:
+    return "closure";
+  case MIR_CLOSURE_GET:
+    return "closure_get";
+  case MIR_CLOSURE_FN:
+    return "closure_fn";
+  case MIR_CLOSURE_GET_ENV:
+    return "closure_get_env";
+  case MIR_DUP:
+    return "dup";
+  case MIR_DROP:
+    return "drop";
+  case MIR_FN_REF:
+    return "fn_ref";
+  case MIR_CALL:
+    return "call";
+  }
+  return "const.unknown";
 }
 
 static void dump_value(FILE *stream, MirValueId value) {
   if (value == MIR_NO_VALUE) {
-    fprintf(stream, "<none>");
-  } else {
-    fprintf(stream, "%%%u", value);
+    fprintf(stream, "_");
+    return;
   }
+  fprintf(stream, "%%%u", value);
 }
 
-static void dump_operands(FILE *stream, const MirValueIdVec *operands) {
-  for (size_t i = 0; i < operands->len; i++) {
+static void dump_escaped_string(FILE *stream, const char *chars, size_t len) {
+  if (!chars) {
+    len = 0;
+  }
+
+  fputc('"', stream);
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)chars[i];
+    switch (c) {
+    case '\\':
+      fputs("\\\\", stream);
+      break;
+    case '"':
+      fputs("\\\"", stream);
+      break;
+    case '\n':
+      fputs("\\n", stream);
+      break;
+    case '\r':
+      fputs("\\r", stream);
+      break;
+    case '\t':
+      fputs("\\t", stream);
+      break;
+    default:
+      if (isprint(c)) {
+        fputc(c, stream);
+      } else {
+        fprintf(stream, "\\x%02x", c);
+      }
+      break;
+    }
+  }
+  fputc('"', stream);
+}
+
+static void dump_char_literal(FILE *stream, char value) {
+  fputc('\'', stream);
+  switch (value) {
+  case '\\':
+    fputs("\\\\", stream);
+    break;
+  case '\'':
+    fputs("\\'", stream);
+    break;
+  case '\n':
+    fputs("\\n", stream);
+    break;
+  case '\r':
+    fputs("\\r", stream);
+    break;
+  case '\t':
+    fputs("\\t", stream);
+    break;
+  default:
+    if (isprint((unsigned char)value)) {
+      fputc(value, stream);
+    } else {
+      fprintf(stream, "\\x%02x", (unsigned char)value);
+    }
+    break;
+  }
+  fputc('\'', stream);
+}
+
+static void dump_value_id_vec(FILE *stream, const MirValueIdVec *values) {
+  for (size_t i = 0; i < values->len; i++) {
     if (i > 0) {
       fprintf(stream, ", ");
     }
-    dump_value(stream, operands->items[i]);
+    dump_value(stream, values->items[i]);
   }
 }
 
-static const MirAllocSite *find_alloc(const MirFunction *fn, MirAllocId id) {
-  if (id == MIR_NO_ALLOC || id >= fn->allocs.len) {
-    return NULL;
+static void dump_named_value_id_vec(FILE *stream, const MirValueIdVec *values,
+                                    Type *type) {
+  const char **names = NULL;
+  int name_count = 0;
+  if (type && (type->kind == T_CONS || type->kind == T_SUM) &&
+      type->data.T_CONS.names) {
+    names = type->data.T_CONS.names;
+    name_count = type->data.T_CONS.num_args;
   }
-  return fn->allocs.items + id;
+
+  for (size_t i = 0; i < values->len; i++) {
+    if (i > 0) {
+      fprintf(stream, ", ");
+    }
+    if (names && i < (size_t)name_count && names[i]) {
+      fprintf(stream, "%s: ", names[i]);
+    }
+    dump_value(stream, values->items[i]);
+  }
+}
+
+static void dump_call_type(FILE *stream, Type *type) {
+  if (!type || type->kind != T_FN) {
+    print_type_to_stream(type, stream);
+    return;
+  }
+
+  fputc('(', stream);
+  Type *cur = type;
+  while (cur && cur->kind == T_FN) {
+    print_type_to_stream(cur->data.T_FN.from, stream);
+    fputs(" -> ", stream);
+    cur = cur->data.T_FN.to;
+  }
+  print_type_to_stream(cur, stream);
+  fputc(')', stream);
+}
+
+static void dump_block_ref(FILE *stream, MirBlockId block) {
+  if (block == MIR_NO_BLOCK) {
+    fputs("bb?", stream);
+    return;
+  }
+  fprintf(stream, "bb%u", block);
+}
+
+static void dump_escape_meta(FILE *stream, const MirFunction *fn,
+                             MirValueId value) {
+  EscapeMeta *meta = mir_value_escape_meta((MirFunction *)fn, value);
+  if (!meta) {
+    return;
+  }
+
+  fputs(STYLE_DIM " ; ea ", stream);
+  switch (meta->status) {
+  case EA_STACK_ALLOC:
+    fputs("stack", stream);
+    break;
+  case EA_HEAP_ALLOC:
+    fputs("heap", stream);
+    break;
+  }
+  fprintf(stream, "#%u", meta->id);
+  if (meta->attributes & EA_ATTR_MUTABLE) {
+    fputs(" mutable", stream);
+  }
+  fputs(STYLE_RESET_ALL, stream);
+}
+
+static const char *mir_operand_role_name(MirOperandRole role) {
+  switch (role) {
+  case MIR_OPERAND_ROLE_VALUE:
+    return "value";
+  case MIR_OPERAND_ROLE_CALLEE:
+    return "callee";
+  case MIR_OPERAND_ROLE_SCRUTINEE:
+    return "scrutinee";
+  case MIR_OPERAND_ROLE_RETURN:
+    return "return";
+  case MIR_OPERAND_ROLE_CONDITION:
+    return "condition";
+  case MIR_OPERAND_ROLE_TAG:
+    return "tag";
+  case MIR_OPERAND_ROLE_CONTAINER:
+    return "container";
+  case MIR_OPERAND_ROLE_INDEX:
+    return "index";
+  case MIR_OPERAND_ROLE_ELEMENT:
+    return "element";
+  case MIR_OPERAND_ROLE_FIELD:
+    return "field";
+  case MIR_OPERAND_ROLE_FUNCTION:
+    return "function";
+  case MIR_OPERAND_ROLE_ENV:
+    return "env";
+  }
+  return "unknown";
+}
+
+static const char *mir_operand_use_name(MirOperandUse use) {
+  switch (use) {
+  case MIR_OPERAND_USE_BORROW:
+    return "borrow";
+  case MIR_OPERAND_USE_CONSUME:
+    return "consume";
+  }
+  return "unknown";
+}
+
+static const char *mir_result_ownership_name(MirResultOwnership ownership) {
+  switch (ownership) {
+  case MIR_RESULT_NONE:
+    return "none";
+  case MIR_RESULT_OWNED:
+    return "owned";
+  case MIR_RESULT_BORROWED:
+    return "borrowed";
+  }
+  return "unknown";
+}
+
+typedef struct {
+  FILE *stream;
+  bool any;
+} MirDumpOperandMetaCtx;
+
+static bool dump_operand_meta_item(MirInstr *instr, MirOperand operand,
+                                   void *ctx) {
+  (void)instr;
+  MirDumpOperandMetaCtx *dump_ctx = ctx;
+  if (!dump_ctx || !dump_ctx->stream) {
+    return true;
+  }
+
+  if (!dump_ctx->any) {
+    fputs(STYLE_DIM " ; ops [", dump_ctx->stream);
+    dump_ctx->any = true;
+  } else {
+    fputs(", ", dump_ctx->stream);
+  }
+
+  dump_value(dump_ctx->stream, operand.value);
+  fprintf(dump_ctx->stream, ":%s/%s#%zu",
+          mir_operand_role_name(operand.role),
+          mir_operand_use_name(operand.use), operand.index);
+  return true;
+}
+
+static void dump_operand_meta(FILE *stream, const MirInstr *instr) {
+  MirDumpOperandMetaCtx ctx = {
+      .stream = stream,
+      .any = false,
+  };
+  mir_instr_for_each_operand((MirInstr *)instr, dump_operand_meta_item, &ctx);
+  if (ctx.any) {
+    fputs("]" STYLE_RESET_ALL, stream);
+  }
+}
+
+static bool dump_term_operand_meta_item(MirInstr *instr, MirOperand operand,
+                                        void *ctx) {
+  (void)instr;
+  return dump_operand_meta_item(NULL, operand, ctx);
+}
+
+static void dump_term_operand_meta(FILE *stream, const MirTerminator *term) {
+  MirDumpOperandMetaCtx ctx = {
+      .stream = stream,
+      .any = false,
+  };
+  mir_term_for_each_operand((MirTerminator *)term, dump_term_operand_meta_item,
+                            &ctx);
+  if (ctx.any) {
+    fputs("]" STYLE_RESET_ALL, stream);
+  }
+}
+
+static void dump_param_summary(FILE *stream, const MirFunction *fn,
+                               size_t index) {
+  fprintf(stream, " @%s",
+          mir_operand_use_name(mir_function_param_use(fn, index)));
+}
+
+static void dump_result_summary(FILE *stream, const MirFunction *fn) {
+  fprintf(stream, " @%s",
+          mir_result_ownership_name(mir_function_result_ownership(fn)));
 }
 
 static void dump_instr(FILE *stream, const MirFunction *fn,
                        const MirInstr *instr) {
-  fprintf(stream, "    ");
-  if (instr->result != MIR_NO_VALUE) {
-    dump_value(stream, instr->result);
-    fprintf(stream, " = ");
+  bool rc_instr = instr->kind == MIR_DUP || instr->kind == MIR_DROP;
+  if (rc_instr) {
+    fputs(COLOR_MAGENTA, stream);
   }
+  fputs("    ", stream);
+  dump_value(stream, instr->result);
+  fprintf(stream, " = %s",
+          instr->kind == MIR_PRIMITIVE
+              ? mir_primitive_op_name(instr->data.primitive.op)
+              : mir_instr_name(instr->kind));
 
-  fprintf(stream, "%s", instr_name(instr->kind));
   switch (instr->kind) {
   case MIR_CONST_INT:
-    fprintf(stream, " %d", instr->imm.int_value);
+    fprintf(stream, " %d", instr->data.int_value);
     break;
   case MIR_CONST_UINT64:
-    fprintf(stream, " %llu", (unsigned long long)instr->imm.uint64_value);
+    fprintf(stream, " %" PRIu64, instr->data.uint64_value);
+    break;
+  case MIR_CONST_FLOAT:
+    fprintf(stream, " %g", (double)instr->data.float_value);
     break;
   case MIR_CONST_DOUBLE:
-    fprintf(stream, " %f", instr->imm.double_value);
+    fprintf(stream, " %g", instr->data.double_value);
     break;
   case MIR_CONST_CHAR:
-    fprintf(stream, " '%c'", instr->imm.char_value);
+    fputc(' ', stream);
+    dump_char_literal(stream, instr->data.char_value);
     break;
   case MIR_CONST_BOOL:
-    fprintf(stream, " %s", instr->imm.bool_value ? "true" : "false");
+    fprintf(stream, " %s", instr->data.bool_value ? "true" : "false");
     break;
-  case MIR_STRING_LITERAL:
-    fprintf(stream, " \"%.*s\"", instr->member_index,
-            instr->name ? instr->name : "");
+  case MIR_CONST_STRING:
+    fputc(' ', stream);
+    dump_escaped_string(stream, instr->data.string_value.chars,
+                        instr->data.string_value.len);
     break;
-  case MIR_PARAM:
-  case MIR_FN_REF:
-  case MIR_LOAD_SYMBOL:
-    fprintf(stream, " %s", instr->name ? instr->name : "<unnamed>");
+  case MIR_CONST_VOID:
     break;
-  case MIR_CALL_DIRECT:
-    fprintf(stream, " %s", instr->name ? instr->name : "<unnamed>");
-    if (instr->operands.len > 0) {
-      fprintf(stream, ", ");
-      dump_operands(stream, &instr->operands);
+  case MIR_PRIMITIVE_CAST:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.primitive_cast.value);
+    fputs(" from ", stream);
+    print_type_to_stream(instr->data.primitive_cast.from_type, stream);
+    fputs(" to ", stream);
+    print_type_to_stream(instr->data.primitive_cast.to_type, stream);
+    break;
+  case MIR_TUPLE:
+    fputs(" { ", stream);
+    dump_named_value_id_vec(stream, &instr->data.tuple.items, instr->type);
+    fputs(" }", stream);
+    break;
+  case MIR_TUPLE_GET:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.tuple_get.tuple);
+    fprintf(stream, ", %zu", instr->data.tuple_get.index);
+    break;
+  case MIR_MATCH:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.match.scrutinee);
+    if (instr->data.match.first_test_block != MIR_NO_BLOCK) {
+      fputs(" first ", stream);
+      dump_block_ref(stream, instr->data.match.first_test_block);
+    }
+    if (instr->data.match.no_match_block != MIR_NO_BLOCK) {
+      fputs(" no_match ", stream);
+      dump_block_ref(stream, instr->data.match.no_match_block);
+    }
+    fputs(" continue ", stream);
+    dump_block_ref(stream, instr->data.match.continuation_block);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
     }
     break;
-  case MIR_ENV_NEW:
-    if (instr->env_layout_id != MIR_NO_ENV_LAYOUT) {
-      fprintf(stream, " layout#%u", instr->env_layout_id);
+  case MIR_VARIANT:
+    fprintf(stream, " %s#%d(",
+            instr->data.variant.constructor_name
+                ? instr->data.variant.constructor_name
+                : "<constructor>",
+            instr->data.variant.constructor_index);
+    dump_value_id_vec(stream, &instr->data.variant.fields);
+    fputc(')', stream);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
     }
     break;
-  case MIR_ENV_GET:
-    fprintf(stream, " ");
-    dump_operands(stream, &instr->operands);
-    fprintf(stream, ", field[%u]", instr->field_index);
+  case MIR_VARIANT_TAG:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.variant_tag.value);
     break;
-  case MIR_ENV_SET:
-    fprintf(stream, " ");
-    dump_operands(stream, &instr->operands);
-    fprintf(stream, ", field[%u]", instr->field_index);
+  case MIR_TAG_EQ:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.tag_eq.tag);
+    fprintf(stream, ", %s#%d",
+            instr->data.tag_eq.constructor_name
+                ? instr->data.tag_eq.constructor_name
+                : "<constructor>",
+            instr->data.tag_eq.constructor_index);
     break;
-  case MIR_BINOP:
-  case MIR_UNOP:
-    fprintf(stream, " %s ", token_name(instr->op));
-    dump_operands(stream, &instr->operands);
+  case MIR_VARIANT_PAYLOAD:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.variant_payload.value);
+    fprintf(stream, ", %s#%d",
+            instr->data.variant_payload.constructor_name
+                ? instr->data.variant_payload.constructor_name
+                : "<constructor>",
+            instr->data.variant_payload.constructor_index);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
     break;
-  case MIR_CALL_INDIRECT:
-  case MIR_MAKE_CLOSURE:
-  case MIR_CLOSURE_FN:
+  case MIR_LIST_EMPTY:
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_LIST_CONS:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.list_cons.head);
+    fputs(", ", stream);
+    dump_value(stream, instr->data.list_cons.tail);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_LIST_IS_EMPTY:
+  case MIR_LIST_HEAD:
+  case MIR_LIST_TAIL:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.list_op.list);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_ARRAY_LITERAL:
+    fputs(" { ", stream);
+    dump_value_id_vec(stream, &instr->data.array_literal.items);
+    fputs(" }", stream);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_ARRAY_SIZE:
+  case MIR_ARRAY_SUCC:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.array_unop.array);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_ARRAY_AT:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.array_at.array);
+    fputs(", ", stream);
+    dump_value(stream, instr->data.array_at.index);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_ARRAY_SET:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.array_set.array);
+    fputs(", ", stream);
+    dump_value(stream, instr->data.array_set.index);
+    fputs(", ", stream);
+    dump_value(stream, instr->data.array_set.value);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_ARRAY_FILL_CONST:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.array_fill_const.size);
+    fputs(", ", stream);
+    dump_value(stream, instr->data.array_fill_const.value);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_ARRAY_FILL:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.array_fill.size);
+    fputs(", ", stream);
+    dump_value(stream, instr->data.array_fill.fill_fn);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_ARRAY_RANGE:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.array_range.offset);
+    fputs(", ", stream);
+    dump_value(stream, instr->data.array_range.size);
+    fputs(", ", stream);
+    dump_value(stream, instr->data.array_range.array);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_ARRAY_OFFSET:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.array_offset.offset);
+    fputs(", ", stream);
+    dump_value(stream, instr->data.array_offset.array);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_STR:
+  case MIR_PRINT:
+  case MIR_CSTR:
+  case MIR_SIZEOF:
+  case MIR_DLOPEN:
+  case MIR_AS_BYTES:
+  case MIR_TYPEOF:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.value_op.value);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_PRIMITIVE:
+    fputc(' ', stream);
+    for (size_t i = 0; i < instr->data.primitive.argc; i++) {
+      if (i > 0) {
+        fputs(", ", stream);
+      }
+      dump_value(stream, instr->data.primitive.operands[i]);
+    }
+    break;
+  case MIR_LOGICAL_AND:
+  case MIR_LOGICAL_OR:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.logical.lhs);
+    fputs(" rhs ", stream);
+    dump_block_ref(stream, instr->data.logical.rhs_block);
+    fputs(" short ", stream);
+    dump_block_ref(stream, instr->data.logical.short_block);
+    fputs(" continue ", stream);
+    dump_block_ref(stream, instr->data.logical.continuation_block);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
   case MIR_CLOSURE_ENV:
-    fprintf(stream, " ");
-    dump_operands(stream, &instr->operands);
-    break;
-  case MIR_RECORD_GET:
-    fprintf(stream, " ");
-    dump_operands(stream, &instr->operands);
-    fprintf(stream, ".%s", instr->name ? instr->name : "<field>");
-    if (instr->member_index >= 0) {
-      fprintf(stream, " index %d", instr->member_index);
+    fputs(" { ", stream);
+    dump_named_value_id_vec(stream, &instr->data.closure_env.fields,
+                            instr->type);
+    fputs(" }", stream);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
     }
     break;
-  case MIR_UNSUPPORTED:
-    fprintf(stream, " %s", instr->name ? instr->name : "<unknown>");
-    break;
-  default:
-    if (instr->operands.len > 0) {
-      fprintf(stream, " ");
-      dump_operands(stream, &instr->operands);
+  case MIR_CLOSURE:
+    fputs(" { env ", stream);
+    dump_value(stream, instr->data.closure.env);
+    fputs(", fn ", stream);
+    dump_value(stream, instr->data.closure.fn);
+    fputs(" }", stream);
+    if (instr->data.closure.impl_name) {
+      fprintf(stream, " as $%s", instr->data.closure.impl_name);
     }
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_CLOSURE_GET:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.closure_get.env);
+    fprintf(stream, ", %zu", instr->data.closure_get.index);
+    if (instr->data.closure_get.name) {
+      fprintf(stream, " ; %s", instr->data.closure_get.name);
+    }
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_CLOSURE_FN:
+  case MIR_CLOSURE_GET_ENV:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.closure_part.closure);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_DUP:
+  case MIR_DROP:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.value_op.value);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+    break;
+  case MIR_FN_REF:
+    fprintf(stream, " $%s",
+            instr->data.fn_ref.name ? instr->data.fn_ref.name : "<anonymous>");
+    break;
+  case MIR_CALL:
+    fputc(' ', stream);
+    if (instr->data.call.builtin) {
+      fprintf(stream, "@%s", instr->data.call.builtin->name);
+    } else {
+      dump_value(stream, instr->data.call.callee);
+    }
+    if (instr->data.call.specialized_name) {
+      const char *prefix =
+          instr->data.call.specialized_name[0] == '$' ? " as " : " as $";
+      fprintf(stream, "%s%s", prefix, instr->data.call.specialized_name);
+    }
+    // if (instr->data.call.callee_type) {
+    //   fputs(STYLE_DIM " : ", stream);
+    //   dump_call_type(stream, instr->data.call.callee_type);
+    //   fputs(STYLE_RESET_ALL, stream);
+    // }
+
+    fputc('(', stream);
+    dump_value_id_vec(stream, &instr->data.call.operands);
+    fputc(')', stream);
+
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+
     break;
   }
 
-  if (instr->alloc_id != MIR_NO_ALLOC) {
-    const MirAllocSite *alloc = find_alloc(fn, instr->alloc_id);
-    fprintf(stream, " alloc #%u", instr->alloc_id);
-    if (alloc) {
-      fprintf(stream, " [%s%s]", placement_name(alloc->placement),
-              alloc->is_mutable ? ", mutable" : "");
-    }
+  dump_escape_meta(stream, fn, instr->result);
+  dump_operand_meta(stream, instr);
+  if (rc_instr) {
+    fputs(STYLE_RESET_ALL, stream);
   }
-
-  if (instr->result != MIR_NO_VALUE) {
-    fprintf(stream, " : %s", type_kind_name(instr->type));
-  }
-  fprintf(stream, "\n");
+  fputc('\n', stream);
 }
 
 static void dump_term(FILE *stream, const MirTerminator *term) {
   switch (term->kind) {
   case MIR_TERM_NONE:
-    fprintf(stream, "    <unterminated>\n");
+    fprintf(stream, "    <no terminator>\n");
     break;
   case MIR_TERM_RETURN:
     fprintf(stream, "    return ");
     dump_value(stream, term->value);
-    fprintf(stream, "\n");
+    dump_term_operand_meta(stream, term);
+    fputc('\n', stream);
     break;
-  case MIR_TERM_BRANCH:
-    fprintf(stream, "    br bb%u\n", term->target);
-    break;
-  case MIR_TERM_COND_BRANCH:
-    fprintf(stream, "    cond_br ");
+  case MIR_TERM_ARM_RETURN:
+    fprintf(stream, "    arm_return ");
     dump_value(stream, term->value);
-    fprintf(stream, ", bb%u, bb%u\n", term->then_target, term->else_target);
-    break;
-  case MIR_TERM_TAIL_CALL_DIRECT:
-    fprintf(stream, "    tail_call_direct %s",
-            term->symbol ? term->symbol : "<unnamed>");
-    if (term->args.len > 0) {
-      fprintf(stream, ", ");
-      dump_operands(stream, &term->args);
+    if (term->target != MIR_NO_BLOCK) {
+      fputs(" -> ", stream);
+      dump_block_ref(stream, term->target);
     }
-    fprintf(stream, "\n");
+    dump_term_operand_meta(stream, term);
+    fputc('\n', stream);
     break;
-  case MIR_TERM_TAIL_CALL_INDIRECT:
-    fprintf(stream, "    tail_call_indirect ");
-    dump_value(stream, term->callee);
-    if (term->args.len > 0) {
-      fprintf(stream, ", ");
-      dump_operands(stream, &term->args);
-    }
-    fprintf(stream, "\n");
+  case MIR_TERM_BR:
+    fputs("    br ", stream);
+    dump_block_ref(stream, term->target);
+    fputc('\n', stream);
+    break;
+  case MIR_TERM_COND:
+    fputs("    cond ", stream);
+    dump_value(stream, term->cond);
+    fputs(", ", stream);
+    dump_block_ref(stream, term->then_block);
+    fputs(", ", stream);
+    dump_block_ref(stream, term->else_block);
+    dump_term_operand_meta(stream, term);
+    fputc('\n', stream);
     break;
   case MIR_TERM_UNREACHABLE:
-    fprintf(stream, "    unreachable\n");
+    fputs("    unreachable\n", stream);
     break;
   }
 }
 
+static Type *mir_dump_function_return_type(const MirFunction *fn) {
+  if (!fn || !fn->type) {
+    return NULL;
+  }
+
+  Type *type = fn->type;
+  bool has_env_param = false;
+  for (size_t i = 0; i < fn->params.len; i++) {
+    MirParam *param = &fn->params.items[i];
+    if (param->name && strcmp(param->name, "$env") == 0) {
+      has_env_param = true;
+      if (!(type && type->kind == T_FN && type->data.T_FN.from && param->type &&
+            types_equal(type->data.T_FN.from, param->type))) {
+        continue;
+      }
+    }
+    if (type && type->kind == T_FN) {
+      type = type->data.T_FN.to;
+    }
+  }
+
+  if (has_env_param && type && type->kind == T_FN && type->data.T_FN.from &&
+      type->data.T_FN.from->kind == T_VOID) {
+    return type->data.T_FN.to;
+  }
+  return type;
+}
+
 void dump_function(FILE *stream, const MirFunction *fn) {
-  fprintf(stream, "fn %s : %s {\n", fn->name ? fn->name : "<unnamed>",
-          type_kind_name(fn->type));
-  for (size_t b = 0; b < fn->blocks.len; b++) {
-    MirBlock *block = fn->blocks.items[b];
-    fprintf(stream, "  bb%u.%s:\n", block->id,
-            block->name ? block->name : "<unnamed>");
-    for (size_t i = 0; i < block->instrs.len; i++) {
-      dump_instr(stream, fn, block->instrs.items + i);
+  if (!stream || !fn) {
+    return;
+  }
+
+  fprintf(stream, "fn %s(", fn->name ? fn->name : "<anonymous>");
+  for (size_t i = 0; i < fn->params.len; i++) {
+    MirParam *param = &fn->params.items[i];
+    if (i > 0) {
+      fputs(", ", stream);
+    }
+    dump_value(stream, param->value);
+    if (param->name) {
+      fprintf(stream, " %s", param->name);
+    }
+    if (param->type) {
+      fputs(STYLE_DIM ": ", stream);
+      if (param->name && strcmp(param->name, "$env") == 0) {
+        fputc('&', stream);
+      }
+      print_type_to_stream(param->type, stream);
+      dump_param_summary(stream, fn, i);
+      fputs(STYLE_RESET_ALL, stream);
+    } else {
+      fputs(STYLE_DIM, stream);
+      dump_param_summary(stream, fn, i);
+      fputs(STYLE_RESET_ALL, stream);
+    }
+  }
+  fputc(')', stream);
+  Type *return_type = mir_dump_function_return_type(fn);
+  if (return_type) {
+    fputs(STYLE_DIM " -> ", stream);
+    print_type_to_stream(return_type, stream);
+    dump_result_summary(stream, fn);
+    fputs(STYLE_RESET_ALL, stream);
+  }
+  fputs(" {\n", stream);
+  for (size_t i = 0; i < fn->blocks.len; i++) {
+    const MirBlock *block = fn->blocks.items[i];
+    fprintf(stream, "  bb%u", block->id);
+    if (block->name) {
+      fprintf(stream, " %s", block->name);
+    }
+    fputs(":\n", stream);
+    for (size_t j = 0; j < block->instrs.len; j++) {
+      dump_instr(stream, fn, &block->instrs.items[j]);
     }
     dump_term(stream, &block->term);
   }
-  fprintf(stream, "}\n\n");
+  fputs("}\n", stream);
+}
+
+MirProgram *mir_build_program(MirArena *arena, Ast *prog, MirCtx *ctx) {
+  if (!arena) {
+    return NULL;
+  }
+
+  MirCtx fallback_ctx = {.env = NULL};
+  if (!ctx) {
+    ctx = &fallback_ctx;
+  }
+
+  MirCtx build_ctx = *ctx;
+  ht root_table;
+  MirStackFrame root_frame;
+  if (!build_ctx.frame) {
+    mir_stack_frame_init(arena, &root_table, &root_frame, NULL);
+    build_ctx.frame = &root_frame;
+  }
+
+  MirProgram *program =
+      mir_arena_alloc(arena, sizeof(MirProgram), MIR_ALIGNOF(MirProgram));
+
+  if (!program) {
+    return NULL;
+  }
+
+  memset(program, 0, sizeof(MirProgram));
+  program->arena = arena;
+  program->type_env = build_ctx.env;
+  ht_init_with_allocator(
+      &program->builtins,
+      (ht_allocator){.alloc = mir_ht_alloc, .free = NULL, .ctx = arena});
+  mir_register_core_builtins(program);
+
+  MirFunction *top =
+      mir_program_add_function(program, "$top", prog ? prog->type : NULL, prog);
+  MirBlock *entry = mir_function_add_block(top, "entry");
+
+  if (!top || !entry) {
+    return program;
+  }
+
+  MirBuilder builder;
+  mir_builder_init(&builder, program, top);
+  mir_builder_position_at_end(&builder, entry);
+
+  MirValueId result = mir_expr(&builder, prog, &build_ctx);
+
+  if (result != MIR_NO_VALUE && builder.block &&
+      builder.block->term.kind == MIR_TERM_NONE) {
+    mir_builder_set_return(&builder, result);
+  } else if (result == MIR_NO_VALUE) {
+    mir_builder_set_unreachable_if_open(&builder);
+  }
+
+  return program;
+}
+
+void mir_program_destroy(MirProgram *program) { (void)program; }
+
+void mir_run_passes(MirProgram *program) {
+  mir_escape_analysis(program);
+  if (ylc_config.perceus_rc) {
+    mir_perceus_instrumentation(program);
+  }
 }
 
 void mir_dump_program(MirProgram *program, FILE *stream) {
   if (!program || !stream) {
     return;
   }
-  fprintf(stream, "# YLC MIR\n");
-  for (size_t i = 0; i < program->env_layouts.len; i++) {
-    MirEnvLayout *layout = &program->env_layouts.items[i];
-    fprintf(stream, "env layout#%u %s(", layout->id,
-            layout->name ? layout->name : "<unnamed>");
-    for (size_t f = 0; f < layout->fields.len; f++) {
-      if (f > 0) {
-        fprintf(stream, ", ");
-      }
-      fprintf(stream, "%s : %s", layout->fields.items[f].name,
-              type_kind_name(layout->fields.items[f].type));
-    }
-    fprintf(stream, ")\n");
-  }
-  if (program->env_layouts.len > 0) {
-    fprintf(stream, "\n");
-  }
+
+  fprintf(stream, "# ylc-mir\n");
   for (size_t i = 0; i < program->functions.len; i++) {
     dump_function(stream, program->functions.items[i]);
   }
 }
-
-MirProgram *mir_build_program(MirArena *arena, Ast *prog, TypeEnv *type_env) {
-  if (!arena || !prog) {
-    return NULL;
-  }
-
-  MirProgram *program =
-      mir_arena_alloc(arena, sizeof(MirProgram), MIR_ALIGNOF(MirProgram));
-  memset(program, 0, sizeof(MirProgram));
-  program->arena = arena;
-
-  MirFunction *top = mir_new_function(program, "$top", prog->type, prog);
-  MirBuilder builder;
-  mir_builder_init(&builder, program, top);
-  MirValueId result = mir_emit_expr(&builder, prog);
-  //
-  // MirInstr vvoid = mir_make_instr(MIR_CONST_VOID, &t_void, NULL);
-  mir_set_return_or_tail_call(&builder, result);
-  mir_builder_destroy_scopes(&builder);
-  return program;
-}
-
-void mir_run_passes(MirProgram *program) {}
 
 int mir(Ast *prog, TypeEnv *type_env) {
   MirArena *arena = mir_arena_create();
   if (!arena) {
     return 0;
   }
+  ht table;
+  MirStackFrame initial_stack_frame;
+  mir_stack_frame_init(arena, &table, &initial_stack_frame, NULL);
+  MirCtx ctx = {.env = type_env, .frame = &initial_stack_frame};
 
-  MirProgram *program = mir_build_program(arena, prog, type_env);
+  MirProgram *program = mir_build_program(arena, prog, &ctx);
+
   if (!program) {
     mir_arena_destroy(arena);
     return 0;
@@ -1362,6 +5416,7 @@ int mir(Ast *prog, TypeEnv *type_env) {
     mir_dump_program(program, stdout);
   }
 
+  mir_program_destroy(program);
   mir_arena_destroy(arena);
   return 1;
 }

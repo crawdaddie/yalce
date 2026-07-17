@@ -23,6 +23,9 @@ void str_copy(char *dest, char *src, int len) {
 void print(_String str) { printf("%s", str.chars); }
 void printc(char c) { printf("%c", c); }
 
+void __ylc_dup(void *ptr) { (void)ptr; }
+void __ylc_drop(void *ptr) { (void)ptr; }
+
 void fprint(FILE *f, _String str) { fprintf(f, "%s", str.chars); }
 struct char_matrix {
   int32_t rows;

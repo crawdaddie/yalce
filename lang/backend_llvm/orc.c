@@ -4,7 +4,6 @@
 #include "builtin_functions.h"
 #include "config.h"
 #include "debugging.h"
-#include "escape_analysis.h"
 #include "format_utils.h"
 #include "function.h"
 #include "globals.h"
@@ -327,8 +326,6 @@ static ORCCompiledModule compile_source(const char *filename,
     return dispose_compile_artifacts(context, module, builder);
   }
 
-  escape_analysis(prog);
-
   *env = ti_ctx.env;
   ctx->env = ti_ctx.env;
   ctx->module_name = filename;
@@ -344,16 +341,21 @@ static ORCCompiledModule compile_source(const char *filename,
   }
 
   MirArena *mir_arena = mir_arena_create();
-  MirProgram *mir_program = mir_build_program(mir_arena, prog, ti_ctx.env);
+  ht mir_table;
+  MirStackFrame mir_initial_stack_frame;
+  mir_stack_frame_init(mir_arena, &mir_table, &mir_initial_stack_frame, NULL);
+  MirCtx mir_ctx = {.env = ti_ctx.env, .frame = &mir_initial_stack_frame};
+  MirProgram *mir_program = mir_build_program(mir_arena, prog, &mir_ctx);
   mir_run_passes(mir_program);
-  // if (ylc_config.dump_mir) {
-  //   mir_dump_program(mir_program, stdout);
-  // }
+  if (ylc_config.dump_mir) {
+    mir_dump_program(mir_program, stdout);
+  }
 
   LLVMTypeRef top_level_ret_type;
   LLVMValueRef top_level_func = NULL;
 
   top_level_func = lower_mir(mir_program, module, builder);
+  mir_program_destroy(mir_program);
   mir_arena_destroy(mir_arena);
 
   // if (ylc_config.test_mode) {

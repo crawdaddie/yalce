@@ -8,6 +8,7 @@ RTConfig ylc_config = {
     .debug_codegen = false,
     .debug_symbols = false,
     .num_input_scripts = 0,
+    .perceus_rc = true,
 };
 
 void print_config() {
@@ -41,6 +42,10 @@ void print_config() {
 
   if (ylc_config.verify_ir) {
     printf("Verify LLVM IR\n");
+  }
+
+  if (ylc_config.perceus_rc) {
+    printf("Perceus RC instrumentation\n");
   }
 
   if (ylc_config.base_libs_dir) {

@@ -9,6 +9,8 @@ void str_copy(char *dest, char *src, int len);
 
 void print(_String str);
 void printc(char c);
+void __ylc_dup(void *ptr);
+void __ylc_drop(void *ptr);
 
 int rand_int(int range);
 

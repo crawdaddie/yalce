@@ -57,6 +57,9 @@ void parse_args(int argc, char **argv) {
     } else if (strcmp(argv[arg_counter], "--verify-ir") == 0) {
       ylc_config.verify_ir = true;
       arg_counter++;
+    } else if (strcmp(argv[arg_counter], "--perceus-rc") == 0) {
+      ylc_config.perceus_rc = true;
+      arg_counter++;
     } else if (strcmp(argv[arg_counter], "-g") == 0) {
       ylc_config.debug_symbols = true;
       arg_counter++;

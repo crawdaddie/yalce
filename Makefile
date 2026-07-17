@@ -26,6 +26,7 @@ LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/llvm/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/coroutines/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/runtime/*.c)
+LANG_HEADERS := $(shell find $(LANG_SRC_DIR) -name '*.h')
 
 # C++ sources for coroutine pass integration
 LANG_CPP_SRCS := $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.cpp)
@@ -129,17 +130,17 @@ $(LEX_OUTPUT): $(LEX_FILE)
 	flex --header-file=$(LANG_SRC_DIR)/lex.yy.h -o $(LEX_OUTPUT) $(LEX_FILE)
 
 # Build language object files
-$(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(LANG_HEADERS) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
 	$(LANG_CC) -c -o $@ $<
 
 # Build C++ object files for coroutine passes
-$(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.cpp | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.cpp $(LANG_HEADERS) | $(BUILD_DIR)
 	$(LANG_CXX) -c -o $@ $<
 
-$(RANGE_SERVER_OBJ): $(RANGE_SERVER_SRC) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
+$(RANGE_SERVER_OBJ): $(RANGE_SERVER_SRC) $(LANG_HEADERS) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
 	$(LANG_CC) -c -o $@ $<
 
-$(LSP_SERVER_OBJ): $(LSP_SERVER_SRC) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
+$(LSP_SERVER_OBJ): $(LSP_SERVER_SRC) $(LANG_HEADERS) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
 	$(LANG_CC) $(JSON_C_CFLAGS) -c -o $@ $<
 
 # Build the final executable (use C++ linker since we have C++ objects)

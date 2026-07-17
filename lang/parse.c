@@ -951,7 +951,8 @@ bool ast_is_placeholder_id(Ast *ast) {
     return false;
   }
 
-  if (*(ast->data.AST_IDENTIFIER.value) == '_') {
+  if (ast->data.AST_IDENTIFIER.length == 1 &&
+      *(ast->data.AST_IDENTIFIER.value) == '_') {
     return true;
   }
 

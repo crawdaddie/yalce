@@ -12,6 +12,7 @@ typedef struct RTConfig {
   bool dump_mir;
   bool debug_symbols;
   bool verify_ir;
+  bool perceus_rc;
   const char *base_libs_dir;
   const char *import_current_dir;
   const char *opt_level;
