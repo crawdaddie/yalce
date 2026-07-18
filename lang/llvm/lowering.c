@@ -1,6 +1,7 @@
 #include "./lowering.h"
 #include "backend_llvm/adt.h"
 #include "backend_llvm/array.h"
+#include "backend_llvm/coroutines/coroutines.h"
 #include "backend_llvm/list.h"
 #include "backend_llvm/strings.h"
 #include "backend_llvm/types.h"
@@ -35,6 +36,20 @@ typedef struct {
   LLVMTypeRef *function_types;
   size_t functions_len;
 } MirLlvmCtx;
+
+typedef struct {
+  bool active;
+  Type *yield_type;
+  LLVMTypeRef llvm_yield_type;
+  LLVMTypeRef promise_type;
+  LLVMValueRef promise_alloca;
+  LLVMValueRef coro_id;
+  LLVMValueRef handle;
+  LLVMBasicBlockRef cleanup_bb;
+  LLVMBasicBlockRef suspend_bb;
+  LLVMBasicBlockRef initial_return_bb;
+  LLVMBasicBlockRef start_bb;
+} MirLlvmCoroCtx;
 
 static LLVMValueRef lower_mir_void_stub(LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
@@ -247,6 +262,55 @@ static LLVMTypeRef lower_mir_generic_ptr_type(LLVMModuleRef module) {
                          0);
 }
 
+static Type *lower_mir_coro_constructor_yield_type(Type *type) {
+  if (!type || !is_coroutine_constructor_type(type)) {
+    return NULL;
+  }
+
+  Type *ret = fn_return_type(type);
+  if (!ret || !is_coroutine_type(ret) || !ret->data.T_CONS.args ||
+      ret->data.T_CONS.num_args < 1) {
+    return NULL;
+  }
+
+  Type *yield_type = ret->data.T_CONS.args[0];
+  if (is_coroutine_type(yield_type) && yield_type->data.T_CONS.args &&
+      yield_type->data.T_CONS.num_args > 0) {
+    yield_type = yield_type->data.T_CONS.args[0];
+  }
+  return yield_type;
+}
+
+static Type *lower_mir_coro_instance_yield_type(Type *type) {
+  if (!type || !is_coroutine_type(type) || !type->data.T_CONS.args ||
+      type->data.T_CONS.num_args < 1) {
+    return NULL;
+  }
+  return type->data.T_CONS.args[0];
+}
+
+static LLVMTypeRef lower_mir_coro_promise_type(Type *yield_type,
+                                               JITLangCtx *ctx,
+                                               LLVMModuleRef module,
+                                               LLVMTypeRef *llvm_yield_type) {
+  LLVMTypeRef yielded = type_to_llvm_type(yield_type, ctx, module);
+  if (!yielded) {
+    return NULL;
+  }
+  if (llvm_yield_type) {
+    *llvm_yield_type = yielded;
+  }
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef fields[] = {
+      yielded,
+      LLVMInt1TypeInContext(llvm_ctx),
+      lower_mir_generic_ptr_type(module),
+      lower_mir_generic_ptr_type(module),
+  };
+  return LLVMStructTypeInContext(llvm_ctx, fields, 4, 0);
+}
+
 static LLVMTypeRef lower_mir_rc_header_type(LLVMModuleRef module) {
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
   LLVMTypeRef header_type = LLVMGetTypeByName2(llvm_ctx, "YlcRcHeader");
@@ -455,6 +519,52 @@ static LLVMTypeRef lower_mir_param_abi_type(MirParam *param, JITLangCtx *ctx,
                                   NULL);
 }
 
+static LLVMTypeRef lower_mir_coroutine_function_type(MirFunction *fn,
+                                                     JITLangCtx *ctx,
+                                                     LLVMModuleRef module) {
+  if (!fn || !is_coroutine_constructor_type(fn->type)) {
+    return NULL;
+  }
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef hidden_size_ptr =
+      LLVMPointerType(LLVMInt64TypeInContext(llvm_ctx), 0);
+  LLVMTypeRef ret_type = lower_mir_generic_ptr_type(module);
+
+  size_t lowered_params = 1;
+  for (size_t i = 0; i < fn->params.len; i++) {
+    if (lower_mir_param_is_lowered(&fn->params.items[i])) {
+      lowered_params++;
+    }
+  }
+
+  LLVMTypeRef *param_types = calloc(lowered_params, sizeof(LLVMTypeRef));
+  if (!param_types) {
+    return NULL;
+  }
+
+  param_types[0] = hidden_size_ptr;
+  size_t llvm_param = 1;
+  for (size_t i = 0; i < fn->params.len; i++) {
+    MirParam *param = &fn->params.items[i];
+    if (!lower_mir_param_is_lowered(param)) {
+      continue;
+    }
+
+    param_types[llvm_param] = lower_mir_param_abi_type(param, ctx, module);
+    if (!param_types[llvm_param]) {
+      free(param_types);
+      return NULL;
+    }
+    llvm_param++;
+  }
+
+  LLVMTypeRef fn_type =
+      LLVMFunctionType(ret_type, param_types, (unsigned)lowered_params, 0);
+  free(param_types);
+  return fn_type;
+}
+
 static MirFunction *lower_mir_extern_symbol_function(MirLlvmCtx *lctx,
                                                      MirFunction *fn) {
   if (!lctx || !lctx->program || !fn || !fn->is_extern) {
@@ -501,6 +611,10 @@ static LLVMTypeRef lower_mir_function_type(MirFunction *fn, JITLangCtx *ctx,
                                            LLVMModuleRef module) {
   if (!fn) {
     return NULL;
+  }
+
+  if (is_coroutine_constructor_type(fn->type)) {
+    return lower_mir_coroutine_function_type(fn, ctx, module);
   }
 
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
@@ -572,6 +686,12 @@ static LLVMValueRef lower_mir_declare_function(MirLlvmCtx *lctx,
   }
 
   LLVMSetLinkage(llvm_fn, LLVMExternalLinkage);
+  if (is_coroutine_constructor_type(fn->type)) {
+    LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+    LLVMAttributeRef attr =
+        LLVMCreateEnumAttribute(llvm_ctx, PRESPLIT_COROUTINE_KIND_ID, 0);
+    LLVMAddAttributeAtIndex(llvm_fn, LLVMAttributeFunctionIndex, attr);
+  }
   if (fn->is_extern) {
     LLVMSetFunctionCallConv(llvm_fn, LLVMCCallConv);
     if (strcmp(name, "hash_string") == 0) {
@@ -2313,12 +2433,153 @@ lower_mir_indirect_call_type(MirFunction *fn, MirInstr *instr,
   return fn_type;
 }
 
+static MirFunction *lower_mir_call_fn_ref_target(MirLlvmCtx *lctx,
+                                                 MirFunction *fn,
+                                                 MirInstr *instr) {
+  if (!lctx || !fn || !instr || instr->data.call.callee == MIR_NO_VALUE) {
+    return NULL;
+  }
+
+  MirInstr *callee_def =
+      mir_function_find_def_instr(fn, instr->data.call.callee);
+  if (!callee_def || callee_def->kind != MIR_FN_REF ||
+      callee_def->data.fn_ref.fn >= lctx->functions_len || !lctx->program ||
+      callee_def->data.fn_ref.fn >= lctx->program->functions.len) {
+    return NULL;
+  }
+
+  return lctx->program->functions.items
+             ? lctx->program->functions.items[callee_def->data.fn_ref.fn]
+             : NULL;
+}
+
+static LLVMValueRef lower_mir_coro_new(MirFunction *fn, MirInstr *instr,
+                                       MirLlvmValueMap *values,
+                                       MirLlvmCtx *lctx, LLVMModuleRef module,
+                                       LLVMBuilderRef builder) {
+  if (!fn || !instr || !values || !lctx) {
+    return NULL;
+  }
+
+  MirFunction *target = lower_mir_call_fn_ref_target(lctx, fn, instr);
+  LLVMValueRef callee = NULL;
+  LLVMTypeRef callee_type = NULL;
+  if (target && target->id < lctx->functions_len) {
+    callee = lctx->functions[target->id];
+    callee_type = lctx->function_types[target->id];
+  }
+
+  if (!callee && instr->data.call.callee != MIR_NO_VALUE) {
+    callee =
+        mir_llvm_value_get_rvalue(values, instr->data.call.callee, builder);
+  }
+  if (!callee) {
+    fprintf(stderr,
+            "MIR to LLVM lowering could not resolve coroutine constructor in "
+            "%s\n",
+            fn && fn->name ? fn->name : "<anonymous>");
+    return NULL;
+  }
+
+  if (!callee_type && target) {
+    callee_type = lower_mir_function_type(target, &lctx->jit_ctx, module);
+  }
+  if (!callee_type) {
+    fprintf(stderr,
+            "MIR to LLVM lowering could not resolve coroutine constructor "
+            "type in %s\n",
+            fn && fn->name ? fn->name : "<anonymous>");
+    return NULL;
+  }
+
+  LLVMValueRef *args =
+      calloc(instr->data.call.operands.len + 1, sizeof(LLVMValueRef));
+  if (!args) {
+    return NULL;
+  }
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  args[0] = LLVMBuildAlloca(builder, LLVMInt64TypeInContext(llvm_ctx),
+                            "coro.size.slot");
+  size_t arg_count = 1;
+  for (size_t i = 0; i < instr->data.call.operands.len; i++) {
+    MirValueId operand_id = instr->data.call.operands.items[i];
+    Type *operand_type = mir_function_value_type(fn, operand_id);
+    if (operand_type && operand_type->kind == T_VOID) {
+      continue;
+    }
+
+    LLVMValueRef arg = mir_llvm_value_get_rvalue(values, operand_id, builder);
+    if (!arg) {
+      free(args);
+      return NULL;
+    }
+    args[arg_count++] = arg;
+  }
+
+  LLVMValueRef handle = LLVMBuildCall2(builder, callee_type, callee, args,
+                                       (unsigned)arg_count, "coro.handle");
+  free(args);
+  return handle;
+}
+
+static LLVMValueRef lower_mir_coro_resume_call(MirFunction *fn, MirInstr *instr,
+                                               MirLlvmValueMap *values,
+                                               MirLlvmCtx *lctx,
+                                               LLVMModuleRef module,
+                                               LLVMBuilderRef builder) {
+  if (!fn || !instr || !values || instr->data.call.callee == MIR_NO_VALUE) {
+    return NULL;
+  }
+
+  Type *coro_type = mir_function_value_type(fn, instr->data.call.callee);
+  if (!is_coroutine_type(coro_type)) {
+    coro_type = instr->data.call.callee_type;
+  }
+  Type *yield_type = lower_mir_coro_instance_yield_type(coro_type);
+  if (!yield_type) {
+    return NULL;
+  }
+
+  for (size_t i = 0; i < instr->data.call.operands.len; i++) {
+    Type *operand_type =
+        mir_function_value_type(fn, instr->data.call.operands.items[i]);
+    if (!operand_type || operand_type->kind != T_VOID) {
+      fprintf(stderr,
+              "MIR to LLVM lowering only supports nullary coroutine resume "
+              "calls in %s\n",
+              fn && fn->name ? fn->name : "<anonymous>");
+      return NULL;
+    }
+  }
+
+  LLVMValueRef handle =
+      mir_llvm_value_get_rvalue(values, instr->data.call.callee, builder);
+  if (!handle) {
+    return NULL;
+  }
+
+  LLVMTypeRef llvm_yield_type =
+      type_to_llvm_type(yield_type, &lctx->jit_ctx, module);
+  if (!llvm_yield_type) {
+    return NULL;
+  }
+  return codegen_handle_resume(handle, llvm_yield_type, &lctx->jit_ctx, module,
+                               builder);
+}
+
 static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
                                    MirLlvmValueMap *values, MirLlvmCtx *lctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder) {
   if (!fn || !instr || !lctx) {
     return NULL;
+  }
+
+  LLVMValueRef coro_resume =
+      lower_mir_coro_resume_call(fn, instr, values, lctx, module, builder);
+  if (coro_resume) {
+    return coro_resume;
   }
 
   LLVMValueRef builtin_result =
@@ -2738,6 +2999,82 @@ static LLVMValueRef lower_mir_rc_marker(MirFunction *fn, MirInstr *instr,
   return LLVMBuildCall2(builder, fn_type, hook, &ptr, 1, "");
 }
 
+static LLVMValueRef lower_mir_print(MirFunction *fn, MirInstr *instr,
+                                    MirLlvmValueMap *values,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  (void)fn;
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef void_type = LLVMVoidTypeInContext(llvm_ctx);
+  if (!instr || instr->data.op.argc != 1) {
+    return LLVMGetUndef(void_type);
+  }
+
+  LLVMValueRef str =
+      mir_llvm_value_get_rvalue(values, instr->data.op.operands[0], builder);
+  if (!str) {
+    return NULL;
+  }
+
+  LLVMTypeRef i32_type = LLVMInt32TypeInContext(llvm_ctx);
+  LLVMTypeRef i8_ptr_type = lower_mir_generic_ptr_type(module);
+  LLVMTypeRef printf_type =
+      LLVMFunctionType(i32_type, (LLVMTypeRef[]){i8_ptr_type}, 1, 1);
+  LLVMValueRef printf_func = LLVMGetNamedFunction(module, "printf");
+  if (!printf_func) {
+    printf_func = LLVMAddFunction(module, "printf", printf_type);
+  }
+  set_memory_effects(printf_func, MEM_ARGMEM_REF | MEM_INACCESSIBLE_MODREF);
+
+  LLVMValueRef format_str =
+      LLVMBuildGlobalStringPtr(builder, "%.*s", "print.fmt");
+  LLVMValueRef len = LLVMBuildExtractValue(builder, str, 0, "print.len");
+  LLVMValueRef chars = LLVMBuildExtractValue(builder, str, 1, "print.chars");
+  LLVMValueRef printf_args[] = {format_str, len, chars};
+  LLVMBuildCall2(builder, printf_type, printf_func, printf_args, 3, "");
+  return LLVMGetUndef(void_type);
+}
+
+static LLVMValueRef lower_mir_flush(MirInstr *instr, LLVMModuleRef module,
+                                    LLVMBuilderRef builder) {
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef void_type = LLVMVoidTypeInContext(llvm_ctx);
+  if (!instr || instr->data.op.argc != 0) {
+    return LLVMGetUndef(void_type);
+  }
+
+  LLVMTypeRef i32_type = LLVMInt32TypeInContext(llvm_ctx);
+  LLVMTypeRef i8_ptr_type = lower_mir_generic_ptr_type(module);
+  LLVMTypeRef fflush_type =
+      LLVMFunctionType(i32_type, (LLVMTypeRef[]){i8_ptr_type}, 1, 0);
+  LLVMValueRef fflush_func = LLVMGetNamedFunction(module, "fflush");
+  if (!fflush_func) {
+    fflush_func = LLVMAddFunction(module, "fflush", fflush_type);
+  }
+  set_memory_effects(fflush_func, MEM_INACCESSIBLE_MODREF);
+
+  LLVMValueRef null_ptr = LLVMConstNull(i8_ptr_type);
+  LLVMBuildCall2(builder, fflush_type, fflush_func, &null_ptr, 1, "");
+  return LLVMGetUndef(void_type);
+}
+
+static LLVMValueRef lower_mir_str(MirFunction *fn, MirInstr *instr,
+                                  MirLlvmValueMap *values,
+                                  LLVMModuleRef module,
+                                  LLVMBuilderRef builder, JITLangCtx *ctx) {
+  if (!fn || !instr || !values || instr->data.op.argc != 1) {
+    return NULL;
+  }
+
+  MirValueId value_id = instr->data.op.operands[0];
+  LLVMValueRef value = mir_llvm_value_get_rvalue(values, value_id, builder);
+  Type *type = mir_function_value_type(fn, value_id);
+  if (!value || !type) {
+    return NULL;
+  }
+  return stringify_value(value, type, ctx, module, builder);
+}
+
 static LLVMValueRef lower_mir_op(MirFunction *fn, MirInstr *instr,
                                  MirLlvmValueMap *values, MirLlvmCtx *lctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder,
@@ -2762,9 +3099,15 @@ static LLVMValueRef lower_mir_op(MirFunction *fn, MirInstr *instr,
     return lower_mir_list_is_empty(fn, instr, values, builder);
   case MIR_OP_KIND_TAG_EQ:
     return lower_mir_tag_eq(instr, values, builder);
+  case MIR_OP_KIND_STR:
+    return lower_mir_str(fn, instr, values, module, builder, ctx);
   case MIR_OP_KIND_DUP:
   case MIR_OP_KIND_DROP:
     return lower_mir_rc_marker(fn, instr, values, module, builder);
+  case MIR_OP_KIND_PRINT:
+    return lower_mir_print(fn, instr, values, module, builder);
+  case MIR_OP_KIND_FLUSH:
+    return lower_mir_flush(instr, module, builder);
   default:
     return NULL;
   }
@@ -2797,11 +3140,7 @@ static LLVMValueRef lower_mir_instr(MirInstr *instr, MirLlvmValueMap *values,
     return lower_mir_call(fn, instr, values, lctx, module, builder);
 
   case MIR_CORO_NEW:
-    fprintf(stderr,
-            "MIR to LLVM lowering does not support coroutine constructor "
-            "application in %s yet\n",
-            fn && fn->name ? fn->name : "<anonymous>");
-    return NULL;
+    return lower_mir_coro_new(fn, instr, values, lctx, module, builder);
 
   default:
     fprintf(stderr,
@@ -2811,9 +3150,117 @@ static LLVMValueRef lower_mir_instr(MirInstr *instr, MirLlvmValueMap *values,
   }
 }
 
+static bool
+lower_mir_coro_yield_terminator(MirFunction *fn, MirTerminator *term,
+                                MirLlvmValueMap *values,
+                                MirLlvmBlockMap *blocks, MirLlvmCoroCtx *coro,
+                                LLVMModuleRef module, LLVMBuilderRef builder) {
+  if (!coro || !coro->active || !coro->handle || !coro->promise_alloca ||
+      !coro->promise_type || !coro->cleanup_bb || !coro->suspend_bb) {
+    fprintf(stderr,
+            "MIR to LLVM lowering found yield outside coroutine context in "
+            "%s\n",
+            fn && fn->name ? fn->name : "<anonymous>");
+    return false;
+  }
+
+  LLVMValueRef value = mir_llvm_value_get_rvalue(values, term->value, builder);
+  LLVMBasicBlockRef resume_block = mir_llvm_block_get(blocks, term->target);
+  if (!value || !resume_block) {
+    fprintf(stderr,
+            "MIR to LLVM lowering could not lower yield terminator in %s\n",
+            fn && fn->name ? fn->name : "<anonymous>");
+    return false;
+  }
+
+  LLVMBasicBlockRef yield_block = LLVMGetInsertBlock(builder);
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMValueRef yield_ptr = LLVMBuildStructGEP2(
+      builder, coro->promise_type, coro->promise_alloca, 0, "yield.ptr");
+  LLVMBuildStore(builder, value, yield_ptr);
+
+  LLVMValueRef save = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){coro->handle}, 1,
+      "coro.save");
+  LLVMValueRef suspend = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){save,
+                       LLVMConstInt(LLVMInt1TypeInContext(llvm_ctx), 0, false)},
+      2, "coro.suspend");
+
+  LLVMValueRef llvm_fn = LLVMGetBasicBlockParent(yield_block);
+  LLVMBasicBlockRef return_block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, llvm_fn, "yield.return");
+  LLVMValueRef switch_inst = LLVMBuildSwitch(builder, suspend, return_block, 2);
+  LLVMAddCase(switch_inst,
+              LLVMConstInt(LLVMInt8TypeInContext(llvm_ctx), 0, false),
+              resume_block);
+  LLVMAddCase(switch_inst,
+              LLVMConstInt(LLVMInt8TypeInContext(llvm_ctx), 1, false),
+              coro->cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, return_block);
+  LLVMBuildBr(builder, coro->suspend_bb);
+  LLVMPositionBuilderAtEnd(builder, yield_block);
+  return true;
+}
+
+static bool lower_mir_coro_done_terminator(MirFunction *fn,
+                                           MirLlvmCoroCtx *coro,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
+  if (!coro || !coro->active || !coro->handle || !coro->promise_alloca ||
+      !coro->promise_type || !coro->cleanup_bb || !coro->suspend_bb) {
+    fprintf(stderr,
+            "MIR to LLVM lowering found coro.done outside coroutine context "
+            "in %s\n",
+            fn && fn->name ? fn->name : "<anonymous>");
+    return false;
+  }
+
+  LLVMBasicBlockRef done_block = LLVMGetInsertBlock(builder);
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMValueRef done_ptr = LLVMBuildStructGEP2(
+      builder, coro->promise_type, coro->promise_alloca, 1, "coro.done.ptr");
+  LLVMBuildStore(builder,
+                 LLVMConstInt(LLVMInt1TypeInContext(llvm_ctx), 1, false),
+                 done_ptr);
+
+  LLVMValueRef save = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_save_intrinsic(module)),
+      get_coro_save_intrinsic(module), (LLVMValueRef[]){coro->handle}, 1,
+      "final.save");
+  LLVMValueRef suspend = LLVMBuildCall2(
+      builder, LLVMGlobalGetValueType(get_coro_suspend_intrinsic(module)),
+      get_coro_suspend_intrinsic(module),
+      (LLVMValueRef[]){save,
+                       LLVMConstInt(LLVMInt1TypeInContext(llvm_ctx), 1, false)},
+      2, "final.suspend");
+
+  LLVMValueRef llvm_fn = LLVMGetBasicBlockParent(done_block);
+  LLVMBasicBlockRef final_return =
+      LLVMAppendBasicBlockInContext(llvm_ctx, llvm_fn, "final.return");
+  LLVMValueRef switch_inst =
+      LLVMBuildSwitch(builder, suspend, coro->suspend_bb, 2);
+  LLVMAddCase(switch_inst,
+              LLVMConstInt(LLVMInt8TypeInContext(llvm_ctx), 0, false),
+              final_return);
+  LLVMAddCase(switch_inst,
+              LLVMConstInt(LLVMInt8TypeInContext(llvm_ctx), 1, false),
+              coro->cleanup_bb);
+
+  LLVMPositionBuilderAtEnd(builder, final_return);
+  LLVMBuildBr(builder, coro->suspend_bb);
+  LLVMPositionBuilderAtEnd(builder, done_block);
+  return true;
+}
+
 static bool lower_mir_terminator(MirFunction *fn, MirTerminator *term,
                                  MirLlvmValueMap *values,
                                  MirLlvmBlockMap *blocks, LLVMTypeRef ret_type,
+                                 MirLlvmCoroCtx *coro, LLVMModuleRef module,
                                  LLVMBuilderRef builder) {
   switch (term->kind) {
   case MIR_TERM_RETURN: {
@@ -2859,12 +3306,8 @@ static bool lower_mir_terminator(MirFunction *fn, MirTerminator *term,
     return true;
   }
   case MIR_TERM_YIELD: {
-    (void)builder;
-    fprintf(stderr,
-            "MIR to LLVM lowering does not support yield terminator in %s "
-            "yet\n",
-            fn && fn->name ? fn->name : "<anonymous>");
-    return false;
+    return lower_mir_coro_yield_terminator(fn, term, values, blocks, coro,
+                                           module, builder);
   }
   case MIR_TERM_CORO_RESTART: {
     (void)builder;
@@ -2873,6 +3316,9 @@ static bool lower_mir_terminator(MirFunction *fn, MirTerminator *term,
             "terminator in %s yet\n",
             fn && fn->name ? fn->name : "<anonymous>");
     return false;
+  }
+  case MIR_TERM_CORO_DONE: {
+    return lower_mir_coro_done_terminator(fn, coro, module, builder);
   }
   case MIR_TERM_UNREACHABLE:
     LLVMBuildUnreachable(builder);
@@ -2939,7 +3385,7 @@ static bool lower_mir_block_body(MirLlvmCtx *lctx, MirFunction *fn,
                                  MirLlvmValueMap *values,
                                  MirLlvmBlockMap *blocks, bool *visited,
                                  MirBlockId block_id, LLVMModuleRef module,
-                                 LLVMBuilderRef builder) {
+                                 LLVMBuilderRef builder, MirLlvmCoroCtx *coro) {
   if (!lctx || !fn || !values || !blocks || !visited ||
       block_id == MIR_NO_BLOCK || block_id >= fn->blocks.len ||
       block_id >= blocks->len) {
@@ -2974,7 +3420,7 @@ static bool lower_mir_block_body(MirLlvmCtx *lctx, MirFunction *fn,
 
   LLVMTypeRef ret_type = LLVMGetReturnType(lctx->function_types[fn->id]);
   if (!lower_mir_terminator(fn, &mir_block->term, values, blocks, ret_type,
-                            builder)) {
+                            coro, module, builder)) {
     return false;
   }
   if (blocks->exits && block_id < blocks->len) {
@@ -2986,7 +3432,7 @@ static bool lower_mir_block_body(MirLlvmCtx *lctx, MirFunction *fn,
       lower_mir_terminator_successors(&mir_block->term, successors);
   for (size_t i = 0; i < successors_len; i++) {
     if (!lower_mir_block_body(lctx, fn, values, blocks, visited, successors[i],
-                              module, builder)) {
+                              module, builder, coro)) {
       return false;
     }
   }
@@ -3128,6 +3574,19 @@ static bool lower_mir_function_body(MirLlvmCtx *lctx, MirFunction *fn,
     return false;
   }
 
+  bool is_coro = is_coroutine_constructor_type(fn->type);
+  MirLlvmCoroCtx coro = {0};
+  if (is_coro) {
+    coro.active = true;
+    coro.cleanup_bb =
+        LLVMAppendBasicBlockInContext(llvm_ctx, llvm_fn, "cleanup");
+    coro.suspend_bb =
+        LLVMAppendBasicBlockInContext(llvm_ctx, llvm_fn, "suspend");
+    coro.initial_return_bb =
+        LLVMAppendBasicBlockInContext(llvm_ctx, llvm_fn, "initial.return");
+    coro.start_bb = LLVMAppendBasicBlockInContext(llvm_ctx, llvm_fn, "start");
+  }
+
   for (size_t i = 0; i < fn->blocks.len; i++) {
     MirBlock *mir_block = fn->blocks.items[i];
     if (!mir_block || mir_block->id >= blocks.len) {
@@ -3137,34 +3596,133 @@ static bool lower_mir_function_body(MirLlvmCtx *lctx, MirFunction *fn,
         llvm_ctx, llvm_fn, mir_block->name ? mir_block->name : "bb");
   }
 
-  size_t llvm_param = 0;
   bool ok = true;
-  for (size_t i = 0; i < fn->params.len; i++) {
-    MirParam *param = &fn->params.items[i];
-    if (!lower_mir_param_is_lowered(param)) {
-      continue;
+  if (is_coro) {
+    LLVMBasicBlockRef entry_bb =
+        LLVMAppendBasicBlockInContext(llvm_ctx, llvm_fn, "entry");
+    LLVMMoveBasicBlockBefore(entry_bb, coro.cleanup_bb);
+    LLVMPositionBuilderAtEnd(builder, entry_bb);
+
+    coro.yield_type = lower_mir_coro_constructor_yield_type(fn->type);
+    coro.promise_type = lower_mir_coro_promise_type(
+        coro.yield_type, &lctx->jit_ctx, module, &coro.llvm_yield_type);
+    if (!coro.promise_type) {
+      ok = false;
     }
 
-    LLVMValueRef llvm_value = LLVMGetParam(llvm_fn, (unsigned)llvm_param);
-    llvm_param++;
-    if (!mir_llvm_value_set(&values, param->value, llvm_value)) {
-      ok = false;
-      break;
+    if (ok) {
+      coro.promise_alloca =
+          LLVMBuildAlloca(builder, coro.promise_type, "promise");
+      LLVMValueRef done_ptr = LLVMBuildStructGEP2(
+          builder, coro.promise_type, coro.promise_alloca, 1, "is_done.ptr");
+      LLVMBuildStore(builder,
+                     LLVMConstInt(LLVMInt1TypeInContext(llvm_ctx), 0, false),
+                     done_ptr);
+      LLVMValueRef reset_ptr = LLVMBuildStructGEP2(
+          builder, coro.promise_type, coro.promise_alloca, 2, "reset.ptr");
+      LLVMBuildStore(builder, LLVMConstNull(lower_mir_generic_ptr_type(module)),
+                     reset_ptr);
+      LLVMValueRef args_ptr = LLVMBuildStructGEP2(
+          builder, coro.promise_type, coro.promise_alloca, 3, "args.ptr");
+      LLVMBuildStore(builder, LLVMConstNull(lower_mir_generic_ptr_type(module)),
+                     args_ptr);
+
+      coro.coro_id = LLVMBuildCall2(
+          builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
+          get_coro_id_intrinsic(module),
+          (LLVMValueRef[]){
+              LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 0, false),
+              coro.promise_alloca,
+              LLVMConstNull(lower_mir_generic_ptr_type(module)),
+              LLVMConstNull(lower_mir_generic_ptr_type(module))},
+          4, "coro.id");
+
+      LLVMValueRef size = LLVMBuildCall2(
+          builder, LLVMGlobalGetValueType(get_coro_size_intrinsic(module)),
+          get_coro_size_intrinsic(module), NULL, 0, "coro.size");
+      LLVMValueRef size_ptr = LLVMGetParam(llvm_fn, 0);
+      LLVMBuildStore(builder, size, size_ptr);
+
+      size_t llvm_param = 1;
+      for (size_t i = 0; i < fn->params.len; i++) {
+        MirParam *param = &fn->params.items[i];
+        if (!lower_mir_param_is_lowered(param)) {
+          continue;
+        }
+
+        LLVMValueRef llvm_value = LLVMGetParam(llvm_fn, (unsigned)llvm_param);
+        llvm_param++;
+        LLVMTypeRef slot_type =
+            lower_mir_param_abi_type(param, &lctx->jit_ctx, module);
+        if (!slot_type) {
+          ok = false;
+          break;
+        }
+        LLVMValueRef slot =
+            LLVMBuildAlloca(builder, slot_type, "coro.param.spill");
+        LLVMBuildStore(builder, llvm_value, slot);
+        if (!mir_llvm_value_set_slot(&values, param->value, slot, slot_type)) {
+          ok = false;
+          break;
+        }
+      }
+    }
+
+    if (ok) {
+      LLVMValueRef size = LLVMBuildCall2(
+          builder, LLVMGlobalGetValueType(get_coro_size_intrinsic(module)),
+          get_coro_size_intrinsic(module), NULL, 0, "coro.size");
+      LLVMValueRef frame = LLVMBuildArrayMalloc(
+          builder, LLVMInt8TypeInContext(llvm_ctx), size, "coro.frame");
+      coro.handle = LLVMBuildCall2(
+          builder, LLVMGlobalGetValueType(get_coro_begin_intrinsic(module)),
+          get_coro_begin_intrinsic(module),
+          (LLVMValueRef[]){coro.coro_id, frame}, 2, "coro.handle");
+
+      coro_emit_initial_suspend(&lctx->jit_ctx, module, builder, coro.handle,
+                                coro.cleanup_bb, coro.suspend_bb,
+                                coro.initial_return_bb, coro.start_bb);
+      if (blocks.items[0]) {
+        LLVMBuildBr(builder, blocks.items[0]);
+      } else {
+        ok = false;
+      }
+    }
+  } else {
+    size_t llvm_param = 0;
+    for (size_t i = 0; i < fn->params.len; i++) {
+      MirParam *param = &fn->params.items[i];
+      if (!lower_mir_param_is_lowered(param)) {
+        continue;
+      }
+
+      LLVMValueRef llvm_value = LLVMGetParam(llvm_fn, (unsigned)llvm_param);
+      llvm_param++;
+      if (!mir_llvm_value_set(&values, param->value, llvm_value)) {
+        ok = false;
+        break;
+      }
     }
   }
 
   if (ok) {
     ok = lower_mir_block_body(lctx, fn, &values, &blocks, visited, 0, module,
-                              builder);
+                              builder, is_coro ? &coro : NULL);
   }
   for (size_t i = 0; ok && i < fn->blocks.len; i++) {
     if (!visited[i]) {
       ok = lower_mir_block_body(lctx, fn, &values, &blocks, visited,
-                                (MirBlockId)i, module, builder);
+                                (MirBlockId)i, module, builder,
+                                is_coro ? &coro : NULL);
     }
   }
   if (ok) {
     ok = lower_mir_add_phi_incomings(fn, &values, &blocks, builder);
+  }
+  if (ok && is_coro) {
+    coro_emit_cleanup_and_suspend(&lctx->jit_ctx, module, builder, coro.coro_id,
+                                  coro.handle, coro.cleanup_bb,
+                                  coro.suspend_bb);
   }
 
   free(values.items);

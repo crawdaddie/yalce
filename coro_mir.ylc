@@ -1,15 +1,17 @@
 
-let _x = fn () ->
+let _x = fn z ->
   yield 1;
   yield 2;
-  yield 3;
+  yield z;
   yield 4
   # yield _x ()
 ;;
 
-let x = _x ();
-x ();
-x ();
-x ();
-x ();
-x ();
+let x = _x 200;
+print `
+[{x ()}]
+[{x ()}]
+[{x ()}]
+[{x ()}]
+[{x ()}]
+`

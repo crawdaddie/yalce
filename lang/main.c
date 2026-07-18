@@ -25,10 +25,10 @@ void parse_args(int argc, char **argv) {
       ylc_config.dump_ir = true;
       ylc_config.debug_codegen = true;
       arg_counter++;
-    } else if (strcmp(argv[arg_counter], "--debug-ir") == 0) {
+    } else if (strcmp(argv[arg_counter], "--dump-ir") == 0) {
       ylc_config.dump_ir = true;
       arg_counter++;
-    } else if (strcmp(argv[arg_counter], "--debug-ir-pre") == 0) {
+    } else if (strcmp(argv[arg_counter], "--dump-ir-pre") == 0) {
       ylc_config.dump_ir_pre = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--dump-mir") == 0) {

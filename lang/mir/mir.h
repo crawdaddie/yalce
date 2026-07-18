@@ -94,6 +94,7 @@ typedef enum {
   MIR_OP_KIND_ARRAY_SET,
   MIR_OP_KIND_STR,
   MIR_OP_KIND_PRINT,
+  MIR_OP_KIND_FLUSH,
   MIR_OP_KIND_CSTR,
   MIR_OP_KIND_SIZEOF,
   MIR_OP_KIND_DLOPEN,
@@ -177,6 +178,7 @@ typedef enum {
   MIR_TERM_UNREACHABLE,
   MIR_TERM_YIELD,
   MIR_TERM_CORO_RESTART,
+  MIR_TERM_CORO_DONE,
 } MirTermKind;
 
 typedef struct MirArenaBlock {

@@ -1640,8 +1640,7 @@ void mir_builder_set_yield(MirBuilder *builder, MirValueId value,
   };
 }
 
-static void mir_builder_set_coro_restart(MirBuilder *builder,
-                                         MirBlockId target,
+static void mir_builder_set_coro_restart(MirBuilder *builder, MirBlockId target,
                                          MirValueIdVec args) {
   if (!builder || !builder->block) {
     return;
@@ -1656,6 +1655,29 @@ static void mir_builder_set_coro_restart(MirBuilder *builder,
       .else_block = MIR_NO_BLOCK,
       .args = args,
   };
+}
+
+static void mir_builder_set_coro_done(MirBuilder *builder) {
+  if (!builder || !builder->block) {
+    return;
+  }
+
+  builder->block->term = (MirTerminator){
+      .kind = MIR_TERM_CORO_DONE,
+      .value = MIR_NO_VALUE,
+      .cond = MIR_NO_VALUE,
+      .target = MIR_NO_BLOCK,
+      .then_block = MIR_NO_BLOCK,
+      .else_block = MIR_NO_BLOCK,
+  };
+}
+
+static void mir_builder_set_coro_done_if_open(MirBuilder *builder) {
+  if (!builder || !builder->block ||
+      builder->block->term.kind != MIR_TERM_NONE) {
+    return;
+  }
+  mir_builder_set_coro_done(builder);
 }
 
 static const char *mir_current_source_function_name(MirBuilder *builder) {
@@ -1687,10 +1709,9 @@ static bool mir_is_recursive_coro_yield(MirBuilder *builder, Ast *expr) {
 
 static bool mir_application_is_void_call(Ast *app, Type *fn_type) {
   return app && app->tag == AST_APPLICATION &&
-         app->data.AST_APPLICATION.len == 1 &&
-         app->data.AST_APPLICATION.args &&
-         app->data.AST_APPLICATION.args->tag == AST_VOID &&
-         fn_type && is_void_func(fn_type);
+         app->data.AST_APPLICATION.len == 1 && app->data.AST_APPLICATION.args &&
+         app->data.AST_APPLICATION.args->tag == AST_VOID && fn_type &&
+         is_void_func(fn_type);
 }
 
 static bool mir_collect_restart_args(MirBuilder *builder, Ast *app, MirCtx *ctx,
@@ -3130,20 +3151,28 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
     case MIR_TERM_CORO_RESTART: {
       MirValueIdVec args = {0};
       for (size_t k = 0; k < source_block->term.args.len; k++) {
-        mir_value_id_vec_push(program->arena, &args,
-                              mir_remap_value(value_map, value_map_len,
-                                              source_block->term.args.items[k]));
+        mir_value_id_vec_push(
+            program->arena, &args,
+            mir_remap_value(value_map, value_map_len,
+                            source_block->term.args.items[k]));
       }
-      block->term =
-          (MirTerminator){.kind = MIR_TERM_CORO_RESTART,
-                          .value = MIR_NO_VALUE,
-                          .cond = MIR_NO_VALUE,
-                          .target = source_block->term.target,
-                          .then_block = MIR_NO_BLOCK,
-                          .else_block = MIR_NO_BLOCK,
-                          .args = args};
+      block->term = (MirTerminator){.kind = MIR_TERM_CORO_RESTART,
+                                    .value = MIR_NO_VALUE,
+                                    .cond = MIR_NO_VALUE,
+                                    .target = source_block->term.target,
+                                    .then_block = MIR_NO_BLOCK,
+                                    .else_block = MIR_NO_BLOCK,
+                                    .args = args};
       break;
     }
+    case MIR_TERM_CORO_DONE:
+      block->term = (MirTerminator){.kind = MIR_TERM_CORO_DONE,
+                                    .value = MIR_NO_VALUE,
+                                    .cond = MIR_NO_VALUE,
+                                    .target = MIR_NO_BLOCK,
+                                    .then_block = MIR_NO_BLOCK,
+                                    .else_block = MIR_NO_BLOCK};
+      break;
     case MIR_TERM_UNREACHABLE:
       block->term = (MirTerminator){.kind = MIR_TERM_UNREACHABLE,
                                     .value = MIR_NO_VALUE,
@@ -3293,8 +3322,8 @@ static bool mir_call_push_application_args(MirBuilder *builder, MirInstr *call,
                                            MirArena *arena,
                                            Type *function_type) {
   if (mir_application_is_void_call(ast, function_type) ||
-      mir_application_is_void_call(ast, call ? call->data.call.callee_type
-                                             : NULL)) {
+      mir_application_is_void_call(ast,
+                                   call ? call->data.call.callee_type : NULL)) {
     return true;
   }
 
@@ -3950,7 +3979,8 @@ MirValueId mir_application(MirBuilder *builder, Type *type, Ast *ast,
         return MIR_NO_VALUE;
       }
       mir_specialize_call_fn_ref_operands(builder, &call);
-      call.data.call.specialized_name = mir_call_specialized_name(builder, &call);
+      call.data.call.specialized_name =
+          mir_call_specialized_name(builder, &call);
       MirFunction *specialized =
           mir_materialize_call_specialization(builder, &call);
       if (specialized) {
@@ -5934,7 +5964,7 @@ static bool mir_populate_function_body(MirProgram *program, MirFunction *fn,
   Ast *body = fn_ast->data.AST_LAMBDA.body;
   MirValueId result = mir_expr(&builder, body, &fn_ctx);
   if (is_coroutine_constructor_type(fn_ast->type)) {
-    mir_builder_set_unreachable_if_open(&builder);
+    mir_builder_set_coro_done_if_open(&builder);
     return true;
   }
   if (result != MIR_NO_VALUE && builder.block &&
@@ -6081,6 +6111,8 @@ static const char *mir_op_kind_name(MirOpKind kind) {
     return "str";
   case MIR_OP_KIND_PRINT:
     return "print";
+  case MIR_OP_KIND_FLUSH:
+    return "flush";
   case MIR_OP_KIND_CSTR:
     return "cstr";
   case MIR_OP_KIND_SIZEOF:
@@ -6751,6 +6783,9 @@ static void dump_term(FILE *stream, const MirTerminator *term) {
     }
     dump_term_operand_meta(stream, term);
     fputc('\n', stream);
+    break;
+  case MIR_TERM_CORO_DONE:
+    fputs("    coro.done\n", stream);
     break;
   case MIR_TERM_UNREACHABLE:
     fputs("    unreachable\n", stream);

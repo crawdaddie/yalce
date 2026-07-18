@@ -283,9 +283,8 @@ static MirValueId mir_array_succ(MirBuilder *builder, Type *type, Ast *origin,
   return mir_builder_append_instr(builder, instr);
 }
 
-static MirValueId mir_array_offset(MirBuilder *builder, Type *type,
-                                   Ast *origin, MirValueId offset,
-                                   MirValueId array) {
+static MirValueId mir_array_offset(MirBuilder *builder, Type *type, Ast *origin,
+                                   MirValueId offset, MirValueId array) {
   if (!builder || !type || !is_array_type(type) || offset == MIR_NO_VALUE ||
       array == MIR_NO_VALUE) {
     return MIR_NO_VALUE;
@@ -298,8 +297,8 @@ static MirValueId mir_array_offset(MirBuilder *builder, Type *type,
   return mir_builder_append_instr(builder, instr);
 }
 
-static MirValueId mir_value_op(MirBuilder *builder, MirOpKind kind,
-                                 Type *type, Ast *origin, MirValueId value) {
+static MirValueId mir_value_op(MirBuilder *builder, MirOpKind kind, Type *type,
+                               Ast *origin, MirValueId value) {
   if (!builder || !type || value == MIR_NO_VALUE) {
     return MIR_NO_VALUE;
   }
@@ -384,10 +383,10 @@ static MirValueId mir_primitive_eq_values(MirBuilder *builder, Ast *origin,
     return MIR_NO_VALUE;
   }
 
-  lhs = mir_primitive_cast_if_needed(builder, lhs, lhs_type, target_type,
-                                     origin);
-  rhs = mir_primitive_cast_if_needed(builder, rhs, rhs_type, target_type,
-                                     origin);
+  lhs =
+      mir_primitive_cast_if_needed(builder, lhs, lhs_type, target_type, origin);
+  rhs =
+      mir_primitive_cast_if_needed(builder, rhs, rhs_type, target_type, origin);
   if (lhs == MIR_NO_VALUE || rhs == MIR_NO_VALUE) {
     return MIR_NO_VALUE;
   }
@@ -474,9 +473,9 @@ static MirValueId mir_short_circuit_bool(MirBuilder *builder, Ast *app,
     return MIR_NO_VALUE;
   }
   MirBlockId short_pred = builder->block ? builder->block->id : MIR_NO_BLOCK;
-  mir_phi_incoming_vec_push(builder->fn->arena, &incoming,
-                            (MirPhiIncoming){.block = short_pred,
-                                             .value = short_value});
+  mir_phi_incoming_vec_push(
+      builder->fn->arena, &incoming,
+      (MirPhiIncoming){.block = short_pred, .value = short_value});
   mir_builder_set_br(builder, continuation_block->id);
 
   mir_builder_position_at_end(builder, rhs_block);
@@ -485,9 +484,9 @@ static MirValueId mir_short_circuit_bool(MirBuilder *builder, Ast *app,
     return MIR_NO_VALUE;
   }
   if (builder->block && builder->block->term.kind == MIR_TERM_NONE) {
-    mir_phi_incoming_vec_push(builder->fn->arena, &incoming,
-                              (MirPhiIncoming){.block = builder->block->id,
-                                               .value = rhs});
+    mir_phi_incoming_vec_push(
+        builder->fn->arena, &incoming,
+        (MirPhiIncoming){.block = builder->block->id, .value = rhs});
     mir_builder_set_br(builder, continuation_block->id);
   }
 
@@ -681,8 +680,8 @@ static MirValueId MirArrayAtHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
                       mir_builtin_arg(builder, app, ctx, 1));
 }
 
-static MirValueId MirArraySetHandler(MirBuilder *builder, Ast *app,
-                                     MirCtx *ctx, MirBuiltinSymbol *symbol) {
+static MirValueId MirArraySetHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
+                                     MirBuiltinSymbol *symbol) {
   (void)symbol;
   if (!mir_builtin_arity(app, 3)) {
     return MIR_NO_VALUE;
@@ -759,6 +758,37 @@ static MirValueId MirUnaryValueOpHandler(MirBuilder *builder, Ast *app,
   MirOpKind kind = *(MirOpKind *)symbol->data;
   return mir_value_op(builder, kind, app->type, app,
                       mir_builtin_arg(builder, app, ctx, 0));
+}
+static MirValueId MirPrintHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
+                                  MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!builder || !mir_builtin_arity(app, 1) || !ctx) {
+    return MIR_NO_VALUE;
+  }
+
+  Ast *arg = app->data.AST_APPLICATION.args;
+  if (arg && arg->tag == AST_FMT_STRING) {
+    for (int i = 0; i < arg->data.AST_LIST.len; i++) {
+      Ast *item = arg->data.AST_LIST.items + i;
+      MirValueId value = mir_expr(builder, item, ctx);
+      if (value == MIR_NO_VALUE) {
+        return MIR_NO_VALUE;
+      }
+      if (mir_value_op(builder, MIR_OP_KIND_PRINT, &t_void, item, value) ==
+          MIR_NO_VALUE) {
+        return MIR_NO_VALUE;
+      }
+    }
+    return mir_value_op_no_operand(builder, MIR_OP_KIND_FLUSH, app->type, app);
+  }
+
+  MirValueId value = mir_expr(builder, arg, ctx);
+  if (value == MIR_NO_VALUE ||
+      mir_value_op(builder, MIR_OP_KIND_PRINT, &t_void, arg, value) ==
+          MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+  return mir_value_op_no_operand(builder, MIR_OP_KIND_FLUSH, app->type, app);
 }
 
 static MirValueId MirSizeOfHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
@@ -953,12 +983,10 @@ mir_lower_specialized_primitive_constructor_call(MirBuilder *builder,
 
   MirValueId operand = call->data.call.operands.items[0];
   Type *from_type = mir_call_primitive_operand_type(builder, call, 0);
-  Type *target_type =
-      call->data.call.builtin && call->data.call.builtin->data
-          ? (Type *)call->data.call.builtin->data
-          : call->type;
-  if (!from_type || !target_type ||
-      !mir_type_is_primitive_numeric(from_type) ||
+  Type *target_type = call->data.call.builtin && call->data.call.builtin->data
+                          ? (Type *)call->data.call.builtin->data
+                          : call->type;
+  if (!from_type || !target_type || !mir_type_is_primitive_numeric(from_type) ||
       !mir_type_is_primitive_numeric(target_type)) {
     return MIR_NO_VALUE;
   }
@@ -1019,8 +1047,7 @@ static void mir_builtin_set_param_use(MirBuiltinSymbol *symbol, size_t index,
 }
 
 static void mir_builtin_set_param_uses(MirBuiltinSymbol *symbol,
-                                       const MirOperandUse *uses,
-                                       size_t len) {
+                                       const MirOperandUse *uses, size_t len) {
   if (!symbol || !uses) {
     return;
   }
@@ -1047,47 +1074,41 @@ mir_register_builtin_env_uses(MirProgram *program, TypeEnv *entry,
   return symbol;
 }
 
+static MirArithmeticBuiltin add_ops = {MIR_BUILTIN_DATA_ARITHMETIC, MIR_OP_IADD,
+                                       MIR_OP_UADD, MIR_OP_FADD};
+static MirArithmeticBuiltin sub_ops = {MIR_BUILTIN_DATA_ARITHMETIC, MIR_OP_ISUB,
+                                       MIR_OP_USUB, MIR_OP_FSUB};
+static MirArithmeticBuiltin mul_ops = {MIR_BUILTIN_DATA_ARITHMETIC, MIR_OP_IMUL,
+                                       MIR_OP_UMUL, MIR_OP_FMUL};
+static MirArithmeticBuiltin div_ops = {MIR_BUILTIN_DATA_ARITHMETIC, MIR_OP_IDIV,
+                                       MIR_OP_UDIV, MIR_OP_FDIV};
+static MirArithmeticBuiltin mod_ops = {MIR_BUILTIN_DATA_ARITHMETIC, MIR_OP_IMOD,
+                                       MIR_OP_UMOD, MIR_OP_FMOD};
+static MirComparisonBuiltin gt_ops = {MIR_BUILTIN_DATA_COMPARISON, MIR_OP_IGT,
+                                      MIR_OP_UGT, MIR_OP_FGT, MIR_OP_CGT};
+static MirComparisonBuiltin gte_ops = {MIR_BUILTIN_DATA_COMPARISON, MIR_OP_IGTE,
+                                       MIR_OP_UGTE, MIR_OP_FGTE, MIR_OP_CGTE};
+static MirComparisonBuiltin lt_ops = {MIR_BUILTIN_DATA_COMPARISON, MIR_OP_ILT,
+                                      MIR_OP_ULT, MIR_OP_FLT, MIR_OP_CLT};
+static MirComparisonBuiltin lte_ops = {MIR_BUILTIN_DATA_COMPARISON, MIR_OP_ILTE,
+                                       MIR_OP_ULTE, MIR_OP_FLTE, MIR_OP_CLTE};
+static MirOpKind str_op = MIR_OP_KIND_STR;
+static MirOpKind print_op = MIR_OP_KIND_PRINT;
+static MirOpKind cstr_op = MIR_OP_KIND_CSTR;
+static MirOpKind sizeof_op = MIR_OP_KIND_SIZEOF;
+static MirOpKind dlopen_op = MIR_OP_KIND_DLOPEN;
+static MirOpKind asbytes_op = MIR_OP_KIND_AS_BYTES;
+static MirOpKind typeof_op = MIR_OP_KIND_TYPEOF;
+static const MirOperandUse borrow1[] = {MIR_OPERAND_USE_BORROW};
+static const MirOperandUse borrow2[] = {MIR_OPERAND_USE_BORROW,
+                                        MIR_OPERAND_USE_BORROW};
+static const MirOperandUse borrow3[] = {
+    MIR_OPERAND_USE_BORROW, MIR_OPERAND_USE_BORROW, MIR_OPERAND_USE_BORROW};
+static const MirOperandUse borrow_borrow_consume[] = {
+    MIR_OPERAND_USE_BORROW, MIR_OPERAND_USE_BORROW, MIR_OPERAND_USE_CONSUME};
+static const MirOperandUse borrow_consume[] = {MIR_OPERAND_USE_BORROW,
+                                               MIR_OPERAND_USE_CONSUME};
 void mir_register_core_builtins(MirProgram *program) {
-  static MirArithmeticBuiltin add_ops = {
-      MIR_BUILTIN_DATA_ARITHMETIC, MIR_OP_IADD, MIR_OP_UADD, MIR_OP_FADD};
-  static MirArithmeticBuiltin sub_ops = {
-      MIR_BUILTIN_DATA_ARITHMETIC, MIR_OP_ISUB, MIR_OP_USUB, MIR_OP_FSUB};
-  static MirArithmeticBuiltin mul_ops = {
-      MIR_BUILTIN_DATA_ARITHMETIC, MIR_OP_IMUL, MIR_OP_UMUL, MIR_OP_FMUL};
-  static MirArithmeticBuiltin div_ops = {
-      MIR_BUILTIN_DATA_ARITHMETIC, MIR_OP_IDIV, MIR_OP_UDIV, MIR_OP_FDIV};
-  static MirArithmeticBuiltin mod_ops = {
-      MIR_BUILTIN_DATA_ARITHMETIC, MIR_OP_IMOD, MIR_OP_UMOD, MIR_OP_FMOD};
-  static MirComparisonBuiltin gt_ops = {
-      MIR_BUILTIN_DATA_COMPARISON, MIR_OP_IGT, MIR_OP_UGT, MIR_OP_FGT,
-      MIR_OP_CGT};
-  static MirComparisonBuiltin gte_ops = {
-      MIR_BUILTIN_DATA_COMPARISON, MIR_OP_IGTE, MIR_OP_UGTE, MIR_OP_FGTE,
-      MIR_OP_CGTE};
-  static MirComparisonBuiltin lt_ops = {
-      MIR_BUILTIN_DATA_COMPARISON, MIR_OP_ILT, MIR_OP_ULT, MIR_OP_FLT,
-      MIR_OP_CLT};
-  static MirComparisonBuiltin lte_ops = {
-      MIR_BUILTIN_DATA_COMPARISON, MIR_OP_ILTE, MIR_OP_ULTE, MIR_OP_FLTE,
-      MIR_OP_CLTE};
-  static MirOpKind str_op = MIR_OP_KIND_STR;
-  static MirOpKind print_op = MIR_OP_KIND_PRINT;
-  static MirOpKind cstr_op = MIR_OP_KIND_CSTR;
-  static MirOpKind sizeof_op = MIR_OP_KIND_SIZEOF;
-  static MirOpKind dlopen_op = MIR_OP_KIND_DLOPEN;
-  static MirOpKind asbytes_op = MIR_OP_KIND_AS_BYTES;
-  static MirOpKind typeof_op = MIR_OP_KIND_TYPEOF;
-  static const MirOperandUse borrow1[] = {MIR_OPERAND_USE_BORROW};
-  static const MirOperandUse borrow2[] = {MIR_OPERAND_USE_BORROW,
-                                          MIR_OPERAND_USE_BORROW};
-  static const MirOperandUse borrow3[] = {
-      MIR_OPERAND_USE_BORROW, MIR_OPERAND_USE_BORROW,
-      MIR_OPERAND_USE_BORROW};
-  static const MirOperandUse borrow_borrow_consume[] = {
-      MIR_OPERAND_USE_BORROW, MIR_OPERAND_USE_BORROW,
-      MIR_OPERAND_USE_CONSUME};
-  static const MirOperandUse borrow_consume[] = {MIR_OPERAND_USE_BORROW,
-                                                MIR_OPERAND_USE_CONSUME};
 
   mir_register_builtin_env_uses(program, builtin_envs.arith_add,
                                 MirArithmeticHandler, &add_ops, borrow2, 2);
@@ -1122,10 +1143,11 @@ void mir_register_core_builtins(MirProgram *program) {
   mir_register_builtin_env(program, builtin_envs.list_prepend,
                            MirListPrependHandler, NULL);
   mir_register_builtin_env_uses(program, lookup_builtin_env(TYPE_NAME_DOUBLE),
-                                MirPrimitiveConstructorHandler, &t_num,
-                                borrow1, 1);
-  mir_register_builtin_env_uses(program, builtin_envs.print,
-                                MirUnaryValueOpHandler, &print_op, borrow1, 1);
+                                MirPrimitiveConstructorHandler, &t_num, borrow1,
+                                1);
+  mir_register_builtin_env_uses(program, builtin_envs.print, MirPrintHandler,
+                                &print_op, borrow1, 1);
+
   mir_register_builtin_env_uses(program, builtin_envs.array_size,
                                 MirArraySizeHandler, NULL, borrow1, 1);
   MirBuiltinSymbol *array_at = mir_register_builtin_env_uses(
@@ -1136,20 +1158,20 @@ void mir_register_core_builtins(MirProgram *program) {
       borrow_borrow_consume, 3);
   mir_builtin_set_result(array_set, MIR_RESULT_BORROWED);
   mir_register_builtin_env_uses(program, builtin_envs.array_fill_const,
-                                MirArrayFillConstHandler, NULL,
-                                borrow_consume, 2);
+                                MirArrayFillConstHandler, NULL, borrow_consume,
+                                2);
   MirBuiltinSymbol *array_succ = mir_register_builtin_env_uses(
       program, builtin_envs.array_succ, MirArraySuccHandler, NULL, borrow1, 1);
   mir_builtin_set_result(array_succ, MIR_RESULT_BORROWED);
   mir_register_builtin_env_uses(program, builtin_envs.array_fill,
                                 MirArrayFillHandler, NULL, borrow2, 2);
-  MirBuiltinSymbol *array_range = mir_register_builtin_env_uses(
-      program, builtin_envs.array_range, MirArrayRangeHandler, NULL, borrow3,
-      3);
+  MirBuiltinSymbol *array_range =
+      mir_register_builtin_env_uses(program, builtin_envs.array_range,
+                                    MirArrayRangeHandler, NULL, borrow3, 3);
   mir_builtin_set_result(array_range, MIR_RESULT_BORROWED);
-  MirBuiltinSymbol *array_offset = mir_register_builtin_env_uses(
-      program, builtin_envs.array_offset, MirArrayOffsetHandler, NULL, borrow2,
-      2);
+  MirBuiltinSymbol *array_offset =
+      mir_register_builtin_env_uses(program, builtin_envs.array_offset,
+                                    MirArrayOffsetHandler, NULL, borrow2, 2);
   mir_builtin_set_result(array_offset, MIR_RESULT_BORROWED);
   mir_register_builtin_env_uses(program, builtin_envs.str,
                                 MirUnaryValueOpHandler, &str_op, borrow1, 1);
@@ -1158,12 +1180,10 @@ void mir_register_core_builtins(MirProgram *program) {
   mir_register_builtin_env_uses(program, builtin_envs.sizeof_env,
                                 MirSizeOfHandler, &sizeof_op, borrow1, 1);
   mir_register_builtin_env_uses(program, builtin_envs.dlopen_env,
-                                MirUnaryValueOpHandler, &dlopen_op, borrow1,
-                                1);
+                                MirUnaryValueOpHandler, &dlopen_op, borrow1, 1);
   mir_register_builtin_env_uses(program, builtin_envs.asbytes,
                                 MirUnaryValueOpHandler, &asbytes_op, borrow1,
                                 1);
   mir_register_builtin_env_uses(program, builtin_envs.typeof_env,
-                                MirUnaryValueOpHandler, &typeof_op, borrow1,
-                                1);
+                                MirUnaryValueOpHandler, &typeof_op, borrow1, 1);
 }
