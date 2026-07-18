@@ -1,0 +1,22 @@
+let add = fn a b -> a + b;;
+
+let const_partial = fn y ->
+  let add2 = add 2 in
+  add2 y
+;;
+
+let local_partial = fn x ->
+  let addx = add x in
+  addx 40
+;;
+
+let make_adder = fn x ->
+  add x
+;;
+
+let escaped_partial = fn x ->
+  let addx = make_adder x in
+  addx 40
+;;
+
+const_partial 40 + local_partial 2 + escaped_partial 2;

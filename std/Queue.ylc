@@ -1,17 +1,18 @@
+let queue_list_rev = fn l ->
+  let aux = fn ll res ->
+    match ll with
+    | [] -> res
+    | x::rest -> aux rest (x::res)
+  ;;
+  aux l []
+;;
+
 let of_list = fn l ->
-  let t = l in 
-  let h = t in
-  (h, t)
+  (l, [])
 ;;
 
 let append = fn n (h, t) ->
-  match h with
-  | [] -> of_list [n,]
-  | _ -> (
-    let nt = [n,] in
-    let tt = list_concat t nt in
-    (h, tt)
-  )
+  (h, n::t)
 ;;
 
 let prepend = fn n (h, t) ->
@@ -21,7 +22,11 @@ let prepend = fn n (h, t) ->
 let pop_left = fn (h, t) ->
   match h with
   | x::rest -> Some (x, (rest, t))  
-  | [] -> None
+  | [] -> (
+    match queue_list_rev t with
+    | [] -> None
+    | x::rest -> Some (x, (rest, []))
+  )
 ;;
 
 

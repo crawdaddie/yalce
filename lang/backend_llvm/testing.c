@@ -196,8 +196,8 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
         LLVMBuildCall2(builder, LLVMGlobalGetValueType(report_func),
                        report_func, report_args, 2, "");
 
-        test_result = LLVMBuildAnd(builder, test_result, stable_test_call,
-                                   "test_result");
+        test_result =
+            LLVMBuildAnd(builder, test_result, stable_test_call, "test_result");
       } else if (types_equal(stmt->data.AST_LET.expr->type, &t_bool)) {
         const char *key = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
 
@@ -247,7 +247,7 @@ int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return 0;
   }
 
-  if (ylc_config.debug_ir_pre) {
+  if (ylc_config.dump_ir_pre) {
     LLVMDumpModule(module);
   }
 
@@ -265,7 +265,7 @@ int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMGetNamedFunction(module, "_report_test_totals"),
                        (void *)_report_test_totals);
 
-  if (ylc_config.debug_ir) {
+  if (ylc_config.dump_ir) {
     LLVMDumpModule(module);
   }
 

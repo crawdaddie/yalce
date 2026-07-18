@@ -127,6 +127,34 @@ static Type *mir_value_primitive_type(MirBuilder *builder, MirValueId value,
   return mir_type_is_primitive_eq(fallback) ? fallback : type;
 }
 
+static Type *mir_call_expected_operand_type(MirInstr *call, size_t index) {
+  if (!call || call->kind != MIR_CALL) {
+    return NULL;
+  }
+
+  Type *cursor = call->data.call.callee_type;
+  for (size_t i = 0; cursor && cursor->kind == T_FN; i++) {
+    if (i == index) {
+      return cursor->data.T_FN.from;
+    }
+    cursor = cursor->data.T_FN.to;
+  }
+
+  return NULL;
+}
+
+static Type *mir_call_primitive_operand_type(MirBuilder *builder,
+                                             MirInstr *call, size_t index) {
+  if (!call || call->kind != MIR_CALL ||
+      index >= call->data.call.operands.len) {
+    return NULL;
+  }
+
+  MirValueId value = call->data.call.operands.items[index];
+  return mir_value_primitive_type(builder, value,
+                                  mir_call_expected_operand_type(call, index));
+}
+
 static MirValueId mir_primitive_cast_if_needed(MirBuilder *builder,
                                                MirValueId value,
                                                Type *from_type, Type *to_type,
@@ -283,6 +311,18 @@ static MirValueId mir_value_op(MirBuilder *builder, MirOpKind kind,
   return mir_builder_append_instr(builder, instr);
 }
 
+static MirValueId mir_value_op_no_operand(MirBuilder *builder, MirOpKind kind,
+                                          Type *type, Ast *origin) {
+  if (!builder || !type) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_OP, type, origin);
+  instr.data.op.kind = kind;
+  instr.data.op.argc = 0;
+  return mir_builder_append_instr(builder, instr);
+}
+
 static MirValueId mir_primitive_ordered_binop(MirBuilder *builder, Ast *app,
                                               MirCtx *ctx,
                                               MirComparisonBuiltin *ops) {
@@ -329,6 +369,53 @@ static MirValueId mir_primitive_ordered_binop(MirBuilder *builder, Ast *app,
   }
 }
 
+static MirValueId mir_primitive_eq_values(MirBuilder *builder, Ast *origin,
+                                          MirValueId lhs, Type *lhs_hint,
+                                          MirValueId rhs, Type *rhs_hint,
+                                          bool negate) {
+  if (!builder || lhs == MIR_NO_VALUE || rhs == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  Type *lhs_type = mir_value_primitive_type(builder, lhs, lhs_hint);
+  Type *rhs_type = mir_value_primitive_type(builder, rhs, rhs_hint);
+  Type *target_type = mir_primitive_target_type(lhs_type, rhs_type, "eq");
+  if (!mir_type_is_primitive_eq(target_type)) {
+    return MIR_NO_VALUE;
+  }
+
+  lhs = mir_primitive_cast_if_needed(builder, lhs, lhs_type, target_type,
+                                     origin);
+  rhs = mir_primitive_cast_if_needed(builder, rhs, rhs_type, target_type,
+                                     origin);
+  if (lhs == MIR_NO_VALUE || rhs == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId eq = MIR_NO_VALUE;
+  switch (target_type->kind) {
+  case T_INT:
+    eq = mir_ieq(builder, origin, lhs, rhs);
+    break;
+  case T_UINT64:
+    eq = mir_ueq(builder, origin, lhs, rhs);
+    break;
+  case T_NUM:
+    eq = mir_feq(builder, origin, lhs, rhs);
+    break;
+  case T_CHAR:
+    eq = mir_ceq(builder, origin, lhs, rhs);
+    break;
+  case T_BOOL:
+    eq = mir_beq(builder, origin, lhs, rhs);
+    break;
+  default:
+    return MIR_NO_VALUE;
+  }
+
+  return negate ? mir_lnot(builder, origin, eq) : eq;
+}
+
 static MirValueId mir_primitive_eq_binop(MirBuilder *builder, Ast *app,
                                          MirCtx *ctx, bool negate) {
   if (!builder || !app || app->tag != AST_APPLICATION || !ctx ||
@@ -340,44 +427,8 @@ static MirValueId mir_primitive_eq_binop(MirBuilder *builder, Ast *app,
   Ast *rhs_ast = app->data.AST_APPLICATION.args + 1;
   MirValueId lhs = mir_expr(builder, lhs_ast, ctx);
   MirValueId rhs = mir_expr(builder, rhs_ast, ctx);
-
-  Type *lhs_type = mir_value_primitive_type(builder, lhs, lhs_ast->type);
-  Type *rhs_type = mir_value_primitive_type(builder, rhs, rhs_ast->type);
-  Type *target_type = mir_primitive_target_type(lhs_type, rhs_type, "eq");
-  if (!mir_type_is_primitive_eq(target_type)) {
-    return MIR_NO_VALUE;
-  }
-
-  lhs = mir_primitive_cast_if_needed(builder, lhs, lhs_type, target_type,
-                                     lhs_ast);
-  rhs = mir_primitive_cast_if_needed(builder, rhs, rhs_type, target_type,
-                                     rhs_ast);
-  if (lhs == MIR_NO_VALUE || rhs == MIR_NO_VALUE) {
-    return MIR_NO_VALUE;
-  }
-
-  MirValueId eq = MIR_NO_VALUE;
-  switch (target_type->kind) {
-  case T_INT:
-    eq = mir_ieq(builder, app, lhs, rhs);
-    break;
-  case T_UINT64:
-    eq = mir_ueq(builder, app, lhs, rhs);
-    break;
-  case T_NUM:
-    eq = mir_feq(builder, app, lhs, rhs);
-    break;
-  case T_CHAR:
-    eq = mir_ceq(builder, app, lhs, rhs);
-    break;
-  case T_BOOL:
-    eq = mir_beq(builder, app, lhs, rhs);
-    break;
-  default:
-    return MIR_NO_VALUE;
-  }
-
-  return negate ? mir_lnot(builder, app, eq) : eq;
+  return mir_primitive_eq_values(builder, app, lhs, lhs_ast->type, rhs,
+                                 rhs_ast->type, negate);
 }
 
 static MirValueId mir_short_circuit_bool(MirBuilder *builder, Ast *app,
@@ -518,6 +569,27 @@ static MirValueId MirListPrependHandler(MirBuilder *builder, Ast *app,
   MirValueId head = mir_builtin_arg(builder, app, ctx, 0);
   MirValueId tail = mir_builtin_arg(builder, app, ctx, 1);
   return mir_list_cons(builder, app->type, app, head, tail);
+}
+
+static MirValueId MirPrimitiveConstructorHandler(MirBuilder *builder, Ast *app,
+                                                 MirCtx *ctx,
+                                                 MirBuiltinSymbol *symbol) {
+  if (!builder || !mir_builtin_arity(app, 1) || !ctx || !symbol) {
+    return MIR_NO_VALUE;
+  }
+
+  Ast *arg = app->data.AST_APPLICATION.args;
+  Type *target_type = symbol->data ? (Type *)symbol->data : app->type;
+  Type *from_type = arg ? arg->type : NULL;
+  if (!target_type || !from_type ||
+      !mir_type_is_primitive_numeric(target_type) ||
+      !mir_type_is_primitive_numeric(from_type)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId value = mir_expr(builder, arg, ctx);
+  return mir_primitive_cast_if_needed(builder, value, from_type, target_type,
+                                      app);
 }
 
 static MirValueId MirArithmeticHandler(MirBuilder *builder, Ast *app,
@@ -689,6 +761,16 @@ static MirValueId MirUnaryValueOpHandler(MirBuilder *builder, Ast *app,
                       mir_builtin_arg(builder, app, ctx, 0));
 }
 
+static MirValueId MirSizeOfHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
+                                   MirBuiltinSymbol *symbol) {
+  (void)ctx;
+  (void)symbol;
+  if (!builder || !mir_builtin_arity(app, 1)) {
+    return MIR_NO_VALUE;
+  }
+  return mir_value_op_no_operand(builder, MIR_OP_KIND_SIZEOF, app->type, app);
+}
+
 static bool mir_builtin_arithmetic_ops(MirBuiltinSymbol *symbol,
                                        MirPrimitiveOp *int_op,
                                        MirPrimitiveOp *uint_op,
@@ -738,8 +820,8 @@ static MirValueId mir_lower_specialized_arithmetic_call(MirBuilder *builder,
 
   MirValueId lhs = call->data.call.operands.items[0];
   MirValueId rhs = call->data.call.operands.items[1];
-  Type *lhs_type = mir_function_value_type(builder->fn, lhs);
-  Type *rhs_type = mir_function_value_type(builder->fn, rhs);
+  Type *lhs_type = mir_call_primitive_operand_type(builder, call, 0);
+  Type *rhs_type = mir_call_primitive_operand_type(builder, call, 1);
   if (!mir_type_is_primitive_numeric(lhs_type) ||
       !mir_type_is_primitive_numeric(rhs_type)) {
     return MIR_NO_VALUE;
@@ -782,8 +864,8 @@ static MirValueId mir_lower_specialized_ordered_call(MirBuilder *builder,
 
   MirValueId lhs = call->data.call.operands.items[0];
   MirValueId rhs = call->data.call.operands.items[1];
-  Type *lhs_type = mir_function_value_type(builder->fn, lhs);
-  Type *rhs_type = mir_function_value_type(builder->fn, rhs);
+  Type *lhs_type = mir_call_primitive_operand_type(builder, call, 0);
+  Type *rhs_type = mir_call_primitive_operand_type(builder, call, 1);
   Type *target_type = mir_primitive_target_type(lhs_type, rhs_type, "ord");
   if (!mir_type_is_primitive_ordered(target_type)) {
     return MIR_NO_VALUE;
@@ -823,8 +905,8 @@ static MirValueId mir_lower_specialized_eq_call(MirBuilder *builder,
 
   MirValueId lhs = call->data.call.operands.items[0];
   MirValueId rhs = call->data.call.operands.items[1];
-  Type *lhs_type = mir_function_value_type(builder->fn, lhs);
-  Type *rhs_type = mir_function_value_type(builder->fn, rhs);
+  Type *lhs_type = mir_call_primitive_operand_type(builder, call, 0);
+  Type *rhs_type = mir_call_primitive_operand_type(builder, call, 1);
   Type *target_type = mir_primitive_target_type(lhs_type, rhs_type, "eq");
   if (!mir_type_is_primitive_eq(target_type)) {
     return MIR_NO_VALUE;
@@ -862,6 +944,29 @@ static MirValueId mir_lower_specialized_eq_call(MirBuilder *builder,
   return negate ? mir_lnot(builder, call->origin, eq) : eq;
 }
 
+static MirValueId
+mir_lower_specialized_primitive_constructor_call(MirBuilder *builder,
+                                                 MirInstr *call) {
+  if (!builder || !builder->fn || !call || call->data.call.operands.len != 1) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId operand = call->data.call.operands.items[0];
+  Type *from_type = mir_call_primitive_operand_type(builder, call, 0);
+  Type *target_type =
+      call->data.call.builtin && call->data.call.builtin->data
+          ? (Type *)call->data.call.builtin->data
+          : call->type;
+  if (!from_type || !target_type ||
+      !mir_type_is_primitive_numeric(from_type) ||
+      !mir_type_is_primitive_numeric(target_type)) {
+    return MIR_NO_VALUE;
+  }
+
+  return mir_primitive_cast_if_needed(builder, operand, from_type, target_type,
+                                      call->origin);
+}
+
 MirValueId mir_lower_specialized_builtin_call(MirBuilder *builder,
                                               MirInstr *call) {
   if (!call || !call->data.call.builtin) {
@@ -886,6 +991,9 @@ MirValueId mir_lower_specialized_builtin_call(MirBuilder *builder,
   }
   if (call->data.call.builtin->handler == MirNeqHandler) {
     return mir_lower_specialized_eq_call(builder, call, true);
+  }
+  if (call->data.call.builtin->handler == MirPrimitiveConstructorHandler) {
+    return mir_lower_specialized_primitive_constructor_call(builder, call);
   }
   return MIR_NO_VALUE;
 }
@@ -1013,6 +1121,9 @@ void mir_register_core_builtins(MirProgram *program) {
                            NULL);
   mir_register_builtin_env(program, builtin_envs.list_prepend,
                            MirListPrependHandler, NULL);
+  mir_register_builtin_env_uses(program, lookup_builtin_env(TYPE_NAME_DOUBLE),
+                                MirPrimitiveConstructorHandler, &t_num,
+                                borrow1, 1);
   mir_register_builtin_env_uses(program, builtin_envs.print,
                                 MirUnaryValueOpHandler, &print_op, borrow1, 1);
   mir_register_builtin_env_uses(program, builtin_envs.array_size,
@@ -1045,8 +1156,7 @@ void mir_register_core_builtins(MirProgram *program) {
   mir_register_builtin_env_uses(program, builtin_envs.cstr,
                                 MirUnaryValueOpHandler, &cstr_op, borrow1, 1);
   mir_register_builtin_env_uses(program, builtin_envs.sizeof_env,
-                                MirUnaryValueOpHandler, &sizeof_op, borrow1,
-                                1);
+                                MirSizeOfHandler, &sizeof_op, borrow1, 1);
   mir_register_builtin_env_uses(program, builtin_envs.dlopen_env,
                                 MirUnaryValueOpHandler, &dlopen_op, borrow1,
                                 1);

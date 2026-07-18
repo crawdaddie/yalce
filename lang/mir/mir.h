@@ -20,10 +20,36 @@ typedef struct MirFnSummary MirFnSummary;
 typedef unsigned MirFunctionId;
 typedef unsigned MirBlockId;
 typedef unsigned MirValueId;
+typedef unsigned MirModuleId;
 
 #define MIR_NO_FUNCTION ((MirFunctionId) - 1)
 #define MIR_NO_BLOCK ((MirBlockId) - 1)
 #define MIR_NO_VALUE ((MirValueId) - 1)
+#define MIR_NO_MODULE ((MirModuleId) - 1)
+
+typedef enum {
+  MIR_SYMBOL_VALUE,
+  MIR_SYMBOL_FUNCTION,
+  MIR_SYMBOL_EXTERN_FUNCTION,
+  MIR_SYMBOL_MODULE,
+  MIR_SYMBOL_GENERIC_MODULE,
+  MIR_SYMBOL_EXPR,
+  MIR_SYMBOL_TYPE,
+} MirSymbolKind;
+
+typedef struct MirSymbol {
+  MirSymbolKind kind;
+  Type *type;
+  Ast *origin;
+  MirModuleId owner_module;
+  bool rematerializing;
+  union {
+    MirValueId value;
+    MirFunctionId function;
+    MirModuleId module;
+    Ast *expr;
+  } as;
+} MirSymbol;
 
 typedef struct MirStackFrame {
   ht *table;
@@ -33,6 +59,8 @@ typedef struct MirStackFrame {
 typedef struct MirCtx {
   MirStackFrame *frame;
   TypeEnv *env;
+  MirModuleId current_module;
+  bool export_bindings;
 } MirCtx;
 
 typedef enum {
@@ -43,6 +71,7 @@ typedef enum {
   MIR_CONSTRUCT,
   MIR_FN_REF,
   MIR_CALL,
+  MIR_CORO_NEW,
 } MirInstrKind;
 
 typedef enum {
@@ -146,6 +175,8 @@ typedef enum {
   MIR_TERM_BR,
   MIR_TERM_COND,
   MIR_TERM_UNREACHABLE,
+  MIR_TERM_YIELD,
+  MIR_TERM_CORO_RESTART,
 } MirTermKind;
 
 typedef struct MirArenaBlock {
@@ -311,6 +342,7 @@ struct MirBuiltinSymbol {
   MirBuiltinHandler handler;
   void *data;
   MirFnSummary summary;
+  MirFunctionId function;
 };
 
 typedef struct MirInstr {
@@ -360,6 +392,7 @@ typedef struct MirTerminator {
   MirBlockId target;
   MirBlockId then_block;
   MirBlockId else_block;
+  MirValueIdVec args;
 } MirTerminator;
 
 typedef struct MirBlock {
@@ -381,6 +414,7 @@ typedef struct MirFunction {
   const char *name;
   Type *type;
   Ast *origin;
+  bool is_extern;
   MirFunctionId specialization_of;
   Type *specialization_type;
   MirFnSummary summary;
@@ -395,11 +429,30 @@ typedef struct {
   size_t cap;
 } MirFunctionVec;
 
+typedef struct MirModule {
+  MirModuleId id;
+  const char *name;
+  const char *path;
+  Type *type;
+  Ast *origin;
+  MirModuleId parent;
+  MirFunctionId init;
+  ht exports;
+} MirModule;
+
+typedef struct {
+  MirModule **items;
+  size_t len;
+  size_t cap;
+} MirModuleVec;
+
 struct MirProgram {
   MirArena *arena;
   TypeEnv *type_env;
   ht builtins;
   MirFunctionVec functions;
+  MirModuleVec modules;
+  MirModuleId root_module;
 };
 
 struct MirBuilder {
@@ -423,6 +476,7 @@ void mir_instr_vec_push(MirArena *arena, MirInstrVec *vec, MirInstr value);
 
 void mir_stack_frame_init(MirArena *arena, ht *table, MirStackFrame *frame,
                           MirStackFrame *next);
+bool mir_ctx_bind_symbol(MirCtx *ctx, const char *name, MirSymbol *symbol);
 bool mir_ctx_bind_value(MirCtx *ctx, const char *name, MirValueId value);
 bool mir_ctx_lookup_value(MirCtx *ctx, const char *name, MirValueId *out);
 

@@ -179,7 +179,7 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
   LLVMValueRef top_level_func =
       codegen_top_level(*prog, &top_level_ret_type, ctx, module, builder);
 
-  if (ylc_config.debug_ir_pre) {
+  if (ylc_config.dump_ir_pre) {
     LLVMDumpModule(module);
   }
 
@@ -203,7 +203,7 @@ static void *eval_script(const char *filename, JITLangCtx *ctx,
   }
 
   LLVMGenericValueRef exec_args[] = {};
-  if (ylc_config.debug_ir) {
+  if (ylc_config.dump_ir) {
     LLVMDumpModule(module);
   }
 
@@ -350,14 +350,14 @@ int jit(int argc, char **argv) {
       ylc_config.interactive_mode = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--debug-codegen") == 0) {
-      ylc_config.debug_ir = true;
+      ylc_config.dump_ir = true;
       ylc_config.debug_codegen = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--debug-ir") == 0) {
-      ylc_config.debug_ir = true;
+      ylc_config.dump_ir = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--debug-ir-pre") == 0) {
-      ylc_config.debug_ir_pre = true;
+      ylc_config.dump_ir_pre = true;
       arg_counter++;
     } else if (strcmp(argv[arg_counter], "--dump-mir") == 0) {
       ylc_config.dump_mir = true;

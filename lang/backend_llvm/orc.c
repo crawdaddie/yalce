@@ -380,11 +380,12 @@ static ORCCompiledModule compile_source(const char *filename,
   ORCCompiledModule compiled = {.module = module,
                                 .context = context,
                                 .returns_bool = ylc_config.test_mode};
+
   next_top_name(compiled.entry_name, sizeof(compiled.entry_name));
   LLVMSetValueName2(top_level_func, compiled.entry_name,
                     strlen(compiled.entry_name));
 
-  if (ylc_config.debug_ir_pre) {
+  if (ylc_config.dump_ir_pre) {
     LLVMDumpModule(module);
   }
 
@@ -400,7 +401,7 @@ static ORCCompiledModule compile_source(const char *filename,
 
   module_passes(module, target_machine);
 
-  if (ylc_config.debug_ir) {
+  if (ylc_config.dump_ir) {
     LLVMDumpModule(module);
   }
 
@@ -539,6 +540,9 @@ int orcjit(int argc, char **argv) {
   for (int i = 0; i < ylc_config.num_input_scripts; i++) {
     ORCCompiledModule compiled = compile_script(
         ylc_config.input_scripts[i], &env, &ctx, jit, target_machine);
+    if (ylc_config.test_mode) {
+      printf("\n## Test %s\n", ylc_config.input_scripts[i]);
+    }
     result = execute_module_top(compiled, jit, jd);
     if (result != 0) {
       break;

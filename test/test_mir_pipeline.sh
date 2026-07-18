@@ -10,9 +10,14 @@ CLOSURE_SRC="$SCRIPT_DIR/mir_scripts/closure_partial_pipeline.ylc"
 VARIANT_SRC="$SCRIPT_DIR/mir_scripts/variant_match_pipeline.ylc"
 CONSTRUCT_SRC="$SCRIPT_DIR/mir_scripts/construct_extract_pipeline.ylc"
 ARRAY_OP_SRC="$SCRIPT_DIR/mir_scripts/array_ops_pipeline.ylc"
+EXTERN_SRC="$SCRIPT_DIR/mir_scripts/extern_pipeline.ylc"
 LLVM_SHAPE_SRC="$SCRIPT_DIR/mir_scripts/llvm_shape_pipeline.ylc"
 MATCH_DESTRUCTURE_SRC="$SCRIPT_DIR/mir_scripts/match_destructure_pipeline.ylc"
 RECURSIVE_DESTRUCTURE_SRC="$SCRIPT_DIR/mir_scripts/recursive_destructure_pipeline.ylc"
+FIB_TEST_SRC="$SCRIPT_DIR/test_scripts/01_fib.ylc"
+LIST_MAP_TEST_SRC="$SCRIPT_DIR/test_scripts/04_list_map.ylc"
+FIRST_CLASS_TEST_SRC="$SCRIPT_DIR/test_scripts/05_1st_class_fns.ylc"
+STD_LISTS_TEST_SRC="$ROOT_DIR/std/Lists.ylc"
 
 if [ ! -x "$YLC" ]; then
   echo "error: $YLC does not exist; run make from the repository root first" >&2
@@ -139,10 +144,34 @@ run_dump_mir() {
   "$YLC" --dump-mir "$source" 2>&1 | strip_ansi >"$output"
 }
 
+run_dump_mir_test() {
+  local source="$1"
+  local output="$2"
+  "$YLC" --test --dump-mir "$source" 2>&1 | strip_ansi >"$output"
+}
+
+run_ylc_test() {
+  local source="$1"
+  local output="$2"
+  if "$YLC" --test "$source" >"$output" 2>&1; then
+    return 0
+  fi
+
+  strip_ansi <"$output" >"$output.stripped"
+  mv "$output.stripped" "$output"
+  return 1
+}
+
 run_dump_llvm_pre() {
   local source="$1"
   local output="$2"
   "$YLC" --debug-ir-pre --verify-ir "$source" 2>&1 | strip_ansi >"$output"
+}
+
+run_dump_llvm_pre_test() {
+  local source="$1"
+  local output="$2"
+  "$YLC" --test --debug-ir-pre --verify-ir "$source" 2>&1 | strip_ansi >"$output"
 }
 
 OWN_MIR="$ARTIFACT_DIR/perceus_pipeline.mir"
@@ -150,24 +179,55 @@ CLOSURE_MIR="$ARTIFACT_DIR/closure_partial_pipeline.mir"
 VARIANT_MIR="$ARTIFACT_DIR/variant_match_pipeline.mir"
 CONSTRUCT_MIR="$ARTIFACT_DIR/construct_extract_pipeline.mir"
 ARRAY_OP_MIR="$ARTIFACT_DIR/array_ops_pipeline.mir"
+EXTERN_MIR="$ARTIFACT_DIR/extern_pipeline.mir"
 LLVM_IR="$ARTIFACT_DIR/perceus_pipeline.ll"
+CLOSURE_LLVM_IR="$ARTIFACT_DIR/closure_partial_pipeline.ll"
+EXTERN_LLVM_IR="$ARTIFACT_DIR/extern_pipeline.ll"
 LLVM_SHAPE_IR="$ARTIFACT_DIR/llvm_shape_pipeline.ll"
 MATCH_DESTRUCTURE_MIR="$ARTIFACT_DIR/match_destructure_pipeline.mir"
 MATCH_DESTRUCTURE_LLVM_IR="$ARTIFACT_DIR/match_destructure_pipeline.ll"
 RECURSIVE_DESTRUCTURE_MIR="$ARTIFACT_DIR/recursive_destructure_pipeline.mir"
 RECURSIVE_DESTRUCTURE_LLVM_IR="$ARTIFACT_DIR/recursive_destructure_pipeline.ll"
+FIB_TEST_MIR="$ARTIFACT_DIR/01_fib.test.mir"
+FIB_TEST_OUT="$ARTIFACT_DIR/01_fib.test.out"
+LIST_MAP_TEST_LLVM_IR="$ARTIFACT_DIR/04_list_map.test.ll"
+LIST_MAP_TEST_OUT="$ARTIFACT_DIR/04_list_map.test.out"
+FIRST_CLASS_TEST_MIR="$ARTIFACT_DIR/05_1st_class_fns.test.mir"
+FIRST_CLASS_TEST_LLVM_IR="$ARTIFACT_DIR/05_1st_class_fns.test.ll"
+FIRST_CLASS_TEST_OUT="$ARTIFACT_DIR/05_1st_class_fns.test.out"
+STD_LISTS_TEST_MIR="$ARTIFACT_DIR/std_Lists.test.mir"
+STD_LISTS_TEST_LLVM_IR="$ARTIFACT_DIR/std_Lists.test.ll"
+STD_LISTS_TEST_OUT="$ARTIFACT_DIR/std_Lists.test.out"
 
 run_dump_mir "$OWNERSHIP_SRC" "$OWN_MIR"
 run_dump_mir "$CLOSURE_SRC" "$CLOSURE_MIR"
 run_dump_mir "$VARIANT_SRC" "$VARIANT_MIR"
 run_dump_mir "$CONSTRUCT_SRC" "$CONSTRUCT_MIR"
 run_dump_mir "$ARRAY_OP_SRC" "$ARRAY_OP_MIR"
+run_dump_mir "$EXTERN_SRC" "$EXTERN_MIR"
 run_dump_mir "$MATCH_DESTRUCTURE_SRC" "$MATCH_DESTRUCTURE_MIR"
 run_dump_mir "$RECURSIVE_DESTRUCTURE_SRC" "$RECURSIVE_DESTRUCTURE_MIR"
 run_dump_llvm_pre "$OWNERSHIP_SRC" "$LLVM_IR"
+run_dump_llvm_pre "$CLOSURE_SRC" "$CLOSURE_LLVM_IR"
+run_dump_llvm_pre "$EXTERN_SRC" "$EXTERN_LLVM_IR"
 run_dump_llvm_pre "$LLVM_SHAPE_SRC" "$LLVM_SHAPE_IR"
 run_dump_llvm_pre "$MATCH_DESTRUCTURE_SRC" "$MATCH_DESTRUCTURE_LLVM_IR"
 run_dump_llvm_pre "$RECURSIVE_DESTRUCTURE_SRC" "$RECURSIVE_DESTRUCTURE_LLVM_IR"
+run_dump_mir_test "$FIB_TEST_SRC" "$FIB_TEST_MIR"
+run_dump_mir_test "$FIRST_CLASS_TEST_SRC" "$FIRST_CLASS_TEST_MIR"
+run_dump_mir_test "$STD_LISTS_TEST_SRC" "$STD_LISTS_TEST_MIR"
+run_dump_llvm_pre_test "$LIST_MAP_TEST_SRC" "$LIST_MAP_TEST_LLVM_IR"
+run_dump_llvm_pre_test "$FIRST_CLASS_TEST_SRC" "$FIRST_CLASS_TEST_LLVM_IR"
+run_dump_llvm_pre_test "$STD_LISTS_TEST_SRC" "$STD_LISTS_TEST_LLVM_IR"
+
+FIB_TEST_STATUS=0
+run_ylc_test "$FIB_TEST_SRC" "$FIB_TEST_OUT" || FIB_TEST_STATUS=$?
+LIST_MAP_TEST_STATUS=0
+run_ylc_test "$LIST_MAP_TEST_SRC" "$LIST_MAP_TEST_OUT" || LIST_MAP_TEST_STATUS=$?
+FIRST_CLASS_TEST_STATUS=0
+run_ylc_test "$FIRST_CLASS_TEST_SRC" "$FIRST_CLASS_TEST_OUT" || FIRST_CLASS_TEST_STATUS=$?
+STD_LISTS_TEST_STATUS=0
+run_ylc_test "$STD_LISTS_TEST_SRC" "$STD_LISTS_TEST_OUT" || STD_LISTS_TEST_STATUS=$?
 
 DUP_BODY="$ARTIFACT_DIR/duplicated_array.mir"
 MOVED_BODY="$ARTIFACT_DIR/moved_call_arg.mir"
@@ -268,7 +328,7 @@ extract_function "$CLOSURE_MIR" "local_partial" "$LOCAL_PARTIAL_BODY"
 extract_function "$CLOSURE_MIR" "make_adder" "$MAKE_ADDER_BODY"
 extract_function "$CLOSURE_MIR" "escaped_partial" "$ESCAPED_PARTIAL_BODY"
 extract_function "$CLOSURE_MIR" "closure_captured_array_cell" "$CLOSURE_CAPTURED_ARRAY_BODY"
-extract_function "$CLOSURE_MIR" "use_cell" "$CLOSURE_USE_CELL_BODY"
+extract_function "$CLOSURE_MIR" "closure_captured_array_cell.use_cell" "$CLOSURE_USE_CELL_BODY"
 extract_function "$VARIANT_MIR" "maybe_array" "$MAYBE_ARRAY_BODY"
 extract_function "$VARIANT_MIR" "variant_payload_return" "$VARIANT_RETURN_BODY"
 extract_function "$VARIANT_MIR" "variant_payload_discard" "$VARIANT_DISCARD_BODY"
@@ -614,11 +674,11 @@ assert_order "$TENSOR_ADD_BODY" "recursive TensorRef sum constructor should cons
   'ops \[%[0-9]+:field/consume#0, %[0-9]+:field/consume#1, %[0-9]+:field/consume#2, %[0-9]+:field/consume#3\]'
 assert_order "$TENSOR_ADD_CONSTRUCTOR_BODY" "TensorRef constructor fixture should build two leaves before tensor_add" \
   'fn_ref \$tensor_make' \
-  'call %[0-9]+ as \$tensor_make' \
+  'call %[0-9]+( as \$tensor_make[^ ]*)?\(' \
   'fn_ref \$tensor_make' \
-  'call %[0-9]+ as \$tensor_make' \
+  'call %[0-9]+( as \$tensor_make[^ ]*)?\(' \
   'fn_ref \$tensor_add' \
-  'call %[0-9]+ as \$tensor_add' \
+  'call %[0-9]+( as \$tensor_add[^ ]*)?\(' \
   'return %[0-9]+'
 assert_order "$TENSOR_OP_BODY" "TensorRef op projection should extract array element before op field" \
   'extract\.array_at %[0-9]+, %[0-9]+' \
@@ -657,6 +717,8 @@ assert_contains "$ARRAY_FILL_BODY" 'construct\.array_fill %[0-9]+, %[0-9]+.*ops 
 assert_contains "$ARRAY_RANGE_BODY" 'construct\.array_range %[0-9]+, %[0-9]+, %[0-9]+.*ops \[%[0-9]+:index/borrow#0, %[0-9]+:value/borrow#1, %[0-9]+:container/borrow#2\]' "array_range should borrow indexes and source container"
 assert_contains "$ARRAY_OFFSET_BODY" 'extract\.array_offset %[0-9]+, %[0-9]+.*ops \[%[0-9]+:index/borrow#0, %[0-9]+:container/borrow#1\]' "array_offset should lower as MIR_EXTRACT"
 assert_contains "$ARRAY_SUCC_BODY" 'extract\.array_succ %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' "array_succ should lower as MIR_EXTRACT"
+assert_contains "$EXTERN_MIR" '^extern fn abs\(%0 arg0: T @borrow\) -> T @owned;' "generic extern should dump as a bodyless MIR function"
+assert_contains "$EXTERN_MIR" '^extern fn abs\.Int\.Int\(%0 arg0: Int @borrow\) -> Int @owned;' "specialized extern should dump as a bodyless MIR function"
 
 section "MIR escape analysis"
 assert_contains "$RETURNED_BODY" 'construct\.array_literal \{ %[0-9]+, %[0-9]+ \}.*ea heap#[0-9]+' "returned arrays should be marked heap allocated"
@@ -924,6 +986,23 @@ assert_contains "$LLVM_IR" 'call void @__ylc_dup\(ptr' "MIR dup markers should l
 assert_contains "$LLVM_IR" 'call void @__ylc_drop\(ptr' "MIR drop markers should lower to __ylc_drop calls"
 assert_contains "$LLVM_IR" 'declare void @__ylc_dup\(ptr' "__ylc_dup hook should be declared"
 assert_contains "$LLVM_IR" 'declare void @__ylc_drop\(ptr' "__ylc_drop hook should be declared"
+assert_contains "$LLVM_IR" '^%YlcRcHeader = type \{ i32, i32 \}' "MIR heap-managed payloads should declare an RC header layout"
+assert_order "$LLVM_IR" "heap array literal should allocate header plus payload and initialize RC header" \
+  'define \{ i32, ptr \} @returned_array' \
+  'tail call ptr @malloc\(i32 ptrtoint \(ptr getelementptr \(\{ %YlcRcHeader, \[2 x i32\] \}, ptr null, i32 1\) to i32\)\)' \
+  'getelementptr inbounds nuw \{ %YlcRcHeader, \[2 x i32\] \}, ptr %array\.data\.heap, i32 0, i32 0' \
+  'store i32 1, ptr %rc\.count\.ptr' \
+  'store i32 0, ptr %rc\.tag\.ptr' \
+  'getelementptr inbounds nuw \{ %YlcRcHeader, \[2 x i32\] \}, ptr %array\.data\.heap, i32 0, i32 1' \
+  'insertvalue \{ i32, ptr \} \{ i32 2, ptr undef \}, ptr %rc\.payload\.ptr, 1'
+assert_order "$CLOSURE_LLVM_IR" "heap closure env should allocate header plus payload and initialize RC header" \
+  'define %Closure @make_adder' \
+  'tail call ptr @malloc\(i32 ptrtoint \(ptr getelementptr \(\{ %YlcRcHeader, \{ i32 \} \}, ptr null, i32 1\) to i32\)\)' \
+  'getelementptr inbounds nuw \{ %YlcRcHeader, \{ i32 \} \}, ptr %closure\.env, i32 0, i32 0' \
+  'store i32 1, ptr %rc\.count\.ptr' \
+  'store i32 0, ptr %rc\.tag\.ptr' \
+  'getelementptr inbounds nuw \{ %YlcRcHeader, \{ i32 \} \}, ptr %closure\.env, i32 0, i32 1' \
+  'insertvalue %Closure undef, ptr %rc\.payload\.ptr, 1'
 assert_order "$LLVM_IR" "managed array_set lowering should load old slot, store new value, then drop old payload" \
   'loop\.body:' \
   'load \{ i32, ptr \}, ptr %element_ptr' \
@@ -959,6 +1038,9 @@ assert_order "$LLVM_IR" "borrowed-return managed phi should lower array size rea
   '%phi = phi \{ i32, ptr \}' \
   'extractvalue \{ i32, ptr \} %phi, 0' \
   'ret \{ i32, ptr \} %phi'
+assert_contains "$EXTERN_LLVM_IR" '^declare i32 @abs\(i32' "specialized extern should declare the base C symbol"
+assert_contains "$EXTERN_LLVM_IR" 'call i32 @abs\(i32 -1\)' "specialized extern calls should target the base C symbol"
+assert_not_contains "$EXTERN_LLVM_IR" 'abs\.Int\.Int' "specialized extern MIR names should not become LLVM symbols"
 assert_contains "$LLVM_SHAPE_IR" 'define i32 @tuple_shape\.Int\.Int' "LLVM shape fixture should lower tuple function"
 assert_order "$LLVM_SHAPE_IR" "tuple construct/extract should lower to insertvalue/extractvalue" \
   'insertvalue \{ i32, i32 \} undef' \
@@ -977,9 +1059,24 @@ assert_order "$LLVM_SHAPE_IR" "list empty/cons/head/tail should lower to node al
   'load i32' \
   'getelementptr inbounds nuw \{ i32, ptr \}.*i32 0, i32 1' \
   'load ptr'
+assert_contains "$LIST_MAP_TEST_LLVM_IR" 'define internal i1 @__ylc_mir_list_eq_int\(ptr' "list equality should lower to a typed helper"
+assert_contains "$LIST_MAP_TEST_LLVM_IR" 'call i1 @__ylc_mir_list_eq_int\(ptr' "list equality calls should target the helper"
+assert_contains "$LIST_MAP_TEST_LLVM_IR" 'define internal i1 @__ylc_mir_list_eq_num\(ptr' "double list equality should lower to a typed helper"
+assert_contains "$LIST_MAP_TEST_LLVM_IR" 'sitofp i32 .* to double' "Double constructor should lower Int to Double casts"
+assert_contains "$STD_LISTS_TEST_LLVM_IR" 'call ptr @map\.Fn_Int_Double\.List_Cons_Cons_Int_List\.List_Cons_Cons_Double_List\(ptr @"\$top\.<anonymous>\.[0-9]+"' "std Lists map lambda should pass a unique Double lambda function pointer"
+assert_contains "$STD_LISTS_TEST_LLVM_IR" 'call ptr @map\.Fn_Int_Double\.List_Cons_Cons_Int_List\.List_Cons_Cons_Double_List\(ptr @builtin_Double\.Int\.Double' "std Lists map Double should pass the specialized builtin constructor"
+assert_contains "$STD_LISTS_TEST_LLVM_IR" 'define double @"\$top\.<anonymous>\.[0-9]+"\(i32' "std Lists Double lambdas should lower as distinct double-returning functions"
+assert_contains "$STD_LISTS_TEST_LLVM_IR" 'call i1 @contains\.Int\.List_Cons_Cons_Int_List\.Bool\(i32' "std Lists contains should lower recursive specialized calls"
+assert_contains "$FIRST_CLASS_TEST_MIR" 'fn_ref \$sum\.Int\.Int\.Int' "first-class sum int ref should specialize in MIR"
+assert_contains "$FIRST_CLASS_TEST_MIR" 'fn_ref \$sum\.Double\.Double\.Double' "first-class sum double ref should specialize in MIR"
+assert_contains "$FIRST_CLASS_TEST_MIR" 'fn_ref \$builtin_op_add\.Int\.Int\.Int' "first-class builtin int ref should specialize in MIR"
+assert_contains "$FIRST_CLASS_TEST_LLVM_IR" 'call i32 @proc\.Fn_Int_Int_Int\.Int\.Int\.Int\(ptr @sum\.Int\.Int\.Int' "first-class sum int ref should lower as a function pointer"
+assert_contains "$FIRST_CLASS_TEST_LLVM_IR" 'call double @proc\.Fn_Double_Double_Double\.Double\.Double\.Double\(ptr @sum\.Double\.Double\.Double' "first-class sum double ref should lower as a function pointer"
+assert_contains "$FIRST_CLASS_TEST_LLVM_IR" 'call i32 @proc\.Fn_Int_Int_Int\.Int\.Int\.Int\(ptr @builtin_op_add\.Int\.Int\.Int' "first-class builtin int ref should lower as a function pointer"
+assert_not_contains "$FIRST_CLASS_TEST_LLVM_IR" 'ptr null' "first-class function refs should not lower to null pointers"
 assert_order "$LLVM_SHAPE_IR" "closure construct/env/fn/field should lower to closure pair and env field load" \
   'insertvalue %Closure undef, ptr %closure\.env\.stack, 1' \
-  'insertvalue %Closure .* ptr @closure_curried_add' \
+  'insertvalue %Closure .* ptr @closure_curried_add_[0-9]+\.Tuple_Int\.Int\.Int' \
   'extractvalue %Closure .* 1' \
   'extractvalue %Closure .* 0' \
   'getelementptr inbounds nuw \{ i32 \}, ptr %0, i32 0, i32 0' \
@@ -1093,13 +1190,17 @@ assert_contains "$RECURSIVE_DESTRUCTURE_LLVM_IR" '^%DirectNode = type \{ i32, pt
 assert_contains "$RECURSIVE_DESTRUCTURE_LLVM_IR" '^%DirectArrayNode = type \{ i32, \{ i32, ptr \} \}' "recursive array record should lower to named LLVM struct"
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive list constructor should lower to list node stores and record insertvalue" \
   'define %DirectNode @direct_pair' \
-  'getelementptr \(\{ %DirectNode, ptr \}, ptr null, i32 1\)' \
+  'getelementptr \(\{ %YlcRcHeader, \{ %DirectNode, ptr \} \}, ptr null, i32 1\)' \
+  'store i32 1, ptr %rc\.count\.ptr' \
+  'store i32 0, ptr %rc\.tag\.ptr' \
   'store %DirectNode %1, ptr %list\.head\.ptr' \
   'store %DirectNode %0, ptr %list\.head\.ptr' \
-  'insertvalue %DirectNode \{ i32 3, ptr undef \}, ptr %list\.node\.heap'
+  'insertvalue %DirectNode \{ i32 3, ptr undef \}, ptr %rc\.payload\.ptr[0-9]*, 1'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive array constructor should lower to array storage of DirectArrayNode" \
   'define %DirectArrayNode @direct_array_pair' \
-  'getelementptr \(\[2 x %DirectArrayNode\], ptr null, i32 1\)' \
+  'getelementptr \(\{ %YlcRcHeader, \[2 x %DirectArrayNode\] \}, ptr null, i32 1\)' \
+  'store i32 1, ptr %rc\.count\.ptr' \
+  'store i32 0, ptr %rc\.tag\.ptr' \
   'store %DirectArrayNode %0, ptr %array\.item\.ptr' \
   'store %DirectArrayNode %1, ptr %array\.item\.ptr' \
   'insertvalue %DirectArrayNode \{ i32 3, \{ i32, ptr \} undef \}, \{ i32, ptr \} %array\.data, 1'
@@ -1151,6 +1252,47 @@ assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum consuming arm shoul
   'define i32 @tensor_op_add_payload_consume' \
   'extractvalue \{ \{ i32, ptr \}, \{ i32, ptr \} \} %extract\.field, 0' \
   'call void @__ylc_dup\(ptr'
+
+section "MIR test mode"
+if [ "$FIB_TEST_STATUS" -eq 0 ]; then
+  pass "01_fib should pass in MIR --test mode"
+else
+  fail "01_fib should pass in MIR --test mode"
+fi
+if [ "$LIST_MAP_TEST_STATUS" -eq 0 ]; then
+  pass "04_list_map should pass in MIR --test mode"
+else
+  fail "04_list_map should pass in MIR --test mode"
+fi
+if [ "$FIRST_CLASS_TEST_STATUS" -eq 0 ]; then
+  pass "05_1st_class_fns should pass in MIR --test mode"
+else
+  fail "05_1st_class_fns should pass in MIR --test mode"
+fi
+if [ "$STD_LISTS_TEST_STATUS" -eq 0 ]; then
+  pass "std/Lists should pass in MIR --test mode"
+else
+  fail "std/Lists should pass in MIR --test mode"
+fi
+assert_contains "$FIB_TEST_MIR" '^fn \$module_init\(\).* -> \(\) @none' "test mode should keep top-level initialization separate from test entry"
+assert_contains "$FIB_TEST_MIR" '^fn \$top\(\).* -> Bool @owned' "test mode should expose a boolean MIR entry point"
+assert_contains "$FIB_TEST_MIR" '^extern fn _report_test_result\(%0 arg0: Ptr @borrow, %1 arg1: Bool @borrow\) -> \(\) @none;' "test-mode top should declare the per-test reporter"
+assert_contains "$FIB_TEST_MIR" '^extern fn _report_test_totals\(%0 arg0: Int @borrow, %1 arg1: Int @borrow\) -> \(\) @none;' "test-mode top should declare the totals reporter"
+assert_contains "$FIB_TEST_MIR" 'call %[0-9]+( as \$fib\.Int\.Int)?\(%[0-9]+\).*: Int' "test-mode top should call module-level functions"
+assert_contains "$FIB_TEST_MIR" 'call %[0-9]+\(%[0-9]+, %[0-9]+\).*: \(\)' "test-mode top should report each test result"
+assert_contains "$FIB_TEST_MIR" '^    %[0-9]+ = phi \[bb[0-9]+: %[0-9]+, bb[0-9]+: %[0-9]+\].*Bool' "test-mode top should combine test bindings through boolean phis"
+assert_contains "$FIB_TEST_OUT" 'test_fib20' "MIR --test mode should print individual test names"
+assert_contains "$FIB_TEST_OUT" '5 / 5 passed' "MIR --test mode should print test totals"
+assert_contains "$LIST_MAP_TEST_OUT" 'test_map_plus' "MIR --test mode should print list-map test name"
+assert_contains "$LIST_MAP_TEST_OUT" 'test_map_to_double' "MIR --test mode should print list-map Double constructor test name"
+assert_contains "$LIST_MAP_TEST_OUT" '2 / 2 passed' "MIR --test mode should pass list-map totals"
+assert_contains "$FIRST_CLASS_TEST_OUT" 'test_1st_class_binop_double' "MIR --test mode should print first-class function test name"
+assert_contains "$FIRST_CLASS_TEST_OUT" '4 / 4 passed' "MIR --test mode should pass first-class function totals"
+assert_contains "$STD_LISTS_TEST_OUT" 'test_map_to_double' "MIR --test mode should print std Lists lambda Double map test"
+assert_contains "$STD_LISTS_TEST_OUT" 'test_map_to_double2' "MIR --test mode should print std Lists builtin Double map test"
+assert_contains "$STD_LISTS_TEST_OUT" 'test_contains' "MIR --test mode should print std Lists contains test"
+assert_contains "$STD_LISTS_TEST_OUT" 'test_not_contains' "MIR --test mode should print std Lists negative contains test"
+assert_contains "$STD_LISTS_TEST_OUT" '9 / 9 passed' "MIR --test mode should pass std Lists totals"
 
 
 echo

@@ -17,8 +17,7 @@
 # ;;
 #
 let fold = fn f res a ->
-  match a with
-  | [] -> res
+  match a with | [] -> res
   | x::rest -> fold f (f res x) rest
 ;;
 

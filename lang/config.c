@@ -24,11 +24,11 @@ void print_config() {
     printf("debug codegen\n");
   }
 
-  if (ylc_config.debug_ir) {
+  if (ylc_config.dump_ir) {
     printf("dump LLVM IR\n");
   }
 
-  if (ylc_config.debug_ir_pre) {
+  if (ylc_config.dump_ir_pre) {
     printf("dump LLVM IR pre-opt\n");
   }
 

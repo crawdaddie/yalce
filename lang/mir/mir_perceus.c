@@ -57,6 +57,18 @@ static size_t mir_perceus_term_successors(MirTerminator *term,
     }
     out[0] = term->target;
     return 1;
+  case MIR_TERM_YIELD:
+    if (term->target == MIR_NO_BLOCK) {
+      return 0;
+    }
+    out[0] = term->target;
+    return 1;
+  case MIR_TERM_CORO_RESTART:
+    if (term->target == MIR_NO_BLOCK) {
+      return 0;
+    }
+    out[0] = term->target;
+    return 1;
   case MIR_TERM_COND: {
     size_t len = 0;
     if (term->then_block != MIR_NO_BLOCK) {
@@ -903,7 +915,8 @@ static bool mir_perceus_function_has_markers(MirFunction *fn) {
 }
 
 static void mir_perceus_instrument_function(MirFunction *fn) {
-  if (!fn || fn->values.len == 0 || mir_perceus_function_has_markers(fn)) {
+  if (!fn || fn->is_extern || fn->blocks.len == 0 || fn->values.len == 0 ||
+      mir_perceus_function_has_markers(fn)) {
     return;
   }
 

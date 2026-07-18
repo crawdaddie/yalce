@@ -7,8 +7,8 @@ typedef struct RTConfig {
   bool test_mode;
   bool gui_mode;
   bool debug_codegen;
-  bool debug_ir;
-  bool debug_ir_pre;
+  bool dump_ir;
+  bool dump_ir_pre;
   bool dump_mir;
   bool debug_symbols;
   bool verify_ir;

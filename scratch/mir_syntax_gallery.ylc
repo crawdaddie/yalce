@@ -1,0 +1,112 @@
+#! ylc --dump-mir
+# MIR syntax gallery scratch file.
+# Run with:
+#   ylc --dump-mir scratch/mir_syntax_gallery.ylc
+
+# From /tmp/ylc_mir_if_bool.ylc
+let mir_if_bool =
+  let x = 2;
+  if x == 3 then 1 else 2
+;
+
+# From /tmp/ylc_mir_ops.ylc
+let mir_bool_ops =
+  let a = 2;
+  let b = 3;
+  let gt = a > b;
+  let gte = a >= b;
+  let lt = a < b;
+  let lte = a <= b;
+  let neq = a != b;
+  let anded = gt && lt;
+  let ored = gt || lt;
+  !ored
+;
+
+# From /tmp/ylc_mir_cmp_cast.ylc
+let mir_mixed_compare =
+  let a = 2;
+  let b = 3.;
+  a < b
+;
+
+# Generic lambda and specialization.
+let mir_add = fn a b -> a + b;;
+let mir_add_int_int = mir_add 2 3;
+let mir_add_int_double = mir_add 2 3.;
+
+# First-class functions and first-class builtin operator values.
+let mir_call2 = fn f a b -> f a b;;
+let mir_first_class_fn = mir_call2 mir_add 10 20;
+let mir_first_class_builtin = mir_call2 (+) 10 20;
+
+# Curried builtin operator use.
+let mir_add_one = (+) 1;
+let mir_add_one_result = mir_add_one 41;
+
+# Closure creation and closure calls, based on test/test_scripts/17_closures.ylc.
+let mir_make_closure = fn c: (Int) ->
+  let a = 1;
+  let b = 2;
+  (fn () -> a + b + c)
+;;
+let mir_closure_instance = mir_make_closure 2;
+let mir_closure_result = mir_closure_instance ();
+
+# Destructuring let binding.
+let mir_tuple_destructure =
+  let a, b = (1, 2);
+  a + b
+;
+
+let mir_named_tuple =
+  (left: 1, right: 2)
+;
+
+# Exhaustive bool match, also the shape used by if sugar.
+let mir_bool_match = fn b ->
+  match b with
+    | true -> 1
+    | false -> 2
+;;
+
+# Option constructor match in source order: Some 1, None, Some a.
+let mir_option_match = fn s ->
+  match s with
+    | Some 1 -> 1
+    | None -> 0
+    | Some a -> a + 2
+;;
+
+# List empty/cons constructor match.
+let mir_list_head_or_zero = fn xs ->
+  match xs with
+    | [] -> 0
+    | x :: rest -> x
+;;
+
+# Guarded match and wildcard fallback.
+let mir_guard_match = fn x ->
+  match x with
+    | xx if xx > 300 -> xx
+    | 2 -> 0
+    | _ -> 3
+;;
+
+# Plain enum / simple tagged constructors.
+type MirEnum =
+  | MirA
+  | MirB
+  | MirC
+  ;
+
+let mir_enum_match = fn x ->
+  match x with
+    | MirA -> 10
+    | MirB -> 20
+    | MirC -> 30
+;;
+
+# Keep the final expression trivial; every let above is still lowered into $top,
+# and lambdas produce their own MIR functions.
+0

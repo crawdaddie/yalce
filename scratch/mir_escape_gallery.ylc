@@ -1,0 +1,63 @@
+#! ylc --dump-mir
+# MIR escape-analysis gallery.
+# Run from the repo root with:
+#   ./build/ylc --dump-mir scratch/mir_escape_gallery.ylc
+
+# Local allocation is not externally reachable, so it should stay stack.
+let ea_stack_array_local = fn n ->
+  let a = [| n, n + 1 |];
+  n
+;;
+
+# Directly returning an allocation makes it externally reachable.
+let ea_heap_array_returned = fn n ->
+  [| n, n + 1 |]
+;;
+
+# Returning a tuple that contains an array also makes the array reachable.
+let ea_heap_array_in_tuple = fn n ->
+  let a = [| n, n + 1 |];
+  (a, n)
+;;
+
+# Constructing the same tuple locally is not enough to force heap allocation.
+let ea_stack_array_in_dead_tuple = fn n ->
+  let a = [| n, n + 1 |];
+  let t = (a, n);
+  n
+;;
+
+# Calls are conservative escape roots until the callee has an effect summary.
+let ea_consume_array = fn a -> 0;;
+let ea_heap_call_arg = fn n ->
+  let a = [| n, n + 1 |];
+  ea_consume_array a
+;;
+
+# Mutation marks the allocation mutable; returning it still makes it heap.
+let ea_mutable_return = fn n ->
+  let a = [| n, n + 1 |];
+  array_set a 0 3
+;;
+
+# Lists follow the same reachability rule as arrays.
+let ea_stack_list_local = fn n ->
+  let xs = [n, n + 1, ];
+  n
+;;
+
+let ea_heap_list_in_tuple = fn n ->
+  let xs = [n, n + 1, ];
+  (xs, n)
+;;
+
+# If an array/list is extracted from an aggregate and passed out, the source
+# aggregate and contained allocation are treated as externally reachable.
+let ea_consume_list = fn xs -> 0;;
+let ea_heap_extracted_list = fn n ->
+  let xs = [n, n + 1, ];
+  let arrbox = [| xs |];
+  ea_consume_list (arrbox[0])
+;;
+
+ea_stack_array_local

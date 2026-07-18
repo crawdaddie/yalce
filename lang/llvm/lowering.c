@@ -2,9 +2,12 @@
 #include "backend_llvm/adt.h"
 #include "backend_llvm/array.h"
 #include "backend_llvm/list.h"
+#include "backend_llvm/strings.h"
 #include "backend_llvm/types.h"
 #include "escape_analysis.h"
+#include "types/type_expressions.h"
 #include <llvm-c/Core.h>
+#include <llvm-c/Target.h>
 #include <llvm-c/Types.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -21,6 +24,7 @@ typedef struct {
 
 typedef struct {
   LLVMBasicBlockRef *items;
+  LLVMBasicBlockRef *exits;
   size_t len;
 } MirLlvmBlockMap;
 
@@ -56,16 +60,23 @@ static Type *mir_function_return_type(MirFunction *fn) {
   }
 
   Type *type = fn->type;
+  bool has_env_param = false;
   for (size_t i = 0; type && type->kind == T_FN && i < fn->params.len; i++) {
     MirParam *param = &fn->params.items[i];
-    if (param && param->name && strcmp(param->name, "$env") == 0 &&
-        !(type->data.T_FN.from && param->type &&
-          types_equal(type->data.T_FN.from, param->type))) {
-      continue;
+    if (param && param->name && strcmp(param->name, "$env") == 0) {
+      has_env_param = true;
+      if (!(type->data.T_FN.from && param->type &&
+            types_equal(type->data.T_FN.from, param->type))) {
+        continue;
+      }
     }
     type = type->data.T_FN.to;
   }
 
+  if (has_env_param && type && type->kind == T_FN && type->data.T_FN.from &&
+      type->data.T_FN.from->kind == T_VOID) {
+    return type->data.T_FN.to;
+  }
   return type;
 }
 
@@ -73,6 +84,37 @@ static LLVMTypeRef lower_mir_type(Type *type, JITLangCtx *ctx,
                                   LLVMModuleRef module, LLVMTypeRef fallback) {
   LLVMTypeRef llvm_type = type_to_llvm_type(type, ctx, module);
   return llvm_type ? llvm_type : fallback;
+}
+
+static Type *lower_mir_sizeof_target_type(MirInstr *instr, JITLangCtx *ctx) {
+  if (!instr || !instr->origin || instr->origin->tag != AST_APPLICATION ||
+      instr->origin->data.AST_APPLICATION.len != 1 ||
+      !instr->origin->data.AST_APPLICATION.args) {
+    return NULL;
+  }
+
+  Ast *expr = instr->origin->data.AST_APPLICATION.args;
+  TICtx type_ctx = {.env = ctx ? ctx->env : NULL};
+  Type *type = NULL;
+  if (expr->tag == AST_TYPE_DECL && expr->data.AST_LET.expr) {
+    type = compute_type_expression(expr->data.AST_LET.expr, &type_ctx);
+  } else {
+    type = compute_type_expression(expr, &type_ctx);
+  }
+  return type ? type : expr->type;
+}
+
+static LLVMValueRef lower_mir_sizeof(MirInstr *instr, LLVMModuleRef module,
+                                     JITLangCtx *ctx) {
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  unsigned long long size = 0;
+  Type *target_type = lower_mir_sizeof_target_type(instr, ctx);
+  LLVMTypeRef llvm_type = type_to_llvm_type(target_type, ctx, module);
+  LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
+  if (llvm_type && target_data) {
+    size = LLVMStoreSizeOfType(target_data, llvm_type);
+  }
+  return LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), size, 0);
 }
 
 static LLVMTypeRef lower_mir_closure_value_type(LLVMModuleRef module) {
@@ -205,6 +247,118 @@ static LLVMTypeRef lower_mir_generic_ptr_type(LLVMModuleRef module) {
                          0);
 }
 
+static LLVMTypeRef lower_mir_rc_header_type(LLVMModuleRef module) {
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef header_type = LLVMGetTypeByName2(llvm_ctx, "YlcRcHeader");
+  if (header_type) {
+    return header_type;
+  }
+
+  header_type = LLVMStructCreateNamed(llvm_ctx, "YlcRcHeader");
+  LLVMTypeRef i32 = LLVMInt32TypeInContext(llvm_ctx);
+  LLVMTypeRef fields[] = {i32, i32};
+  LLVMStructSetBody(header_type, fields, 2, 0);
+  return header_type;
+}
+
+static LLVMValueRef lower_mir_heap_alloc_payload(LLVMModuleRef module,
+                                                 LLVMBuilderRef builder,
+                                                 LLVMTypeRef payload_type,
+                                                 const char *name) {
+  if (!module || !builder || !payload_type) {
+    return NULL;
+  }
+
+  LLVMTypeRef header_type = lower_mir_rc_header_type(module);
+  LLVMTypeRef object_fields[] = {header_type, payload_type};
+  LLVMTypeRef object_type = LLVMStructTypeInContext(
+      LLVMGetModuleContext(module), object_fields, 2, 0);
+  LLVMValueRef object =
+      LLVMBuildMalloc(builder, object_type, name ? name : "rc.object");
+  if (!object) {
+    return NULL;
+  }
+
+  LLVMTypeRef i32 = LLVMInt32TypeInContext(LLVMGetModuleContext(module));
+  LLVMValueRef header_ptr =
+      LLVMBuildStructGEP2(builder, object_type, object, 0, "rc.header.ptr");
+  LLVMValueRef rc_ptr =
+      LLVMBuildStructGEP2(builder, header_type, header_ptr, 0, "rc.count.ptr");
+  LLVMBuildStore(builder, LLVMConstInt(i32, 1, false), rc_ptr);
+  LLVMValueRef tag_ptr =
+      LLVMBuildStructGEP2(builder, header_type, header_ptr, 1, "rc.tag.ptr");
+  LLVMBuildStore(builder, LLVMConstInt(i32, 0, false), tag_ptr);
+
+  return LLVMBuildStructGEP2(builder, object_type, object, 1, "rc.payload.ptr");
+}
+
+static LLVMValueRef lower_mir_malloc_i32(LLVMModuleRef module,
+                                         LLVMBuilderRef builder,
+                                         LLVMValueRef size, const char *name) {
+  if (!module || !builder || !size) {
+    return NULL;
+  }
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef i32 = LLVMInt32TypeInContext(llvm_ctx);
+  LLVMTypeRef ptr_type = lower_mir_generic_ptr_type(module);
+  if (LLVMTypeOf(size) != i32) {
+    size = LLVMBuildIntCast(builder, size, i32, "malloc.size");
+  }
+
+  LLVMValueRef malloc_fn = LLVMGetNamedFunction(module, "malloc");
+  LLVMTypeRef malloc_type = LLVMFunctionType(ptr_type, &i32, 1, 0);
+  if (!malloc_fn) {
+    malloc_fn = LLVMAddFunction(module, "malloc", malloc_type);
+  }
+  return LLVMBuildCall2(builder, malloc_type, malloc_fn, &size, 1,
+                        name ? name : "malloc");
+}
+
+static LLVMValueRef lower_mir_heap_alloc_array_payload(LLVMModuleRef module,
+                                                       LLVMBuilderRef builder,
+                                                       LLVMTypeRef element_type,
+                                                       LLVMValueRef size,
+                                                       const char *name) {
+  if (!module || !builder || !element_type || !size) {
+    return NULL;
+  }
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef i32 = LLVMInt32TypeInContext(llvm_ctx);
+  LLVMTypeRef i8 = LLVMInt8TypeInContext(llvm_ctx);
+  if (LLVMTypeOf(size) != i32) {
+    size = LLVMBuildIntCast(builder, size, i32, "array.size.i32");
+  }
+
+  LLVMValueRef element_size =
+      LLVMConstTruncOrBitCast(LLVMSizeOf(element_type), i32);
+  LLVMValueRef payload_size =
+      LLVMBuildMul(builder, size, element_size, "array.payload.bytes");
+  LLVMValueRef header_size = LLVMConstInt(i32, 8, false);
+  LLVMValueRef total_size =
+      LLVMBuildAdd(builder, header_size, payload_size, "array.alloc.bytes");
+  LLVMValueRef object = lower_mir_malloc_i32(module, builder, total_size,
+                                             name ? name : "array.data.heap");
+  if (!object) {
+    return NULL;
+  }
+
+  LLVMTypeRef header_type = lower_mir_rc_header_type(module);
+  LLVMValueRef rc_ptr =
+      LLVMBuildStructGEP2(builder, header_type, object, 0, "rc.count.ptr");
+  LLVMBuildStore(builder, LLVMConstInt(i32, 1, false), rc_ptr);
+  LLVMValueRef tag_ptr =
+      LLVMBuildStructGEP2(builder, header_type, object, 1, "rc.tag.ptr");
+  LLVMBuildStore(builder, LLVMConstInt(i32, 0, false), tag_ptr);
+
+  LLVMValueRef payload =
+      LLVMBuildGEP2(builder, i8, object, &header_size, 1, "array.payload.ptr");
+  LLVMTypeRef data_ptr_type = LLVMPointerType(element_type, 0);
+  return LLVMBuildPointerCast(builder, payload, data_ptr_type,
+                              "array.data.ptr");
+}
+
 static LLVMTypeRef lower_mir_closure_env_record_type(Type *env_type,
                                                      JITLangCtx *ctx,
                                                      LLVMModuleRef module) {
@@ -223,9 +377,8 @@ static LLVMTypeRef lower_mir_closure_env_record_type(Type *env_type,
   }
 
   for (size_t i = 0; i < num_fields; i++) {
-    Type *field_type = env_type->data.T_CONS.args
-                           ? env_type->data.T_CONS.args[i]
-                           : NULL;
+    Type *field_type =
+        env_type->data.T_CONS.args ? env_type->data.T_CONS.args[i] : NULL;
     if (field_type && field_type->kind == T_FN && !is_closure(field_type)) {
       field_types[i] = lower_mir_generic_ptr_type(module);
     } else {
@@ -263,8 +416,7 @@ static LLVMTypeRef lower_mir_value_storage_type(Type *type, JITLangCtx *ctx,
 }
 
 static LLVMValueRef lower_mir_cast_value_to_storage(LLVMValueRef value,
-                                                    Type *type,
-                                                    JITLangCtx *ctx,
+                                                    Type *type, JITLangCtx *ctx,
                                                     LLVMModuleRef module,
                                                     LLVMBuilderRef builder,
                                                     const char *name) {
@@ -303,11 +455,46 @@ static LLVMTypeRef lower_mir_param_abi_type(MirParam *param, JITLangCtx *ctx,
                                   NULL);
 }
 
-static const char *lower_mir_function_symbol_name(MirFunction *fn) {
-  if (!fn || !fn->name) {
+static MirFunction *lower_mir_extern_symbol_function(MirLlvmCtx *lctx,
+                                                     MirFunction *fn) {
+  if (!lctx || !lctx->program || !fn || !fn->is_extern) {
+    return fn;
+  }
+
+  MirFunction *symbol_fn = fn;
+  MirFunctionId source_id = fn->specialization_of;
+  while (source_id != MIR_NO_FUNCTION &&
+         source_id < lctx->program->functions.len) {
+    MirFunction **items = lctx->program->functions.items;
+    MirFunction *source = items ? items[source_id] : NULL;
+    if (!source || !source->is_extern) {
+      break;
+    }
+
+    symbol_fn = source;
+    if (source->specialization_of == MIR_NO_FUNCTION ||
+        source->specialization_of == source_id) {
+      break;
+    }
+    source_id = source->specialization_of;
+  }
+
+  return symbol_fn;
+}
+
+static const char *lower_mir_function_symbol_name(MirLlvmCtx *lctx,
+                                                  MirFunction *fn) {
+  MirFunction *symbol_fn = lower_mir_extern_symbol_function(lctx, fn);
+  const char *name = NULL;
+  if (symbol_fn && symbol_fn->name) {
+    name = symbol_fn->name;
+  } else if (fn) {
+    name = fn->name;
+  }
+  if (!name) {
     return "<anonymous>";
   }
-  return strcmp(fn->name, "$top") == 0 ? "top" : fn->name;
+  return strcmp(name, "$top") == 0 ? "top" : name;
 }
 
 static LLVMTypeRef lower_mir_function_type(MirFunction *fn, JITLangCtx *ctx,
@@ -375,7 +562,7 @@ static LLVMValueRef lower_mir_declare_function(MirLlvmCtx *lctx,
     return NULL;
   }
 
-  const char *name = lower_mir_function_symbol_name(fn);
+  const char *name = lower_mir_function_symbol_name(lctx, fn);
   LLVMValueRef llvm_fn = LLVMGetNamedFunction(module, name);
   if (!llvm_fn) {
     llvm_fn = LLVMAddFunction(module, name, fn_type);
@@ -385,6 +572,12 @@ static LLVMValueRef lower_mir_declare_function(MirLlvmCtx *lctx,
   }
 
   LLVMSetLinkage(llvm_fn, LLVMExternalLinkage);
+  if (fn->is_extern) {
+    LLVMSetFunctionCallConv(llvm_fn, LLVMCCallConv);
+    if (strcmp(name, "hash_string") == 0) {
+      set_memory_effects(llvm_fn, MEM_ARGMEM_REF);
+    }
+  }
   lctx->functions[fn->id] = llvm_fn;
   lctx->function_types[fn->id] = fn_type;
   return llvm_fn;
@@ -398,8 +591,8 @@ static MirFunction *lower_mir_find_function_by_name(MirProgram *program,
 
   const char *needle = name[0] == '$' ? name + 1 : name;
   for (size_t i = 0; i < program->functions.len; i++) {
-    MirFunction *fn = program->functions.items ? program->functions.items[i]
-                                               : NULL;
+    MirFunction *fn =
+        program->functions.items ? program->functions.items[i] : NULL;
     if (!fn || !fn->name) {
       continue;
     }
@@ -452,8 +645,48 @@ static LLVMValueRef lower_mir_fn_ref(MirInstr *instr, MirLlvmCtx *lctx,
   return fn;
 }
 
-static LLVMValueRef lower_mir_const(MirInstr *instr, LLVMModuleRef module,
-                                    JITLangCtx *ctx) {
+static LLVMValueRef lower_mir_const_string(MirFunction *fn, MirInstr *instr,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder) {
+  if (!instr || !instr->type || !is_string_type(instr->type)) {
+    return NULL;
+  }
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef char_type = LLVMInt8TypeInContext(llvm_ctx);
+  size_t len = instr->data.const_value.as.string_value.len;
+  const char *chars = instr->data.const_value.as.string_value.chars;
+  if (!chars) {
+    chars = "";
+    len = 0;
+  }
+
+  unsigned storage_len = (unsigned)(len + 1);
+  LLVMTypeRef backing_type = LLVMArrayType(char_type, storage_len);
+  LLVMValueRef data =
+      lower_mir_value_allocates_on_stack(fn, instr->result)
+          ? LLVMBuildAlloca(builder, backing_type, "string.data.stack")
+          : lower_mir_heap_alloc_payload(module, builder, backing_type,
+                                         "string.data.heap");
+  if (!data) {
+    return NULL;
+  }
+
+  LLVMValueRef str_const =
+      LLVMConstStringInContext(llvm_ctx, chars, (unsigned)len, 0);
+  LLVMBuildStore(builder, str_const, data);
+
+  LLVMValueRef result = LLVMGetUndef(codegen_array_type(char_type));
+  result = LLVMBuildInsertValue(
+      builder, result,
+      LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), (uint64_t)len, false), 0,
+      "string.size");
+  return LLVMBuildInsertValue(builder, result, data, 1, "string.data");
+}
+
+static LLVMValueRef lower_mir_const(MirFunction *fn, MirInstr *instr,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder, JITLangCtx *ctx) {
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
 
   if (!instr || instr->kind != MIR_CONST) {
@@ -491,13 +724,21 @@ static LLVMValueRef lower_mir_const(MirInstr *instr, LLVMModuleRef module,
   case MIR_CONST_KIND_BOOL: {
     LLVMTypeRef type = lower_mir_type(instr->type, ctx, module,
                                       LLVMInt1TypeInContext(llvm_ctx));
-    return LLVMConstInt(type,
-                        instr->data.const_value.as.bool_value ? 1 : 0, false);
+    return LLVMConstInt(type, instr->data.const_value.as.bool_value ? 1 : 0,
+                        false);
   }
   case MIR_CONST_KIND_VOID:
     return LLVMGetUndef(LLVMVoidTypeInContext(llvm_ctx));
   case MIR_CONST_KIND_STRING:
-    return NULL;
+    if (instr->type && is_pointer_type(instr->type)) {
+      return LLVMBuildGlobalStringPtr(
+          builder,
+          instr->data.const_value.as.string_value.chars
+              ? instr->data.const_value.as.string_value.chars
+              : "",
+          "mir.cstr");
+    }
+    return lower_mir_const_string(fn, instr, module, builder);
   default:
     return NULL;
   }
@@ -534,12 +775,13 @@ static LLVMValueRef lower_mir_array_literal(MirFunction *fn, MirInstr *instr,
                                 "array.data");
   }
 
-  LLVMTypeRef backing_type = LLVMArrayType(
-      element_type, (unsigned)instr->data.construct.items.len);
+  LLVMTypeRef backing_type =
+      LLVMArrayType(element_type, (unsigned)instr->data.construct.items.len);
   LLVMValueRef data =
       lower_mir_value_allocates_on_stack(fn, instr->result)
           ? LLVMBuildAlloca(builder, backing_type, "array.data.stack")
-          : LLVMBuildMalloc(builder, backing_type, "array.data.heap");
+          : lower_mir_heap_alloc_payload(module, builder, backing_type,
+                                         "array.data.heap");
   if (!data) {
     return NULL;
   }
@@ -584,9 +826,8 @@ static LLVMValueRef lower_mir_array_size(MirFunction *fn, MirInstr *instr,
   }
 
   LLVMValueRef array = mir_llvm_value_get_rvalue(values, array_id, builder);
-  LLVMTypeRef element_type =
-      lower_mir_value_storage_type(array_type->data.T_CONS.args[0], ctx,
-                                   module);
+  LLVMTypeRef element_type = lower_mir_value_storage_type(
+      array_type->data.T_CONS.args[0], ctx, module);
   if (!array || !element_type) {
     return NULL;
   }
@@ -657,6 +898,221 @@ static LLVMValueRef lower_mir_array_set(MirFunction *fn, MirInstr *instr,
   return set_array_element(builder, array, index, value, element_type);
 }
 
+static LLVMValueRef lower_mir_array_succ(MirFunction *fn, MirInstr *instr,
+                                         MirLlvmValueMap *values,
+                                         LLVMModuleRef module,
+                                         LLVMBuilderRef builder,
+                                         JITLangCtx *ctx) {
+  if (!fn || !instr || !values) {
+    return NULL;
+  }
+
+  MirValueId array_id = instr->data.extract.value;
+  Type *array_type = mir_function_value_type(fn, array_id);
+  if (!array_type || !is_array_type(array_type) ||
+      !array_type->data.T_CONS.args || array_type->data.T_CONS.num_args < 1) {
+    return NULL;
+  }
+
+  Type *element_type_ref = array_type->data.T_CONS.args[0];
+  LLVMTypeRef element_type =
+      lower_mir_value_storage_type(element_type_ref, ctx, module);
+  LLVMValueRef array = mir_llvm_value_get_rvalue(values, array_id, builder);
+  if (!element_type || !array) {
+    return NULL;
+  }
+
+  LLVMTypeRef llvm_array_type = codegen_array_type(element_type);
+  LLVMValueRef current_size =
+      LLVMBuildExtractValue(builder, array, 0, "array.current_size");
+  LLVMValueRef is_size_gt_zero = LLVMBuildICmp(
+      builder, LLVMIntSGT, current_size,
+      LLVMConstInt(LLVMTypeOf(current_size), 0, false), "array.has_items");
+  LLVMValueRef size_mask = LLVMBuildZExt(
+      builder, is_size_gt_zero, LLVMTypeOf(current_size), "array.succ.mask");
+  LLVMValueRef new_size =
+      LLVMBuildSub(builder, current_size, size_mask, "array.succ.size");
+  LLVMValueRef data_ptr =
+      LLVMBuildExtractValue(builder, array, 1, "array.data");
+  LLVMValueRef new_data_ptr = LLVMBuildGEP2(builder, element_type, data_ptr,
+                                            &size_mask, 1, "array.succ.data");
+
+  LLVMValueRef result = LLVMGetUndef(llvm_array_type);
+  result = LLVMBuildInsertValue(builder, result, new_size, 0, "array.size");
+  return LLVMBuildInsertValue(builder, result, new_data_ptr, 1, "array.data");
+}
+
+static LLVMValueRef lower_mir_array_offset(MirFunction *fn, MirInstr *instr,
+                                           MirLlvmValueMap *values,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder,
+                                           JITLangCtx *ctx) {
+  if (!fn || !instr || !values) {
+    return NULL;
+  }
+
+  MirValueId array_id = instr->data.extract.value;
+  Type *array_type = mir_function_value_type(fn, array_id);
+  if (!array_type || !is_array_type(array_type) ||
+      !array_type->data.T_CONS.args || array_type->data.T_CONS.num_args < 1) {
+    return NULL;
+  }
+
+  Type *element_type_ref = array_type->data.T_CONS.args[0];
+  LLVMTypeRef element_type =
+      lower_mir_value_storage_type(element_type_ref, ctx, module);
+  LLVMValueRef array = mir_llvm_value_get_rvalue(values, array_id, builder);
+  LLVMValueRef offset = mir_llvm_value_get_rvalue(
+      values, instr->data.extract.index_value, builder);
+  if (!element_type || !array || !offset) {
+    return NULL;
+  }
+
+  LLVMTypeRef llvm_array_type = codegen_array_type(element_type);
+  LLVMValueRef current_size =
+      LLVMBuildExtractValue(builder, array, 0, "array.current_size");
+  if (LLVMTypeOf(offset) != LLVMTypeOf(current_size)) {
+    offset =
+        LLVMBuildIntCast(builder, offset, LLVMTypeOf(current_size), "offset");
+  }
+  LLVMValueRef is_size_gt_zero = LLVMBuildICmp(
+      builder, LLVMIntSGT, current_size,
+      LLVMConstInt(LLVMTypeOf(current_size), 0, false), "array.has_items");
+  LLVMValueRef size_mask = LLVMBuildZExt(
+      builder, is_size_gt_zero, LLVMTypeOf(current_size), "array.offset.mask");
+  LLVMValueRef size_decrement =
+      LLVMBuildMul(builder, offset, size_mask, "array.offset.decrement");
+  LLVMValueRef new_size =
+      LLVMBuildSub(builder, current_size, size_decrement, "array.offset.size");
+  LLVMValueRef data_ptr =
+      LLVMBuildExtractValue(builder, array, 1, "array.data");
+  LLVMValueRef new_data_ptr = LLVMBuildGEP2(builder, element_type, data_ptr,
+                                            &offset, 1, "array.offset.data");
+
+  LLVMValueRef result = LLVMGetUndef(llvm_array_type);
+  result = LLVMBuildInsertValue(builder, result, new_size, 0, "array.size");
+  return LLVMBuildInsertValue(builder, result, new_data_ptr, 1, "array.data");
+}
+
+static LLVMValueRef lower_mir_array_range(MirFunction *fn, MirInstr *instr,
+                                          MirLlvmValueMap *values,
+                                          LLVMModuleRef module,
+                                          LLVMBuilderRef builder,
+                                          JITLangCtx *ctx) {
+  if (!fn || !instr || !values || !instr->type || !is_array_type(instr->type) ||
+      !instr->type->data.T_CONS.args || instr->type->data.T_CONS.num_args < 1) {
+    return NULL;
+  }
+
+  Type *element_type_ref = instr->type->data.T_CONS.args[0];
+  LLVMTypeRef element_type =
+      lower_mir_value_storage_type(element_type_ref, ctx, module);
+  LLVMValueRef offset = mir_llvm_value_get_rvalue(
+      values, instr->data.construct.operands[0], builder);
+  LLVMValueRef size = mir_llvm_value_get_rvalue(
+      values, instr->data.construct.operands[1], builder);
+  LLVMValueRef array = mir_llvm_value_get_rvalue(
+      values, instr->data.construct.operands[2], builder);
+  if (!element_type || !offset || !size || !array) {
+    return NULL;
+  }
+
+  LLVMValueRef data_ptr =
+      LLVMBuildExtractValue(builder, array, 1, "array.data");
+  LLVMValueRef new_data_ptr = LLVMBuildGEP2(builder, element_type, data_ptr,
+                                            &offset, 1, "array.range.data");
+  LLVMValueRef result = LLVMGetUndef(codegen_array_type(element_type));
+  result = LLVMBuildInsertValue(builder, result, size, 0, "array.size");
+  return LLVMBuildInsertValue(builder, result, new_data_ptr, 1, "array.data");
+}
+
+static LLVMValueRef lower_mir_array_fill_data(MirFunction *fn, MirInstr *instr,
+                                              MirLlvmValueMap *values,
+                                              LLVMModuleRef module,
+                                              LLVMBuilderRef builder,
+                                              JITLangCtx *ctx,
+                                              bool call_fill_fn) {
+  if (!fn || !instr || !values || !instr->type || !is_array_type(instr->type) ||
+      !instr->type->data.T_CONS.args || instr->type->data.T_CONS.num_args < 1) {
+    return NULL;
+  }
+
+  Type *element_type_ref = instr->type->data.T_CONS.args[0];
+  LLVMTypeRef element_type =
+      lower_mir_value_storage_type(element_type_ref, ctx, module);
+  LLVMValueRef size = mir_llvm_value_get_rvalue(
+      values, instr->data.construct.operands[0], builder);
+  LLVMValueRef fill_source = mir_llvm_value_get_rvalue(
+      values, instr->data.construct.operands[1], builder);
+  if (!element_type || !size || !fill_source) {
+    return NULL;
+  }
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef i32 = LLVMInt32TypeInContext(llvm_ctx);
+  if (LLVMTypeOf(size) != i32) {
+    size = LLVMBuildIntCast(builder, size, i32, "array.fill.size");
+  }
+
+  LLVMValueRef data_ptr =
+      lower_mir_value_allocates_on_stack(fn, instr->result)
+          ? LLVMBuildArrayAlloca(builder, element_type, size,
+                                 "array.fill.stack")
+          : lower_mir_heap_alloc_array_payload(module, builder, element_type,
+                                               size, "array.fill.heap");
+  if (!data_ptr) {
+    return NULL;
+  }
+
+  LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
+  LLVMValueRef parent = LLVMGetBasicBlockParent(entry_block);
+  LLVMBasicBlockRef loop_block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, parent, "array.fill.loop");
+  LLVMBasicBlockRef after_block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, parent, "array.fill.after");
+
+  LLVMValueRef zero = LLVMConstInt(i32, 0, false);
+  LLVMValueRef has_items =
+      LLVMBuildICmp(builder, LLVMIntUGT, size, zero, "array.fill.nonempty");
+  LLVMBuildCondBr(builder, has_items, loop_block, after_block);
+
+  LLVMPositionBuilderAtEnd(builder, loop_block);
+  LLVMValueRef index = LLVMBuildPhi(builder, i32, "array.fill.index");
+  LLVMAddIncoming(index, &zero, &entry_block, 1);
+
+  LLVMValueRef element = fill_source;
+  if (call_fill_fn) {
+    LLVMTypeRef fill_fn_type = LLVMFunctionType(element_type, &i32, 1, 0);
+    element = LLVMBuildCall2(builder, fill_fn_type, fill_source, &index, 1,
+                             "array.fill.element");
+  }
+  Type *fill_type =
+      mir_function_value_type(fn, instr->data.construct.operands[1]);
+  if (!call_fill_fn) {
+    element = lower_mir_cast_value_to_storage(element, fill_type, ctx, module,
+                                              builder, "array.fill.cast");
+  }
+  if (!element) {
+    return NULL;
+  }
+
+  LLVMValueRef element_ptr = LLVMBuildGEP2(builder, element_type, data_ptr,
+                                           &index, 1, "array.fill.ptr");
+  LLVMBuildStore(builder, element, element_ptr);
+
+  LLVMValueRef one = LLVMConstInt(i32, 1, false);
+  LLVMValueRef next = LLVMBuildAdd(builder, index, one, "array.fill.next");
+  LLVMAddIncoming(index, &next, &loop_block, 1);
+  LLVMValueRef more =
+      LLVMBuildICmp(builder, LLVMIntULT, next, size, "array.fill.more");
+  LLVMBuildCondBr(builder, more, loop_block, after_block);
+
+  LLVMPositionBuilderAtEnd(builder, after_block);
+  LLVMValueRef result = LLVMGetUndef(codegen_array_type(element_type));
+  result = LLVMBuildInsertValue(builder, result, size, 0, "array.size");
+  return LLVMBuildInsertValue(builder, result, data_ptr, 1, "array.data");
+}
+
 static LLVMValueRef lower_mir_list_empty(MirInstr *instr, LLVMModuleRef module,
                                          JITLangCtx *ctx) {
   LLVMTypeRef list_type = lower_mir_type(instr->type, ctx, module, NULL);
@@ -679,10 +1135,10 @@ static LLVMValueRef lower_mir_list_cons(MirFunction *fn, MirInstr *instr,
     return NULL;
   }
 
-  LLVMValueRef head =
-      mir_llvm_value_get_rvalue(values, instr->data.construct.operands[0], builder);
-  LLVMValueRef tail =
-      mir_llvm_value_get_rvalue(values, instr->data.construct.operands[1], builder);
+  LLVMValueRef head = mir_llvm_value_get_rvalue(
+      values, instr->data.construct.operands[0], builder);
+  LLVMValueRef tail = mir_llvm_value_get_rvalue(
+      values, instr->data.construct.operands[1], builder);
   if (!head || !tail) {
     return NULL;
   }
@@ -700,7 +1156,8 @@ static LLVMValueRef lower_mir_list_cons(MirFunction *fn, MirInstr *instr,
   LLVMValueRef node =
       lower_mir_value_allocates_on_stack(fn, instr->result)
           ? LLVMBuildAlloca(builder, node_type, "list.node.stack")
-          : LLVMBuildMalloc(builder, node_type, "list.node.heap");
+          : lower_mir_heap_alloc_payload(module, builder, node_type,
+                                         "list.node.heap");
   if (!node) {
     return NULL;
   }
@@ -718,8 +1175,7 @@ static LLVMValueRef lower_mir_list_cons(MirFunction *fn, MirInstr *instr,
 static LLVMValueRef lower_mir_tuple(MirFunction *fn, MirInstr *instr,
                                     MirLlvmValueMap *values,
                                     LLVMModuleRef module,
-                                    LLVMBuilderRef builder,
-                                    JITLangCtx *ctx) {
+                                    LLVMBuilderRef builder, JITLangCtx *ctx) {
   if (!instr || !instr->type) {
     return NULL;
   }
@@ -784,7 +1240,8 @@ static LLVMValueRef lower_mir_constructor_payload_value(
     }
 
     Type *field_type = NULL;
-    if (constructor_type->kind == T_CONS && constructor_type->data.T_CONS.args &&
+    if (constructor_type->kind == T_CONS &&
+        constructor_type->data.T_CONS.args &&
         i < (size_t)constructor_type->data.T_CONS.num_args) {
       field_type = constructor_type->data.T_CONS.args[i];
     }
@@ -792,8 +1249,8 @@ static LLVMValueRef lower_mir_constructor_payload_value(
       field_type = mir_function_value_type(fn, field_id);
     }
 
-    field = lower_mir_cast_value_to_storage(
-        field, field_type, ctx, module, builder, "variant.field.cast");
+    field = lower_mir_cast_value_to_storage(field, field_type, ctx, module,
+                                            builder, "variant.field.cast");
     payload =
         LLVMBuildInsertValue(builder, payload, field, (unsigned)i, "variant");
   }
@@ -836,15 +1293,13 @@ static LLVMValueRef lower_mir_wrap_single_field_payload(
   }
 
   LLVMValueRef wrapped = LLVMGetUndef(desired_type);
-  return LLVMBuildInsertValue(builder, wrapped, payload, 0,
-                              "variant.payload");
+  return LLVMBuildInsertValue(builder, wrapped, payload, 0, "variant.payload");
 }
 
 static LLVMValueRef lower_mir_variant(MirFunction *fn, MirInstr *instr,
                                       MirLlvmValueMap *values,
                                       LLVMModuleRef module,
-                                      LLVMBuilderRef builder,
-                                      JITLangCtx *ctx) {
+                                      LLVMBuilderRef builder, JITLangCtx *ctx) {
   if (!instr || !instr->type || instr->data.construct.constructor_index < 0) {
     return NULL;
   }
@@ -852,12 +1307,12 @@ static LLVMValueRef lower_mir_variant(MirFunction *fn, MirInstr *instr,
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
   if (is_simple_enum(instr->type)) {
     return LLVMConstInt(LLVMInt8TypeInContext(llvm_ctx),
-                        (uint64_t)instr->data.construct.constructor_index, false);
+                        (uint64_t)instr->data.construct.constructor_index,
+                        false);
   }
 
   LLVMTypeRef variant_type = lower_mir_type(instr->type, ctx, module, NULL);
-  if (!variant_type ||
-      LLVMGetTypeKind(variant_type) != LLVMStructTypeKind ||
+  if (!variant_type || LLVMGetTypeKind(variant_type) != LLVMStructTypeKind ||
       LLVMCountStructElementTypes(variant_type) < 1) {
     return NULL;
   }
@@ -940,8 +1395,8 @@ static LLVMValueRef lower_mir_list_is_empty(MirFunction *fn, MirInstr *instr,
     return NULL;
   }
 
-  return LLVMBuildICmp(builder, LLVMIntEQ, list, LLVMConstNull(LLVMTypeOf(list)),
-                       "list.is_empty");
+  return LLVMBuildICmp(builder, LLVMIntEQ, list,
+                       LLVMConstNull(LLVMTypeOf(list)), "list.is_empty");
 }
 
 static LLVMValueRef lower_mir_list_head(MirFunction *fn, MirInstr *instr,
@@ -998,6 +1453,487 @@ static LLVMValueRef lower_mir_list_tail(MirFunction *fn, MirInstr *instr,
   return tail;
 }
 
+static const char *lower_mir_list_eq_helper_name(Type *element_type) {
+  if (!element_type) {
+    return NULL;
+  }
+
+  switch (element_type->kind) {
+  case T_BOOL:
+    return "__ylc_mir_list_eq_bool";
+  case T_CHAR:
+    return "__ylc_mir_list_eq_char";
+  case T_INT:
+    return "__ylc_mir_list_eq_int";
+  case T_UINT64:
+    return "__ylc_mir_list_eq_uint64";
+  case T_NUM:
+    return "__ylc_mir_list_eq_num";
+  default:
+    return NULL;
+  }
+}
+
+static LLVMValueRef lower_mir_primitive_eq_value(Type *type, LLVMValueRef lhs,
+                                                 LLVMValueRef rhs,
+                                                 LLVMBuilderRef builder) {
+  if (!type || !lhs || !rhs || !builder) {
+    return NULL;
+  }
+
+  switch (type->kind) {
+  case T_BOOL:
+  case T_CHAR:
+  case T_INT:
+  case T_UINT64:
+    return LLVMBuildICmp(builder, LLVMIntEQ, lhs, rhs, "list.elem.eq");
+  case T_NUM:
+    return LLVMBuildFCmp(builder, LLVMRealOEQ, lhs, rhs, "list.elem.eq");
+  default:
+    return NULL;
+  }
+}
+
+static bool lower_mir_type_is_numeric_scalar(Type *type) {
+  return type &&
+         (type->kind == T_INT || type->kind == T_UINT64 || type->kind == T_NUM);
+}
+
+static bool lower_mir_type_is_eq_scalar(Type *type) {
+  return type && (type->kind == T_BOOL || type->kind == T_CHAR ||
+                  lower_mir_type_is_numeric_scalar(type));
+}
+
+static Type *lower_mir_scalar_eq_target_type(Type *lhs, Type *rhs) {
+  if (!lower_mir_type_is_eq_scalar(lhs) || !lower_mir_type_is_eq_scalar(rhs)) {
+    return NULL;
+  }
+  if (lhs->kind == rhs->kind) {
+    return lhs;
+  }
+  if (lower_mir_type_is_numeric_scalar(lhs) &&
+      lower_mir_type_is_numeric_scalar(rhs)) {
+    if (lhs->kind == T_NUM || rhs->kind == T_NUM) {
+      return lhs->kind == T_NUM ? lhs : rhs;
+    }
+    if (lhs->kind == T_UINT64 || rhs->kind == T_UINT64) {
+      return lhs->kind == T_UINT64 ? lhs : rhs;
+    }
+    return lhs;
+  }
+  return NULL;
+}
+
+static LLVMValueRef lower_mir_cast_scalar_for_eq(LLVMValueRef value,
+                                                 Type *from_type, Type *to_type,
+                                                 LLVMModuleRef module,
+                                                 LLVMBuilderRef builder,
+                                                 JITLangCtx *ctx) {
+  if (!value || !from_type || !to_type) {
+    return NULL;
+  }
+  if (from_type->kind == to_type->kind) {
+    return value;
+  }
+
+  LLVMTypeRef to_llvm_type = lower_mir_type(to_type, ctx, module, NULL);
+  if (!to_llvm_type) {
+    return NULL;
+  }
+
+  if (from_type->kind == T_NUM &&
+      mir_llvm_is_integral_type(to_type, ctx, module)) {
+    return mir_llvm_is_signed_integral_type(to_type)
+               ? LLVMBuildFPToSI(builder, value, to_llvm_type, "eq.cast")
+               : LLVMBuildFPToUI(builder, value, to_llvm_type, "eq.cast");
+  }
+  if (mir_llvm_is_integral_type(from_type, ctx, module) &&
+      to_type->kind == T_NUM) {
+    return mir_llvm_is_signed_integral_type(from_type)
+               ? LLVMBuildSIToFP(builder, value, to_llvm_type, "eq.cast")
+               : LLVMBuildUIToFP(builder, value, to_llvm_type, "eq.cast");
+  }
+  if (mir_llvm_is_integral_type(from_type, ctx, module) &&
+      mir_llvm_is_integral_type(to_type, ctx, module)) {
+    unsigned from_width = mir_llvm_int_width(from_type, ctx, module);
+    unsigned to_width = mir_llvm_int_width(to_type, ctx, module);
+    if (from_width < to_width) {
+      return mir_llvm_is_signed_integral_type(from_type)
+                 ? LLVMBuildSExt(builder, value, to_llvm_type, "eq.cast")
+                 : LLVMBuildZExt(builder, value, to_llvm_type, "eq.cast");
+    }
+    if (from_width > to_width) {
+      return LLVMBuildTrunc(builder, value, to_llvm_type, "eq.cast");
+    }
+    return LLVMBuildBitCast(builder, value, to_llvm_type, "eq.cast");
+  }
+
+  return NULL;
+}
+
+static LLVMValueRef
+lower_mir_builtin_scalar_eq_call(MirFunction *fn, MirInstr *instr,
+                                 MirLlvmValueMap *values, LLVMModuleRef module,
+                                 LLVMBuilderRef builder, JITLangCtx *ctx) {
+  if (!fn || !instr || !instr->data.call.builtin || !values ||
+      instr->data.call.operands.len != 2) {
+    return NULL;
+  }
+
+  const char *name = instr->data.call.builtin->name;
+  bool negate = false;
+  if (name && strcmp(name, "!=") == 0) {
+    negate = true;
+  } else if (!name || strcmp(name, "==") != 0) {
+    return NULL;
+  }
+
+  MirValueId lhs_id = instr->data.call.operands.items[0];
+  MirValueId rhs_id = instr->data.call.operands.items[1];
+  Type *lhs_type = mir_function_value_type(fn, lhs_id);
+  Type *rhs_type = mir_function_value_type(fn, rhs_id);
+  Type *target_type = lower_mir_scalar_eq_target_type(lhs_type, rhs_type);
+  if (!target_type) {
+    return NULL;
+  }
+
+  LLVMValueRef lhs = mir_llvm_value_get_rvalue(values, lhs_id, builder);
+  LLVMValueRef rhs = mir_llvm_value_get_rvalue(values, rhs_id, builder);
+  lhs = lower_mir_cast_scalar_for_eq(lhs, lhs_type, target_type, module,
+                                     builder, ctx);
+  rhs = lower_mir_cast_scalar_for_eq(rhs, rhs_type, target_type, module,
+                                     builder, ctx);
+  if (!lhs || !rhs) {
+    return NULL;
+  }
+
+  LLVMValueRef eq =
+      target_type->kind == T_NUM
+          ? LLVMBuildFCmp(builder, LLVMRealOEQ, lhs, rhs, "scalar.eq")
+          : LLVMBuildICmp(builder, LLVMIntEQ, lhs, rhs, "scalar.eq");
+  return negate ? LLVMBuildNot(builder, eq, "scalar.neq") : eq;
+}
+
+static LLVMValueRef lower_mir_builtin_logical_call(MirFunction *fn,
+                                                   MirInstr *instr,
+                                                   MirLlvmValueMap *values,
+                                                   LLVMBuilderRef builder) {
+  if (!fn || !instr || !instr->data.call.builtin || !values) {
+    return NULL;
+  }
+
+  const char *name = instr->data.call.builtin->name;
+  if (!name) {
+    return NULL;
+  }
+
+  if (strcmp(name, "!") == 0) {
+    if (instr->data.call.operands.len != 1) {
+      return NULL;
+    }
+    MirValueId value_id = instr->data.call.operands.items[0];
+    Type *value_type = mir_function_value_type(fn, value_id);
+    if (!value_type || value_type->kind != T_BOOL) {
+      return NULL;
+    }
+    LLVMValueRef value = mir_llvm_value_get_rvalue(values, value_id, builder);
+    return value ? LLVMBuildNot(builder, value, "logical.not") : NULL;
+  }
+
+  bool is_and = strcmp(name, "&&") == 0;
+  bool is_or = strcmp(name, "||") == 0;
+  if (!is_and && !is_or) {
+    return NULL;
+  }
+  if (instr->data.call.operands.len != 2) {
+    return NULL;
+  }
+
+  MirValueId lhs_id = instr->data.call.operands.items[0];
+  MirValueId rhs_id = instr->data.call.operands.items[1];
+  Type *lhs_type = mir_function_value_type(fn, lhs_id);
+  Type *rhs_type = mir_function_value_type(fn, rhs_id);
+  if (!lhs_type || !rhs_type || lhs_type->kind != T_BOOL ||
+      rhs_type->kind != T_BOOL) {
+    return NULL;
+  }
+
+  LLVMValueRef lhs = mir_llvm_value_get_rvalue(values, lhs_id, builder);
+  LLVMValueRef rhs = mir_llvm_value_get_rvalue(values, rhs_id, builder);
+  if (!lhs || !rhs) {
+    return NULL;
+  }
+  return is_and ? LLVMBuildAnd(builder, lhs, rhs, "logical.and")
+                : LLVMBuildOr(builder, lhs, rhs, "logical.or");
+}
+
+static LLVMValueRef lower_mir_get_list_eq_helper(Type *list_type,
+                                                 LLVMModuleRef module,
+                                                 JITLangCtx *ctx) {
+  if (!list_type || !is_list_type(list_type) || !module) {
+    return NULL;
+  }
+
+  Type *element_type_ref = type_of_list(list_type);
+  const char *name = lower_mir_list_eq_helper_name(element_type_ref);
+  if (!name) {
+    return NULL;
+  }
+
+  LLVMValueRef existing = LLVMGetNamedFunction(module, name);
+  if (existing) {
+    return existing;
+  }
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef i1_type = LLVMInt1TypeInContext(llvm_ctx);
+  LLVMTypeRef ptr_type = lower_mir_generic_ptr_type(module);
+  LLVMTypeRef params[] = {ptr_type, ptr_type};
+  LLVMTypeRef fn_type = LLVMFunctionType(i1_type, params, 2, 0);
+  LLVMValueRef helper = LLVMAddFunction(module, name, fn_type);
+  if (!helper) {
+    return NULL;
+  }
+  LLVMSetLinkage(helper, LLVMInternalLinkage);
+
+  LLVMTypeRef element_type =
+      lower_mir_value_storage_type(element_type_ref, ctx, module);
+  if (!element_type) {
+    return NULL;
+  }
+  LLVMTypeRef node_type = llnode_type(element_type);
+
+  LLVMBuilderRef helper_builder = LLVMCreateBuilderInContext(llvm_ctx);
+  LLVMBasicBlockRef entry =
+      LLVMAppendBasicBlockInContext(llvm_ctx, helper, "entry");
+  LLVMBasicBlockRef loop =
+      LLVMAppendBasicBlockInContext(llvm_ctx, helper, "list.eq.loop");
+  LLVMBasicBlockRef lhs_empty =
+      LLVMAppendBasicBlockInContext(llvm_ctx, helper, "list.eq.lhs_empty");
+  LLVMBasicBlockRef rhs_empty =
+      LLVMAppendBasicBlockInContext(llvm_ctx, helper, "list.eq.rhs_empty");
+  LLVMBasicBlockRef compare =
+      LLVMAppendBasicBlockInContext(llvm_ctx, helper, "list.eq.compare");
+  LLVMBasicBlockRef advance =
+      LLVMAppendBasicBlockInContext(llvm_ctx, helper, "list.eq.advance");
+  LLVMBasicBlockRef true_block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, helper, "list.eq.true");
+  LLVMBasicBlockRef false_block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, helper, "list.eq.false");
+
+  LLVMPositionBuilderAtEnd(helper_builder, entry);
+  LLVMValueRef lhs_start = LLVMGetParam(helper, 0);
+  LLVMValueRef rhs_start = LLVMGetParam(helper, 1);
+  LLVMBuildBr(helper_builder, loop);
+
+  LLVMPositionBuilderAtEnd(helper_builder, loop);
+  LLVMValueRef lhs_cursor = LLVMBuildPhi(helper_builder, ptr_type, "lhs");
+  LLVMValueRef rhs_cursor = LLVMBuildPhi(helper_builder, ptr_type, "rhs");
+  LLVMAddIncoming(lhs_cursor, &lhs_start, &entry, 1);
+  LLVMAddIncoming(rhs_cursor, &rhs_start, &entry, 1);
+  LLVMValueRef null_ptr = LLVMConstNull(ptr_type);
+  LLVMValueRef lhs_is_empty = LLVMBuildICmp(
+      helper_builder, LLVMIntEQ, lhs_cursor, null_ptr, "lhs.is_empty");
+  LLVMBuildCondBr(helper_builder, lhs_is_empty, lhs_empty, rhs_empty);
+
+  LLVMPositionBuilderAtEnd(helper_builder, lhs_empty);
+  LLVMValueRef rhs_also_empty = LLVMBuildICmp(
+      helper_builder, LLVMIntEQ, rhs_cursor, null_ptr, "rhs.is_empty");
+  LLVMBuildCondBr(helper_builder, rhs_also_empty, true_block, false_block);
+
+  LLVMPositionBuilderAtEnd(helper_builder, rhs_empty);
+  LLVMValueRef rhs_is_empty = LLVMBuildICmp(
+      helper_builder, LLVMIntEQ, rhs_cursor, null_ptr, "rhs.is_empty");
+  LLVMBuildCondBr(helper_builder, rhs_is_empty, false_block, compare);
+
+  LLVMPositionBuilderAtEnd(helper_builder, compare);
+  LLVMValueRef lhs_head_ptr = LLVMBuildStructGEP2(
+      helper_builder, node_type, lhs_cursor, 0, "lhs.head.ptr");
+  LLVMValueRef rhs_head_ptr = LLVMBuildStructGEP2(
+      helper_builder, node_type, rhs_cursor, 0, "rhs.head.ptr");
+  LLVMValueRef lhs_head =
+      LLVMBuildLoad2(helper_builder, element_type, lhs_head_ptr, "lhs.head");
+  LLVMValueRef rhs_head =
+      LLVMBuildLoad2(helper_builder, element_type, rhs_head_ptr, "rhs.head");
+  LLVMValueRef heads_equal = lower_mir_primitive_eq_value(
+      element_type_ref, lhs_head, rhs_head, helper_builder);
+  if (!heads_equal) {
+    LLVMDisposeBuilder(helper_builder);
+    return NULL;
+  }
+  LLVMBuildCondBr(helper_builder, heads_equal, advance, false_block);
+
+  LLVMPositionBuilderAtEnd(helper_builder, advance);
+  LLVMValueRef lhs_tail_ptr = LLVMBuildStructGEP2(
+      helper_builder, node_type, lhs_cursor, 1, "lhs.tail.ptr");
+  LLVMValueRef rhs_tail_ptr = LLVMBuildStructGEP2(
+      helper_builder, node_type, rhs_cursor, 1, "rhs.tail.ptr");
+  LLVMValueRef lhs_tail =
+      LLVMBuildLoad2(helper_builder, ptr_type, lhs_tail_ptr, "lhs.tail");
+  LLVMValueRef rhs_tail =
+      LLVMBuildLoad2(helper_builder, ptr_type, rhs_tail_ptr, "rhs.tail");
+  LLVMAddIncoming(lhs_cursor, &lhs_tail, &advance, 1);
+  LLVMAddIncoming(rhs_cursor, &rhs_tail, &advance, 1);
+  LLVMBuildBr(helper_builder, loop);
+
+  LLVMPositionBuilderAtEnd(helper_builder, true_block);
+  LLVMBuildRet(helper_builder, LLVMConstInt(i1_type, 1, false));
+
+  LLVMPositionBuilderAtEnd(helper_builder, false_block);
+  LLVMBuildRet(helper_builder, LLVMConstInt(i1_type, 0, false));
+
+  LLVMDisposeBuilder(helper_builder);
+  return helper;
+}
+
+static LLVMValueRef
+lower_mir_builtin_list_eq_call(MirFunction *fn, MirInstr *instr,
+                               MirLlvmValueMap *values, LLVMModuleRef module,
+                               LLVMBuilderRef builder, JITLangCtx *ctx) {
+  if (!fn || !instr || !instr->data.call.builtin || !values ||
+      instr->data.call.operands.len != 2) {
+    return NULL;
+  }
+
+  const char *name = instr->data.call.builtin->name;
+  bool negate = false;
+  if (name && strcmp(name, "!=") == 0) {
+    negate = true;
+  } else if (!name || strcmp(name, "==") != 0) {
+    return NULL;
+  }
+
+  MirValueId lhs_id = instr->data.call.operands.items[0];
+  MirValueId rhs_id = instr->data.call.operands.items[1];
+  Type *lhs_type = mir_function_value_type(fn, lhs_id);
+  Type *rhs_type = mir_function_value_type(fn, rhs_id);
+  if (!is_list_type(lhs_type) || !is_list_type(rhs_type) ||
+      !types_equal(type_of_list(lhs_type), type_of_list(rhs_type))) {
+    return NULL;
+  }
+
+  LLVMValueRef helper = lower_mir_get_list_eq_helper(lhs_type, module, ctx);
+  LLVMValueRef lhs = mir_llvm_value_get_rvalue(values, lhs_id, builder);
+  LLVMValueRef rhs = mir_llvm_value_get_rvalue(values, rhs_id, builder);
+  if (!helper || !lhs || !rhs) {
+    return NULL;
+  }
+
+  LLVMValueRef args[] = {lhs, rhs};
+  LLVMValueRef result = LLVMBuildCall2(builder, LLVMGlobalGetValueType(helper),
+                                       helper, args, 2, "list.eq");
+  return negate ? LLVMBuildNot(builder, result, "list.neq") : result;
+}
+
+static LLVMValueRef
+lower_mir_builtin_array_eq_call(MirFunction *fn, MirInstr *instr,
+                                MirLlvmValueMap *values, LLVMModuleRef module,
+                                LLVMBuilderRef builder, JITLangCtx *ctx) {
+  if (!fn || !instr || !instr->data.call.builtin || !values ||
+      instr->data.call.operands.len != 2) {
+    return NULL;
+  }
+
+  const char *name = instr->data.call.builtin->name;
+  bool negate = false;
+  if (name && strcmp(name, "!=") == 0) {
+    negate = true;
+  } else if (!name || strcmp(name, "==") != 0) {
+    return NULL;
+  }
+
+  MirValueId lhs_id = instr->data.call.operands.items[0];
+  MirValueId rhs_id = instr->data.call.operands.items[1];
+  Type *lhs_type = mir_function_value_type(fn, lhs_id);
+  Type *rhs_type = mir_function_value_type(fn, rhs_id);
+  if (!is_array_type(lhs_type) || !is_array_type(rhs_type) ||
+      !lhs_type->data.T_CONS.args || lhs_type->data.T_CONS.num_args < 1 ||
+      !rhs_type->data.T_CONS.args || rhs_type->data.T_CONS.num_args < 1 ||
+      !types_equal(lhs_type->data.T_CONS.args[0],
+                   rhs_type->data.T_CONS.args[0])) {
+    return NULL;
+  }
+
+  Type *element_type_ref = lhs_type->data.T_CONS.args[0];
+  LLVMTypeRef element_type =
+      lower_mir_value_storage_type(element_type_ref, ctx, module);
+  LLVMValueRef lhs = mir_llvm_value_get_rvalue(values, lhs_id, builder);
+  LLVMValueRef rhs = mir_llvm_value_get_rvalue(values, rhs_id, builder);
+  if (!element_type || !lhs || !rhs) {
+    return NULL;
+  }
+
+  LLVMValueRef lhs_size = codegen_get_array_size(builder, lhs, element_type);
+  LLVMValueRef rhs_size = codegen_get_array_size(builder, rhs, element_type);
+  if (!lhs_size || !rhs_size) {
+    return NULL;
+  }
+
+  LLVMValueRef sizes_equal =
+      LLVMBuildICmp(builder, LLVMIntEQ, lhs_size, rhs_size, "array.sizes.eq");
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMValueRef parent = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+  LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
+  LLVMBasicBlockRef loop_block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, parent, "array.eq.loop");
+  LLVMBasicBlockRef compare_block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, parent, "array.eq.compare");
+  LLVMBasicBlockRef advance_block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, parent, "array.eq.advance");
+  LLVMBasicBlockRef true_block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, parent, "array.eq.true");
+  LLVMBasicBlockRef false_block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, parent, "array.eq.false");
+  LLVMBasicBlockRef merge_block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, parent, "array.eq.merge");
+
+  LLVMBuildCondBr(builder, sizes_equal, loop_block, false_block);
+
+  LLVMPositionBuilderAtEnd(builder, loop_block);
+  LLVMValueRef zero = LLVMConstInt(LLVMTypeOf(lhs_size), 0, false);
+  LLVMValueRef index = LLVMBuildPhi(builder, LLVMTypeOf(lhs_size), "array.idx");
+  LLVMAddIncoming(index, &zero, &entry_block, 1);
+  LLVMValueRef done =
+      LLVMBuildICmp(builder, LLVMIntEQ, index, lhs_size, "array.eq.done");
+  LLVMBuildCondBr(builder, done, true_block, compare_block);
+
+  LLVMPositionBuilderAtEnd(builder, compare_block);
+  LLVMValueRef lhs_element =
+      get_array_element(builder, lhs, index, element_type);
+  LLVMValueRef rhs_element =
+      get_array_element(builder, rhs, index, element_type);
+  LLVMValueRef elements_equal = lower_mir_primitive_eq_value(
+      element_type_ref, lhs_element, rhs_element, builder);
+  if (!elements_equal) {
+    return NULL;
+  }
+  LLVMBuildCondBr(builder, elements_equal, advance_block, false_block);
+
+  LLVMPositionBuilderAtEnd(builder, advance_block);
+  LLVMValueRef one = LLVMConstInt(LLVMTypeOf(lhs_size), 1, false);
+  LLVMValueRef next = LLVMBuildAdd(builder, index, one, "array.idx.next");
+  LLVMAddIncoming(index, &next, &advance_block, 1);
+  LLVMBuildBr(builder, loop_block);
+
+  LLVMPositionBuilderAtEnd(builder, true_block);
+  LLVMBuildBr(builder, merge_block);
+
+  LLVMPositionBuilderAtEnd(builder, false_block);
+  LLVMBuildBr(builder, merge_block);
+
+  LLVMPositionBuilderAtEnd(builder, merge_block);
+  LLVMTypeRef i1_type = LLVMInt1TypeInContext(llvm_ctx);
+  LLVMValueRef result = LLVMBuildPhi(builder, i1_type, "array.eq");
+  LLVMValueRef true_value = LLVMConstInt(i1_type, 1, false);
+  LLVMValueRef false_value = LLVMConstInt(i1_type, 0, false);
+  LLVMValueRef incoming_values[] = {true_value, false_value};
+  LLVMBasicBlockRef incoming_blocks[] = {true_block, false_block};
+  LLVMAddIncoming(result, incoming_values, incoming_blocks, 2);
+
+  return negate ? LLVMBuildNot(builder, result, "array.neq") : result;
+}
+
 static LLVMValueRef lower_mir_variant_tag(MirInstr *instr,
                                           MirLlvmValueMap *values,
                                           LLVMBuilderRef builder) {
@@ -1030,9 +1966,8 @@ static LLVMValueRef lower_mir_tag_eq(MirInstr *instr, MirLlvmValueMap *values,
     return NULL;
   }
 
-  LLVMValueRef expected =
-      LLVMConstInt(LLVMTypeOf(tag),
-                   (uint64_t)instr->data.op.constructor_index, false);
+  LLVMValueRef expected = LLVMConstInt(
+      LLVMTypeOf(tag), (uint64_t)instr->data.op.constructor_index, false);
   return LLVMBuildICmp(builder, LLVMIntEQ, tag, expected, "tag.eq");
 }
 
@@ -1045,8 +1980,8 @@ static LLVMValueRef lower_mir_variant_payload(MirInstr *instr,
     return NULL;
   }
 
-  LLVMValueRef value = mir_llvm_value_get_rvalue(
-      values, instr->data.extract.value, builder);
+  LLVMValueRef value =
+      mir_llvm_value_get_rvalue(values, instr->data.extract.value, builder);
   if (!value) {
     return NULL;
   }
@@ -1054,8 +1989,8 @@ static LLVMValueRef lower_mir_variant_payload(MirInstr *instr,
   LLVMTypeRef value_type = LLVMTypeOf(value);
   if (LLVMGetTypeKind(value_type) == LLVMStructTypeKind &&
       LLVMCountStructElementTypes(value_type) > 1) {
-    LLVMValueRef payload = LLVMBuildExtractValue(builder, value, 1,
-                                                 "variant.payload.raw");
+    LLVMValueRef payload =
+        LLVMBuildExtractValue(builder, value, 1, "variant.payload.raw");
     Type *payload_type = instr->type;
 
     LLVMTypeRef payload_llvm_type =
@@ -1085,8 +2020,8 @@ static LLVMValueRef lower_mir_primitive_cast(MirInstr *instr,
                                              LLVMModuleRef module,
                                              LLVMBuilderRef builder,
                                              JITLangCtx *ctx) {
-  LLVMValueRef value = mir_llvm_value_get_rvalue(
-      values, instr->data.op.operands[0], builder);
+  LLVMValueRef value =
+      mir_llvm_value_get_rvalue(values, instr->data.op.operands[0], builder);
   Type *from_type = instr->data.op.from_type;
   Type *to_type = instr->data.op.to_type;
   if (!value || !from_type || !to_type) {
@@ -1145,7 +2080,8 @@ static LLVMValueRef lower_mir_primitive_cast(MirInstr *instr,
   return NULL;
 }
 
-static LLVMValueRef lower_mir_primitive(MirInstr *instr, MirLlvmValueMap *values,
+static LLVMValueRef lower_mir_primitive(MirInstr *instr,
+                                        MirLlvmValueMap *values,
                                         LLVMBuilderRef builder) {
   if (!instr || instr->kind != MIR_OP ||
       instr->data.op.kind != MIR_OP_KIND_PRIMITIVE) {
@@ -1156,18 +2092,18 @@ static LLVMValueRef lower_mir_primitive(MirInstr *instr, MirLlvmValueMap *values
     if (instr->data.op.argc != 1) {
       return NULL;
     }
-    LLVMValueRef value = mir_llvm_value_get_rvalue(
-        values, instr->data.op.operands[0], builder);
+    LLVMValueRef value =
+        mir_llvm_value_get_rvalue(values, instr->data.op.operands[0], builder);
     return value ? LLVMBuildNot(builder, value, "not") : NULL;
   }
 
   if (instr->data.op.argc != 2) {
     return NULL;
   }
-  LLVMValueRef lhs = mir_llvm_value_get_rvalue(
-      values, instr->data.op.operands[0], builder);
-  LLVMValueRef rhs = mir_llvm_value_get_rvalue(
-      values, instr->data.op.operands[1], builder);
+  LLVMValueRef lhs =
+      mir_llvm_value_get_rvalue(values, instr->data.op.operands[0], builder);
+  LLVMValueRef rhs =
+      mir_llvm_value_get_rvalue(values, instr->data.op.operands[1], builder);
   if (!lhs || !rhs) {
     return NULL;
   }
@@ -1300,9 +2236,8 @@ static LLVMValueRef lower_mir_extract_field(MirFunction *fn, MirInstr *instr,
 
   LLVMTypeRef source_type = LLVMTypeOf(source);
   if (LLVMGetTypeKind(source_type) == LLVMStructTypeKind) {
-    return LLVMBuildExtractValue(builder, source,
-                                 (unsigned)instr->data.extract.index,
-                                 "extract.field");
+    return LLVMBuildExtractValue(
+        builder, source, (unsigned)instr->data.extract.index, "extract.field");
   }
 
   if (LLVMGetTypeKind(source_type) != LLVMPointerTypeKind) {
@@ -1323,19 +2258,16 @@ static LLVMValueRef lower_mir_extract_field(MirFunction *fn, MirInstr *instr,
                               "extract.field.container.cast");
   }
 
-  LLVMValueRef field_ptr =
-      LLVMBuildStructGEP2(builder, record_type, source,
-                          (unsigned)instr->data.extract.index,
-                          "extract.field.ptr");
+  LLVMValueRef field_ptr = LLVMBuildStructGEP2(
+      builder, record_type, source, (unsigned)instr->data.extract.index,
+      "extract.field.ptr");
   return LLVMBuildLoad2(builder, field_type, field_ptr, "extract.field");
 }
 
-static LLVMTypeRef lower_mir_indirect_call_type(MirFunction *fn,
-                                                MirInstr *instr,
-                                                Type *callee_type,
-                                                Type *result_type,
-                                                JITLangCtx *ctx,
-                                                LLVMModuleRef module) {
+static LLVMTypeRef
+lower_mir_indirect_call_type(MirFunction *fn, MirInstr *instr,
+                             Type *callee_type, Type *result_type,
+                             JITLangCtx *ctx, LLVMModuleRef module) {
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
   LLVMTypeRef ret_type = lower_mir_abi_value_type(
       result_type, ctx, module, LLVMVoidTypeInContext(llvm_ctx));
@@ -1359,8 +2291,8 @@ static LLVMTypeRef lower_mir_indirect_call_type(MirFunction *fn,
     Type *param_type = cursor->data.T_FN.from;
     MirValueId operand = instr->data.call.operands.items[operand_index++];
     if (param_type && param_type->kind != T_VOID) {
-      param_types[param_count] = lower_mir_call_operand_abi_type(
-          fn, operand, param_type, ctx, module);
+      param_types[param_count] =
+          lower_mir_call_operand_abi_type(fn, operand, param_type, ctx, module);
       if (!param_types[param_count]) {
         free(param_types);
         return NULL;
@@ -1389,6 +2321,27 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
     return NULL;
   }
 
+  LLVMValueRef builtin_result =
+      lower_mir_builtin_logical_call(fn, instr, values, builder);
+  if (builtin_result) {
+    return builtin_result;
+  }
+  builtin_result = lower_mir_builtin_scalar_eq_call(fn, instr, values, module,
+                                                    builder, &lctx->jit_ctx);
+  if (builtin_result) {
+    return builtin_result;
+  }
+  builtin_result = lower_mir_builtin_list_eq_call(fn, instr, values, module,
+                                                  builder, &lctx->jit_ctx);
+  if (builtin_result) {
+    return builtin_result;
+  }
+  builtin_result = lower_mir_builtin_array_eq_call(fn, instr, values, module,
+                                                   builder, &lctx->jit_ctx);
+  if (builtin_result) {
+    return builtin_result;
+  }
+
   LLVMValueRef callee = NULL;
   LLVMTypeRef callee_type = NULL;
 
@@ -1399,9 +2352,8 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
   }
 
   if (!callee && instr->data.call.specialized_name) {
-    MirFunction *specialized =
-        lower_mir_find_function_by_name(lctx->program,
-                                        instr->data.call.specialized_name);
+    MirFunction *specialized = lower_mir_find_function_by_name(
+        lctx->program, instr->data.call.specialized_name);
     if (specialized && specialized->id < lctx->functions_len) {
       callee = lctx->functions[specialized->id];
       callee_type = lctx->function_types[specialized->id];
@@ -1428,6 +2380,13 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
       }
       callee = lctx->functions[callee_def->data.fn_ref.fn];
       callee_type = lctx->function_types[callee_def->data.fn_ref.fn];
+      if (!callee && target) {
+        callee = LLVMGetNamedFunction(
+            module, lower_mir_function_symbol_name(lctx, target));
+      }
+      if (!callee_type && target) {
+        callee_type = lower_mir_function_type(target, &lctx->jit_ctx, module);
+      }
     }
   }
 
@@ -1437,7 +2396,8 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
   }
 
   if (!callee) {
-    fprintf(stderr, "MIR to LLVM lowering could not resolve call callee in %s\n",
+    fprintf(stderr,
+            "MIR to LLVM lowering could not resolve call callee in %s\n",
             fn && fn->name ? fn->name : "<anonymous>");
     return NULL;
   }
@@ -1475,9 +2435,9 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
   }
 
   if (!callee_type) {
-    callee_type = lower_mir_indirect_call_type(
-        fn, instr, instr->data.call.callee_type, instr->type, &lctx->jit_ctx,
-        module);
+    callee_type =
+        lower_mir_indirect_call_type(fn, instr, instr->data.call.callee_type,
+                                     instr->type, &lctx->jit_ctx, module);
   }
 
   if (!callee_type) {
@@ -1493,8 +2453,7 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
 }
 
 static LLVMValueRef lower_mir_phi(MirInstr *instr, LLVMModuleRef module,
-                                  JITLangCtx *ctx,
-                                  LLVMBuilderRef builder) {
+                                  JITLangCtx *ctx, LLVMBuilderRef builder) {
   if (!instr || !instr->type) {
     return NULL;
   }
@@ -1525,7 +2484,8 @@ static LLVMValueRef lower_mir_closure_env(MirFunction *fn, MirInstr *instr,
   LLVMValueRef env =
       lower_mir_value_allocates_on_stack(fn, instr->result)
           ? LLVMBuildAlloca(builder, record_type, "closure.env.stack")
-          : LLVMBuildMalloc(builder, record_type, "closure.env");
+          : lower_mir_heap_alloc_payload(module, builder, record_type,
+                                         "closure.env");
   if (!env) {
     return NULL;
   }
@@ -1538,8 +2498,8 @@ static LLVMValueRef lower_mir_closure_env(MirFunction *fn, MirInstr *instr,
     }
 
     Type *field_type = NULL;
-    if (instr->type && (instr->type->kind == T_CONS ||
-                        instr->type->kind == T_SUM) &&
+    if (instr->type &&
+        (instr->type->kind == T_CONS || instr->type->kind == T_SUM) &&
         instr->type->data.T_CONS.args &&
         i < (size_t)instr->type->data.T_CONS.num_args) {
       field_type = instr->type->data.T_CONS.args[i];
@@ -1563,8 +2523,7 @@ static LLVMValueRef lower_mir_closure_env(MirFunction *fn, MirInstr *instr,
 
 static LLVMValueRef lower_mir_closure(MirInstr *instr, MirLlvmValueMap *values,
                                       LLVMModuleRef module,
-                                      LLVMBuilderRef builder,
-                                      JITLangCtx *ctx) {
+                                      LLVMBuilderRef builder, JITLangCtx *ctx) {
   if (!instr || !values) {
     return NULL;
   }
@@ -1574,10 +2533,10 @@ static LLVMValueRef lower_mir_closure(MirInstr *instr, MirLlvmValueMap *values,
     return NULL;
   }
 
-  LLVMValueRef fn =
-      mir_llvm_value_get_rvalue(values, instr->data.construct.operands[0], builder);
-  LLVMValueRef env =
-      mir_llvm_value_get_rvalue(values, instr->data.construct.operands[1], builder);
+  LLVMValueRef fn = mir_llvm_value_get_rvalue(
+      values, instr->data.construct.operands[0], builder);
+  LLVMValueRef env = mir_llvm_value_get_rvalue(
+      values, instr->data.construct.operands[1], builder);
   if (!fn || !env) {
     return NULL;
   }
@@ -1624,8 +2583,7 @@ static LLVMValueRef lower_mir_closure_env_part(MirInstr *instr,
     return NULL;
   }
 
-  LLVMValueRef env =
-      LLVMBuildExtractValue(builder, closure, 1, "closure.env");
+  LLVMValueRef env = LLVMBuildExtractValue(builder, closure, 1, "closure.env");
   LLVMTypeRef env_ptr_type =
       lower_mir_closure_env_ptr_type(instr->type, ctx, module);
   if (env_ptr_type && LLVMTypeOf(env) != env_ptr_type) {
@@ -1637,8 +2595,7 @@ static LLVMValueRef lower_mir_closure_env_part(MirInstr *instr,
 static LLVMValueRef lower_mir_extract(MirFunction *fn, MirInstr *instr,
                                       MirLlvmValueMap *values,
                                       LLVMModuleRef module,
-                                      LLVMBuilderRef builder,
-                                      JITLangCtx *ctx) {
+                                      LLVMBuilderRef builder, JITLangCtx *ctx) {
   if (!instr || instr->kind != MIR_EXTRACT) {
     return NULL;
   }
@@ -1661,8 +2618,9 @@ static LLVMValueRef lower_mir_extract(MirFunction *fn, MirInstr *instr,
   case MIR_EXTRACT_CLOSURE_ENV:
     return lower_mir_closure_env_part(instr, values, module, builder, ctx);
   case MIR_EXTRACT_ARRAY_SUCC:
+    return lower_mir_array_succ(fn, instr, values, module, builder, ctx);
   case MIR_EXTRACT_ARRAY_OFFSET:
-    return NULL;
+    return lower_mir_array_offset(fn, instr, values, module, builder, ctx);
   }
 
   return NULL;
@@ -1693,9 +2651,13 @@ static LLVMValueRef lower_mir_construct(MirFunction *fn, MirInstr *instr,
   case MIR_CONSTRUCT_CLOSURE:
     return lower_mir_closure(instr, values, module, builder, ctx);
   case MIR_CONSTRUCT_ARRAY_FILL_CONST:
+    return lower_mir_array_fill_data(fn, instr, values, module, builder, ctx,
+                                     false);
   case MIR_CONSTRUCT_ARRAY_FILL:
+    return lower_mir_array_fill_data(fn, instr, values, module, builder, ctx,
+                                     true);
   case MIR_CONSTRUCT_ARRAY_RANGE:
-    return NULL;
+    return lower_mir_array_range(fn, instr, values, module, builder, ctx);
   }
 
   return NULL;
@@ -1733,8 +2695,8 @@ static LLVMValueRef lower_mir_rc_managed_ptr(MirFunction *fn, MirInstr *instr,
   }
 
   Type *type = mir_function_value_type(fn, value_id);
-  if (type && (is_array_type(type) || is_string_type(type) ||
-               is_closure(type))) {
+  if (type &&
+      (is_array_type(type) || is_string_type(type) || is_closure(type))) {
     value = LLVMBuildExtractValue(builder, value, 1, "rc.payload");
   }
 
@@ -1794,6 +2756,8 @@ static LLVMValueRef lower_mir_op(MirFunction *fn, MirInstr *instr,
     return lower_mir_array_size(fn, instr, values, module, builder, ctx);
   case MIR_OP_KIND_ARRAY_SET:
     return lower_mir_array_set(fn, instr, values, module, builder, ctx);
+  case MIR_OP_KIND_SIZEOF:
+    return lower_mir_sizeof(instr, module, ctx);
   case MIR_OP_KIND_LIST_IS_EMPTY:
     return lower_mir_list_is_empty(fn, instr, values, builder);
   case MIR_OP_KIND_TAG_EQ:
@@ -1812,7 +2776,7 @@ static LLVMValueRef lower_mir_instr(MirInstr *instr, MirLlvmValueMap *values,
                                     LLVMBuilderRef builder, JITLangCtx *ctx) {
   switch (instr->kind) {
   case MIR_CONST:
-    return lower_mir_const(instr, module, ctx);
+    return lower_mir_const(fn, instr, module, builder, ctx);
 
   case MIR_OP:
     return lower_mir_op(fn, instr, values, lctx, module, builder, ctx);
@@ -1831,6 +2795,13 @@ static LLVMValueRef lower_mir_instr(MirInstr *instr, MirLlvmValueMap *values,
 
   case MIR_CALL:
     return lower_mir_call(fn, instr, values, lctx, module, builder);
+
+  case MIR_CORO_NEW:
+    fprintf(stderr,
+            "MIR to LLVM lowering does not support coroutine constructor "
+            "application in %s yet\n",
+            fn && fn->name ? fn->name : "<anonymous>");
+    return NULL;
 
   default:
     fprintf(stderr,
@@ -1887,6 +2858,22 @@ static bool lower_mir_terminator(MirFunction *fn, MirTerminator *term,
     LLVMBuildCondBr(builder, cond, then_block, else_block);
     return true;
   }
+  case MIR_TERM_YIELD: {
+    (void)builder;
+    fprintf(stderr,
+            "MIR to LLVM lowering does not support yield terminator in %s "
+            "yet\n",
+            fn && fn->name ? fn->name : "<anonymous>");
+    return false;
+  }
+  case MIR_TERM_CORO_RESTART: {
+    (void)builder;
+    fprintf(stderr,
+            "MIR to LLVM lowering does not support coroutine restart "
+            "terminator in %s yet\n",
+            fn && fn->name ? fn->name : "<anonymous>");
+    return false;
+  }
   case MIR_TERM_UNREACHABLE:
     LLVMBuildUnreachable(builder);
     return true;
@@ -1915,6 +2902,18 @@ static size_t lower_mir_terminator_successors(MirTerminator *term,
 
   switch (term->kind) {
   case MIR_TERM_BR:
+    if (term->target == MIR_NO_BLOCK) {
+      return 0;
+    }
+    out[0] = term->target;
+    return 1;
+  case MIR_TERM_YIELD:
+    if (term->target == MIR_NO_BLOCK) {
+      return 0;
+    }
+    out[0] = term->target;
+    return 1;
+  case MIR_TERM_CORO_RESTART:
     if (term->target == MIR_NO_BLOCK) {
       return 0;
     }
@@ -1964,6 +2963,11 @@ static bool lower_mir_block_body(MirLlvmCtx *lctx, MirFunction *fn,
     LLVMValueRef value = lower_mir_instr(instr, values, fn, lctx, module,
                                          builder, &lctx->jit_ctx);
     if (!value || !mir_llvm_value_set(values, instr->result, value)) {
+      fprintf(stderr,
+              "MIR to LLVM lowering failed instruction kind %d result %u in "
+              "%s bb%u\n",
+              instr->kind, instr->result,
+              fn && fn->name ? fn->name : "<anonymous>", mir_block->id);
       return false;
     }
   }
@@ -1972,6 +2976,9 @@ static bool lower_mir_block_body(MirLlvmCtx *lctx, MirFunction *fn,
   if (!lower_mir_terminator(fn, &mir_block->term, values, blocks, ret_type,
                             builder)) {
     return false;
+  }
+  if (blocks->exits && block_id < blocks->len) {
+    blocks->exits[block_id] = LLVMGetInsertBlock(builder);
   }
 
   MirBlockId successors[2] = {MIR_NO_BLOCK, MIR_NO_BLOCK};
@@ -2000,7 +3007,9 @@ static LLVMValueRef lower_mir_phi_incoming_value(MirLlvmValueMap *values,
   if (values->slots && values->slots[incoming.value]) {
     LLVMTypeRef type =
         values->slot_types ? values->slot_types[incoming.value] : NULL;
-    LLVMBasicBlockRef block = blocks->items[incoming.block];
+    LLVMBasicBlockRef block = blocks->exits && blocks->exits[incoming.block]
+                                  ? blocks->exits[incoming.block]
+                                  : blocks->items[incoming.block];
     if (!type || !block) {
       return NULL;
     }
@@ -2053,7 +3062,10 @@ static bool lower_mir_add_phi_incomings(MirFunction *fn,
           return false;
         }
 
-        LLVMBasicBlockRef incoming_block = blocks->items[incoming.block];
+        LLVMBasicBlockRef incoming_block =
+            blocks->exits && blocks->exits[incoming.block]
+                ? blocks->exits[incoming.block]
+                : blocks->items[incoming.block];
         LLVMValueRef incoming_value =
             lower_mir_phi_incoming_value(values, blocks, incoming, builder);
         if (!incoming_block || !incoming_value) {
@@ -2071,6 +3083,10 @@ static bool lower_mir_add_phi_incomings(MirFunction *fn,
 static bool lower_mir_function_body(MirLlvmCtx *lctx, MirFunction *fn,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
+  if (fn && (fn->is_extern || fn->blocks.len == 0)) {
+    return true;
+  }
+
   if (!lctx || !fn || fn->id >= lctx->functions_len ||
       !lctx->functions[fn->id] || !lctx->function_types[fn->id]) {
     return false;
@@ -2097,15 +3113,17 @@ static bool lower_mir_function_body(MirLlvmCtx *lctx, MirFunction *fn,
   };
   MirLlvmBlockMap blocks = {
       .items = calloc(fn->blocks.len, sizeof(LLVMBasicBlockRef)),
+      .exits = calloc(fn->blocks.len, sizeof(LLVMBasicBlockRef)),
       .len = fn->blocks.len,
   };
   bool *visited = calloc(fn->blocks.len, sizeof(bool));
   if (!values.items || !values.slots || !values.slot_types || !blocks.items ||
-      !visited) {
+      !blocks.exits || !visited) {
     free(values.items);
     free(values.slots);
     free(values.slot_types);
     free(blocks.items);
+    free(blocks.exits);
     free(visited);
     return false;
   }
@@ -2153,6 +3171,7 @@ static bool lower_mir_function_body(MirLlvmCtx *lctx, MirFunction *fn,
   free(values.slots);
   free(values.slot_types);
   free(blocks.items);
+  free(blocks.exits);
   free(visited);
   if (!ok) {
     LLVMDeleteFunction(llvm_fn);
@@ -2208,7 +3227,8 @@ LLVMValueRef lower_mir(MirProgram *prog, LLVMModuleRef module,
     if (!fn || !lctx.functions[fn->id]) {
       continue;
     }
-    if (lower_mir_type_has_unresolved_vars(fn->type)) {
+    if (fn->is_extern || fn->blocks.len == 0 ||
+        lower_mir_type_has_unresolved_vars(fn->type)) {
       continue;
     }
 

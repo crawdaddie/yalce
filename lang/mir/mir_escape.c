@@ -485,6 +485,10 @@ static void mir_escape_state_destroy(MirEscapeState *state) {
 static bool mir_escape_analyze_function(MirFunction *fn,
                                         MirEscapeProgramCtx *program_ctx,
                                         MirEscapeState *state) {
+  if (!fn || fn->is_extern || fn->blocks.len == 0) {
+    return false;
+  }
+
   if (!mir_escape_state_init(fn, state)) {
     return false;
   }
@@ -520,6 +524,10 @@ static bool mir_escape_analyze_function(MirFunction *fn,
 }
 
 void mir_escape_analysis_function(MirFunction *fn) {
+  if (!fn || fn->is_extern || fn->blocks.len == 0) {
+    return;
+  }
+
   MirEscapeState state = {0};
   if (!mir_escape_analyze_function(fn, NULL, &state)) {
     return;
@@ -616,6 +624,9 @@ static bool mir_escape_compute_program_summaries(MirProgram *program,
       if (!fn || fn->id >= ctx->functions_len) {
         continue;
       }
+      if (fn->is_extern || fn->blocks.len == 0) {
+        continue;
+      }
 
       MirEscapeState state = {0};
       if (!mir_escape_analyze_function(fn, ctx, &state)) {
@@ -647,6 +658,10 @@ void mir_escape_analysis(MirProgram *program) {
 
   for (size_t i = 0; i < program->functions.len; i++) {
     MirFunction *fn = program->functions.items[i];
+    if (!fn || fn->is_extern || fn->blocks.len == 0) {
+      continue;
+    }
+
     MirEscapeState state = {0};
     if (!mir_escape_analyze_function(fn, &ctx, &state)) {
       continue;
