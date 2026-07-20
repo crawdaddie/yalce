@@ -87,7 +87,8 @@ static size_t mir_perceus_term_successors(MirTerminator *term,
 
 static bool mir_perceus_is_managed_type(Type *type) {
   return type && (is_array_type(type) || is_list_type(type) ||
-                  is_string_type(type) || is_closure(type));
+                  is_string_type(type) || is_closure(type) ||
+                  is_coroutine_type(type));
 }
 
 static bool mir_perceus_is_stack_alloc(MirFunction *fn, MirValueId value) {
@@ -167,14 +168,25 @@ static MirValueId mir_perceus_borrow_parent_for_instr(MirInstr *instr) {
   }
 
   switch (instr->kind) {
+  case MIR_CONSTRUCT:
+    if (instr->data.construct.kind == MIR_CONSTRUCT_TUPLE &&
+        is_array_type(instr->type) && instr->data.construct.items.len > 1) {
+      return instr->data.construct.items.items[1];
+    }
+    return MIR_NO_VALUE;
   case MIR_EXTRACT:
     return instr->data.extract.kind == MIR_EXTRACT_VARIANT_TAG
                ? MIR_NO_VALUE
                : instr->data.extract.value;
   case MIR_OP:
-    return instr->data.op.kind == MIR_OP_KIND_ARRAY_SET
-               ? instr->data.op.operands[0]
-               : MIR_NO_VALUE;
+    switch (instr->data.op.kind) {
+    case MIR_OP_KIND_ARRAY_SET:
+    case MIR_OP_KIND_PTR_OFFSET:
+    case MIR_OP_KIND_LOAD:
+      return instr->data.op.operands[0];
+    default:
+      return MIR_NO_VALUE;
+    }
   default:
     return MIR_NO_VALUE;
   }
@@ -568,6 +580,39 @@ static MirValueId mir_perceus_emit_array_set_old_slot_load(
   return old_slot.result;
 }
 
+static Type *mir_perceus_pointer_pointee_type(MirFunction *fn,
+                                              MirValueId ptr) {
+  Type *ptr_type = mir_function_value_type(fn, ptr);
+  if (!ptr_type || !is_pointer_type(ptr_type) || !ptr_type->data.T_CONS.args ||
+      ptr_type->data.T_CONS.num_args < 1) {
+    return NULL;
+  }
+  return ptr_type->data.T_CONS.args[0];
+}
+
+static MirValueId mir_perceus_emit_store_old_slot_load(MirFunction *fn,
+                                                       MirInstrVec *out,
+                                                       MirInstr *instr) {
+  if (!fn || !out || !instr || instr->kind != MIR_OP ||
+      instr->data.op.kind != MIR_OP_KIND_STORE || instr->data.op.argc < 2) {
+    return MIR_NO_VALUE;
+  }
+
+  Type *element_type =
+      mir_perceus_pointer_pointee_type(fn, instr->data.op.operands[0]);
+  if (!mir_perceus_is_managed_type(element_type)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr old_slot = mir_make_instr(MIR_OP, element_type, instr->origin);
+  old_slot.data.op.kind = MIR_OP_KIND_LOAD_OWNED;
+  old_slot.data.op.argc = 1;
+  old_slot.data.op.operands[0] = instr->data.op.operands[0];
+  old_slot.result = mir_function_add_value(fn, element_type, instr->origin);
+  mir_instr_vec_push(fn->arena, out, old_slot);
+  return old_slot.result;
+}
+
 static void mir_perceus_process_use(MirFunction *fn, MirInstrVec *out,
                                     uint32_t *remaining, size_t value_limit,
                                     const MirValueId *borrow_parent,
@@ -605,10 +650,14 @@ static bool mir_perceus_extraction_borrows_result(MirInstr *instr) {
   }
 
   switch (instr->kind) {
+  case MIR_CONSTRUCT:
+    return instr->data.construct.kind == MIR_CONSTRUCT_TUPLE &&
+           is_array_type(instr->type);
   case MIR_EXTRACT:
     return instr->data.extract.kind != MIR_EXTRACT_VARIANT_TAG;
   case MIR_OP:
-    return instr->data.op.kind == MIR_OP_KIND_ARRAY_SET;
+    return instr->data.op.kind == MIR_OP_KIND_ARRAY_SET ||
+           instr->data.op.kind == MIR_OP_KIND_LOAD;
   default:
     return false;
   }
@@ -962,6 +1011,8 @@ static void mir_perceus_instrument_function(MirFunction *fn) {
                                      instr);
       MirValueId old_array_slot =
           mir_perceus_emit_array_set_old_slot_load(fn, &block->instrs, instr);
+      MirValueId old_store_slot =
+          mir_perceus_emit_store_old_slot_load(fn, &block->instrs, instr);
       mir_instr_vec_push(fn->arena, &block->instrs, *instr);
       mir_perceus_own_extracted_result(fn, &block->instrs, instr, remaining,
                                        original_values_len,
@@ -971,6 +1022,8 @@ static void mir_perceus_instrument_function(MirFunction *fn) {
                                        liveness.borrow_parent, live_out);
       mir_perceus_emit_marker(fn, &block->instrs, MIR_OP_KIND_DROP,
                               old_array_slot, instr->origin);
+      mir_perceus_emit_marker(fn, &block->instrs, MIR_OP_KIND_DROP,
+                              old_store_slot, instr->origin);
       mir_perceus_emit_post_releases(fn, &block->instrs, &post_releases,
                                      instr->origin);
     }

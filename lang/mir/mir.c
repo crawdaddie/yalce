@@ -590,6 +590,42 @@ static MirFunction *mir_program_find_function_by_name(MirProgram *program,
   return NULL;
 }
 
+static MirFunction *mir_program_find_scoped_function(MirProgram *program,
+                                                     MirFunction *scope_fn,
+                                                     const char *name) {
+  if (!program || !program->arena || !scope_fn || !scope_fn->name || !name) {
+    return NULL;
+  }
+
+  const char *scope_name = scope_fn->name;
+  const char *end = scope_name + strlen(scope_name);
+  while (end > scope_name) {
+    const char *dot = end;
+    while (dot > scope_name && dot[-1] != '.') {
+      dot--;
+    }
+    if (dot == scope_name) {
+      break;
+    }
+
+    dot--;
+    size_t prefix_len = (size_t)(dot - scope_name);
+    if (prefix_len == 0) {
+      break;
+    }
+
+    const char *candidate = mir_arena_printf(program->arena, "%.*s.%s",
+                                             (int)prefix_len, scope_name, name);
+    MirFunction *fn = mir_program_find_function_by_name(program, candidate);
+    if (fn) {
+      return fn;
+    }
+    end = dot;
+  }
+
+  return NULL;
+}
+
 static MirModule *mir_program_get_module(MirProgram *program, MirModuleId id) {
   if (!program || id == MIR_NO_MODULE || id >= program->modules.len) {
     return NULL;
@@ -1019,7 +1055,8 @@ static MirOperand mir_make_operand(MirValueId value, MirOperandRole role,
 }
 
 static bool mir_instr_is_call_like(const MirInstr *instr) {
-  return instr && (instr->kind == MIR_CALL || instr->kind == MIR_CORO_NEW);
+  return instr && (instr->kind == MIR_CALL || instr->kind == MIR_CORO_NEW ||
+                   instr->kind == MIR_CORO_NEXT);
 }
 
 static MirOperandUse mir_call_operand_use(const MirInstr *instr, size_t index) {
@@ -1050,6 +1087,13 @@ static MirOperandRole mir_op_operand_role(const MirInstr *instr, size_t index) {
       return MIR_OPERAND_ROLE_INDEX;
     }
     return MIR_OPERAND_ROLE_ELEMENT;
+  case MIR_OP_KIND_PTR_OFFSET:
+    return index == 1 ? MIR_OPERAND_ROLE_INDEX : MIR_OPERAND_ROLE_VALUE;
+  case MIR_OP_KIND_LOAD:
+  case MIR_OP_KIND_LOAD_OWNED:
+    return MIR_OPERAND_ROLE_VALUE;
+  case MIR_OP_KIND_STORE:
+    return index == 1 ? MIR_OPERAND_ROLE_ELEMENT : MIR_OPERAND_ROLE_VALUE;
   default:
     return MIR_OPERAND_ROLE_VALUE;
   }
@@ -1060,7 +1104,8 @@ static MirOperandUse mir_op_operand_use(const MirInstr *instr, size_t index) {
     return MIR_OPERAND_USE_BORROW;
   }
 
-  return instr->data.op.kind == MIR_OP_KIND_ARRAY_SET && index == 2
+  return ((instr->data.op.kind == MIR_OP_KIND_ARRAY_SET && index == 2) ||
+          (instr->data.op.kind == MIR_OP_KIND_STORE && index == 1))
              ? MIR_OPERAND_USE_CONSUME
              : MIR_OPERAND_USE_BORROW;
 }
@@ -1122,6 +1167,14 @@ static bool mir_extract_for_each_operand(MirInstr *instr,
   return true;
 }
 
+static MirOperandUse mir_construct_item_use(const MirInstr *instr) {
+  return instr && instr->kind == MIR_CONSTRUCT &&
+                 instr->data.construct.kind == MIR_CONSTRUCT_TUPLE &&
+                 instr->type && is_array_type(instr->type)
+             ? MIR_OPERAND_USE_BORROW
+             : MIR_OPERAND_USE_CONSUME;
+}
+
 static bool mir_construct_for_each_operand(MirInstr *instr,
                                            MirOperandVisitor visitor,
                                            void *ctx) {
@@ -1137,8 +1190,8 @@ static bool mir_construct_for_each_operand(MirInstr *instr,
       if (!mir_visit_operand(
               instr, visitor,
               mir_make_operand(instr->data.construct.items.items[i],
-                               MIR_OPERAND_ROLE_FIELD, MIR_OPERAND_USE_CONSUME,
-                               i),
+                               MIR_OPERAND_ROLE_FIELD,
+                               mir_construct_item_use(instr), i),
               ctx)) {
         return false;
       }
@@ -1258,25 +1311,8 @@ bool mir_instr_for_each_operand(MirInstr *instr, MirOperandVisitor visitor,
   case MIR_EXTRACT:
     return mir_extract_for_each_operand(instr, visitor, ctx);
   case MIR_CALL:
-    if (!mir_visit_operand(instr, visitor,
-                           mir_make_operand(instr->data.call.callee,
-                                            MIR_OPERAND_ROLE_CALLEE,
-                                            MIR_OPERAND_USE_BORROW, 0),
-                           ctx)) {
-      return false;
-    }
-    for (size_t i = 0; i < instr->data.call.operands.len; i++) {
-      if (!mir_visit_operand(
-              instr, visitor,
-              mir_make_operand(instr->data.call.operands.items[i],
-                               MIR_OPERAND_ROLE_VALUE,
-                               mir_call_operand_use(instr, i), i),
-              ctx)) {
-        return false;
-      }
-    }
-    return true;
   case MIR_CORO_NEW:
+  case MIR_CORO_NEXT:
     if (!mir_visit_operand(instr, visitor,
                            mir_make_operand(instr->data.call.callee,
                                             MIR_OPERAND_ROLE_CALLEE,
@@ -1295,6 +1331,12 @@ bool mir_instr_for_each_operand(MirInstr *instr, MirOperandVisitor visitor,
       }
     }
     return true;
+  case MIR_CORO_RESET:
+    return mir_visit_operand(instr, visitor,
+                             mir_make_operand(instr->data.call.callee,
+                                              MIR_OPERAND_ROLE_VALUE,
+                                              MIR_OPERAND_USE_CONSUME, 0),
+                             ctx);
   default:
     return true;
   }
@@ -1417,7 +1459,8 @@ static void mir_rewrite_construct_operands(MirInstr *instr,
       instr->data.construct.items.items[i] = mir_rewrite_operand(
           instr, rewriter,
           mir_make_operand(instr->data.construct.items.items[i],
-                           MIR_OPERAND_ROLE_FIELD, MIR_OPERAND_USE_CONSUME, i),
+                           MIR_OPERAND_ROLE_FIELD,
+                           mir_construct_item_use(instr), i),
           ctx);
     }
     break;
@@ -1536,6 +1579,7 @@ void mir_instr_rewrite_operands(MirInstr *instr, MirOperandRewriter rewriter,
     break;
   case MIR_CALL:
   case MIR_CORO_NEW:
+  case MIR_CORO_NEXT:
     instr->data.call.callee = mir_rewrite_operand(
         instr, rewriter,
         mir_make_operand(instr->data.call.callee, MIR_OPERAND_ROLE_CALLEE,
@@ -1549,6 +1593,13 @@ void mir_instr_rewrite_operands(MirInstr *instr, MirOperandRewriter rewriter,
                            mir_call_operand_use(instr, i), i),
           ctx);
     }
+    break;
+  case MIR_CORO_RESET:
+    instr->data.call.callee = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.call.callee, MIR_OPERAND_ROLE_VALUE,
+                         MIR_OPERAND_USE_CONSUME, 0),
+        ctx);
     break;
   default:
     break;
@@ -1624,6 +1675,47 @@ MirValueId mir_const_void(MirBuilder *builder, Type *type, Ast *origin) {
   return mir_builder_append_instr(builder, instr);
 }
 
+static MirValueId mir_extract_field(MirBuilder *builder, Type *type,
+                                    Ast *origin, MirValueId value, size_t index,
+                                    const char *name);
+
+static Type *mir_coroutine_instance_yield_type(Type *type) {
+  if (!type || !is_coroutine_type(type) || !type->data.T_CONS.args ||
+      type->data.T_CONS.num_args < 1) {
+    return NULL;
+  }
+  return type->data.T_CONS.args[0];
+}
+
+MirValueId mir_coro_next(MirBuilder *builder, Ast *origin,
+                         MirValueId coroutine, Type *coroutine_type) {
+  Type *yield_type = mir_coroutine_instance_yield_type(coroutine_type);
+  if (!builder || coroutine == MIR_NO_VALUE || !yield_type) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr =
+      mir_make_instr(MIR_CORO_NEXT, create_option_type(yield_type), origin);
+  instr.data.call.callee = coroutine;
+  instr.data.call.callee_type = coroutine_type;
+  instr.data.call.specialized_fn = MIR_NO_FUNCTION;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_coro_reset(MirBuilder *builder, Ast *origin,
+                          MirValueId coroutine, Type *coroutine_type) {
+  if (!builder || coroutine == MIR_NO_VALUE ||
+      !mir_coroutine_instance_yield_type(coroutine_type)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_CORO_RESET, coroutine_type, origin);
+  instr.data.call.callee = coroutine;
+  instr.data.call.callee_type = coroutine_type;
+  instr.data.call.specialized_fn = MIR_NO_FUNCTION;
+  return mir_builder_append_instr(builder, instr);
+}
+
 void mir_builder_set_yield(MirBuilder *builder, MirValueId value,
                            MirBlockId resume) {
   if (!builder || !builder->block) {
@@ -1657,7 +1749,7 @@ static void mir_builder_set_coro_restart(MirBuilder *builder, MirBlockId target,
   };
 }
 
-static void mir_builder_set_coro_done(MirBuilder *builder) {
+void mir_builder_set_coro_done(MirBuilder *builder) {
   if (!builder || !builder->block) {
     return;
   }
@@ -1714,6 +1806,14 @@ static bool mir_application_is_void_call(Ast *app, Type *fn_type) {
          is_void_func(fn_type);
 }
 
+static bool mir_application_has_only_void_arg(Ast *app) {
+  return app && app->tag == AST_APPLICATION &&
+         (app->data.AST_APPLICATION.len == 0 ||
+          (app->data.AST_APPLICATION.len == 1 &&
+           app->data.AST_APPLICATION.args &&
+           app->data.AST_APPLICATION.args->tag == AST_VOID));
+}
+
 static bool mir_collect_restart_args(MirBuilder *builder, Ast *app, MirCtx *ctx,
                                      MirValueIdVec *args) {
   if (!builder || !builder->fn || !app || app->tag != AST_APPLICATION ||
@@ -1760,6 +1860,58 @@ static MirValueId mir_yield_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
 
   if (yielded == MIR_NO_VALUE || !builder->block) {
     return MIR_NO_VALUE;
+  }
+
+  Type *yielded_type = yield_expr ? yield_expr->type : NULL;
+  if (!is_coroutine_type(yielded_type)) {
+    yielded_type = mir_function_value_type(builder->fn, yielded);
+  }
+  Type *inner_yield_type = mir_coroutine_instance_yield_type(yielded_type);
+  if (inner_yield_type) {
+    Type *next_type = create_option_type(inner_yield_type);
+    Type *some_type = next_type && next_type->data.T_CONS.args
+                          ? next_type->data.T_CONS.args[0]
+                          : NULL;
+    if (!some_type) {
+      return MIR_NO_VALUE;
+    }
+
+    MirBlock *check = mir_function_add_block(builder->fn, "yield_from.check");
+    MirBlock *value = mir_function_add_block(builder->fn, "yield_from.value");
+    MirBlock *resume = mir_function_add_block(builder->fn, "yield_from.resume");
+    MirBlock *exit = mir_function_add_block(builder->fn, "yield_from.exit");
+    if (!check || !value || !resume || !exit) {
+      return MIR_NO_VALUE;
+    }
+
+    mir_builder_set_br(builder, check->id);
+
+    mir_builder_position_at_end(builder, check);
+    MirValueId next = mir_coro_next(builder, yield_expr, yielded, yielded_type);
+    MirValueId tag = mir_variant_tag(builder, yield_expr, next);
+    MirValueId is_some =
+        mir_tag_eq(builder, yield_expr, tag, 0, TYPE_NAME_SOME);
+    if (next == MIR_NO_VALUE || tag == MIR_NO_VALUE ||
+        is_some == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+    mir_builder_set_cond(builder, is_some, value->id, exit->id);
+
+    mir_builder_position_at_end(builder, value);
+    MirValueId payload = mir_variant_payload(builder, yield_expr, next,
+                                             some_type, 0, TYPE_NAME_SOME);
+    MirValueId yielded_value = mir_extract_field(builder, inner_yield_type,
+                                                 yield_expr, payload, 0, NULL);
+    if (payload == MIR_NO_VALUE || yielded_value == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+    mir_builder_set_yield(builder, yielded_value, resume->id);
+
+    mir_builder_position_at_end(builder, resume);
+    mir_builder_set_br(builder, check->id);
+
+    mir_builder_position_at_end(builder, exit);
+    return mir_const_void(builder, &t_void, ast);
   }
 
   MirBlock *resume = mir_function_add_block(builder->fn, "yield.resume");
@@ -1951,6 +2103,60 @@ MirValueId mir_fn_ref(MirBuilder *builder, Type *type, Ast *origin,
   MirInstr instr = mir_make_instr(MIR_FN_REF, type, origin);
   instr.data.fn_ref.fn = fn->id;
   instr.data.fn_ref.name = fn->name;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_ptr_offset(MirBuilder *builder, Type *ptr_type, Ast *origin,
+                          MirValueId ptr, MirValueId index) {
+  if (!builder || !ptr_type || !is_pointer_type(ptr_type) ||
+      ptr == MIR_NO_VALUE || index == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_OP, ptr_type, origin);
+  instr.data.op.kind = MIR_OP_KIND_PTR_OFFSET;
+  instr.data.op.argc = 2;
+  instr.data.op.operands[0] = ptr;
+  instr.data.op.operands[1] = index;
+  return mir_builder_append_instr(builder, instr);
+}
+
+static MirValueId mir_ptr_load_with_kind(MirBuilder *builder, MirOpKind kind,
+                                         Type *type, Ast *origin,
+                                         MirValueId ptr) {
+  if (!builder || !type || ptr == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_OP, type, origin);
+  instr.data.op.kind = kind;
+  instr.data.op.argc = 1;
+  instr.data.op.operands[0] = ptr;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_ptr_load(MirBuilder *builder, Type *type, Ast *origin,
+                        MirValueId ptr) {
+  return mir_ptr_load_with_kind(builder, MIR_OP_KIND_LOAD, type, origin, ptr);
+}
+
+MirValueId mir_ptr_load_owned(MirBuilder *builder, Type *type, Ast *origin,
+                              MirValueId ptr) {
+  return mir_ptr_load_with_kind(builder, MIR_OP_KIND_LOAD_OWNED, type, origin,
+                                ptr);
+}
+
+MirValueId mir_ptr_store(MirBuilder *builder, Ast *origin, MirValueId ptr,
+                         MirValueId value) {
+  if (!builder || ptr == MIR_NO_VALUE || value == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_OP, &t_void, origin);
+  instr.data.op.kind = MIR_OP_KIND_STORE;
+  instr.data.op.argc = 2;
+  instr.data.op.operands[0] = ptr;
+  instr.data.op.operands[1] = value;
   return mir_builder_append_instr(builder, instr);
 }
 
@@ -2636,6 +2842,7 @@ static Type *mir_closure_callable_type(MirArena *arena, Type *closure_type) {
   impl_type->kind = T_FN;
   impl_type->data.T_FN.from = closure_type->closure_meta;
   impl_type->data.T_FN.to = callable_type;
+  impl_type->data.T_FN.attributes = closure_type->data.T_FN.attributes;
   return impl_type;
 }
 
@@ -2819,6 +3026,8 @@ static MirInstr mir_clone_instr_with_subst(MirArena *arena, MirTypeSubst *subst,
     break;
   case MIR_CALL:
   case MIR_CORO_NEW:
+  case MIR_CORO_NEXT:
+  case MIR_CORO_RESET:
     clone.data.call.callee_type =
         mir_substitute_type(arena, subst, instr->data.call.callee_type);
     clone.data.call.specialized_name = NULL;
@@ -3220,9 +3429,23 @@ static MirFunction *mir_materialize_call_specialization(MirBuilder *builder,
                                         call->data.call.callee_type);
 }
 
-static Type *mir_application_expected_callee_type(MirArena *arena, Ast *ast) {
+static Type *mir_application_expected_callee_type(MirArena *arena, Ast *ast,
+                                                  Type *function_type) {
   if (!arena || !ast || ast->tag != AST_APPLICATION) {
     return NULL;
+  }
+
+  FnAttributes *attrs = NULL;
+  if (ast->data.AST_APPLICATION.len > 0) {
+    attrs = mir_arena_alloc(
+        arena, sizeof(FnAttributes) * ast->data.AST_APPLICATION.len,
+        MIR_ALIGNOF(FnAttributes));
+    Type *cursor = function_type;
+    for (size_t i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      attrs[i] =
+          cursor && cursor->kind == T_FN ? cursor->data.T_FN.attributes : 0;
+      cursor = cursor && cursor->kind == T_FN ? cursor->data.T_FN.to : NULL;
+    }
   }
 
   Type *type = ast->type;
@@ -3236,6 +3459,7 @@ static Type *mir_application_expected_callee_type(MirArena *arena, Ast *ast) {
     fn_type->kind = T_FN;
     fn_type->data.T_FN.from = arg->type;
     fn_type->data.T_FN.to = type;
+    fn_type->data.T_FN.attributes = attrs ? attrs[i - 1] : 0;
     type = fn_type;
   }
   return type;
@@ -3344,6 +3568,78 @@ static bool mir_application_is_partial(Ast *ast) {
     return false;
   }
   return application_is_partial(ast);
+}
+
+static Ast *mir_application_root_function(Ast *app) {
+  Ast *fn = app;
+  while (fn && fn->tag == AST_APPLICATION) {
+    fn = fn->data.AST_APPLICATION.function;
+  }
+  return fn;
+}
+
+static size_t mir_application_flat_arg_count(Ast *app) {
+  if (!app || app->tag != AST_APPLICATION) {
+    return 0;
+  }
+
+  size_t count = app->data.AST_APPLICATION.len;
+  Ast *fn = app->data.AST_APPLICATION.function;
+  if (fn && fn->tag == AST_APPLICATION) {
+    count += mir_application_flat_arg_count(fn);
+  }
+  return count;
+}
+
+static size_t mir_application_collect_flat_args(Ast *app, Ast *args,
+                                                size_t offset) {
+  if (!app || app->tag != AST_APPLICATION) {
+    return offset;
+  }
+
+  Ast *fn = app->data.AST_APPLICATION.function;
+  if (fn && fn->tag == AST_APPLICATION) {
+    offset = mir_application_collect_flat_args(fn, args, offset);
+  }
+
+  for (size_t i = 0; i < app->data.AST_APPLICATION.len; i++) {
+    args[offset++] = app->data.AST_APPLICATION.args[i];
+  }
+  return offset;
+}
+
+static Ast *mir_application_flatten_if_saturated(MirArena *arena, Ast *app) {
+  if (!arena || !app || app->tag != AST_APPLICATION ||
+      !app->data.AST_APPLICATION.function ||
+      app->data.AST_APPLICATION.function->tag != AST_APPLICATION) {
+    return app;
+  }
+
+  Ast *root = mir_application_root_function(app);
+  if (!root || !root->type || root->type->kind != T_FN) {
+    return app;
+  }
+
+  size_t arg_count = mir_application_flat_arg_count(app);
+  int expected = fn_type_args_len(root->type);
+  if (expected <= 0 || arg_count > (size_t)expected) {
+    return app;
+  }
+
+  Ast *flat = mir_arena_alloc(arena, sizeof(Ast), MIR_ALIGNOF(Ast));
+  Ast *args = arg_count ? mir_arena_alloc(arena, sizeof(Ast) * arg_count,
+                                          MIR_ALIGNOF(Ast))
+                        : NULL;
+  if (!flat || (arg_count && !args)) {
+    return app;
+  }
+
+  *flat = *app;
+  flat->data.AST_APPLICATION.function = root;
+  flat->data.AST_APPLICATION.args = args;
+  flat->data.AST_APPLICATION.len = arg_count;
+  mir_application_collect_flat_args(app, args, 0);
+  return flat;
 }
 
 static size_t mir_fn_param_count(Type *type) {
@@ -3528,6 +3824,12 @@ static MirFunction *mir_direct_callee_function(MirBuilder *builder,
                                               function);
     }
 
+    MirFunction *scoped = mir_program_find_scoped_function(
+        builder->program, builder->fn, function->data.AST_IDENTIFIER.value);
+    if (scoped) {
+      return scoped;
+    }
+
     return mir_program_find_function_by_name(
         builder->program, function->data.AST_IDENTIFIER.value);
   }
@@ -3692,6 +3994,76 @@ static void mir_update_closure_value_type(MirBuilder *builder,
     mir_function_set_value_callable_summary(builder->fn, closure->result,
                                             &impl->summary);
   }
+}
+
+void mir_prepare_call(MirBuilder *builder, MirInstr *call) {
+  if (!builder || !call || !mir_instr_is_call_like(call)) {
+    return;
+  }
+
+  mir_specialize_call_fn_ref_operands(builder, call);
+  if (!call->data.call.builtin) {
+    call->data.call.specialized_name = mir_call_specialized_name(builder, call);
+    call->data.call.specialized_fn = MIR_NO_FUNCTION;
+    MirFunction *specialized =
+        mir_materialize_call_specialization(builder, call);
+    if (specialized) {
+      call->data.call.specialized_name = specialized->name;
+      call->data.call.specialized_fn = specialized->id;
+    }
+  }
+  mir_call_apply_callee_summary(builder, call);
+}
+
+MirValueId mir_call_value(MirBuilder *builder, Type *type, Ast *origin,
+                          MirValueId callee, Type *callee_type,
+                          const MirValueId *args, size_t argc) {
+  if (!builder || !builder->program || !builder->fn ||
+      callee == MIR_NO_VALUE || !callee_type || callee_type->kind != T_FN ||
+      (argc > 0 && !args)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr call = mir_make_instr(MIR_CALL, type, origin);
+  MirArena *arena = builder->fn->arena;
+  call.data.call.callee = callee;
+  call.data.call.builtin = NULL;
+  call.data.call.callee_type = callee_type;
+  call.data.call.specialized_fn = MIR_NO_FUNCTION;
+
+  if (is_closure(callee_type) && callee_type->closure_meta) {
+    MirInstr *callee_def = mir_function_find_def_instr(builder->fn, callee);
+    if (callee_def && callee_def->kind == MIR_CALL &&
+        callee_def->type != callee_type) {
+      mir_update_call_result_type(builder, callee_def, callee_type);
+    } else if (callee_def && callee_def->kind == MIR_CONSTRUCT &&
+               callee_def->data.construct.kind == MIR_CONSTRUCT_CLOSURE &&
+               callee_def->type != callee_type) {
+      mir_update_closure_value_type(builder, callee_def, callee_type);
+    }
+
+    MirValueId env =
+        mir_closure_get_env(builder, callee_type->closure_meta, origin, callee);
+    Type *callable_type = mir_closure_callable_type(arena, callee_type);
+    MirValueId fn = mir_closure_fn(builder, callable_type, origin, callee);
+    if (env == MIR_NO_VALUE || fn == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+
+    call.data.call.callee = fn;
+    call.data.call.callee_type = callable_type;
+    mir_call_push_operand(arena, &call, env, MIR_OPERAND_USE_BORROW);
+  }
+
+  for (size_t i = 0; i < argc; i++) {
+    if (args[i] == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+    mir_call_push_operand(arena, &call, args[i], MIR_OPERAND_USE_CONSUME);
+  }
+
+  mir_prepare_call(builder, &call);
+  return mir_builder_append_instr(builder, call);
 }
 
 static MirFunction *mir_build_const_curried_wrapper(MirBuilder *builder,
@@ -3925,6 +4297,12 @@ static MirValueId mir_partial_application(MirBuilder *builder, Type *type,
 
 MirValueId mir_application(MirBuilder *builder, Type *type, Ast *ast,
                            MirCtx *ctx) {
+  Ast *flat = mir_application_flatten_if_saturated(
+      builder && builder->program ? builder->program->arena : NULL, ast);
+  if (flat != ast) {
+    ast = flat;
+    type = ast->type;
+  }
 
   Ast *function = ast->data.AST_APPLICATION.function;
   Type *function_type = function ? function->type : NULL;
@@ -3964,7 +4342,8 @@ MirValueId mir_application(MirBuilder *builder, Type *type, Ast *ast,
   call.data.call.callee = MIR_NO_VALUE;
   call.data.call.builtin = builtin;
   call.data.call.specialized_fn = MIR_NO_FUNCTION;
-  call.data.call.callee_type = mir_application_expected_callee_type(arena, ast);
+  call.data.call.callee_type =
+      mir_application_expected_callee_type(arena, ast, function_type);
   if (!builtin) {
     MirValueId callee_value =
         mir_expr(builder, ast->data.AST_APPLICATION.function, ctx);
@@ -3973,6 +4352,41 @@ MirValueId mir_application(MirBuilder *builder, Type *type, Ast *ast,
     }
     if (is_coroutine_constructor_type(function_type)) {
       call.kind = MIR_CORO_NEW;
+      if (is_closure(function_type) && function_type->closure_meta) {
+        MirInstr *callee_def =
+            mir_function_find_def_instr(builder->fn, callee_value);
+        if (callee_def && callee_def->kind == MIR_CALL &&
+            callee_def->type != function_type) {
+          mir_update_call_result_type(builder, callee_def, function_type);
+        } else if (callee_def && callee_def->kind == MIR_CONSTRUCT &&
+                   callee_def->data.construct.kind == MIR_CONSTRUCT_CLOSURE &&
+                   callee_def->type != function_type) {
+          mir_update_closure_value_type(builder, callee_def, function_type);
+        }
+
+        MirValueId env = mir_closure_get_env(
+            builder, function_type->closure_meta, function, callee_value);
+        Type *callable_type = mir_closure_callable_type(arena, function_type);
+        MirValueId fn =
+            mir_closure_fn(builder, callable_type, function, callee_value);
+        if (env == MIR_NO_VALUE || fn == MIR_NO_VALUE) {
+          return MIR_NO_VALUE;
+        }
+
+        call.data.call.callee = fn;
+        call.data.call.callee_type = callable_type;
+        mir_call_push_operand(arena, &call, env, MIR_OPERAND_USE_BORROW);
+
+        if (!mir_call_push_application_args(builder, &call, ast, ctx, arena,
+                                            function_type)) {
+          return MIR_NO_VALUE;
+        }
+
+        mir_specialize_call_fn_ref_operands(builder, &call);
+        mir_call_apply_callee_summary(builder, &call);
+        return mir_builder_append_instr(builder, call);
+      }
+
       call.data.call.callee = callee_value;
       if (!mir_call_push_application_args(builder, &call, ast, ctx, arena,
                                           function_type)) {
@@ -3988,6 +4402,17 @@ MirValueId mir_application(MirBuilder *builder, Type *type, Ast *ast,
         call.data.call.specialized_fn = specialized->id;
       }
       mir_call_apply_callee_summary(builder, &call);
+      return mir_builder_append_instr(builder, call);
+    }
+    if (is_coroutine_type(function_type)) {
+      if (!mir_application_has_only_void_arg(ast)) {
+        fprintf(stderr,
+                "MIR lowering only supports nullary coroutine resume calls\n");
+        return MIR_NO_VALUE;
+      }
+      call.kind = MIR_CORO_NEXT;
+      call.data.call.callee = callee_value;
+      call.data.call.callee_type = function_type;
       return mir_builder_append_instr(builder, call);
     }
     if (is_closure(function_type) && function_type->closure_meta) {
@@ -4737,8 +5162,15 @@ static MirValueId mir_identifier(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
       return symbol_value;
     }
 
-    MirFunction *fn = mir_program_find_function_by_name(
-        builder ? builder->program : NULL, ast->data.AST_IDENTIFIER.value);
+    MirFunction *fn = mir_program_find_scoped_function(
+        builder ? builder->program : NULL, builder ? builder->fn : NULL,
+        ast->data.AST_IDENTIFIER.value);
+    if (fn) {
+      return mir_fn_ref(builder, ast->type, ast, fn);
+    }
+
+    fn = mir_program_find_function_by_name(builder ? builder->program : NULL,
+                                           ast->data.AST_IDENTIFIER.value);
     if (fn) {
       return mir_fn_ref(builder, ast->type, ast, fn);
     }
@@ -5182,11 +5614,7 @@ static MirValueId mir_pattern_array_size(MirBuilder *builder, Ast *origin,
     return MIR_NO_VALUE;
   }
 
-  MirInstr instr = mir_make_instr(MIR_OP, &t_int, origin);
-  instr.data.op.kind = MIR_OP_KIND_ARRAY_SIZE;
-  instr.data.op.argc = 1;
-  instr.data.op.operands[0] = array;
-  return mir_builder_append_instr(builder, instr);
+  return mir_tuple_get(builder, &t_int, origin, array, 0);
 }
 
 static MirValueId mir_pattern_array_at(MirBuilder *builder, Type *type,
@@ -5196,11 +5624,17 @@ static MirValueId mir_pattern_array_at(MirBuilder *builder, Type *type,
     return MIR_NO_VALUE;
   }
 
-  MirInstr instr = mir_make_instr(MIR_EXTRACT, type, origin);
-  instr.data.extract.kind = MIR_EXTRACT_ARRAY_AT;
-  instr.data.extract.value = array;
-  instr.data.extract.index_value = index;
-  return mir_builder_append_instr(builder, instr);
+  Type *array_type = mir_function_value_type(builder->fn, array);
+  if (!array_type || !is_array_type(array_type) ||
+      !array_type->data.T_CONS.args || array_type->data.T_CONS.num_args < 1) {
+    return MIR_NO_VALUE;
+  }
+
+  Type *ptr_type = ptr_of_type(array_type->data.T_CONS.args[0]);
+  MirValueId data_ptr = mir_tuple_get(builder, ptr_type, origin, array, 1);
+  MirValueId element_ptr =
+      mir_ptr_offset(builder, ptr_type, origin, data_ptr, index);
+  return mir_ptr_load(builder, type, origin, element_ptr);
 }
 
 static bool mir_lower_array_pattern_items_to_cfg(
@@ -6107,6 +6541,14 @@ static const char *mir_op_kind_name(MirOpKind kind) {
     return "array_size";
   case MIR_OP_KIND_ARRAY_SET:
     return "array_set";
+  case MIR_OP_KIND_PTR_OFFSET:
+    return "ptr_offset";
+  case MIR_OP_KIND_LOAD:
+    return "load";
+  case MIR_OP_KIND_LOAD_OWNED:
+    return "load_owned";
+  case MIR_OP_KIND_STORE:
+    return "store";
   case MIR_OP_KIND_STR:
     return "str";
   case MIR_OP_KIND_PRINT:
@@ -6201,6 +6643,10 @@ static const char *mir_instr_name(MirInstrKind kind) {
     return "call";
   case MIR_CORO_NEW:
     return "coro.new";
+  case MIR_CORO_NEXT:
+    return "coro.next";
+  case MIR_CORO_RESET:
+    return "coro.reset";
   }
   return "unknown";
 }
@@ -6701,6 +7147,7 @@ static void dump_instr(FILE *stream, const MirFunction *fn,
     break;
   case MIR_CALL:
   case MIR_CORO_NEW:
+  case MIR_CORO_NEXT:
     fputc(' ', stream);
     if (instr->data.call.builtin) {
       fprintf(stream, "@%s", instr->data.call.builtin->name);
@@ -6728,6 +7175,15 @@ static void dump_instr(FILE *stream, const MirFunction *fn,
       fputs(STYLE_RESET_ALL, stream);
     }
 
+    break;
+  case MIR_CORO_RESET:
+    fputc(' ', stream);
+    dump_value(stream, instr->data.call.callee);
+    if (instr->type) {
+      fputs(STYLE_DIM " : ", stream);
+      print_type_to_stream(instr->type, stream);
+      fputs(STYLE_RESET_ALL, stream);
+    }
     break;
   }
 

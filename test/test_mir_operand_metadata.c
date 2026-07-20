@@ -205,6 +205,44 @@ static bool test_extract(const char *label, MirExtractKind kind,
   return true;
 }
 
+static bool test_coro_next(void) {
+  MirInstr instr = {
+      .kind = MIR_CORO_NEXT,
+      .data.call = {.callee = 40},
+  };
+  ExpectedOperand expected[] = {
+      {40, MIR_OPERAND_ROLE_CALLEE, MIR_OPERAND_USE_BORROW, 0},
+  };
+  if (!check_operands("coro.next", &instr, expected, 1)) {
+    return false;
+  }
+  mir_instr_rewrite_operands(&instr, rewrite_operand, NULL);
+  if (instr.data.call.callee != 1040) {
+    fprintf(stderr, "coro.next callee rewrite failed\n");
+    return false;
+  }
+  return true;
+}
+
+static bool test_coro_reset(void) {
+  MirInstr instr = {
+      .kind = MIR_CORO_RESET,
+      .data.call = {.callee = 41},
+  };
+  ExpectedOperand expected[] = {
+      {41, MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_CONSUME, 0},
+  };
+  if (!check_operands("coro.reset", &instr, expected, 1)) {
+    return false;
+  }
+  mir_instr_rewrite_operands(&instr, rewrite_operand, NULL);
+  if (instr.data.call.callee != 1041) {
+    fprintf(stderr, "coro.reset operand rewrite failed\n");
+    return false;
+  }
+  return true;
+}
+
 int main(void) {
   bool ok = true;
 
@@ -304,6 +342,8 @@ int main(void) {
   };
   ok &= test_extract("extract.array_offset", MIR_EXTRACT_ARRAY_OFFSET, 30, 31,
                      array_offset, 2);
+  ok &= test_coro_next();
+  ok &= test_coro_reset();
 
   if (!ok) {
     return 1;

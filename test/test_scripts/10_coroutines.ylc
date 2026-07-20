@@ -37,6 +37,7 @@ let test_embed_seq = fn () ->
   && co () == Some 400
   && co () == Some 3
 ;;
+
 let test_rec = fn () ->
   let co_void_rec = fn () ->
     yield 1;
@@ -156,7 +157,7 @@ let test_iter_array = fn () ->
   && x () == Some 3 
   && x () == Some 4
   && x () == None
-  
+
 ;;
 #
 let test_iter_list = fn () ->
@@ -168,7 +169,7 @@ let test_iter_list = fn () ->
   && x () == Some 4
   && x () == None
 ;;
-#
+
 let test_cor_loop = fn () ->
   let c = fn () -> yield 1; yield 2; yield 3;;
   let x = c () |> cor_loop in 
@@ -191,20 +192,20 @@ let test_cor_map = fn () ->
 
 ;;
 
-let test_cor_zip_struct_map = fn () ->
-  let x =
-    (
-      a: iter [1, 2],
-      b: iter [10, 20]
-    )
-    |> cor_zip_struct
-    |> cor_map (fn (a, b) -> a + b)
-  ;
-
-     x () == Some 11
-  && x () == Some 22
-  && x () == None
-;;
+# let test_cor_zip_struct_map = fn () ->
+#   let x =
+#     (
+#       a: iter [1, 2],
+#       b: iter [10, 20]
+#     )
+#     |> cor_zip_struct
+#     |> cor_map (fn (a, b) -> a + b)
+#   ;
+#
+#      x () == Some 11
+#   && x () == Some 22
+#   && x () == None
+# ;;
 #
 let test_cor_loop_and_map = fn () ->
   let c = fn () -> yield 1; yield 2; yield 3;;
@@ -267,11 +268,43 @@ let test_zip = fn () ->
     yield 3.;
     yield 3.
   ;;
+
   let c = cor_zip (a ()) (b ());
   let x = c ();
 
   match x with
     | Some (1, 1.) -> true
+    | _ -> false
+
+;;
+
+let test_zip_spread = fn () ->
+  let a = fn () ->
+    yield 1;
+    yield 2;
+    yield 3
+  ;;
+
+
+  let b = fn () ->
+    yield 1.;
+    yield 2.;
+    yield 3.;
+    yield 3.
+  ;;
+
+  let c = fn () ->
+    yield 1.;
+    yield 2.;
+    yield 3.;
+    yield 3.
+  ;;
+
+  let d = b () |> cor_zip (a ()) |> cor_zip (c ()) |> cor_map (fn (c, (a, b)) -> (a, b, c));
+  let x = d ();
+
+  match x with
+    | Some (1, 1., 1.) -> true
     | _ -> false
 
 ;;

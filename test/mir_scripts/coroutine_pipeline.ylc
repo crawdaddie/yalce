@@ -1,0 +1,53 @@
+let coroutine_map_loop = fn () ->
+  let x = [1, 2, 3] |> iter |> cor_map (fn d -> d + 10) |> cor_loop in
+     x () == Some 11
+  && x () == Some 12
+  && x () == Some 13
+  && x () == Some 11
+;;
+
+let coroutine_map_double_loop = fn () ->
+  let c = fn () -> yield 1; yield 2; yield 3;;
+  let x = c () |> cor_map (Double) |> cor_loop in
+     x () == Some 1.
+  && x () == Some 2.
+  && x () == Some 3.
+  && x () == Some 1.
+;;
+
+let coroutine_zip_loop = fn () ->
+  let a = fn () -> yield 1; yield 2;;
+  let b = fn () -> yield 10.; yield 20.; yield 30.;;
+  let x = cor_zip (a ()) (b ()) |> cor_loop in
+  let first = match x () with
+    | Some (1, 10.) -> true
+    | _ -> false
+  in
+  let second = match x () with
+    | Some (2, 20.) -> true
+    | _ -> false
+  in
+  let reset = match x () with
+    | Some (1, 10.) -> true
+    | _ -> false
+  in
+  first && second && reset
+;;
+
+let coroutine_returned = fn () ->
+  let c = fn () -> yield 1; yield 2;;
+  c ()
+;;
+
+let coroutine_map_returned = fn () ->
+  let c = fn () -> yield 1; yield 2;;
+  c () |> cor_map (fn x -> x + 1)
+;;
+
+let coroutine_duplicate_returned = fn () ->
+  let c = fn () -> yield 1; yield 2;;
+  let x = c ();
+  (x, x)
+;;
+
+0

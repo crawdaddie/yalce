@@ -411,6 +411,10 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
       return generic_ptr_type(module);
     }
 
+    if (is_string_type(type)) {
+      return codegen_string_type(LLVMInt8TypeInContext(module_context(module)));
+    }
+
     if (is_array_type(type)) {
       if (type->data.T_CONS.args[0]->kind == T_VAR &&
           !type->data.T_CONS.args[0]->is_recursive_type_ref) {

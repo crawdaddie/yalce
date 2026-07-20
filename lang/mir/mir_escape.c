@@ -54,7 +54,8 @@ static MirFunction *mir_escape_program_get_function(MirProgram *program,
 
 static bool mir_escape_is_tracked_type(Type *type) {
   return type && (is_array_type(type) || is_list_type(type) ||
-                  is_string_type(type) || is_closure(type));
+                  is_string_type(type) || is_closure(type) ||
+                  is_coroutine_type(type));
 }
 
 static bool mir_escape_may_be_tracked_type(Type *type) {
@@ -112,6 +113,8 @@ static bool mir_escape_is_alloc_site(MirInstr *instr) {
   }
 
   switch (instr->kind) {
+  case MIR_CORO_NEW:
+    return true;
   case MIR_CONSTRUCT:
     switch (instr->data.construct.kind) {
     case MIR_CONSTRUCT_ARRAY_LITERAL:
@@ -276,6 +279,9 @@ static bool mir_escape_seed_instruction(MirFunction *fn, MirInstr *instr,
     if (instr->data.op.kind == MIR_OP_KIND_ARRAY_SET) {
       changed |= mir_escape_mark(state->mutable, fn,
                                  instr->data.op.operands[0]);
+    } else if (instr->data.op.kind == MIR_OP_KIND_STORE) {
+      changed |= mir_escape_mark(state->mutable, fn,
+                                 instr->data.op.operands[0]);
     }
     break;
   default:
@@ -325,7 +331,22 @@ static bool mir_escape_propagate_from_result(MirFunction *fn, MirInstr *instr,
                                  instr->data.op.operands[0]);
       changed |= mir_escape_mark(state->escaped, fn,
                                  instr->data.op.operands[2]);
+    } else if (instr->data.op.kind == MIR_OP_KIND_PTR_OFFSET) {
+      changed |= mir_escape_mark(state->escaped, fn,
+                                 instr->data.op.operands[0]);
+    } else if (instr->data.op.kind == MIR_OP_KIND_LOAD ||
+               instr->data.op.kind == MIR_OP_KIND_LOAD_OWNED) {
+      if (mir_escape_may_be_tracked_type(instr->type)) {
+        changed |= mir_escape_mark(state->escaped, fn,
+                                   instr->data.op.operands[0]);
+      }
     }
+    break;
+  case MIR_CORO_NEW:
+    changed |= mir_escape_mark_operands(fn, instr, state->escaped, true);
+    break;
+  case MIR_CORO_RESET:
+    changed |= mir_escape_mark(state->escaped, fn, instr->data.call.callee);
     break;
   case MIR_EXTRACT:
     switch (instr->data.extract.kind) {
@@ -369,16 +390,25 @@ static bool mir_escape_propagate_mutability(MirFunction *fn, MirInstr *instr,
     if (instr->data.op.kind == MIR_OP_KIND_ARRAY_SET) {
       return mir_escape_mark(state->mutable, fn, instr->data.op.operands[0]);
     }
+    if (instr->data.op.kind == MIR_OP_KIND_PTR_OFFSET) {
+      return mir_escape_mark(state->mutable, fn, instr->data.op.operands[0]);
+    }
     return false;
   case MIR_CONSTRUCT:
     if (instr->data.construct.kind == MIR_CONSTRUCT_ARRAY_RANGE) {
       return mir_escape_mark(state->mutable, fn,
                              instr->data.construct.operands[2]);
     }
+    if (instr->data.construct.kind == MIR_CONSTRUCT_TUPLE &&
+        is_array_type(instr->type) && instr->data.construct.items.len > 1) {
+      return mir_escape_mark(state->mutable, fn,
+                             instr->data.construct.items.items[1]);
+    }
     return false;
   case MIR_EXTRACT:
     if (instr->data.extract.kind == MIR_EXTRACT_ARRAY_SUCC ||
-        instr->data.extract.kind == MIR_EXTRACT_ARRAY_OFFSET) {
+        instr->data.extract.kind == MIR_EXTRACT_ARRAY_OFFSET ||
+        instr->data.extract.kind == MIR_EXTRACT_FIELD) {
       return mir_escape_mark(state->mutable, fn, instr->data.extract.value);
     }
     return false;
@@ -389,13 +419,14 @@ static bool mir_escape_propagate_mutability(MirFunction *fn, MirInstr *instr,
 
 static bool mir_escape_propagate_array_store(MirFunction *fn, MirInstr *instr,
                                              MirEscapeState *state) {
-  if (!mir_escape_instr_is_op(instr, MIR_OP_KIND_ARRAY_SET) || !state) {
+  if ((!mir_escape_instr_is_op(instr, MIR_OP_KIND_ARRAY_SET) &&
+       !mir_escape_instr_is_op(instr, MIR_OP_KIND_STORE)) ||
+      !state) {
     return false;
   }
 
-  bool array_escapes =
-      mir_escape_value_in_range(fn, instr->data.op.operands[0]) &&
-      state->escaped[instr->data.op.operands[0]];
+  bool array_escapes = mir_escape_value_in_range(fn, instr->data.op.operands[0]) &&
+                       state->escaped[instr->data.op.operands[0]];
   bool result_escapes = mir_escape_value_in_range(fn, instr->result) &&
                         state->escaped[instr->result];
   if (!array_escapes && !result_escapes) {
@@ -404,7 +435,10 @@ static bool mir_escape_propagate_array_store(MirFunction *fn, MirInstr *instr,
 
   bool changed = false;
   changed |= mir_escape_mark(state->escaped, fn, instr->data.op.operands[0]);
-  changed |= mir_escape_mark(state->escaped, fn, instr->data.op.operands[2]);
+  MirValueId stored =
+      instr->data.op.kind == MIR_OP_KIND_STORE ? instr->data.op.operands[1]
+                                               : instr->data.op.operands[2];
+  changed |= mir_escape_mark(state->escaped, fn, stored);
   changed |= mir_escape_mark(state->escaped, fn, instr->result);
   return changed;
 }

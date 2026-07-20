@@ -143,6 +143,25 @@ void mark_generalizable_slice(TypeEnv *slice_head, TypeEnv *boundary) {
     e->generalize_boundary = boundary;
   }
 }
+
+static void mark_function_binding_slice(Ast *binding, Ast *expr,
+                                        TypeEnv *slice_head,
+                                        TypeEnv *boundary) {
+  if (!binding || binding->tag != AST_IDENTIFIER ||
+      ast_is_placeholder_id(binding) || !expr || expr->tag != AST_LAMBDA ||
+      expr->data.AST_LAMBDA.num_closed_vals != 0) {
+    return;
+  }
+
+  const char *name = binding->data.AST_IDENTIFIER.value;
+  for (TypeEnv *e = slice_head; e != boundary; e = e->next) {
+    if (e->name && strcmp(e->name, name) == 0) {
+      e->md.type = BT_FUNCTION;
+      return;
+    }
+  }
+}
+
 Type *infer_let_expr(Ast *ast, TICtx *ctx) {
   Ast *binding = ast->data.AST_LET.binding;
   Ast *expr = ast->data.AST_LET.expr;
@@ -175,6 +194,7 @@ Type *infer_let_expr(Ast *ast, TICtx *ctx) {
         ctx->env, outer_env, ctx->current_fn_ast->data.AST_LAMBDA.num_yields);
   }
 
+  mark_function_binding_slice(binding, expr, ctx->env, outer_env);
   mark_generalizable_slice(ctx->env, outer_env);
   if (checkpoint_generalizable_slice(ctx->env, outer_env, ctx) != 0) {
     ctx->env = outer_env;

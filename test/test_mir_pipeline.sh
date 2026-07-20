@@ -10,6 +10,7 @@ CLOSURE_SRC="$SCRIPT_DIR/mir_scripts/closure_partial_pipeline.ylc"
 VARIANT_SRC="$SCRIPT_DIR/mir_scripts/variant_match_pipeline.ylc"
 CONSTRUCT_SRC="$SCRIPT_DIR/mir_scripts/construct_extract_pipeline.ylc"
 ARRAY_OP_SRC="$SCRIPT_DIR/mir_scripts/array_ops_pipeline.ylc"
+COROUTINE_SRC="$SCRIPT_DIR/mir_scripts/coroutine_pipeline.ylc"
 EXTERN_SRC="$SCRIPT_DIR/mir_scripts/extern_pipeline.ylc"
 LLVM_SHAPE_SRC="$SCRIPT_DIR/mir_scripts/llvm_shape_pipeline.ylc"
 MATCH_DESTRUCTURE_SRC="$SCRIPT_DIR/mir_scripts/match_destructure_pipeline.ylc"
@@ -165,13 +166,13 @@ run_ylc_test() {
 run_dump_llvm_pre() {
   local source="$1"
   local output="$2"
-  "$YLC" --debug-ir-pre --verify-ir "$source" 2>&1 | strip_ansi >"$output"
+  "$YLC" --dump-ir-pre --verify-ir "$source" 2>&1 | strip_ansi >"$output"
 }
 
 run_dump_llvm_pre_test() {
   local source="$1"
   local output="$2"
-  "$YLC" --test --debug-ir-pre --verify-ir "$source" 2>&1 | strip_ansi >"$output"
+  "$YLC" --test --dump-ir-pre --verify-ir "$source" 2>&1 | strip_ansi >"$output"
 }
 
 OWN_MIR="$ARTIFACT_DIR/perceus_pipeline.mir"
@@ -179,9 +180,11 @@ CLOSURE_MIR="$ARTIFACT_DIR/closure_partial_pipeline.mir"
 VARIANT_MIR="$ARTIFACT_DIR/variant_match_pipeline.mir"
 CONSTRUCT_MIR="$ARTIFACT_DIR/construct_extract_pipeline.mir"
 ARRAY_OP_MIR="$ARTIFACT_DIR/array_ops_pipeline.mir"
+COROUTINE_MIR="$ARTIFACT_DIR/coroutine_pipeline.mir"
 EXTERN_MIR="$ARTIFACT_DIR/extern_pipeline.mir"
 LLVM_IR="$ARTIFACT_DIR/perceus_pipeline.ll"
 CLOSURE_LLVM_IR="$ARTIFACT_DIR/closure_partial_pipeline.ll"
+COROUTINE_LLVM_IR="$ARTIFACT_DIR/coroutine_pipeline.ll"
 EXTERN_LLVM_IR="$ARTIFACT_DIR/extern_pipeline.ll"
 LLVM_SHAPE_IR="$ARTIFACT_DIR/llvm_shape_pipeline.ll"
 MATCH_DESTRUCTURE_MIR="$ARTIFACT_DIR/match_destructure_pipeline.mir"
@@ -204,11 +207,13 @@ run_dump_mir "$CLOSURE_SRC" "$CLOSURE_MIR"
 run_dump_mir "$VARIANT_SRC" "$VARIANT_MIR"
 run_dump_mir "$CONSTRUCT_SRC" "$CONSTRUCT_MIR"
 run_dump_mir "$ARRAY_OP_SRC" "$ARRAY_OP_MIR"
+run_dump_mir "$COROUTINE_SRC" "$COROUTINE_MIR"
 run_dump_mir "$EXTERN_SRC" "$EXTERN_MIR"
 run_dump_mir "$MATCH_DESTRUCTURE_SRC" "$MATCH_DESTRUCTURE_MIR"
 run_dump_mir "$RECURSIVE_DESTRUCTURE_SRC" "$RECURSIVE_DESTRUCTURE_MIR"
 run_dump_llvm_pre "$OWNERSHIP_SRC" "$LLVM_IR"
 run_dump_llvm_pre "$CLOSURE_SRC" "$CLOSURE_LLVM_IR"
+run_dump_llvm_pre "$COROUTINE_SRC" "$COROUTINE_LLVM_IR"
 run_dump_llvm_pre "$EXTERN_SRC" "$EXTERN_LLVM_IR"
 run_dump_llvm_pre "$LLVM_SHAPE_SRC" "$LLVM_SHAPE_IR"
 run_dump_llvm_pre "$MATCH_DESTRUCTURE_SRC" "$MATCH_DESTRUCTURE_LLVM_IR"
@@ -307,6 +312,11 @@ TENSOR_OP_BODY="$ARTIFACT_DIR/tensor_op.mir"
 TENSOR_ADD_CONSTRUCTOR_BODY="$ARTIFACT_DIR/tensor_add_constructor.mir"
 TENSOR_OP_ADD_MATCH_BODY="$ARTIFACT_DIR/tensor_op_add_payload_match.mir"
 TENSOR_OP_ADD_CONSUME_BODY="$ARTIFACT_DIR/tensor_op_add_payload_consume.mir"
+COROUTINE_MAP_LOOP_BODY="$ARTIFACT_DIR/coroutine_map_loop.mir"
+COROUTINE_ZIP_LOOP_BODY="$ARTIFACT_DIR/coroutine_zip_loop.mir"
+COROUTINE_RETURNED_BODY="$ARTIFACT_DIR/coroutine_returned.mir"
+COROUTINE_MAP_RETURNED_BODY="$ARTIFACT_DIR/coroutine_map_returned.mir"
+COROUTINE_DUP_RETURNED_BODY="$ARTIFACT_DIR/coroutine_duplicate_returned.mir"
 
 extract_function "$OWN_MIR" "duplicated_array" "$DUP_BODY"
 extract_function "$OWN_MIR" "moved_call_arg" "$MOVED_BODY"
@@ -386,6 +396,17 @@ extract_function "$RECURSIVE_DESTRUCTURE_MIR" "tensor_op" "$TENSOR_OP_BODY"
 extract_function "$RECURSIVE_DESTRUCTURE_MIR" "tensor_add_constructor" "$TENSOR_ADD_CONSTRUCTOR_BODY"
 extract_function "$RECURSIVE_DESTRUCTURE_MIR" "tensor_op_add_payload_match" "$TENSOR_OP_ADD_MATCH_BODY"
 extract_function "$RECURSIVE_DESTRUCTURE_MIR" "tensor_op_add_payload_consume" "$TENSOR_OP_ADD_CONSUME_BODY"
+extract_function "$COROUTINE_MIR" "coroutine_map_loop" "$COROUTINE_MAP_LOOP_BODY"
+extract_function "$COROUTINE_MIR" "coroutine_zip_loop" "$COROUTINE_ZIP_LOOP_BODY"
+extract_function "$COROUTINE_MIR" "coroutine_returned" "$COROUTINE_RETURNED_BODY"
+extract_function "$COROUTINE_MIR" "coroutine_map_returned" "$COROUTINE_MAP_RETURNED_BODY"
+extract_function "$COROUTINE_MIR" "coroutine_duplicate_returned" "$COROUTINE_DUP_RETURNED_BODY"
+
+ARRAY_SIZE_MIR='extract\.field %[0-9]+, 0 : Int ; ops \[%[0-9]+:container/borrow#0\]'
+ARRAY_DATA_MIR='extract\.field %[0-9]+, 1 : Ptr ; ops \[%[0-9]+:container/borrow#0\]'
+ARRAY_PTR_OFFSET_MIR='ptr_offset %[0-9]+, %[0-9]+ : Ptr ; ops \[%[0-9]+:value/borrow#0, %[0-9]+:index/borrow#1\]'
+ARRAY_LOAD_MIR='load %[0-9]+ :'
+ARRAY_VIEW_MIR='construct\.tuple \{ %[0-9]+, %[0-9]+ \} : Array.*ops \[%[0-9]+:field/borrow#0, %[0-9]+:field/borrow#1\]'
 
 section "MIR generation"
 assert_contains "$RANGE_BORROW_BODY" '^  bb1 loop\.cond:' "range loop should create a loop condition block"
@@ -393,7 +414,7 @@ assert_contains "$RANGE_BORROW_BODY" '^    %[0-9]+ = phi \[bb0: %[0-9]+, bb3: %[
 assert_contains "$RANGE_BORROW_BODY" '^  bb2 loop\.body:' "range loop should create a loop body block"
 assert_contains "$RANGE_BORROW_BODY" '^  bb3 loop\.inc:' "range loop should create a loop increment block"
 assert_contains "$RANGE_BORROW_BODY" '^  bb4 loop\.after:' "range loop should create a loop exit block"
-assert_contains "$RANGE_BORROW_BODY" 'array_size %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' "array_size should borrow its container"
+assert_contains "$RANGE_BORROW_BODY" "$ARRAY_SIZE_MIR" "array size projection should borrow its container"
 assert_contains "$BRANCH_BODY" '^  bb1 match\.cont:' "if expression should lower through a MIR match continuation"
 assert_contains "$BRANCH_BODY" '^    %[0-9]+ = phi \[bb2: %[0-9]+, bb3: %[0-9]+\]' "match result should be a MIR_PHI in the continuation"
 assert_contains "$BRANCH_BODY" '^    br bb1$' "match arms should branch into the continuation"
@@ -459,12 +480,16 @@ assert_order "$RECORD_LIST_EXACT_BODY" "exact two-cons record destructure should
   'list_is_empty %[0-9]+' \
   'cond %[0-9]+, bb4, bb5'
 assert_order "$RECORD_ARRAY_BODY" "record array pattern should test length and extract both elements" \
-  'array_size %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
+  "$ARRAY_SIZE_MIR" \
   'const\.int 2' \
   'ieq %[0-9]+, %[0-9]+' \
-  'extract\.array_at %[0-9]+, %[0-9]+.*index/borrow#1' \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR" \
   'br bb7' \
-  'extract\.array_at %[0-9]+, %[0-9]+.*index/borrow#1' \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR" \
   'br bb4'
 assert_order "$RECORD_ARRAY_BODY" "record array pattern should project both bound record fields" \
   '^  bb4 match\.arm\.0\.body:' \
@@ -489,9 +514,13 @@ assert_order "$NESTED_RECORD_LIST_BODY" "nested record list destructure should t
   'ops \[%[0-9]+:container/borrow#0\]' \
   'list_is_empty %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]'
 assert_order "$NESTED_RECORD_ARRAY_BODY" "nested record array destructure should test length and extract both elements" \
-  'array_size %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
-  'extract\.array_at %[0-9]+, %[0-9]+.*index/borrow#1' \
-  'extract\.array_at %[0-9]+, %[0-9]+.*index/borrow#1'
+  "$ARRAY_SIZE_MIR" \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR" \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR"
 assert_order "$NESTED_RECORD_ARRAY_BODY" "nested record array destructure should project through both record layers" \
   '^  bb4 match\.arm\.0\.body:' \
   'extract\.field %[0-9]+, 0' \
@@ -540,11 +569,12 @@ assert_order "$LIST_RECORD_ARRAY_PAYLOAD_BODY" "list-bound record array payload 
   'extract\.field %[0-9]+, 0' \
   'call %[0-9]+.*consume_array.*value/consume#0'
 assert_order "$ARRAY_RECORD_LIST_PAYLOAD_BODY" "array pattern should bind a record containing a list payload" \
-  'array_size %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
+  "$ARRAY_SIZE_MIR" \
   'const\.int 1' \
   'ieq %[0-9]+, %[0-9]+' \
-  'extract\.array_at %[0-9]+, %[0-9]+' \
-  'ops \[%[0-9]+:container/borrow#0, %[0-9]+:index/borrow#1\]'
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR"
 assert_order "$ARRAY_RECORD_LIST_PAYLOAD_BODY" "array-bound record list payload should be consumed in the arm body" \
   '^  bb4 match\.arm\.0\.body:' \
   'extract\.field %[0-9]+, 0' \
@@ -580,15 +610,17 @@ assert_order "$VARIANT_FIRST_FIELD_FAILURE_BODY" "variant first-field literal fa
   ' = dup %[0-9]+'
 assert_not_contains "$VARIANT_FIRST_FIELD_FAILURE_BODY" 'perceus\.edge\.drop' "variant first-field failure should not emit an edge drop before payload ownership exists"
 assert_order "$ARRAY_PATTERN_FAILURE_BODY" "failed array length pattern should retry before extracting the one-element payload" \
-  'array_size %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
+  "$ARRAY_SIZE_MIR" \
   'const\.int 2' \
   'ieq %[0-9]+, %[0-9]+' \
   '^  bb5 match\.arm\.1\.test:' \
-  'array_size %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
+  "$ARRAY_SIZE_MIR" \
   'const\.int 1' \
   'ieq %[0-9]+, %[0-9]+' \
   '^  bb10 match\.array\.bb5:' \
-  'extract\.array_at %[0-9]+, %[0-9]+.*index/borrow#1'
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR"
 assert_contains "$ARRAY_PATTERN_FAILURE_BODY" 'call %[0-9]+.*value/consume#0' "array pattern fallback arm should consume the extracted managed payload"
 assert_order "$LIST_PATTERN_FAILURE_BODY" "failed two-cons list pattern should retry against the one-cons payload arm" \
   'extract\.list_head %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
@@ -612,11 +644,11 @@ assert_order "$LIST_PATTERN_FAILURE_BODY" "one-cons fallback list pattern should
   'list_is_empty %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
   'cond %[0-9]+, bb10, bb11'
 assert_order "$HEAP_ARRAY_PATTERN_FAILURE_BODY" "heap array pattern failure should drop the owned scrutinee on the no-match retry edge" \
-  'array_size %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
+  "$ARRAY_SIZE_MIR" \
   'const\.int 2' \
   'ieq %[0-9]+, %[0-9]+' \
   '^  bb5 match\.arm\.1\.test:' \
-  'array_size %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
+  "$ARRAY_SIZE_MIR" \
   'const\.int 1' \
   'ieq %[0-9]+, %[0-9]+' \
   'perceus\.edge\.drop:' \
@@ -655,9 +687,13 @@ assert_order "$DIRECT_RECURSIVE_LIST_BODY" "recursive list record match should p
   'iadd %[0-9]+, %[0-9]+'
 assert_order "$DIRECT_RECURSIVE_ARRAY_BODY" "recursive array record match should extract kids before testing the array" \
   'extract\.field %[0-9]+, 1' \
-  'array_size %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
-  'extract\.array_at %[0-9]+, %[0-9]+.*index/borrow#1' \
-  'extract\.array_at %[0-9]+, %[0-9]+.*index/borrow#1'
+  "$ARRAY_SIZE_MIR" \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR" \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR"
 assert_order "$DIRECT_RECURSIVE_ARRAY_BODY" "recursive array record match should project both matched node values" \
   '^  bb4 match\.arm\.0\.body:' \
   'extract\.field %[0-9]+, 0' \
@@ -681,8 +717,9 @@ assert_order "$TENSOR_ADD_CONSTRUCTOR_BODY" "TensorRef constructor fixture shoul
   'call %[0-9]+( as \$tensor_add[^ ]*)?\(' \
   'return %[0-9]+'
 assert_order "$TENSOR_OP_BODY" "TensorRef op projection should extract array element before op field" \
-  'extract\.array_at %[0-9]+, %[0-9]+' \
-  'ops \[%[0-9]+:container/borrow#0, %[0-9]+:index/borrow#1\]' \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR" \
   'extract\.field %[0-9]+, 3' \
   'ops \[%[0-9]+:container/borrow#0\]'
 assert_order "$TENSOR_OP_ADD_MATCH_BODY" "recursive sum payload match should extract both TensorRef fields" \
@@ -692,8 +729,8 @@ assert_order "$TENSOR_OP_ADD_MATCH_BODY" "recursive sum payload match should ext
   'extract\.field %[0-9]+, 1'
 assert_order "$TENSOR_OP_ADD_MATCH_BODY" "recursive sum payload arm should borrow both TensorRef payloads for array_size" \
   '^  bb4 match\.arm\.0\.body:' \
-  'array_size %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
-  'array_size %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
+  "$ARRAY_SIZE_MIR" \
+  "$ARRAY_SIZE_MIR" \
   'iadd %[0-9]+, %[0-9]+'
 assert_order "$TENSOR_OP_ADD_CONSUME_BODY" "recursive sum payload consuming arm should extract selected TensorRef field" \
   'extract\.variant_payload %[0-9]+, TensOpAdd#1' \
@@ -704,19 +741,89 @@ assert_not_contains "$TENSOR_OP_ADD_MATCH_BODY" '<no terminator>' "recursive sum
 assert_not_contains "$TENSOR_OP_ADD_CONSUME_BODY" '<no terminator>' "recursive sum payload consume should not leave unterminated MIR blocks"
 assert_order "$NESTED_EXTRACT_BODY" "nested tuple/array extraction should lower as field extract before array_at" \
   'extract\.field %[0-9]+, 0' \
-  'extract\.array_at %[0-9]+, %[0-9]+'
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR"
 assert_order "$CLOSURE_USE_CELL_BODY" "closure env array field should extract env field before array element" \
   'extract\.field %[0-9]+, 0' \
-  'extract\.array_at %[0-9]+, %[0-9]+'
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR"
 assert_contains "$LIST_HEAD_BODY" 'extract\.list_head %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' "list head pattern should borrow the list container"
 assert_order "$LIST_HEAD_BODY" "list tail pattern should borrow the list container" \
   'extract\.list_tail %[0-9]+' \
   'ops \[%[0-9]+:container/borrow#0\]'
 assert_contains "$ARRAY_FILL_CONST_BODY" 'construct\.array_fill_const %[0-9]+, %[0-9]+.*ops \[%[0-9]+:value/borrow#0, %[0-9]+:element/consume#1\]' "array_fill_const should construct through MIR_CONSTRUCT with size borrow and element consume"
 assert_contains "$ARRAY_FILL_BODY" 'construct\.array_fill %[0-9]+, %[0-9]+.*ops \[%[0-9]+:value/borrow#0, %[0-9]+:function/borrow#1\]' "array_fill should borrow the fill function"
-assert_contains "$ARRAY_RANGE_BODY" 'construct\.array_range %[0-9]+, %[0-9]+, %[0-9]+.*ops \[%[0-9]+:index/borrow#0, %[0-9]+:value/borrow#1, %[0-9]+:container/borrow#2\]' "array_range should borrow indexes and source container"
-assert_contains "$ARRAY_OFFSET_BODY" 'extract\.array_offset %[0-9]+, %[0-9]+.*ops \[%[0-9]+:index/borrow#0, %[0-9]+:container/borrow#1\]' "array_offset should lower as MIR_EXTRACT"
-assert_contains "$ARRAY_SUCC_BODY" 'extract\.array_succ %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' "array_succ should lower as MIR_EXTRACT"
+assert_order "$ARRAY_RANGE_BODY" "array_range should lower to a borrowed data pointer slice" \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_VIEW_MIR"
+assert_order "$ARRAY_OFFSET_BODY" "array_offset should lower to size/data pointer arithmetic" \
+  "$ARRAY_SIZE_MIR" \
+  'igt %[0-9]+, %[0-9]+' \
+  'isub %[0-9]+, %[0-9]+' \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_VIEW_MIR"
+assert_order "$ARRAY_SUCC_BODY" "array_succ should lower to size/data pointer arithmetic" \
+  "$ARRAY_SIZE_MIR" \
+  'igt %[0-9]+, %[0-9]+' \
+  'isub %[0-9]+, %[0-9]+' \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_VIEW_MIR"
+assert_order "$COROUTINE_MIR" "cor_map pipeline should construct iter, map, then loop coroutines" \
+  '^fn coroutine_map_loop\(' \
+  'fn_ref \$\$builtin\.iter\.list\.[0-9]+' \
+  'coro\.new %[0-9]+\(%[0-9]+\)' \
+  'fn_ref \$\$builtin\.cor_map\.[0-9]+' \
+  'coro\.new %[0-9]+\(%[0-9]+, %[0-9]+\)' \
+  'fn_ref \$\$builtin\.cor_loop\.[0-9]+' \
+  'coro\.new %[0-9]+\(%[0-9]+\)'
+assert_order "$COROUTINE_MIR" "cor_map wrapper should drive source and yield mapped values" \
+  '^fn \$builtin\.cor_map\.[0-9]+\(' \
+  '^  bb1 cor_map\.check:' \
+  'coro\.next %[0-9]+\(\)' \
+  'extract\.variant_payload %[0-9]+, Some#0' \
+  'extract\.field %[0-9]+, 0' \
+  'call %0\(%[0-9]+\)' \
+  'yield %[0-9]+, bb3' \
+  '^  bb4 cor_map\.done:' \
+  'coro\.done'
+assert_order "$COROUTINE_MIR" "cor_loop over mapped coroutine should reset through coro.reset" \
+  'coro\.reset %[0-9]+' \
+  'ops \[%[0-9]+:value/consume#0\]'
+assert_order "$COROUTINE_MIR" "cor_map should specialize captured generic builtin functions" \
+  '^fn coroutine_map_double_loop\(' \
+  'fn_ref \$builtin_Double\.Int\.Double' \
+  'fn_ref \$\$builtin\.cor_map\.[0-9]+' \
+  'coro\.new %[0-9]+\(%[0-9]+, %[0-9]+\)'
+assert_order "$COROUTINE_MIR" "cor_zip pipeline should construct two sources, zip, then loop" \
+  '^fn coroutine_zip_loop\(' \
+  'fn_ref \$coroutine_zip_loop\.a' \
+  'fn_ref \$coroutine_zip_loop\.b' \
+  'coro\.new %[0-9]+\(\)' \
+  'coro\.new %[0-9]+\(\)' \
+  'fn_ref \$\$builtin\.cor_zip\.[0-9]+' \
+  'coro\.new %[0-9]+\(%[0-9]+, %[0-9]+\)' \
+  'fn_ref \$\$builtin\.cor_loop\.[0-9]+' \
+  'coro\.new %[0-9]+\(%[0-9]+\)'
+assert_order "$COROUTINE_MIR" "cor_zip wrapper should stop on either input and yield tuples" \
+  '^fn \$builtin\.cor_zip\.[0-9]+\(' \
+  '^  bb1 cor_zip\.check_left:' \
+  'coro\.next %0\(\)' \
+  'cond %[0-9]+, bb2, bb[0-9]+' \
+  '^  bb2 cor_zip\.check_right:' \
+  'coro\.next %1\(\)' \
+  'cond %[0-9]+, bb3, bb[0-9]+' \
+  '^  bb3 cor_zip\.value:' \
+  'extract\.variant_payload %[0-9]+, Some#0' \
+  'extract\.variant_payload %[0-9]+, Some#0' \
+  'construct\.tuple \{ %[0-9]+, %[0-9]+ \}' \
+  'yield %[0-9]+, bb4' \
+  '^  bb5 cor_zip\.done:' \
+  'coro\.done'
 assert_contains "$EXTERN_MIR" '^extern fn abs\(%0 arg0: T @borrow\) -> T @owned;' "generic extern should dump as a bodyless MIR function"
 assert_contains "$EXTERN_MIR" '^extern fn abs\.Int\.Int\(%0 arg0: Int @borrow\) -> Int @owned;' "specialized extern should dump as a bodyless MIR function"
 
@@ -766,14 +873,68 @@ assert_order "$TENSOR_ADD_BODY" "returned TensorRef constructor should heap allo
   'construct\.tuple \{ data: %[0-9]+, grad: %[0-9]+, shape: %[0-9]+, op: %[0-9]+ \}' \
   'construct\.array_literal \{ %[0-9]+ \}' \
   'ea heap#[0-9]+'
+assert_order "$COROUTINE_MAP_LOOP_BODY" "local mapped coroutine pipeline should stay stack allocated" \
+  'coro\.new %[0-9]+\(%[0-9]+\)' \
+  'ea stack#[0-9]+' \
+  'coro\.new %[0-9]+\(%[0-9]+, %[0-9]+\)' \
+  'ea stack#[0-9]+' \
+  'coro\.new %[0-9]+\(%[0-9]+\)' \
+  'ea stack#[0-9]+'
+assert_order "$COROUTINE_ZIP_LOOP_BODY" "local zipped coroutine pipeline should stay stack allocated" \
+  'coro\.new %[0-9]+\(\)' \
+  'ea stack#[0-9]+' \
+  'coro\.new %[0-9]+\(\)' \
+  'ea stack#[0-9]+' \
+  'coro\.new %[0-9]+\(%[0-9]+, %[0-9]+\)' \
+  'ea stack#[0-9]+' \
+  'coro\.new %[0-9]+\(%[0-9]+\)' \
+  'ea stack#[0-9]+'
+assert_order "$COROUTINE_RETURNED_BODY" "returned coroutine should be heap allocated" \
+  'coro\.new %[0-9]+\(\)' \
+  'ea heap#[0-9]+' \
+  'return %[0-9]+.*return/consume#0'
+assert_order "$COROUTINE_MAP_RETURNED_BODY" "returned coroutine adapter should heap allocate wrapper and captured source" \
+  'coro\.new %[0-9]+\(\)' \
+  'ea heap#[0-9]+' \
+  'coro\.new %[0-9]+\(%[0-9]+, %[0-9]+\)' \
+  'ea heap#[0-9]+' \
+  'return %[0-9]+.*return/consume#0'
 
 section "Perceus instrumentation"
 assert_order "$DUP_BODY" "duplicate array should dup before consuming the same owner twice" \
   'construct\.array_literal' \
   ' = dup %[0-9]+' \
   'construct\.tuple \{ %[0-9]+, %[0-9]+ \}'
-assert_not_contains "$BORROWED_BODY" ' = dup ' "borrowed array_size should not force a dup"
-assert_not_contains "$BORROWED_BODY" ' = drop ' "borrowed array_size should not force a drop"
+assert_order "$COROUTINE_DUP_RETURNED_BODY" "duplicated returned coroutine should dup before consuming the owner twice" \
+  'coro\.new %[0-9]+\(\)' \
+  'ea heap#[0-9]+' \
+  ' = dup %[0-9]+' \
+  'construct\.tuple \{ %[0-9]+, %[0-9]+ \}' \
+  'field/consume#0.*field/consume#1'
+assert_order "$COROUTINE_MIR" "cor_map wrapper should drop the owned source on the done edge" \
+  '^fn \$builtin\.cor_map\.[0-9]+\(' \
+  'cond %[0-9]+, bb2, bb[0-9]+' \
+  '^  bb4 cor_map\.done:' \
+  'coro\.done' \
+  '^  bb[0-9]+ perceus\.edge\.drop:' \
+  ' = drop %1' \
+  'br bb4'
+assert_order "$COROUTINE_MIR" "cor_zip wrapper should drop both owned sources on either done edge" \
+  '^fn \$builtin\.cor_zip\.[0-9]+\(' \
+  '^  bb5 cor_zip\.done:' \
+  'coro\.done' \
+  '^  bb[0-9]+ perceus\.edge\.drop:' \
+  ' = drop %0' \
+  ' = drop %1' \
+  'br bb5' \
+  '^  bb[0-9]+ perceus\.edge\.drop:' \
+  ' = drop %0' \
+  ' = drop %1' \
+  'br bb5'
+assert_order "$BORROWED_BODY" "borrowed array size should project the size field before tuple return" \
+  'construct\.array_literal' \
+  "$ARRAY_SIZE_MIR" \
+  'construct\.tuple \{ %[0-9]+, %[0-9]+ \}'
 assert_contains "$BRANCH_BODY" '^  bb[0-9]+ perceus\.edge\.drop:' "path-local branch release should split the edge"
 assert_contains "$BRANCH_BODY" ' = drop %[0-9]+.*ops \[%[0-9]+:value/borrow#0\]' "edge release block should drop the abandoned heap value"
 assert_not_contains "$BRANCH_CONSUME_BODY" ' = dup ' "branch-local consuming uses should not force path-insensitive dup"
@@ -821,7 +982,7 @@ assert_order "$PHI_BORROW_RETURN_BODY" "borrowed-return managed phi should relea
 assert_order "$PHI_BORROW_RETURN_BODY" "borrowed managed phi should borrow for array_size and then return without dup" \
   '^  bb1 match\.cont:' \
   ' = phi \[bb2: %[0-9]+, bb3: %[0-9]+\]' \
-  'array_size %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
+  "$ARRAY_SIZE_MIR" \
   'return %[0-9]+'
 assert_not_contains "$PHI_BORROW_RETURN_BODY" ' = dup ' "borrowed-return managed phi should not dup for array_size before return"
 assert_order "$MATCH_BODY" "unused owned match result should be dropped in the continuation" \
@@ -831,12 +992,16 @@ assert_order "$MATCH_BODY" "unused owned match result should be dropped in the c
   'return %[0-9]+'
 assert_not_contains "$RANGE_BORROW_BODY" ' = drop ' "loop-borrowed returned array should not be dropped before return"
 assert_order "$RANGE_REPLACE_BODY" "managed array_set should load and drop the overwritten slot" \
-  'extract\.array_at %[0-9]+, %[0-9]+' \
-  'array_set %[0-9]+, %[0-9]+, %[0-9]+' \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  'load_owned %[0-9]+ : Array' \
+  'store %[0-9]+, %[0-9]+ : \(\).*ops \[%[0-9]+:value/borrow#0, %[0-9]+:element/consume#1\]' \
   ' = drop %[0-9]+'
 assert_order "$RANGE_REPLACE_BODY" "returning a borrowed array cell should dup the extraction before dropping the container" \
   '^  bb4 loop\.after:' \
-  'extract\.array_at %[0-9]+, %[0-9]+' \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR" \
   ' = dup %[0-9]+' \
   ' = drop %[0-9]+' \
   'return %[0-9]+'
@@ -942,11 +1107,11 @@ assert_order "$TENSOR_OP_ADD_MATCH_BODY" "recursive sum match should dup both bo
   ' = dup %[0-9]+'
 assert_order "$TENSOR_OP_ADD_MATCH_BODY" "recursive sum match body should drop duplicated TensorRef borrows after array_size" \
   '^  bb4 match\.arm\.0\.body:' \
-  'array_size %[0-9]+' \
+  "$ARRAY_SIZE_MIR" \
+  "$ARRAY_SIZE_MIR" \
+  'iadd %[0-9]+, %[0-9]+' \
   ' = drop %[0-9]+' \
-  'array_size %[0-9]+' \
-  ' = drop %[0-9]+' \
-  'iadd %[0-9]+, %[0-9]+'
+  ' = drop %[0-9]+'
 assert_order "$TENSOR_OP_ADD_CONSUME_BODY" "recursive sum consuming arm should dup selected TensorRef payload before consume" \
   'extract\.variant_payload %[0-9]+, TensOpAdd#1' \
   'extract\.field %[0-9]+, 0' \
@@ -958,21 +1123,25 @@ assert_order "$TENSOR_OP_ADD_CONSUME_BODY" "recursive sum consuming arm should p
   'call %[0-9]+.*consume_tensor.*value/consume#0'
 assert_order "$NESTED_EXTRACT_BODY" "nested borrowed extraction should keep the outer borrowed field live through element use" \
   'extract\.field %[0-9]+, 0' \
-  'extract\.array_at %[0-9]+, %[0-9]+' \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR" \
   'call %[0-9]+.*value/consume#0' \
   ' = drop %[0-9]+'
 assert_order "$CLOSURE_USE_CELL_BODY" "closure env nested array extraction should keep captured array live through element use" \
   'extract\.field %[0-9]+, 0' \
-  'extract\.array_at %[0-9]+, %[0-9]+' \
+  "$ARRAY_DATA_MIR" \
+  "$ARRAY_PTR_OFFSET_MIR" \
+  "$ARRAY_LOAD_MIR" \
   'call %[0-9]+.*value/consume#0' \
   ' = drop %[0-9]+'
 assert_order "$ARRAY_OFFSET_BODY" "returned array_offset borrow should dup before dropping the source array" \
-  'extract\.array_offset %[0-9]+, %[0-9]+' \
+  "$ARRAY_VIEW_MIR" \
   ' = dup %[0-9]+' \
   ' = drop %[0-9]+' \
   'return %[0-9]+'
 assert_order "$ARRAY_SUCC_BODY" "returned array_succ borrow should dup before dropping the source array" \
-  'extract\.array_succ %[0-9]+' \
+  "$ARRAY_VIEW_MIR" \
   ' = dup %[0-9]+' \
   ' = drop %[0-9]+' \
   'return %[0-9]+'
@@ -986,6 +1155,9 @@ assert_contains "$LLVM_IR" 'call void @__ylc_dup\(ptr' "MIR dup markers should l
 assert_contains "$LLVM_IR" 'call void @__ylc_drop\(ptr' "MIR drop markers should lower to __ylc_drop calls"
 assert_contains "$LLVM_IR" 'declare void @__ylc_dup\(ptr' "__ylc_dup hook should be declared"
 assert_contains "$LLVM_IR" 'declare void @__ylc_drop\(ptr' "__ylc_drop hook should be declared"
+assert_contains "$COROUTINE_LLVM_IR" 'define .*@coroutine_returned' "coroutine escape fixture should lower to LLVM"
+assert_contains "$COROUTINE_LLVM_IR" 'call void @__ylc_dup\(ptr' "coroutine Perceus dup markers should lower to __ylc_dup calls"
+assert_contains "$COROUTINE_LLVM_IR" 'call void @__ylc_drop\(ptr' "coroutine Perceus drop markers should lower to __ylc_drop calls"
 assert_contains "$LLVM_IR" '^%YlcRcHeader = type \{ i32, i32 \}' "MIR heap-managed payloads should declare an RC header layout"
 assert_order "$LLVM_IR" "heap array literal should allocate header plus payload and initialize RC header" \
   'define \{ i32, ptr \} @returned_array' \
@@ -1005,12 +1177,16 @@ assert_order "$CLOSURE_LLVM_IR" "heap closure env should allocate header plus pa
   'insertvalue %Closure undef, ptr %rc\.payload\.ptr, 1'
 assert_order "$LLVM_IR" "managed array_set lowering should load old slot, store new value, then drop old payload" \
   'loop\.body:' \
-  'load \{ i32, ptr \}, ptr %element_ptr' \
-  'store \{ i32, ptr \} %[A-Za-z0-9_.]+, ptr %element_ptr' \
+  'extractvalue \{ i32, ptr \} %array\.data, 1' \
+  'getelementptr \{ i32, ptr \}, ptr %extract\.field, i32 0' \
+  'load \{ i32, ptr \}, ptr %ptr\.offset' \
+  'store \{ i32, ptr \} %[A-Za-z0-9_.]+, ptr %ptr\.offset' \
   'call void @__ylc_drop\(ptr'
 assert_order "$LLVM_IR" "returned extraction lowering should dup before dropping its source container" \
   'loop\.after:' \
-  'load \{ i32, ptr \}, ptr %element_ptr' \
+  'extractvalue \{ i32, ptr \} %array\.data, 1' \
+  'getelementptr \{ i32, ptr \}, ptr %extract\.field[0-9]*, i32 0' \
+  'load \{ i32, ptr \}, ptr %ptr\.offset[0-9]*' \
   'call void @__ylc_dup\(ptr' \
   'call void @__ylc_drop\(ptr' \
   'ret \{ i32, ptr \}'
@@ -1084,9 +1260,11 @@ assert_order "$LLVM_SHAPE_IR" "closure construct/env/fn/field should lower to cl
 assert_order "$LLVM_SHAPE_IR" "array literal/at/set should lower to data insert, store, and load" \
   'insertvalue \{ i32, ptr \} \{ i32 2, ptr undef \}, ptr %array\.data\.stack, 1' \
   'extractvalue \{ i32, ptr \} %array\.data, 1' \
-  'store i32 .* ptr %element_ptr' \
+  'getelementptr i32, ptr %extract\.field, i32 0' \
+  'store i32 .* ptr %ptr\.offset' \
   'extractvalue \{ i32, ptr \} %array\.data, 1' \
-  'load i32'
+  'getelementptr i32, ptr %extract\.field[0-9]*, i32 0' \
+  'load i32, ptr %ptr\.offset[0-9]*'
 assert_contains "$MATCH_DESTRUCTURE_LLVM_IR" 'define i32 @tuple_let_record_destructure\(i32 %0, i32 %1\)' "destructure LLVM fixture should lower tuple let-binding function"
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "tuple let destructure should lower nested records to insertvalue/extractvalue" \
   'define i32 @tuple_let_record_destructure' \
@@ -1115,9 +1293,9 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "nested list record destructure should
 assert_contains "$MATCH_DESTRUCTURE_LLVM_IR" 'load \{ \{ i32 \} \}, ptr %list\.head\.ptr' "nested list record destructure should lower list head loads"
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "nested array record destructure should lower nested field extractvalue in the arm" \
   'define i32 @nested_record_array_match' \
-  'extractvalue \{ \{ i32 \} \} %element, 0' \
+  'extractvalue \{ \{ i32 \} \} %ptr\.load, 0' \
   'extractvalue \{ i32 \} %[A-Za-z0-9_.]+, 0'
-assert_contains "$MATCH_DESTRUCTURE_LLVM_IR" 'load \{ \{ i32 \} \}, ptr %element_ptr' "nested array record destructure should lower array element loads"
+assert_contains "$MATCH_DESTRUCTURE_LLVM_IR" 'load \{ \{ i32 \} \}, ptr %ptr\.offset[0-9]*' "nested array record destructure should lower array element loads"
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "variant record payload destructure should lower payload extraction" \
   'define i32 @variant_record_payload_match' \
   'extractvalue \{ i8, \{ \{ i32, ptr \}, i32 \} \} %phi, 1' \
@@ -1137,9 +1315,11 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "literal-pattern failure should lower 
   'br label %match\.arm\.1\.test'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "array-pattern fallback should lower second length test before one-element payload consume" \
   'define i32 @array_pattern_failure_then_payload_match' \
-  'icmp eq i32 %get_array_size, 2' \
-  'icmp eq i32 %get_array_size[0-9]+, 1' \
-  'load \{ \{ i32, ptr \} \}, ptr %element_ptr[0-9]*' \
+  'extractvalue \{ i32, ptr \} %array\.data, 0' \
+  'icmp eq i32 %extract\.field, 2' \
+  'extractvalue \{ i32, ptr \} %array\.data, 0' \
+  'icmp eq i32 %extract\.field[0-9]+, 1' \
+  'load \{ \{ i32, ptr \} \}, ptr %ptr\.offset[0-9]*' \
   'call i32 @consume_array\.Array_Int\.Int'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "list record array payload match should lower list loads into record field extraction" \
   'define i32 @list_record_array_payload_match' \
@@ -1154,15 +1334,17 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "list record array payload match shoul
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "array record list payload match should length-check before loading the record payload" \
   'define i32 @array_record_list_payload_match' \
   'extractvalue \{ i32, ptr \} %array\.data, 0' \
-  'icmp eq i32 %get_array_size, 1'
+  'icmp eq i32 %extract\.field, 1'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "array record list payload match should load the record payload" \
   'define i32 @array_record_list_payload_match' \
-  'load \{ ptr \}, ptr %element_ptr' \
+  'extractvalue \{ i32, ptr \} %array\.data, 1' \
+  'getelementptr \{ ptr \}, ptr %extract\.field[0-9]*, i32 0' \
+  'load \{ ptr \}, ptr %ptr\.offset[0-9]*' \
   'br label %match\.arm\.0\.body'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "array record list payload match should extract and consume the list field in the arm" \
   'define i32 @array_record_list_payload_match' \
   '^match\.arm\.0\.body:' \
-  'extractvalue \{ ptr \} %element, 0' \
+  'extractvalue \{ ptr \} %ptr\.load, 0' \
   'call i32 @consume_list\.List_Cons_Cons_Array_Int_List\.Int'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "variant first-field failure should compare before extracting the managed payload field" \
   'define i32 @variant_first_field_failure_payload_match' \
@@ -1174,8 +1356,10 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "variant first-field failure should co
   'call void @__ylc_dup\(ptr'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "heap array pattern failure should lower retry-edge drop after failed length tests" \
   'define i32 @heap_array_pattern_failure_then_payload_match' \
-  'icmp eq i32 %get_array_size, 2' \
-  'icmp eq i32 %get_array_size[0-9]+, 1' \
+  'extractvalue \{ i32, ptr \} %call, 0' \
+  'icmp eq i32 %extract\.field, 2' \
+  'extractvalue \{ i32, ptr \} %call, 0' \
+  'icmp eq i32 %extract\.field[0-9]+, 1' \
   'br i1 %eq[0-9]*, label %match\.array\.bb5, label %perceus\.edge\.drop' \
   '^perceus\.edge\.drop:' \
   'call void @__ylc_drop\(ptr'
@@ -1215,7 +1399,7 @@ assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive array match should lowe
   'define i32 @direct_recursive_record_array_match' \
   'extractvalue %DirectArrayNode %[A-Za-z0-9_.]+, 1' \
   'extractvalue \{ i32, ptr \} %extract\.field, 1' \
-  'load %DirectArrayNode, ptr %element_ptr' \
+  'load %DirectArrayNode, ptr %ptr\.offset' \
   'perceus\.edge\.drop:' \
   'call void @__ylc_drop\(ptr'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum constructor should lower payload tuple and tagged storage" \
@@ -1227,15 +1411,16 @@ assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum constructor should 
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef op projection should lower array load and op extractvalue" \
   'define \{ i8, \[32 x i8\] \} @tensor_op' \
   'load \{ \{ i32, ptr \}, \{ i32, ptr \}, \{ i32, ptr \}, \{ i8, \[32 x i8\] \} \}' \
-  'extractvalue \{ \{ i32, ptr \}, \{ i32, ptr \}, \{ i32, ptr \}, \{ i8, \[32 x i8\] \} \} %element, 3'
+  'extractvalue \{ \{ i32, ptr \}, \{ i32, ptr \}, \{ i32, ptr \}, \{ i8, \[32 x i8\] \} \} %ptr\.load, 3'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum match should lower array_size uses and drop duplicated payloads" \
   'define i32 @tensor_op_add_payload_match' \
   '^match\.arm\.0\.body:' \
   'extractvalue \{ i32, ptr \} %extract\.field[0-9]+, 0' \
-  'call void @__ylc_drop\(ptr' \
   'extractvalue \{ i32, ptr \} %extract\.field[0-9]+, 0' \
+  'add i32' \
   'call void @__ylc_drop\(ptr' \
-  'add i32'
+  'call void @__ylc_drop\(ptr' \
+  'br label %match\.cont'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum match should lower payload unpack and RC dup" \
   'define i32 @tensor_op_add_payload_match' \
   'extractvalue \{ i8, \[32 x i8\] \} %call[0-9]*, 1' \

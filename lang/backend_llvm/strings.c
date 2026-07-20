@@ -152,7 +152,7 @@ LLVMValueRef int_to_string(LLVMValueRef int_value, LLVMModuleRef module,
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
 
   LLVMTypeRef struct_type =
-      codegen_array_type(LLVMInt8TypeInContext(LLVMGetModuleContext(module)));
+      codegen_string_type(LLVMInt8TypeInContext(LLVMGetModuleContext(module)));
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
@@ -180,7 +180,7 @@ LLVMValueRef bool_to_string(LLVMValueRef int_value, LLVMModuleRef module,
       LLVMBuildSelect(builder, bool_val, true_len, false_len, "select_len");
 
   LLVMTypeRef struct_type =
-      codegen_array_type(LLVMInt8TypeInContext(LLVMGetModuleContext(module)));
+      codegen_string_type(LLVMInt8TypeInContext(LLVMGetModuleContext(module)));
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
@@ -204,7 +204,7 @@ LLVMValueRef uint64_to_string(LLVMValueRef int_value, LLVMModuleRef module,
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
 
   LLVMTypeRef struct_type =
-      codegen_array_type(LLVMInt8TypeInContext(LLVMGetModuleContext(module)));
+      codegen_string_type(LLVMInt8TypeInContext(LLVMGetModuleContext(module)));
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
@@ -225,7 +225,7 @@ LLVMValueRef char_to_string(LLVMValueRef char_value, LLVMModuleRef module,
 
   LLVMTypeRef data_ptr_type = LLVMPointerType(i8_type, 0);
 
-  LLVMTypeRef struct_type = codegen_array_type(i8_type);
+  LLVMTypeRef struct_type = codegen_string_type(i8_type);
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");
@@ -266,7 +266,7 @@ LLVMValueRef num_to_string(LLVMValueRef int_value, LLVMModuleRef module,
   LLVMTypeRef data_ptr_type = LLVMTypeOf(data_ptr);
 
   LLVMTypeRef struct_type =
-      codegen_array_type(LLVMInt8TypeInContext(LLVMGetModuleContext(module)));
+      codegen_string_type(LLVMInt8TypeInContext(LLVMGetModuleContext(module)));
 
   LLVMValueRef str = LLVMGetUndef(struct_type);
   str = LLVMBuildInsertValue(builder, str, data_ptr, 1, "insert_array_data");

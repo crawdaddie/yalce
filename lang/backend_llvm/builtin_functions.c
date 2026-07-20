@@ -583,12 +583,9 @@ LLVMValueRef array_eq(LLVMValueRef arr1, LLVMValueRef arr2, Type *arr_type,
                       JITLangCtx *ctx, LLVMModuleRef module,
                       LLVMBuilderRef builder) {
 
-  // Get the element type from the array type
-  LLVMTypeRef element_type = type_to_llvm_type(arr_type, ctx, module);
-
   // Get sizes of both arrays
-  LLVMValueRef size1 = codegen_get_array_size(builder, arr1, element_type);
-  LLVMValueRef size2 = codegen_get_array_size(builder, arr2, element_type);
+  LLVMValueRef size1 = LLVMBuildExtractValue(builder, arr1, 0, "array1.size");
+  LLVMValueRef size2 = LLVMBuildExtractValue(builder, arr2, 0, "array2.size");
 
   // Compare sizes — if not equal, skip strncmp entirely.
   LLVMValueRef sizes_equal =
@@ -607,10 +604,11 @@ LLVMValueRef array_eq(LLVMValueRef arr1, LLVMValueRef arr2, Type *arr_type,
   LLVMPositionBuilderAtEnd(builder, cmp_block);
 
   // Get data pointers from both arrays
+  unsigned data_index = is_string_type(arr_type) ? 1 : 2;
   LLVMValueRef data1 =
-      LLVMBuildExtractValue(builder, arr1, 1, "get_array1_data_ptr");
+      LLVMBuildExtractValue(builder, arr1, data_index, "get_array1_data_ptr");
   LLVMValueRef data2 =
-      LLVMBuildExtractValue(builder, arr2, 1, "get_array2_data_ptr");
+      LLVMBuildExtractValue(builder, arr2, data_index, "get_array2_data_ptr");
 
   // Get or declare strncmp function
   LLVMTypeRef strncmp_args[] = {
@@ -1509,7 +1507,11 @@ LLVMValueRef DFAtOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
         LLVMBuildSub(builder, current_size, effective_offset, "new_size");
 
     LLVMValueRef data_ptr =
-        LLVMBuildExtractValue(builder, array_struct, 1, "data_ptr");
+        LLVMBuildExtractValue(builder, array_struct, 2, "data_ptr");
+    LLVMValueRef current_offset =
+        LLVMBuildExtractValue(builder, array_struct, 1, "array_offset");
+    LLVMValueRef new_offset =
+        LLVMBuildAdd(builder, current_offset, effective_offset, "new_offset");
 
     LLVMValueRef new_data_ptr =
         LLVMBuildGEP2(builder, element_type, data_ptr,
@@ -1517,8 +1519,11 @@ LLVMValueRef DFAtOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     new_array_struct = LLVMBuildInsertValue(builder, new_array_struct, new_size,
                                             0, "insert_new_size");
+    new_array_struct = LLVMBuildInsertValue(builder, new_array_struct,
+                                            new_offset, 1,
+                                            "insert_new_offset");
     new_array_struct = LLVMBuildInsertValue(
-        builder, new_array_struct, new_data_ptr, 1, "insert_new_data_ptr");
+        builder, new_array_struct, new_data_ptr, 2, "insert_new_data_ptr");
 
     result = LLVMBuildInsertValue(builder, result, new_array_struct, i,
                                   "result_field");
@@ -1564,7 +1569,7 @@ LLVMValueRef DFRawFieldsHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
         LLVMBuildExtractValue(builder, df_val, i, "array_struct");
 
     LLVMValueRef data_ptr =
-        LLVMBuildExtractValue(builder, array_struct, 1, "data_ptr");
+        LLVMBuildExtractValue(builder, array_struct, 2, "data_ptr");
 
     LLVMValueRef void_data_ptr =
         LLVMBuildBitCast(builder, data_ptr, void_ptr_type, "void_data_ptr");

@@ -29,26 +29,40 @@ static LLVMBasicBlockRef append_block_in_module(LLVMModuleRef module,
                                        name);
 }
 
-// Creates an array type: { i32, T* }
+// Creates an array value type: { i32 size, i32 offset, T* data }
 LLVMTypeRef codegen_array_type(LLVMTypeRef element_type) {
   LLVMContextRef llvm_ctx = type_context(element_type);
   return LLVMStructTypeInContext(
       llvm_ctx,
       (LLVMTypeRef[]){
           LLVMInt32TypeInContext(llvm_ctx), // size
-          LLVMPointerType(element_type, 0) // data pointer
+          LLVMInt32TypeInContext(llvm_ctx), // offset from allocation base
+          LLVMPointerType(element_type, 0)  // data pointer
       },
-      2, 0); // 2 elements, not packed
+      3, 0); // 3 elements, not packed
 }
 
-// Creates an array type: { i32, T* }
+// Strings keep the C runtime ABI: { i32 size, i8* chars }.
+LLVMTypeRef codegen_string_type(LLVMTypeRef char_type) {
+  LLVMContextRef llvm_ctx = type_context(char_type);
+  return LLVMStructTypeInContext(
+      llvm_ctx,
+      (LLVMTypeRef[]){
+          LLVMInt32TypeInContext(llvm_ctx), // size
+          LLVMPointerType(char_type, 0)     // chars pointer
+      },
+      2, 0);
+}
+
+// Creates a generic array value type: { i32, i32, i8* }
 LLVMTypeRef tmp_generic_codegen_array_type() {
   return LLVMStructType(
       (LLVMTypeRef[]){
           LLVMInt32Type(), // size
+          LLVMInt32Type(), // offset
           GENERIC_PTR,     // data pointer
       },
-      2, 0); // 2 elements, not packed
+      3, 0); // 3 elements, not packed
 }
 
 LLVMTypeRef codegen_matrix_type(LLVMTypeRef element_type) {
@@ -85,7 +99,7 @@ LLVMValueRef get_array_element(LLVMBuilderRef builder, LLVMValueRef array,
   LLVMValueRef array_struct = get_array_struct(array, array_type, builder);
 
   LLVMValueRef data_ptr =
-      LLVMBuildExtractValue(builder, array_struct, 1, "get_array_data_ptr");
+      LLVMBuildExtractValue(builder, array_struct, 2, "get_array_data_ptr");
 
   LLVMValueRef element_ptr =
       LLVMBuildGEP2(builder, element_type, data_ptr, (LLVMValueRef[]){index}, 1,
@@ -101,7 +115,7 @@ LLVMValueRef set_array_element(LLVMBuilderRef builder, LLVMValueRef array,
   LLVMValueRef array_struct = get_array_struct(array, array_type, builder);
 
   LLVMValueRef data_ptr =
-      LLVMBuildExtractValue(builder, array_struct, 1, "get_array_data_ptr");
+      LLVMBuildExtractValue(builder, array_struct, 2, "get_array_data_ptr");
 
   LLVMValueRef element_ptr =
       LLVMBuildGEP2(builder, element_type, data_ptr, (LLVMValueRef[]){index}, 1,
@@ -124,14 +138,31 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
 
   if (array_size > 0) {
   } else {
+    LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
     LLVMTypeRef empty_type = type_to_llvm_type(ast->type, ctx, module);
-
-    LLVMValueRef size_const =
-        LLVMConstInt(LLVMInt32TypeInContext(LLVMGetModuleContext(module)), 0,
-                     0);
+    LLVMValueRef size_const = LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 0,
+                                           0);
     LLVMValueRef array_struct = LLVMGetUndef(empty_type);
     array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 0,
                                         "insert_array_size");
+    if (is_string_type(ast->type)) {
+      LLVMValueRef null_data =
+          LLVMConstNull(LLVMPointerType(LLVMInt8TypeInContext(llvm_ctx), 0));
+      array_struct = LLVMBuildInsertValue(builder, array_struct, null_data, 1,
+                                          "insert_array_data");
+    } else {
+      Type *element_type_ref = ast->type->data.T_CONS.args[0];
+      LLVMTypeRef element_type =
+          element_type_ref->kind == T_FN
+              ? generic_ptr_type_for_module(module)
+              : type_to_llvm_type(element_type_ref, ctx, module);
+      LLVMValueRef null_data =
+          LLVMConstNull(LLVMPointerType(element_type, 0));
+      array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 1,
+                                          "insert_array_offset");
+      array_struct = LLVMBuildInsertValue(builder, array_struct, null_data, 2,
+                                          "insert_array_data");
+    }
 
     return array_struct;
   }
@@ -175,6 +206,10 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
 
   array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 0,
                                       "insert_array_size");
+  array_struct = LLVMBuildInsertValue(
+      builder, array_struct,
+      LLVMConstInt(LLVMInt32TypeInContext(LLVMGetModuleContext(module)), 0, 0),
+      1, "insert_array_offset");
 
   TICtx ti_ctx = {.env = ctx->env};
   if (is_constant_expr(ast, &ti_ctx) && ctx->coro_ctx) {
@@ -211,7 +246,7 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
     }
   }
 
-  array_struct = LLVMBuildInsertValue(builder, array_struct, data_ptr, 1,
+  array_struct = LLVMBuildInsertValue(builder, array_struct, data_ptr, 2,
                                       "insert_array_data");
   return array_struct;
 }
@@ -277,6 +312,10 @@ LLVMValueRef ArrayFillHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   array_struct =
       LLVMBuildInsertValue(builder, array_struct, size, 0, "insert_array_size");
+  array_struct = LLVMBuildInsertValue(
+      builder, array_struct,
+      LLVMConstInt(LLVMInt32TypeInContext(LLVMGetModuleContext(module)), 0, 0),
+      1, "insert_array_offset");
 
   Type *ftype = ast->data.AST_APPLICATION.function->type;
   Type *fill_func_type = ftype->data.T_FN.to->data.T_FN.from;
@@ -327,7 +366,7 @@ LLVMValueRef ArrayFillHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMPositionBuilderAtEnd(builder, after_block);
 
-  array_struct = LLVMBuildInsertValue(builder, array_struct, data_ptr, 1,
+  array_struct = LLVMBuildInsertValue(builder, array_struct, data_ptr, 2,
                                       "insert_array_data");
   return array_struct;
 }
@@ -368,6 +407,10 @@ LLVMValueRef ArrayFillConstHandler(Ast *ast, JITLangCtx *ctx,
 
   array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 0,
                                       "insert_array_size");
+  array_struct = LLVMBuildInsertValue(
+      builder, array_struct,
+      LLVMConstInt(LLVMInt32TypeInContext(LLVMGetModuleContext(module)), 0, 0),
+      1, "insert_array_offset");
 
   LLVMBasicBlockRef entry_block = LLVMGetInsertBlock(builder);
   LLVMValueRef function = LLVMGetBasicBlockParent(entry_block);
@@ -403,7 +446,7 @@ LLVMValueRef ArrayFillConstHandler(Ast *ast, JITLangCtx *ctx,
 
   LLVMPositionBuilderAtEnd(builder, after_block);
 
-  array_struct = LLVMBuildInsertValue(builder, array_struct, data_ptr, 1,
+  array_struct = LLVMBuildInsertValue(builder, array_struct, data_ptr, 2,
                                       "insert_array_data");
   return array_struct;
 }
@@ -447,7 +490,11 @@ LLVMValueRef ArraySuccHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMBuildSub(builder, current_size, size_decrement, "new_size");
 
   LLVMValueRef data_ptr =
-      LLVMBuildExtractValue(builder, array_struct, 1, "data_ptr");
+      LLVMBuildExtractValue(builder, array_struct, 2, "data_ptr");
+  LLVMValueRef current_offset =
+      LLVMBuildExtractValue(builder, array_struct, 1, "array_offset");
+  LLVMValueRef new_offset =
+      LLVMBuildAdd(builder, current_offset, size_mask, "new_offset");
 
   // Calculate the pointer offset in the same way (0 or 1 based on original
   // size) This ensures we don't move the pointer if the size was 0
@@ -458,8 +505,10 @@ LLVMValueRef ArraySuccHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // Build the new array struct
   new_array_struct = LLVMBuildInsertValue(builder, new_array_struct, new_size,
                                           0, "insert_new_size");
+  new_array_struct = LLVMBuildInsertValue(builder, new_array_struct, new_offset,
+                                          1, "insert_new_offset");
   new_array_struct = LLVMBuildInsertValue(
-      builder, new_array_struct, new_data_ptr, 1, "insert_new_data_ptr");
+      builder, new_array_struct, new_data_ptr, 2, "insert_new_data_ptr");
 
   return new_array_struct;
 }
@@ -496,7 +545,11 @@ LLVMValueRef ArrayRangeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef new_size = size_val;
 
   LLVMValueRef data_ptr =
-      LLVMBuildExtractValue(builder, array_struct, 1, "data_ptr");
+      LLVMBuildExtractValue(builder, array_struct, 2, "data_ptr");
+  LLVMValueRef current_offset =
+      LLVMBuildExtractValue(builder, array_struct, 1, "array_offset");
+  LLVMValueRef new_offset =
+      LLVMBuildAdd(builder, current_offset, offset_val, "new_offset");
 
   // Calculate the pointer offset in the same way (0 or 1 based on original
   // size) This ensures we don't move the pointer if the size was 0
@@ -507,8 +560,10 @@ LLVMValueRef ArrayRangeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // Build the new array struct
   new_array_struct = LLVMBuildInsertValue(builder, new_array_struct, new_size,
                                           0, "insert_new_size");
+  new_array_struct = LLVMBuildInsertValue(builder, new_array_struct, new_offset,
+                                          1, "insert_new_offset");
   new_array_struct = LLVMBuildInsertValue(
-      builder, new_array_struct, new_data_ptr, 1, "insert_new_data_ptr");
+      builder, new_array_struct, new_data_ptr, 2, "insert_new_data_ptr");
 
   return new_array_struct;
 }
@@ -560,7 +615,11 @@ LLVMValueRef ArrayOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       LLVMBuildSub(builder, current_size, size_decrement, "new_size");
 
   LLVMValueRef data_ptr =
-      LLVMBuildExtractValue(builder, array_struct, 1, "data_ptr");
+      LLVMBuildExtractValue(builder, array_struct, 2, "data_ptr");
+  LLVMValueRef current_offset =
+      LLVMBuildExtractValue(builder, array_struct, 1, "array_offset");
+  LLVMValueRef new_offset =
+      LLVMBuildAdd(builder, current_offset, offset_val, "new_offset");
 
   // Calculate the pointer offset in the same way (0 or 1 based on original
   // size) This ensures we don't move the pointer if the size was 0
@@ -571,8 +630,10 @@ LLVMValueRef ArrayOffsetHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // Build the new array struct
   new_array_struct = LLVMBuildInsertValue(builder, new_array_struct, new_size,
                                           0, "insert_new_size");
+  new_array_struct = LLVMBuildInsertValue(builder, new_array_struct, new_offset,
+                                          1, "insert_new_offset");
   new_array_struct = LLVMBuildInsertValue(
-      builder, new_array_struct, new_data_ptr, 1, "insert_new_data_ptr");
+      builder, new_array_struct, new_data_ptr, 2, "insert_new_data_ptr");
 
   return new_array_struct;
 }
@@ -595,7 +656,8 @@ LLVMValueRef CStrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
   arr = get_array_struct(arr, llvm_arr_type, builder);
 
-  return LLVMBuildExtractValue(builder, arr, 1, "get_array_data_ptr");
+  return LLVMBuildExtractValue(builder, arr, is_string_type(arr_type) ? 1 : 2,
+                               "get_array_data_ptr");
 }
 
 LLVMValueRef ArrayConstructor(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
@@ -615,7 +677,9 @@ LLVMValueRef ArrayConstructorHandler(Ast *ast, JITLangCtx *ctx,
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
   LLVMValueRef v = LLVMGetUndef(tmp_generic_codegen_array_type());
   v = LLVMBuildInsertValue(builder, v, size, 0, "insert_arr_size");
-  v = LLVMBuildInsertValue(builder, v, data_ptr, 1, "insert_arr_data");
+  v = LLVMBuildInsertValue(builder, v, LLVMConstInt(LLVMInt32Type(), 0, 0), 1,
+                           "insert_arr_offset");
+  v = LLVMBuildInsertValue(builder, v, data_ptr, 2, "insert_arr_data");
   return v;
 }
 LLVMValueRef ArrayOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,

@@ -72,6 +72,8 @@ typedef enum {
   MIR_FN_REF,
   MIR_CALL,
   MIR_CORO_NEW,
+  MIR_CORO_NEXT,
+  MIR_CORO_RESET,
 } MirInstrKind;
 
 typedef enum {
@@ -92,6 +94,10 @@ typedef enum {
   MIR_OP_KIND_LIST_IS_EMPTY,
   MIR_OP_KIND_ARRAY_SIZE,
   MIR_OP_KIND_ARRAY_SET,
+  MIR_OP_KIND_PTR_OFFSET,
+  MIR_OP_KIND_LOAD,
+  MIR_OP_KIND_LOAD_OWNED,
+  MIR_OP_KIND_STORE,
   MIR_OP_KIND_STR,
   MIR_OP_KIND_PRINT,
   MIR_OP_KIND_FLUSH,
@@ -514,6 +520,9 @@ void mir_builder_set_br(MirBuilder *builder, MirBlockId target);
 void mir_builder_set_cond(MirBuilder *builder, MirValueId cond,
                           MirBlockId then_block, MirBlockId else_block);
 void mir_builder_set_unreachable(MirBuilder *builder);
+void mir_builder_set_yield(MirBuilder *builder, MirValueId value,
+                           MirBlockId resume);
+void mir_builder_set_coro_done(MirBuilder *builder);
 
 MirInstr mir_make_instr(MirInstrKind kind, Type *type, Ast *origin);
 MirValueId mir_function_add_value(MirFunction *fn, Type *type, Ast *origin);
@@ -571,6 +580,14 @@ MirValueId mir_list_tail(MirBuilder *builder, Type *type, Ast *origin,
                          MirValueId list);
 MirValueId mir_array_literal(MirBuilder *builder, Type *type, Ast *origin,
                              MirValueIdVec items);
+MirValueId mir_ptr_offset(MirBuilder *builder, Type *ptr_type, Ast *origin,
+                          MirValueId ptr, MirValueId index);
+MirValueId mir_ptr_load(MirBuilder *builder, Type *type, Ast *origin,
+                        MirValueId ptr);
+MirValueId mir_ptr_load_owned(MirBuilder *builder, Type *type, Ast *origin,
+                              MirValueId ptr);
+MirValueId mir_ptr_store(MirBuilder *builder, Ast *origin, MirValueId ptr,
+                         MirValueId value);
 MirValueId mir_ieq(MirBuilder *builder, Ast *origin, MirValueId lhs,
                    MirValueId rhs);
 MirValueId mir_ueq(MirBuilder *builder, Ast *origin, MirValueId lhs,
@@ -583,6 +600,14 @@ MirValueId mir_beq(MirBuilder *builder, Ast *origin, MirValueId lhs,
                    MirValueId rhs);
 MirValueId mir_fn_ref(MirBuilder *builder, Type *type, Ast *origin,
                       MirFunction *fn);
+void mir_prepare_call(MirBuilder *builder, MirInstr *call);
+MirValueId mir_call_value(MirBuilder *builder, Type *type, Ast *origin,
+                          MirValueId callee, Type *callee_type,
+                          const MirValueId *args, size_t argc);
+MirValueId mir_coro_next(MirBuilder *builder, Ast *origin,
+                         MirValueId coroutine, Type *coroutine_type);
+MirValueId mir_coro_reset(MirBuilder *builder, Ast *origin,
+                          MirValueId coroutine, Type *coroutine_type);
 MirValueId mir_primitive_instr(MirBuilder *builder, MirPrimitiveOp op,
                                Type *type, Ast *origin,
                                const MirValueId *operands, size_t argc);

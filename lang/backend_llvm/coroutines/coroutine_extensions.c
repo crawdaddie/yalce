@@ -48,8 +48,8 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMTypeRef inner_prom_type = CORO_PROMISE_TYPE(llvm_yield_type);
 
   // Create wrapper coroutine function — takes just the inner handle
-  LLVMTypeRef wrapper_fn_type =
-      LLVMFunctionType(CORO_GENERIC_PTR, (LLVMTypeRef[]){CORO_GENERIC_PTR}, 1, 0);
+  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(
+      CORO_GENERIC_PTR, (LLVMTypeRef[]){CORO_GENERIC_PTR}, 1, 0);
 
   LLVMValueRef wrapper_fn = add_coroutine_helper_function(
       module, "coro_loop_wrapper", wrapper_fn_type);
@@ -94,7 +94,8 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
       get_coro_id_intrinsic(module),
       (LLVMValueRef[]){LLVMConstInt(CORO_I32, 0, 0), promise_alloca,
-                       LLVMConstNull(CORO_GENERIC_PTR), LLVMConstNull(CORO_GENERIC_PTR)},
+                       LLVMConstNull(CORO_GENERIC_PTR),
+                       LLVMConstNull(CORO_GENERIC_PTR)},
       4, "coro.id");
 
   LLVMValueRef size = LLVMBuildCall2(
@@ -137,8 +138,8 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, loop_bb);
 
   // Load inner handle from alloca
-  LLVMValueRef inner_handle_loop =
-      LLVMBuildLoad2(builder, CORO_GENERIC_PTR, inner_handle_slot, "inner_handle");
+  LLVMValueRef inner_handle_loop = LLVMBuildLoad2(
+      builder, CORO_GENERIC_PTR, inner_handle_slot, "inner_handle");
 
   // Read reset_fn and args_ptr from the INNER coroutine's promise
   LLVMValueRef inner_prom_ptr =
@@ -259,7 +260,8 @@ LLVMValueRef CorLoopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
       get_coro_end_intrinsic(module),
-      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3, "");
+      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3,
+      "");
 
   LLVMBuildRet(builder, handle);
 
@@ -285,8 +287,8 @@ LLVMValueRef coro_map_reset_fn(LLVMTypeRef promise_type,
                                LLVMBuilderRef builder) {
   // Create reset closure for mapped coroutine
   // Closure args: {map_fn_ptr, inner_handle}
-  LLVMTypeRef closure_args_ty =
-      LLVMStructTypeInContext(CORO_CONTEXT, (LLVMTypeRef[]){CORO_GENERIC_PTR, CORO_GENERIC_PTR}, 2, 0);
+  LLVMTypeRef closure_args_ty = LLVMStructTypeInContext(
+      CORO_CONTEXT, (LLVMTypeRef[]){CORO_GENERIC_PTR, CORO_GENERIC_PTR}, 2, 0);
 
   // Reset closure signature: (ptr frame_size_out, ptr args_ptr) -> ptr handle
   LLVMTypeRef reset_closure_type = LLVMFunctionType(
@@ -298,8 +300,7 @@ LLVMValueRef coro_map_reset_fn(LLVMTypeRef promise_type,
   LLVMSetLinkage(reset_closure_fn, LLVMExternalLinkage);
 
   LLVMBasicBlockRef reset_prev = LLVMGetInsertBlock(builder);
-  LLVMBasicBlockRef reset_entry =
-      CORO_APPEND_BLOCK(reset_closure_fn, "entry");
+  LLVMBasicBlockRef reset_entry = CORO_APPEND_BLOCK(reset_closure_fn, "entry");
   LLVMPositionBuilderAtEnd(builder, reset_entry);
 
   // Reset closure params: (ptr frame_size_out, ptr args_ptr)
@@ -460,7 +461,8 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
       get_coro_id_intrinsic(module),
       (LLVMValueRef[]){LLVMConstInt(CORO_I32, 0, 0), promise_alloca,
-                       LLVMConstNull(CORO_GENERIC_PTR), LLVMConstNull(CORO_GENERIC_PTR)},
+                       LLVMConstNull(CORO_GENERIC_PTR),
+                       LLVMConstNull(CORO_GENERIC_PTR)},
       4, "coro.id");
 
   LLVMValueRef size = LLVMBuildCall2(
@@ -515,8 +517,7 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildStore(builder, map_fn_param, map_fn_alloca);
 
   // === YIELD-FROM LOOP with mapping ===
-  LLVMBasicBlockRef loop_check_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "map.check");
+  LLVMBasicBlockRef loop_check_bb = CORO_APPEND_BLOCK(wrapper_fn, "map.check");
   LLVMBasicBlockRef loop_body_bb = CORO_APPEND_BLOCK(wrapper_fn, "map.body");
   LLVMBasicBlockRef get_value_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "map.get_value");
@@ -623,8 +624,7 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       CORO_APPEND_BLOCK(wrapper_fn, "final.return");
   LLVMValueRef final_switch =
       LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
-  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0),
-              final_return_bb);
+  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0), final_return_bb);
   LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 1, 0), cleanup_bb);
 
   LLVMPositionBuilderAtEnd(builder, final_return_bb);
@@ -647,7 +647,8 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
       get_coro_end_intrinsic(module),
-      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3, "");
+      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3,
+      "");
 
   LLVMBuildRet(builder, handle);
 
@@ -666,8 +667,8 @@ LLVMValueRef CorMapHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Create reset closure for mapped coroutine
   // Closure args: {map_fn_ptr, inner_handle}
-  LLVMTypeRef closure_args_ty =
-      LLVMStructTypeInContext(CORO_CONTEXT, (LLVMTypeRef[]){CORO_GENERIC_PTR, CORO_GENERIC_PTR}, 2, 0);
+  LLVMTypeRef closure_args_ty = LLVMStructTypeInContext(
+      CORO_CONTEXT, (LLVMTypeRef[]){CORO_GENERIC_PTR, CORO_GENERIC_PTR}, 2, 0);
 
   LLVMValueRef reset_closure_fn =
       coro_map_reset_fn(promise_type, inner_prom_type, wrapper_fn_type,
@@ -748,7 +749,8 @@ LLVMValueRef CorFilterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
       get_coro_id_intrinsic(module),
       (LLVMValueRef[]){LLVMConstInt(CORO_I32, 0, 0), promise_alloca,
-                       LLVMConstNull(CORO_GENERIC_PTR), LLVMConstNull(CORO_GENERIC_PTR)},
+                       LLVMConstNull(CORO_GENERIC_PTR),
+                       LLVMConstNull(CORO_GENERIC_PTR)},
       4, "coro.id");
 
   LLVMValueRef size = LLVMBuildCall2(
@@ -805,15 +807,13 @@ LLVMValueRef CorFilterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // === FILTER LOOP: consume inner until predicate passes or exhausted ===
   LLVMBasicBlockRef loop_check_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "filter.check");
-  LLVMBasicBlockRef loop_body_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "filter.body");
+  LLVMBasicBlockRef loop_body_bb = CORO_APPEND_BLOCK(wrapper_fn, "filter.body");
   LLVMBasicBlockRef test_predicate_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "filter.test");
   LLVMBasicBlockRef yield_bb = CORO_APPEND_BLOCK(wrapper_fn, "filter.yield");
   LLVMBasicBlockRef loop_resume_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "filter.resume");
-  LLVMBasicBlockRef loop_exit_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "filter.exit");
+  LLVMBasicBlockRef loop_exit_bb = CORO_APPEND_BLOCK(wrapper_fn, "filter.exit");
 
   LLVMBuildBr(builder, loop_check_bb);
 
@@ -921,8 +921,7 @@ LLVMValueRef CorFilterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       CORO_APPEND_BLOCK(wrapper_fn, "final.return");
   LLVMValueRef final_switch =
       LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
-  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0),
-              final_return_bb);
+  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0), final_return_bb);
   LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 1, 0), cleanup_bb);
 
   LLVMPositionBuilderAtEnd(builder, final_return_bb);
@@ -945,7 +944,8 @@ LLVMValueRef CorFilterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
       get_coro_end_intrinsic(module),
-      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3, "");
+      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3,
+      "");
 
   LLVMBuildRet(builder, handle);
 
@@ -964,8 +964,8 @@ LLVMValueRef CorFilterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Create reset closure for filtered coroutine
   // Closure args: {filter_fn_ptr, inner_handle}
-  LLVMTypeRef closure_args_ty =
-      LLVMStructTypeInContext(CORO_CONTEXT, (LLVMTypeRef[]){CORO_GENERIC_PTR, CORO_GENERIC_PTR}, 2, 0);
+  LLVMTypeRef closure_args_ty = LLVMStructTypeInContext(
+      CORO_CONTEXT, (LLVMTypeRef[]){CORO_GENERIC_PTR, CORO_GENERIC_PTR}, 2, 0);
 
   // Reuse coro_map_reset_fn since filter has same closure structure
   LLVMValueRef reset_closure_fn =
@@ -996,8 +996,8 @@ LLVMValueRef coro_take_reset_fn(LLVMTypeRef promise_type,
   // Create reset closure for coro_take coroutine
   //
   // Closure args: {take_count (i32), inner_handle (ptr)}
-  LLVMTypeRef closure_args_ty =
-      LLVMStructTypeInContext(CORO_CONTEXT, (LLVMTypeRef[]){CORO_I32, CORO_GENERIC_PTR}, 2, 0);
+  LLVMTypeRef closure_args_ty = LLVMStructTypeInContext(
+      CORO_CONTEXT, (LLVMTypeRef[]){CORO_I32, CORO_GENERIC_PTR}, 2, 0);
 
   // Reset closure signature: (ptr frame_size_out, ptr args_ptr) -> ptr handle
   LLVMTypeRef reset_closure_type = LLVMFunctionType(
@@ -1009,8 +1009,7 @@ LLVMValueRef coro_take_reset_fn(LLVMTypeRef promise_type,
   LLVMSetLinkage(reset_closure_fn, LLVMExternalLinkage);
 
   LLVMBasicBlockRef reset_prev = LLVMGetInsertBlock(builder);
-  LLVMBasicBlockRef reset_entry =
-      CORO_APPEND_BLOCK(reset_closure_fn, "entry");
+  LLVMBasicBlockRef reset_entry = CORO_APPEND_BLOCK(reset_closure_fn, "entry");
   LLVMPositionBuilderAtEnd(builder, reset_entry);
 
   // Reset closure params: (ptr frame_size_out, ptr args_ptr)
@@ -1084,11 +1083,10 @@ LLVMValueRef CorTakeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Create wrapper coroutine function: (frame_size_out, count, inner_handle) ->
   // handle
-  LLVMTypeRef wrapper_fn_type =
-      LLVMFunctionType(CORO_GENERIC_PTR,
-                       (LLVMTypeRef[]){LLVMPointerType(CORO_I64, 0),
-                                       CORO_I32, CORO_GENERIC_PTR},
-                       3, 0);
+  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(
+      CORO_GENERIC_PTR,
+      (LLVMTypeRef[]){LLVMPointerType(CORO_I64, 0), CORO_I32, CORO_GENERIC_PTR},
+      3, 0);
 
   LLVMValueRef wrapper_fn = add_coroutine_helper_function(
       module, "coro_take_wrapper", wrapper_fn_type);
@@ -1136,7 +1134,8 @@ LLVMValueRef CorTakeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
       get_coro_id_intrinsic(module),
       (LLVMValueRef[]){LLVMConstInt(CORO_I32, 0, 0), promise_alloca,
-                       LLVMConstNull(CORO_GENERIC_PTR), LLVMConstNull(CORO_GENERIC_PTR)},
+                       LLVMConstNull(CORO_GENERIC_PTR),
+                       LLVMConstNull(CORO_GENERIC_PTR)},
       4, "coro.id");
 
   LLVMValueRef size = LLVMBuildCall2(
@@ -1179,18 +1178,15 @@ LLVMValueRef CorTakeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, start_bb);
 
   // === TAKE LOOP ===
-  LLVMBasicBlockRef loop_check_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "take.check");
+  LLVMBasicBlockRef loop_check_bb = CORO_APPEND_BLOCK(wrapper_fn, "take.check");
   LLVMBasicBlockRef count_check_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "take.count_check");
-  LLVMBasicBlockRef loop_body_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "take.body");
+  LLVMBasicBlockRef loop_body_bb = CORO_APPEND_BLOCK(wrapper_fn, "take.body");
   LLVMBasicBlockRef get_value_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "take.get_value");
   LLVMBasicBlockRef loop_resume_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "take.resume");
-  LLVMBasicBlockRef loop_exit_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "take.exit");
+  LLVMBasicBlockRef loop_exit_bb = CORO_APPEND_BLOCK(wrapper_fn, "take.exit");
 
   LLVMBuildBr(builder, loop_check_bb);
 
@@ -1207,8 +1203,8 @@ LLVMValueRef CorTakeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // Second check: is inner done?
   LLVMPositionBuilderAtEnd(builder, count_check_bb);
   // Load inner handle from slot
-  LLVMValueRef inner_handle_for_done =
-      LLVMBuildLoad2(builder, CORO_GENERIC_PTR, inner_handle_slot, "inner_handle");
+  LLVMValueRef inner_handle_for_done = LLVMBuildLoad2(
+      builder, CORO_GENERIC_PTR, inner_handle_slot, "inner_handle");
   LLVMValueRef is_done_before = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_done_intrinsic(module)),
       get_coro_done_intrinsic(module), (LLVMValueRef[]){inner_handle_for_done},
@@ -1217,8 +1213,8 @@ LLVMValueRef CorTakeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Resume inner
   LLVMPositionBuilderAtEnd(builder, loop_body_bb);
-  LLVMValueRef inner_handle_for_resume =
-      LLVMBuildLoad2(builder, CORO_GENERIC_PTR, inner_handle_slot, "inner_handle");
+  LLVMValueRef inner_handle_for_resume = LLVMBuildLoad2(
+      builder, CORO_GENERIC_PTR, inner_handle_slot, "inner_handle");
   LLVMBuildCall2(builder,
                  LLVMGlobalGetValueType(get_coro_resume_intrinsic(module)),
                  get_coro_resume_intrinsic(module),
@@ -1232,14 +1228,13 @@ LLVMValueRef CorTakeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Get value from inner and yield it
   LLVMPositionBuilderAtEnd(builder, get_value_bb);
-  LLVMValueRef inner_handle_for_value =
-      LLVMBuildLoad2(builder, CORO_GENERIC_PTR, inner_handle_slot, "inner_handle");
+  LLVMValueRef inner_handle_for_value = LLVMBuildLoad2(
+      builder, CORO_GENERIC_PTR, inner_handle_slot, "inner_handle");
 
   LLVMValueRef inner_promise_raw = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),
       get_coro_promise_intrinsic(module),
-      (LLVMValueRef[]){inner_handle_for_value,
-                       LLVMConstInt(CORO_I32, 0, 0),
+      (LLVMValueRef[]){inner_handle_for_value, LLVMConstInt(CORO_I32, 0, 0),
                        LLVMConstInt(CORO_I1, 0, 0)},
       3, "inner.promise.raw");
 
@@ -1257,9 +1252,8 @@ LLVMValueRef CorTakeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef remaining_now =
       LLVMBuildLoad2(builder, CORO_I32, remaining_slot, "remaining.now");
 
-  LLVMValueRef remaining_dec =
-      LLVMBuildSub(builder, remaining_now, LLVMConstInt(CORO_I32, 1, 0),
-                   "remaining.dec");
+  LLVMValueRef remaining_dec = LLVMBuildSub(
+      builder, remaining_now, LLVMConstInt(CORO_I32, 1, 0), "remaining.dec");
   LLVMBuildStore(builder, remaining_dec, remaining_slot);
 
   // Suspend
@@ -1307,8 +1301,7 @@ LLVMValueRef CorTakeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       CORO_APPEND_BLOCK(wrapper_fn, "final.return");
   LLVMValueRef final_switch =
       LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
-  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0),
-              final_return_bb);
+  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0), final_return_bb);
   LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 1, 0), cleanup_bb);
 
   LLVMPositionBuilderAtEnd(builder, final_return_bb);
@@ -1331,7 +1324,8 @@ LLVMValueRef CorTakeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
       get_coro_end_intrinsic(module),
-      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3, "");
+      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3,
+      "");
 
   LLVMBuildRet(builder, handle);
 
@@ -1349,8 +1343,8 @@ LLVMValueRef CorTakeHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // Create reset closure for coro_take
   // Closure args: {take_count (i32), inner_handle (ptr)}
-  LLVMTypeRef closure_args_ty =
-      LLVMStructTypeInContext(CORO_CONTEXT, (LLVMTypeRef[]){CORO_I32, CORO_GENERIC_PTR}, 2, 0);
+  LLVMTypeRef closure_args_ty = LLVMStructTypeInContext(
+      CORO_CONTEXT, (LLVMTypeRef[]){CORO_I32, CORO_GENERIC_PTR}, 2, 0);
 
   LLVMValueRef reset_closure_fn =
       coro_take_reset_fn(promise_type, inner_prom_type, wrapper_fn_type,
@@ -1400,7 +1394,8 @@ LLVMValueRef CorStopHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     is_null_or_zero = LLVMBuildICmp(builder, LLVMIntEQ, handle_raw,
                                     LLVMConstInt(handle_type, 0, 0), "is_zero");
     // Cast to pointer for further use
-    handle = LLVMBuildIntToPtr(builder, handle_raw, CORO_GENERIC_PTR, "handle_ptr");
+    handle =
+        LLVMBuildIntToPtr(builder, handle_raw, CORO_GENERIC_PTR, "handle_ptr");
   } else {
     // Handle is already a pointer type
     handle = handle_raw;
@@ -1482,8 +1477,7 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   COROUTINE_BASIC_BLOCKS(wrapper_fn)
 
   // Outer loop blocks - iterate through list
-  LLVMBasicBlockRef outer_loop_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "outer.loop");
+  LLVMBasicBlockRef outer_loop_bb = CORO_APPEND_BLOCK(wrapper_fn, "outer.loop");
   LLVMBasicBlockRef outer_loop_body_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "outer.loop.body");
   LLVMBasicBlockRef outer_loop_exit_bb =
@@ -1492,14 +1486,12 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   // Inner loop blocks - yield from current coroutine
   LLVMBasicBlockRef inner_check_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "inner.check");
-  LLVMBasicBlockRef inner_body_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "inner.body");
+  LLVMBasicBlockRef inner_body_bb = CORO_APPEND_BLOCK(wrapper_fn, "inner.body");
   LLVMBasicBlockRef inner_get_value_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "inner.get_value");
   LLVMBasicBlockRef inner_resume_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "inner.resume");
-  LLVMBasicBlockRef inner_exit_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "inner.exit");
+  LLVMBasicBlockRef inner_exit_bb = CORO_APPEND_BLOCK(wrapper_fn, "inner.exit");
 
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
 
@@ -1512,9 +1504,9 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
       LLVMBuildAlloca(builder, promise_type, "promise");
 
   // Get the actual node type {Coroutine<T>, void*}
-  LLVMTypeRef node_type = LLVMStructTypeInContext(CORO_CONTEXT, 
-      (LLVMTypeRef[]){llvm_coro_type, LLVMPointerType(CORO_VOID, 0)}, 2,
-      0);
+  LLVMTypeRef node_type = LLVMStructTypeInContext(
+      CORO_CONTEXT,
+      (LLVMTypeRef[]){llvm_coro_type, LLVMPointerType(CORO_VOID, 0)}, 2, 0);
 
   // Current list node pointer - llvm_list_type is already ptr to node
   LLVMValueRef current_alloca =
@@ -1528,7 +1520,8 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
       builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
       get_coro_id_intrinsic(module),
       (LLVMValueRef[]){LLVMConstInt(CORO_I32, 0, 0), promise_alloca,
-                       LLVMConstNull(CORO_GENERIC_PTR), LLVMConstNull(CORO_GENERIC_PTR)},
+                       LLVMConstNull(CORO_GENERIC_PTR),
+                       LLVMConstNull(CORO_GENERIC_PTR)},
       4, "coro.id");
 
   LLVMValueRef size = LLVMBuildCall2(
@@ -1642,8 +1635,7 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef inner_promise_raw = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_promise_intrinsic(module)),
       get_coro_promise_intrinsic(module),
-      (LLVMValueRef[]){inner_handle_for_promise,
-                       LLVMConstInt(CORO_I32, 0, 0),
+      (LLVMValueRef[]){inner_handle_for_promise, LLVMConstInt(CORO_I32, 0, 0),
                        LLVMConstInt(CORO_I1, 0, 0)},
       3, "inner.promise.raw");
 
@@ -1697,8 +1689,8 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   // GEP to next field (field 1) and load
   LLVMValueRef next_ptr_ptr = LLVMBuildStructGEP2(
       builder, node_type, current_for_next, 1, "next.ptr.ptr");
-  LLVMValueRef next_ptr = LLVMBuildLoad2(
-      builder, LLVMPointerType(CORO_VOID, 0), next_ptr_ptr, "next.ptr");
+  LLVMValueRef next_ptr = LLVMBuildLoad2(builder, LLVMPointerType(CORO_VOID, 0),
+                                         next_ptr_ptr, "next.ptr");
 
   // Cast void* to proper list pointer type (ptr to node)
   LLVMValueRef next_typed =
@@ -1726,8 +1718,7 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
       CORO_APPEND_BLOCK(wrapper_fn, "final.return");
   LLVMValueRef final_switch =
       LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
-  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0),
-              final_return_bb);
+  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0), final_return_bb);
   LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 1, 0), cleanup_bb);
 
   LLVMPositionBuilderAtEnd(builder, final_return_bb);
@@ -1750,7 +1741,8 @@ LLVMValueRef CorOfCorListHandler(Ast *ast, JITLangCtx *ctx,
   LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
       get_coro_end_intrinsic(module),
-      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3, "");
+      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3,
+      "");
 
   LLVMBuildRet(builder, handle);
 
@@ -1778,8 +1770,7 @@ LLVMValueRef cor_of_list_reset_fn(LLVMTypeRef promise_type,
   LLVMSetLinkage(reset_closure_fn, LLVMExternalLinkage);
 
   LLVMBasicBlockRef reset_prev = LLVMGetInsertBlock(builder);
-  LLVMBasicBlockRef reset_entry =
-      CORO_APPEND_BLOCK(reset_closure_fn, "entry");
+  LLVMBasicBlockRef reset_entry = CORO_APPEND_BLOCK(reset_closure_fn, "entry");
   LLVMPositionBuilderAtEnd(builder, reset_entry);
 
   // Reset closure params: (ptr frame_size_out, ptr args_ptr)
@@ -1818,8 +1809,7 @@ cor_of_array_reset_fn(LLVMTypeRef promise_type, LLVMTypeRef wrapper_fn_type,
   LLVMSetLinkage(reset_closure_fn, LLVMExternalLinkage);
 
   LLVMBasicBlockRef reset_prev = LLVMGetInsertBlock(builder);
-  LLVMBasicBlockRef reset_entry =
-      CORO_APPEND_BLOCK(reset_closure_fn, "entry");
+  LLVMBasicBlockRef reset_entry = CORO_APPEND_BLOCK(reset_closure_fn, "entry");
   LLVMPositionBuilderAtEnd(builder, reset_entry);
 
   // Reset closure params: (ptr frame_size_out, ptr args_ptr)
@@ -1868,8 +1858,7 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // parameters
   LLVMTypeRef wrapper_fn_type = LLVMFunctionType(
       CORO_GENERIC_PTR,
-      (LLVMTypeRef[]){LLVMPointerType(CORO_I64, 0), llvm_list_type}, 2,
-      0);
+      (LLVMTypeRef[]){LLVMPointerType(CORO_I64, 0), llvm_list_type}, 2, 0);
 
   static int counter = 0;
   char wrapper_name[64];
@@ -1883,10 +1872,8 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   COROUTINE_BASIC_BLOCKS(wrapper_fn)
 
   LLVMBasicBlockRef loop_bb = CORO_APPEND_BLOCK(wrapper_fn, "loop");
-  LLVMBasicBlockRef loop_body_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "loop.body");
-  LLVMBasicBlockRef loop_exit_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "loop.exit");
+  LLVMBasicBlockRef loop_body_bb = CORO_APPEND_BLOCK(wrapper_fn, "loop.body");
+  LLVMBasicBlockRef loop_exit_bb = CORO_APPEND_BLOCK(wrapper_fn, "loop.exit");
 
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
 
@@ -1909,9 +1896,9 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMConstNull(CORO_GENERIC_PTR));
 
   // Get the actual node type {T, void*}
-  LLVMTypeRef node_type = LLVMStructTypeInContext(CORO_CONTEXT, 
-      (LLVMTypeRef[]){llvm_elem_type, LLVMPointerType(CORO_VOID, 0)}, 2,
-      0);
+  LLVMTypeRef node_type = LLVMStructTypeInContext(
+      CORO_CONTEXT,
+      (LLVMTypeRef[]){llvm_elem_type, LLVMPointerType(CORO_VOID, 0)}, 2, 0);
 
   // Current list node pointer - llvm_list_type is already ptr to node
   LLVMValueRef current_alloca =
@@ -1921,7 +1908,8 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
       get_coro_id_intrinsic(module),
       (LLVMValueRef[]){LLVMConstInt(CORO_I32, 0, 0), promise_alloca,
-                       LLVMConstNull(CORO_GENERIC_PTR), LLVMConstNull(CORO_GENERIC_PTR)},
+                       LLVMConstNull(CORO_GENERIC_PTR),
+                       LLVMConstNull(CORO_GENERIC_PTR)},
       4, "coro.id");
 
   LLVMValueRef size = LLVMBuildCall2(
@@ -1994,8 +1982,8 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // GEP to next field (field 1) and load
   LLVMValueRef next_ptr_ptr =
       LLVMBuildStructGEP2(builder, node_type, current, 1, "next.ptr.ptr");
-  LLVMValueRef next_ptr = LLVMBuildLoad2(
-      builder, LLVMPointerType(CORO_VOID, 0), next_ptr_ptr, "next.ptr");
+  LLVMValueRef next_ptr = LLVMBuildLoad2(builder, LLVMPointerType(CORO_VOID, 0),
+                                         next_ptr_ptr, "next.ptr");
 
   // Cast void* to proper list pointer type (ptr to node)
   LLVMValueRef next_typed =
@@ -2047,8 +2035,7 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       CORO_APPEND_BLOCK(wrapper_fn, "final.return");
   LLVMValueRef final_switch =
       LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
-  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0),
-              final_return_bb);
+  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0), final_return_bb);
   LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 1, 0), cleanup_bb);
 
   LLVMPositionBuilderAtEnd(builder, final_return_bb);
@@ -2071,7 +2058,8 @@ LLVMValueRef CorOfListHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
       get_coro_end_intrinsic(module),
-      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3, "");
+      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3,
+      "");
 
   LLVMBuildRet(builder, handle);
 
@@ -2134,8 +2122,7 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   // parameters
   LLVMTypeRef wrapper_fn_type = LLVMFunctionType(
       CORO_GENERIC_PTR,
-      (LLVMTypeRef[]){LLVMPointerType(CORO_I64, 0), llvm_array_type}, 2,
-      0);
+      (LLVMTypeRef[]){LLVMPointerType(CORO_I64, 0), llvm_array_type}, 2, 0);
 
   static int counter = 0;
   char wrapper_name[64];
@@ -2149,10 +2136,8 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   COROUTINE_BASIC_BLOCKS(wrapper_fn)
 
   LLVMBasicBlockRef loop_bb = CORO_APPEND_BLOCK(wrapper_fn, "loop");
-  LLVMBasicBlockRef loop_body_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "loop.body");
-  LLVMBasicBlockRef loop_exit_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "loop.exit");
+  LLVMBasicBlockRef loop_body_bb = CORO_APPEND_BLOCK(wrapper_fn, "loop.body");
+  LLVMBasicBlockRef loop_exit_bb = CORO_APPEND_BLOCK(wrapper_fn, "loop.exit");
 
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
 
@@ -2177,15 +2162,15 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef array_alloca =
       LLVMBuildAlloca(builder, llvm_array_type, "array.alloca");
 
-  LLVMValueRef counter_alloca =
-      LLVMBuildAlloca(builder, CORO_I32, "counter");
+  LLVMValueRef counter_alloca = LLVMBuildAlloca(builder, CORO_I32, "counter");
   LLVMBuildStore(builder, LLVMConstInt(CORO_I32, 0, 0), counter_alloca);
 
   LLVMValueRef id = LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
       get_coro_id_intrinsic(module),
       (LLVMValueRef[]){LLVMConstInt(CORO_I32, 0, 0), promise_alloca,
-                       LLVMConstNull(CORO_GENERIC_PTR), LLVMConstNull(CORO_GENERIC_PTR)},
+                       LLVMConstNull(CORO_GENERIC_PTR),
+                       LLVMConstNull(CORO_GENERIC_PTR)},
       4, "coro.id");
 
   LLVMValueRef size = LLVMBuildCall2(
@@ -2242,7 +2227,7 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef array =
       LLVMBuildLoad2(builder, llvm_array_type, array_alloca, "array");
 
-  // Array is {i32 size, ptr data}
+  // Array is {i32 size, i32 offset, ptr data}
   LLVMValueRef array_size =
       LLVMBuildExtractValue(builder, array, 0, "array.size");
 
@@ -2254,7 +2239,7 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMPositionBuilderAtEnd(builder, loop_body_bb);
 
   LLVMValueRef data_ptr =
-      LLVMBuildExtractValue(builder, array, 1, "array.data");
+      LLVMBuildExtractValue(builder, array, 2, "array.data");
   LLVMValueRef elem_ptr =
       LLVMBuildGEP2(builder, llvm_elem_type, data_ptr,
                     (LLVMValueRef[]){counter_val}, 1, "elem.ptr");
@@ -2262,9 +2247,8 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMBuildStore(builder, elem, promise_alloca);
 
-  LLVMValueRef next_counter =
-      LLVMBuildAdd(builder, counter_val, LLVMConstInt(CORO_I32, 1, 0),
-                   "next.counter");
+  LLVMValueRef next_counter = LLVMBuildAdd(
+      builder, counter_val, LLVMConstInt(CORO_I32, 1, 0), "next.counter");
   LLVMBuildStore(builder, next_counter, counter_alloca);
 
   LLVMValueRef save_token = LLVMBuildCall2(
@@ -2311,8 +2295,7 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       CORO_APPEND_BLOCK(wrapper_fn, "final.return");
   LLVMValueRef final_switch =
       LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
-  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0),
-              final_return_bb);
+  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0), final_return_bb);
   LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 1, 0), cleanup_bb);
 
   LLVMPositionBuilderAtEnd(builder, final_return_bb);
@@ -2335,7 +2318,8 @@ LLVMValueRef CorOfArrayHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
       get_coro_end_intrinsic(module),
-      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3, "");
+      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3,
+      "");
 
   LLVMBuildRet(builder, handle);
 
@@ -2397,15 +2381,15 @@ LLVMValueRef PlayRoutineQuantHandler(Ast *ast, JITLangCtx *ctx,
 
   LLVMValueRef func = LLVMAddFunction(
       module, "schedule_event_wrapper",
-      LLVMFunctionType(CORO_VOID,
-                       (LLVMTypeRef[]){CORO_GENERIC_PTR, CORO_I64}, 2, 0));
+      LLVMFunctionType(CORO_VOID, (LLVMTypeRef[]){CORO_GENERIC_PTR, CORO_I64},
+                       2, 0));
 
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
   LLVMTypeRef schedule_event_type =
       LLVMFunctionType(CORO_GENERIC_PTR,
-                       (LLVMTypeRef[]){CORO_I64, CORO_DOUBLE,
-                                       CORO_GENERIC_PTR, CORO_GENERIC_PTR},
+                       (LLVMTypeRef[]){CORO_I64, CORO_DOUBLE, CORO_GENERIC_PTR,
+                                       CORO_GENERIC_PTR},
                        4, 0);
 
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
@@ -2413,8 +2397,7 @@ LLVMValueRef PlayRoutineQuantHandler(Ast *ast, JITLangCtx *ctx,
   LLVMBasicBlockRef entry = CORO_APPEND_BLOCK(func, "entry");
   LLVMBasicBlockRef finished =
       CORO_APPEND_BLOCK(func, "coro.is_finished_block");
-  LLVMBasicBlockRef not_finished =
-      CORO_APPEND_BLOCK(func, "coro.resume_block");
+  LLVMBasicBlockRef not_finished = CORO_APPEND_BLOCK(func, "coro.resume_block");
 
   LLVMPositionBuilderAtEnd(builder, entry);
 
@@ -2434,9 +2417,8 @@ LLVMValueRef PlayRoutineQuantHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef result_tag =
       LLVMBuildExtractValue(builder, resume_result, 0, "tag");
 
-  LLVMValueRef is_done =
-      LLVMBuildICmp(builder, LLVMIntEQ, result_tag,
-                    LLVMConstInt(CORO_I8, 1, 0), "tag_eq_1");
+  LLVMValueRef is_done = LLVMBuildICmp(builder, LLVMIntEQ, result_tag,
+                                       LLVMConstInt(CORO_I8, 1, 0), "tag_eq_1");
 
   LLVMBuildCondBr(builder, is_done, finished, not_finished);
 
@@ -2477,18 +2459,16 @@ LLVMValueRef PlayRoutineQuantHandler(Ast *ast, JITLangCtx *ctx,
   LLVMValueRef get_current_sample_fn =
       LLVMGetNamedFunction(module, "get_current_sample");
   if (!get_current_sample_fn) {
-    get_current_sample_fn =
-        LLVMAddFunction(module, "get_current_sample",
-                        LLVMFunctionType(CORO_I64, NULL, 0, 0));
+    get_current_sample_fn = LLVMAddFunction(
+        module, "get_current_sample", LLVMFunctionType(CORO_I64, NULL, 0, 0));
     LLVMSetLinkage(get_current_sample_fn, LLVMExternalLinkage);
   }
 
   LLVMValueRef ctx_sample_rate_fn =
       LLVMGetNamedFunction(module, "ctx_sample_rate");
   if (!ctx_sample_rate_fn) {
-    ctx_sample_rate_fn =
-        LLVMAddFunction(module, "ctx_sample_rate",
-                        LLVMFunctionType(CORO_I32, NULL, 0, 0));
+    ctx_sample_rate_fn = LLVMAddFunction(
+        module, "ctx_sample_rate", LLVMFunctionType(CORO_I32, NULL, 0, 0));
     LLVMSetLinkage(ctx_sample_rate_fn, LLVMExternalLinkage);
   }
 
@@ -2499,14 +2479,13 @@ LLVMValueRef PlayRoutineQuantHandler(Ast *ast, JITLangCtx *ctx,
       LLVMBuildCall2(builder, LLVMGlobalGetValueType(ctx_sample_rate_fn),
                      ctx_sample_rate_fn, NULL, 0, "quant.sr.raw");
   LLVMValueRef sr_is_zero =
-      LLVMBuildICmp(builder, LLVMIntEQ, sr_raw,
-                    LLVMConstInt(CORO_I32, 0, 0), "quant.sr.is_zero");
-  LLVMValueRef sr = LLVMBuildSelect(builder, sr_is_zero,
-                                    LLVMConstInt(CORO_I32, 48000, 0),
-                                    sr_raw, "quant.sr");
+      LLVMBuildICmp(builder, LLVMIntEQ, sr_raw, LLVMConstInt(CORO_I32, 0, 0),
+                    "quant.sr.is_zero");
+  LLVMValueRef sr =
+      LLVMBuildSelect(builder, sr_is_zero, LLVMConstInt(CORO_I32, 48000, 0),
+                      sr_raw, "quant.sr");
 
-  LLVMValueRef sr_f =
-      LLVMBuildSIToFP(builder, sr, CORO_DOUBLE, "quant.sr.f64");
+  LLVMValueRef sr_f = LLVMBuildSIToFP(builder, sr, CORO_DOUBLE, "quant.sr.f64");
   LLVMValueRef quant_is_positive =
       LLVMBuildFCmp(builder, LLVMRealOGT, quant,
                     LLVMConstReal(CORO_DOUBLE, 0.0), "quant.is_positive");
@@ -2519,17 +2498,17 @@ LLVMValueRef PlayRoutineQuantHandler(Ast *ast, JITLangCtx *ctx,
                       LLVMConstInt(CORO_I64, 1, 0), "quant.samps.safe");
   LLVMValueRef offset_in_cycle =
       LLVMBuildURem(builder, now, safe_quant_samps, "quant.offset");
-  LLVMValueRef offset_is_zero = LLVMBuildICmp(
-      builder, LLVMIntEQ, offset_in_cycle, LLVMConstInt(CORO_I64, 0, 0),
-      "quant.offset_is_zero");
+  LLVMValueRef offset_is_zero =
+      LLVMBuildICmp(builder, LLVMIntEQ, offset_in_cycle,
+                    LLVMConstInt(CORO_I64, 0, 0), "quant.offset_is_zero");
   LLVMValueRef positive_remainder_samps =
       LLVMBuildSelect(builder, offset_is_zero, safe_quant_samps,
                       LLVMBuildSub(builder, safe_quant_samps, offset_in_cycle,
                                    "quant.remainder.sub"),
                       "quant.remainder.samps.positive");
-  LLVMValueRef remainder_samps = LLVMBuildSelect(
-      builder, quant_is_positive, positive_remainder_samps,
-      LLVMConstInt(CORO_I64, 0, 0), "quant.remainder.samps");
+  LLVMValueRef remainder_samps =
+      LLVMBuildSelect(builder, quant_is_positive, positive_remainder_samps,
+                      LLVMConstInt(CORO_I64, 0, 0), "quant.remainder.samps");
   LLVMValueRef remainder_samps_f = LLVMBuildUIToFP(
       builder, remainder_samps, CORO_DOUBLE, "quant.remainder.samps.f64");
   LLVMValueRef remainder_secs =
@@ -2572,15 +2551,15 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   LLVMValueRef func = LLVMAddFunction(
       module, "schedule_event_wrapper",
-      LLVMFunctionType(CORO_VOID,
-                       (LLVMTypeRef[]){CORO_GENERIC_PTR, CORO_I64}, 2, 0));
+      LLVMFunctionType(CORO_VOID, (LLVMTypeRef[]){CORO_GENERIC_PTR, CORO_I64},
+                       2, 0));
 
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
   LLVMTypeRef schedule_event_type =
       LLVMFunctionType(CORO_GENERIC_PTR,
-                       (LLVMTypeRef[]){CORO_I64, CORO_DOUBLE,
-                                       CORO_GENERIC_PTR, CORO_GENERIC_PTR},
+                       (LLVMTypeRef[]){CORO_I64, CORO_DOUBLE, CORO_GENERIC_PTR,
+                                       CORO_GENERIC_PTR},
                        4, 0);
 
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);
@@ -2588,8 +2567,7 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBasicBlockRef entry = CORO_APPEND_BLOCK(func, "entry");
   LLVMBasicBlockRef finished =
       CORO_APPEND_BLOCK(func, "coro.is_finished_block");
-  LLVMBasicBlockRef not_finished =
-      CORO_APPEND_BLOCK(func, "coro.resume_block");
+  LLVMBasicBlockRef not_finished = CORO_APPEND_BLOCK(func, "coro.resume_block");
 
   LLVMPositionBuilderAtEnd(builder, entry);
 
@@ -2609,9 +2587,8 @@ LLVMValueRef PlayRoutineHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMValueRef result_tag =
       LLVMBuildExtractValue(builder, resume_result, 0, "tag");
 
-  LLVMValueRef is_done =
-      LLVMBuildICmp(builder, LLVMIntEQ, result_tag,
-                    LLVMConstInt(CORO_I8, 1, 0), "tag_eq_1");
+  LLVMValueRef is_done = LLVMBuildICmp(builder, LLVMIntEQ, result_tag,
+                                       LLVMConstInt(CORO_I8, 1, 0), "tag_eq_1");
 
   LLVMBuildCondBr(builder, is_done, finished, not_finished);
 
@@ -2685,10 +2662,8 @@ LLVMValueRef CorUnwrapOrEndHandler(Ast *ast, JITLangCtx *ctx,
   LLVMBasicBlockRef current_bb = LLVMGetInsertBlock(builder);
   LLVMValueRef current_fn = LLVMGetBasicBlockParent(current_bb);
 
-  LLVMBasicBlockRef is_none_bb =
-      CORO_APPEND_BLOCK(current_fn, "opt_is_none");
-  LLVMBasicBlockRef is_some_bb =
-      CORO_APPEND_BLOCK(current_fn, "opt_is_some");
+  LLVMBasicBlockRef is_none_bb = CORO_APPEND_BLOCK(current_fn, "opt_is_none");
+  LLVMBasicBlockRef is_some_bb = CORO_APPEND_BLOCK(current_fn, "opt_is_some");
 
   LLVMValueRef is_none = codegen_option_is_none(opt_val, builder);
   LLVMBuildCondBr(builder, is_none, is_none_bb, is_some_bb);
@@ -2978,7 +2953,8 @@ LLVMValueRef CorZipHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
       get_coro_id_intrinsic(module),
       (LLVMValueRef[]){LLVMConstInt(CORO_I32, 0, 0), promise_alloca,
-                       LLVMConstNull(CORO_GENERIC_PTR), LLVMConstNull(CORO_GENERIC_PTR)},
+                       LLVMConstNull(CORO_GENERIC_PTR),
+                       LLVMConstNull(CORO_GENERIC_PTR)},
       4, "coro.id");
 
   LLVMValueRef size = LLVMBuildCall2(
@@ -3029,14 +3005,12 @@ LLVMValueRef CorZipHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       CORO_APPEND_BLOCK(wrapper_fn, "zip.check_a");
   LLVMBasicBlockRef zip_check_b_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "zip.check_b");
-  LLVMBasicBlockRef zip_resume_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "zip.resume");
+  LLVMBasicBlockRef zip_resume_bb = CORO_APPEND_BLOCK(wrapper_fn, "zip.resume");
   LLVMBasicBlockRef zip_check_a_done_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "zip.check_a_done");
   LLVMBasicBlockRef zip_check_b_done_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "zip.check_b_done");
-  LLVMBasicBlockRef zip_values_bb =
-      CORO_APPEND_BLOCK(wrapper_fn, "zip.values");
+  LLVMBasicBlockRef zip_values_bb = CORO_APPEND_BLOCK(wrapper_fn, "zip.values");
   LLVMBasicBlockRef zip_loop_resume_bb =
       CORO_APPEND_BLOCK(wrapper_fn, "zip.loop_resume");
   LLVMBasicBlockRef zip_exit_bb = CORO_APPEND_BLOCK(wrapper_fn, "zip.exit");
@@ -3154,8 +3128,7 @@ LLVMValueRef CorZipHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       CORO_APPEND_BLOCK(wrapper_fn, "zip.suspend_return");
   LLVMValueRef switch_inst =
       LLVMBuildSwitch(builder, suspend_result, suspend_return_bb, 2);
-  LLVMAddCase(switch_inst, LLVMConstInt(CORO_I8, 0, 0),
-              zip_loop_resume_bb);
+  LLVMAddCase(switch_inst, LLVMConstInt(CORO_I8, 0, 0), zip_loop_resume_bb);
   LLVMAddCase(switch_inst, LLVMConstInt(CORO_I8, 1, 0), cleanup_bb);
 
   LLVMPositionBuilderAtEnd(builder, suspend_return_bb);
@@ -3181,8 +3154,7 @@ LLVMValueRef CorZipHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       CORO_APPEND_BLOCK(wrapper_fn, "final.return");
   LLVMValueRef final_switch =
       LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
-  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0),
-              final_return_bb);
+  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0), final_return_bb);
   LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 1, 0), cleanup_bb);
 
   LLVMPositionBuilderAtEnd(builder, final_return_bb);
@@ -3202,7 +3174,8 @@ LLVMValueRef CorZipHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
       get_coro_end_intrinsic(module),
-      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3, "");
+      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3,
+      "");
   LLVMBuildRet(builder, handle);
 
   // === BACK IN ORIGINAL BLOCK ===
@@ -3319,8 +3292,8 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
     }
   }
 
-  LLVMTypeRef wrapper_fn_type =
-      LLVMFunctionType(CORO_GENERIC_PTR, wrapper_param_types, 1 + num_fields, 0);
+  LLVMTypeRef wrapper_fn_type = LLVMFunctionType(
+      CORO_GENERIC_PTR, wrapper_param_types, 1 + num_fields, 0);
 
   static unsigned long zip_struct_counter = 0;
   char wrapper_name[64];
@@ -3356,7 +3329,8 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
       builder, LLVMGlobalGetValueType(get_coro_id_intrinsic(module)),
       get_coro_id_intrinsic(module),
       (LLVMValueRef[]){LLVMConstInt(CORO_I32, 0, 0), promise_alloca,
-                       LLVMConstNull(CORO_GENERIC_PTR), LLVMConstNull(CORO_GENERIC_PTR)},
+                       LLVMConstNull(CORO_GENERIC_PTR),
+                       LLVMConstNull(CORO_GENERIC_PTR)},
       4, "coro.id");
 
   LLVMValueRef size = LLVMBuildCall2(
@@ -3429,7 +3403,8 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
                        field_slots[field_idx], "zips.coro.h.pre");
     LLVMValueRef h = h_val;
     if (LLVMTypeOf(h) != CORO_GENERIC_PTR) {
-      h = LLVMBuildBitCast(builder, h, CORO_GENERIC_PTR, "zips.coro.h.pre.cast");
+      h = LLVMBuildBitCast(builder, h, CORO_GENERIC_PTR,
+                           "zips.coro.h.pre.cast");
     }
 
     LLVMValueRef done_before = LLVMBuildCall2(
@@ -3468,7 +3443,8 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
                        field_slots[field_idx], "zips.coro.h.post");
     LLVMValueRef h = h_val;
     if (LLVMTypeOf(h) != CORO_GENERIC_PTR) {
-      h = LLVMBuildBitCast(builder, h, CORO_GENERIC_PTR, "zips.coro.h.post.cast");
+      h = LLVMBuildBitCast(builder, h, CORO_GENERIC_PTR,
+                           "zips.coro.h.post.cast");
     }
 
     LLVMValueRef done_after = LLVMBuildCall2(
@@ -3497,7 +3473,8 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
                                           field_slots[i], "zips.coro.h.val");
       LLVMValueRef h = h_val;
       if (LLVMTypeOf(h) != CORO_GENERIC_PTR) {
-        h = LLVMBuildBitCast(builder, h, CORO_GENERIC_PTR, "zips.coro.h.val.cast");
+        h = LLVMBuildBitCast(builder, h, CORO_GENERIC_PTR,
+                             "zips.coro.h.val.cast");
       }
 
       LLVMValueRef prom_raw = LLVMBuildCall2(
@@ -3568,8 +3545,7 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
       CORO_APPEND_BLOCK(wrapper_fn, "zips.final_return");
   LLVMValueRef final_switch =
       LLVMBuildSwitch(builder, final_suspend, suspend_bb, 2);
-  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0),
-              final_return_bb);
+  LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 0, 0), final_return_bb);
   LLVMAddCase(final_switch, LLVMConstInt(CORO_I8, 1, 0), cleanup_bb);
 
   LLVMPositionBuilderAtEnd(builder, final_return_bb);
@@ -3587,7 +3563,8 @@ LLVMValueRef CorZipStructHandler(Ast *ast, JITLangCtx *ctx,
   LLVMBuildCall2(
       builder, LLVMGlobalGetValueType(get_coro_end_intrinsic(module)),
       get_coro_end_intrinsic(module),
-      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3, "");
+      (LLVMValueRef[]){handle, LLVMConstInt(CORO_I1, 0, 0), CORO_TOKEN_NONE}, 3,
+      "");
   LLVMBuildRet(builder, handle);
 
   // === back to caller ===

@@ -1,17 +1,20 @@
 
-let _x = fn z ->
-  yield 1;
-  yield 2;
-  yield z;
-  yield 4
-  # yield _x ()
-;;
 
-let x = _x 200;
+
+let c = fn () -> yield 1; yield 2; yield 3;;
+let x = c () |> cor_map (Double) |> cor_loop in 
 print `
-[{x ()}]
-[{x ()}]
-[{x ()}]
-[{x ()}]
-[{x ()}]
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
 `
