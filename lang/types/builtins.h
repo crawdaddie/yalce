@@ -18,9 +18,11 @@ extern Type t_ptr;
 extern Type t_none;
 
 extern Type t_builtin_print;
+extern Type t_builtin_fprintf;
 
 typedef struct BuiltinEnvRefs {
   TypeEnv *print;
+  TypeEnv *fprintf;
   TypeEnv *str;
   TypeEnv *some;
   TypeEnv *list_concat;

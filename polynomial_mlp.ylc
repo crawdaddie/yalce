@@ -140,22 +140,22 @@ train TRAIN_EPOCHS 0.025 losses;
 let loss_after = losses[TRAIN_EPOCHS];
 
 let popen = extern fn Ptr -> Ptr -> Ptr; 
-let fprintf = extern fn Ptr -> Ptr -> Int;
+# let fprintf = extern fn Ptr -> Ptr -> Int;
 let fflush = extern fn Ptr -> Int;
 let pclose = extern fn Ptr -> Int;
 
 let plot_losses = fn losses epochs ->
   let gp = popen (cstr "gnuplot") (cstr "w"); 
-  fprintf gp (cstr "set terminal kittycairo size 900,500\n");
-  fprintf gp (cstr "set title 'Polynomial MLP training loss'\n");
-  fprintf gp (cstr "set xlabel 'epoch'\n");
-  fprintf gp (cstr "set ylabel 'total loss'\n");
-  fprintf gp (cstr "set grid\n");
-  fprintf gp (cstr "plot '-' using 1:2 with lines title 'loss'\n");
+  fprintf gp "set terminal kittycairo size 900,500\n";
+  fprintf gp "set title 'Polynomial MLP training loss'\n";
+  fprintf gp "set xlabel 'epoch'\n";
+  fprintf gp "set ylabel 'total loss'\n";
+  fprintf gp "set grid\n";
+  fprintf gp "plot '-' using 1:2 with lines title 'loss'\n";
   for epoch = 0 .. (epochs + 1) in (
-    fprintf gp (cstr `{epoch} {losses[epoch]}\n`)
+    fprintf gp `{epoch} {losses[epoch]}\n`
   );
-  fprintf gp (cstr "e\n");
+  fprintf gp "e\n";
   fflush gp;
   pclose gp
 ;;
@@ -177,34 +177,34 @@ let grid_value = fn i: (Int) steps: (Int) ->
 
 let plot_target_surface = fn steps ->
   let gp = popen (cstr "gnuplot") (cstr "w"); 
-  fprintf gp (cstr "set terminal kittycairo size 900,650\n");
-  fprintf gp (cstr "set title 'Polynomial surface and trained MLP predictions'\n");
-  fprintf gp (cstr "set xlabel 'x'\n");
-  fprintf gp (cstr "set ylabel 'y'\n");
-  fprintf gp (cstr "set zlabel 'z'\n");
-  fprintf gp (cstr "set grid\n");
-  fprintf gp (cstr "set hidden3d\n");
-  fprintf gp (cstr "set view 55, 35\n");
-  fprintf gp (cstr "splot '-' using 1:2:3 with lines title 'target', '-' using 1:2:3 with points pointtype 7 pointsize 0.35 title 'model'\n");
+  fprintf gp "set terminal kittycairo size 900,650\n";
+  fprintf gp "set title 'Polynomial surface and trained MLP predictions'\n";
+  fprintf gp "set xlabel 'x'\n";
+  fprintf gp "set ylabel 'y'\n";
+  fprintf gp "set zlabel 'z'\n";
+  fprintf gp "set grid\n";
+  fprintf gp "set hidden3d\n";
+  fprintf gp "set view 55, 35\n";
+  fprintf gp "splot '-' using 1:2:3 with lines title 'target', '-' using 1:2:3 with points pointtype 7 pointsize 0.35 title 'model'\n";
 
   for xi = 0 .. steps in (
     let x = grid_value xi steps;
     for yi = 0 .. steps in (
       let y = grid_value yi steps;
-      fprintf gp (cstr `{x} {y} {target_surface x y}\n`)
+      fprintf gp `{x} {y} {target_surface x y}\n`
     );
-    fprintf gp (cstr "\n")
+    fprintf gp "\n"
   );
-  fprintf gp (cstr "e\n");
+  fprintf gp "e\n";
 
   for xi = 0 .. steps in (
     let x = grid_value xi steps;
     for yi = 0 .. steps in (
       let y = grid_value yi steps;
-      fprintf gp (cstr `{x} {y} {model_surface x y}\n`)
+      fprintf gp `{x} {y} {model_surface x y}\n`
     )
   );
-  fprintf gp (cstr "e\n");
+  fprintf gp "e\n";
   fflush gp;
   pclose gp
 ;;

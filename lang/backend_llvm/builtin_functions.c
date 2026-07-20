@@ -1765,6 +1765,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
 
   GENERIC_FN_ENV(builtin_envs.str, StringFmtHandler);
   GENERIC_FN_ENV(builtin_envs.print, PrintHandler);
+  GENERIC_FN_ENV(builtin_envs.fprintf, FPrintHandler);
   // GENERIC_FN_SYMBOL("Coroutine", &cor_scheme, CorConsHandler);
 
   GENERIC_FN_SYMBOL("list_empty", NULL, ListEmptyHandler);

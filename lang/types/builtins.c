@@ -25,6 +25,7 @@ Type t_none =
     (Type){T_CONS, {.T_CONS = {.name = TYPE_NAME_NONE, .num_args = 0}}};
 
 Type t_builtin_print = MAKE_FN_TYPE_2(&t_string, &t_void);
+Type t_builtin_fprintf = MAKE_FN_TYPE_3(&t_ptr, &t_string, &t_void);
 
 Type arithmetic_scheme = {0};
 Type ord_scheme = {0};
@@ -897,6 +898,8 @@ void initialize_builtin_types() {
   // Register print: String -> Void (monomorphic)
   builtin_envs.print = make_monomorphic_env("print", &t_builtin_print);
   add_builtin_env("print", builtin_envs.print);
+  builtin_envs.fprintf = make_monomorphic_env("fprintf", &t_builtin_fprintf);
+  add_builtin_env("fprintf", builtin_envs.fprintf);
   builtin_envs.str = make_str_env();
   add_builtin_env("str", builtin_envs.str);
   add_builtin_env("Option", make_option_env("Option"));

@@ -963,6 +963,29 @@ LLVMValueRef print_str(LLVMValueRef val, JITLangCtx *ctx, LLVMModuleRef module,
   return LLVMGetUndef(LLVMVoidTypeInContext(llvm_ctx));
 }
 
+LLVMValueRef fprint_str(LLVMValueRef file, LLVMValueRef val,
+                        LLVMModuleRef module, LLVMBuilderRef builder) {
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef i32_type = LLVMInt32TypeInContext(llvm_ctx);
+  LLVMTypeRef i8_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(llvm_ctx), 0);
+  LLVMTypeRef void_type = LLVMVoidTypeInContext(llvm_ctx);
+
+  LLVMTypeRef fprintf_type =
+      LLVMFunctionType(i32_type, (LLVMTypeRef[]){i8_ptr_type, i8_ptr_type}, 2, 1);
+  LLVMValueRef fprintf_func = get_extern_fn("fprintf", fprintf_type, module);
+  set_memory_effects(fprintf_func, MEM_ARGMEM_REF | MEM_INACCESSIBLE_MODREF);
+
+  LLVMValueRef chars_ptr =
+      LLVMBuildExtractValue(builder, val, 2, "fprint.string_chars");
+  LLVMValueRef len = LLVMBuildExtractValue(builder, val, 0, "fprint.string_len");
+  LLVMValueRef format_str =
+      LLVMBuildGlobalStringPtr(builder, "%.*s", "fprint.fmt_str");
+  LLVMValueRef args[] = {file, format_str, len, chars_ptr};
+  LLVMBuildCall2(builder, fprintf_type, fprintf_func, args, 4, "fprintf_call");
+
+  return LLVMGetUndef(void_type);
+}
+
 LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder) {
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
@@ -1033,4 +1056,39 @@ LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   // return LLVMConstNull(LLVMVoidType());
   return LLVMGetUndef(void_type);
+}
+
+LLVMValueRef FPrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder) {
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef void_type = LLVMVoidTypeInContext(llvm_ctx);
+  if (!ast || ast->data.AST_APPLICATION.len != 2) {
+    return LLVMGetUndef(void_type);
+  }
+
+  Ast *file_arg = ast->data.AST_APPLICATION.args;
+  Ast *arg = ast->data.AST_APPLICATION.args + 1;
+  LLVMValueRef file = codegen(file_arg, ctx, module, builder);
+  if (!file) {
+    return NULL;
+  }
+
+  if (arg && arg->tag == AST_FMT_STRING) {
+    LLVMValueRef result = LLVMGetUndef(void_type);
+    for (int i = 0; i < arg->data.AST_LIST.len; i++) {
+      Ast *item = arg->data.AST_LIST.items + i;
+      LLVMValueRef val = codegen(item, ctx, module, builder);
+      if (!val) {
+        return NULL;
+      }
+      result = fprint_str(file, val, module, builder);
+    }
+    return result;
+  }
+
+  LLVMValueRef val = codegen(arg, ctx, module, builder);
+  if (!val) {
+    return NULL;
+  }
+  return fprint_str(file, val, module, builder);
 }

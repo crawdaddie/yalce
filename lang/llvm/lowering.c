@@ -2,11 +2,15 @@
 #include "backend_llvm/adt.h"
 #include "backend_llvm/array.h"
 #include "backend_llvm/coroutines/coroutines.h"
+#include "backend_llvm/lib_registry.h"
 #include "backend_llvm/list.h"
+#include "backend_llvm/module.h"
 #include "backend_llvm/strings.h"
 #include "backend_llvm/types.h"
 #include "escape_analysis.h"
+#include "input.h"
 #include "types/type_expressions.h"
+#include <dlfcn.h>
 #include <llvm-c/Core.h>
 #include <llvm-c/Target.h>
 #include <llvm-c/Types.h>
@@ -852,6 +856,11 @@ static LLVMValueRef lower_mir_const(MirFunction *fn, MirInstr *instr,
   }
   case MIR_CONST_KIND_VOID:
     return LLVMGetUndef(LLVMVoidTypeInContext(llvm_ctx));
+  case MIR_CONST_KIND_UNDEF: {
+    LLVMTypeRef type = lower_mir_type(instr->type, ctx, module,
+                                      LLVMVoidTypeInContext(llvm_ctx));
+    return type ? LLVMGetUndef(type) : NULL;
+  }
   case MIR_CONST_KIND_STRING:
     if (instr->type && is_pointer_type(instr->type)) {
       return LLVMBuildGlobalStringPtr(
@@ -3734,6 +3743,28 @@ static LLVMValueRef lower_mir_print(MirFunction *fn, MirInstr *instr,
   return LLVMGetUndef(void_type);
 }
 
+static LLVMValueRef lower_mir_fprint(MirFunction *fn, MirInstr *instr,
+                                     MirLlvmValueMap *values,
+                                     LLVMModuleRef module,
+                                     LLVMBuilderRef builder) {
+  (void)fn;
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef void_type = LLVMVoidTypeInContext(llvm_ctx);
+  if (!instr || instr->data.op.argc != 2) {
+    return LLVMGetUndef(void_type);
+  }
+
+  LLVMValueRef file =
+      mir_llvm_value_get_rvalue(values, instr->data.op.operands[0], builder);
+  LLVMValueRef str =
+      mir_llvm_value_get_rvalue(values, instr->data.op.operands[1], builder);
+  if (!file || !str) {
+    return NULL;
+  }
+
+  return fprint_str(file, str, module, builder);
+}
+
 static LLVMValueRef lower_mir_flush(MirInstr *instr, LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
@@ -3754,6 +3785,133 @@ static LLVMValueRef lower_mir_flush(MirInstr *instr, LLVMModuleRef module,
 
   LLVMValueRef null_ptr = LLVMConstNull(i8_ptr_type);
   LLVMBuildCall2(builder, fflush_type, fflush_func, &null_ptr, 1, "");
+  return LLVMGetUndef(void_type);
+}
+
+static LLVMValueRef lower_mir_cstr(MirInstr *instr, MirLlvmValueMap *values,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef ptr_type = lower_mir_generic_ptr_type(module);
+  if (!instr || !values || instr->data.op.argc != 1) {
+    return LLVMConstNull(ptr_type);
+  }
+
+  LLVMValueRef value =
+      mir_llvm_value_get_rvalue(values, instr->data.op.operands[0], builder);
+  if (!value) {
+    return NULL;
+  }
+
+  if (LLVMGetTypeKind(LLVMTypeOf(value)) == LLVMPointerTypeKind) {
+    return value;
+  }
+
+  LLVMValueRef data = LLVMBuildExtractValue(builder, value, 2, "cstr.data");
+  if (!data) {
+    return NULL;
+  }
+
+  if (LLVMTypeOf(data) != ptr_type &&
+      LLVMGetTypeKind(LLVMTypeOf(data)) == LLVMPointerTypeKind) {
+    data = LLVMBuildBitCast(builder, data, ptr_type, "cstr.ptr");
+  }
+
+  return LLVMGetTypeKind(LLVMTypeOf(data)) == LLVMPointerTypeKind
+             ? data
+             : LLVMConstNull(LLVMPointerType(LLVMInt8TypeInContext(llvm_ctx),
+                                             0));
+}
+
+static char *lower_mir_resolve_dlopen_path(const char *path) {
+  if (!path) {
+    return NULL;
+  }
+
+  if (!module_path) {
+    return strdup(path);
+  }
+
+  char *module_dir = get_dirname(module_path);
+  if (!module_dir) {
+    return strdup(path);
+  }
+
+  const char *rel_path = path;
+  while (strncmp(rel_path, "../", 3) == 0) {
+    rel_path += 3;
+    char *parent = get_dirname(module_dir);
+    free(module_dir);
+    module_dir = parent;
+    if (!module_dir) {
+      return strdup(rel_path);
+    }
+  }
+
+  size_t len = strlen(module_dir) + strlen(rel_path) + 2;
+  char *full_path = calloc(len, sizeof(char));
+  if (full_path) {
+    snprintf(full_path, len, "%s/%s", module_dir, rel_path);
+  }
+  free(module_dir);
+  return full_path;
+}
+
+static const char *lower_mir_const_string_operand(MirFunction *fn,
+                                                  MirValueId value) {
+  MirInstr *def = mir_function_find_def_instr(fn, value);
+  if (!def || def->kind != MIR_CONST ||
+      def->data.const_value.kind != MIR_CONST_KIND_STRING) {
+    return NULL;
+  }
+
+  const char *chars = def->data.const_value.as.string_value.chars;
+  return chars ? chars : "";
+}
+
+static LLVMValueRef lower_mir_dlopen(MirFunction *fn, MirInstr *instr,
+                                     MirLlvmCtx *lctx, LLVMModuleRef module,
+                                     LLVMBuilderRef builder) {
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef void_type = LLVMVoidTypeInContext(llvm_ctx);
+  if (!fn || !instr || instr->data.op.argc != 1) {
+    return LLVMGetUndef(void_type);
+  }
+
+  const char *path =
+      lower_mir_const_string_operand(fn, instr->data.op.operands[0]);
+  if (!path) {
+    fprintf(stderr, "MIR dlopen requires a string literal path\n");
+    return LLVMGetUndef(void_type);
+  }
+
+  char *full_path = lower_mir_resolve_dlopen_path(path);
+  if (!full_path) {
+    return LLVMGetUndef(void_type);
+  }
+
+  ylc_jit_ctx = lctx ? &lctx->jit_ctx : NULL;
+  ylc_jit_module = module;
+  ylc_jit_builder = builder;
+
+  ylc_runtime_load_fn = NULL;
+  void *handle = dlopen(full_path, RTLD_GLOBAL | RTLD_LAZY);
+  if (ylc_runtime_load_fn) {
+    ylc_runtime_load_fn();
+    ylc_runtime_load_fn = NULL;
+  }
+
+  ylc_jit_ctx = NULL;
+  ylc_jit_module = NULL;
+  ylc_jit_builder = NULL;
+
+  if (!handle) {
+    fprintf(stderr, "Failed to load library globally: %s\n", dlerror());
+  } else {
+    fprintf(stderr, "loaded %s\n", full_path);
+  }
+
+  free(full_path);
   return LLVMGetUndef(void_type);
 }
 
@@ -3867,6 +4025,10 @@ static LLVMValueRef lower_mir_op(MirFunction *fn, MirInstr *instr,
     return lower_mir_tag_eq(instr, values, builder);
   case MIR_OP_KIND_STR:
     return lower_mir_str(fn, instr, values, module, builder, ctx);
+  case MIR_OP_KIND_CSTR:
+    return lower_mir_cstr(instr, values, module, builder);
+  case MIR_OP_KIND_DLOPEN:
+    return lower_mir_dlopen(fn, instr, lctx, module, builder);
   case MIR_OP_KIND_AS_BYTES:
     return lower_mir_as_bytes(fn, instr, values, module, builder, ctx);
   case MIR_OP_KIND_DUP:
@@ -3874,6 +4036,8 @@ static LLVMValueRef lower_mir_op(MirFunction *fn, MirInstr *instr,
     return lower_mir_rc_marker(fn, instr, values, module, builder, ctx);
   case MIR_OP_KIND_PRINT:
     return lower_mir_print(fn, instr, values, module, builder);
+  case MIR_OP_KIND_FPRINT:
+    return lower_mir_fprint(fn, instr, values, module, builder);
   case MIR_OP_KIND_FLUSH:
     return lower_mir_flush(instr, module, builder);
   default:

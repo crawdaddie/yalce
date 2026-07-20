@@ -1675,6 +1675,12 @@ MirValueId mir_const_void(MirBuilder *builder, Type *type, Ast *origin) {
   return mir_builder_append_instr(builder, instr);
 }
 
+MirValueId mir_const_undef(MirBuilder *builder, Type *type, Ast *origin) {
+  MirInstr instr = mir_make_instr(MIR_CONST, type, origin);
+  instr.data.const_value.kind = MIR_CONST_KIND_UNDEF;
+  return mir_builder_append_instr(builder, instr);
+}
+
 static MirValueId mir_extract_field(MirBuilder *builder, Type *type,
                                     Ast *origin, MirValueId value, size_t index,
                                     const char *name);
@@ -6405,7 +6411,7 @@ static MirValueId mir_loop_range_expr(MirBuilder *builder, Ast *ast,
   if (loop_type->kind == T_VOID) {
     return mir_const_void(builder, loop_type, ast);
   }
-  return mir_const_int(builder, &t_int, ast, 0);
+  return mir_const_undef(builder, loop_type, ast);
 }
 
 static MirValueId mir_loop_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
@@ -6707,6 +6713,8 @@ static const char *mir_const_kind_name(MirConstKind kind) {
     return "const.string";
   case MIR_CONST_KIND_VOID:
     return "const.void";
+  case MIR_CONST_KIND_UNDEF:
+    return "const.undef";
   }
   return "const.unknown";
 }
@@ -6737,6 +6745,8 @@ static const char *mir_op_kind_name(MirOpKind kind) {
     return "str";
   case MIR_OP_KIND_PRINT:
     return "print";
+  case MIR_OP_KIND_FPRINT:
+    return "fprint";
   case MIR_OP_KIND_FLUSH:
     return "flush";
   case MIR_OP_KIND_CSTR:
@@ -7156,6 +7166,7 @@ static void dump_instr(FILE *stream, const MirFunction *fn,
                           instr->data.const_value.as.string_value.len);
       break;
     case MIR_CONST_KIND_VOID:
+    case MIR_CONST_KIND_UNDEF:
       break;
     }
     break;

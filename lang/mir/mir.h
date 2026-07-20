@@ -85,6 +85,7 @@ typedef enum {
   MIR_CONST_KIND_BOOL,
   MIR_CONST_KIND_STRING,
   MIR_CONST_KIND_VOID,
+  MIR_CONST_KIND_UNDEF,
 } MirConstKind;
 
 typedef enum {
@@ -100,6 +101,7 @@ typedef enum {
   MIR_OP_KIND_STORE,
   MIR_OP_KIND_STR,
   MIR_OP_KIND_PRINT,
+  MIR_OP_KIND_FPRINT,
   MIR_OP_KIND_FLUSH,
   MIR_OP_KIND_CSTR,
   MIR_OP_KIND_SIZEOF,
@@ -552,6 +554,7 @@ MirValueId mir_const_bool(MirBuilder *builder, Type *type, Ast *origin,
 MirValueId mir_const_string(MirBuilder *builder, Type *type, Ast *origin,
                             const char *chars, size_t len);
 MirValueId mir_const_void(MirBuilder *builder, Type *type, Ast *origin);
+MirValueId mir_const_undef(MirBuilder *builder, Type *type, Ast *origin);
 MirValueId mir_phi(MirBuilder *builder, Type *type, Ast *origin,
                    MirPhiIncomingVec incoming);
 MirValueId mir_primitive_cast(MirBuilder *builder, Type *from_type,

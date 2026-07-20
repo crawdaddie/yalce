@@ -1469,6 +1469,55 @@ static MirValueId MirPrintHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
   return mir_value_op_no_operand(builder, MIR_OP_KIND_FLUSH, app->type, app);
 }
 
+static MirValueId mir_fprint_value(MirBuilder *builder, Ast *origin,
+                                   MirValueId file, MirValueId value) {
+  if (file == MIR_NO_VALUE || value == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_OP, &t_void, origin);
+  instr.data.op.kind = MIR_OP_KIND_FPRINT;
+  instr.data.op.argc = 2;
+  instr.data.op.operands[0] = file;
+  instr.data.op.operands[1] = value;
+  return mir_builder_append_instr(builder, instr);
+}
+
+static MirValueId MirFPrintHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
+                                   MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!mir_builtin_arity(app, 2)) {
+    return MIR_NO_VALUE;
+  }
+
+  Ast *file_arg = app->data.AST_APPLICATION.args;
+  Ast *arg = app->data.AST_APPLICATION.args + 1;
+  MirValueId file = mir_expr(builder, file_arg, ctx);
+  if (file == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  if (arg && arg->tag == AST_FMT_STRING) {
+    MirValueId result = MIR_NO_VALUE;
+    for (int i = 0; i < arg->data.AST_LIST.len; i++) {
+      Ast *item = arg->data.AST_LIST.items + i;
+      MirValueId value = mir_expr(builder, item, ctx);
+      if (value == MIR_NO_VALUE) {
+        return MIR_NO_VALUE;
+      }
+      result = mir_fprint_value(builder, item, file, value);
+      if (result == MIR_NO_VALUE) {
+        return MIR_NO_VALUE;
+      }
+    }
+    return result == MIR_NO_VALUE ? mir_const_void(builder, app->type, app)
+                                  : result;
+  }
+
+  MirValueId value = mir_expr(builder, arg, ctx);
+  return mir_fprint_value(builder, app, file, value);
+}
+
 static MirValueId MirSizeOfHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
                                    MirBuiltinSymbol *symbol) {
   (void)ctx;
@@ -1830,6 +1879,8 @@ void mir_register_core_builtins(MirProgram *program) {
                                 1);
   mir_register_builtin_env_uses(program, builtin_envs.print, MirPrintHandler,
                                 &print_op, borrow1, 1);
+  mir_register_builtin_env_uses(program, builtin_envs.fprintf, MirFPrintHandler,
+                                NULL, borrow2, 2);
 
   mir_register_builtin_env_uses(program, builtin_envs.array_size,
                                 MirArraySizeHandler, NULL, borrow1, 1);
