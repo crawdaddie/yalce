@@ -200,18 +200,29 @@ static MirValueId mir_array_data_ptr(MirBuilder *builder, Type *array_type,
     return MIR_NO_VALUE;
   }
 
-  return mir_tuple_get(builder, ptr_of_type(element_type), origin, array, 1);
+  return mir_tuple_get(builder, ptr_of_type(element_type), origin, array, 2);
+}
+
+static MirValueId mir_array_offset_field(MirBuilder *builder, Ast *origin,
+                                         MirValueId array) {
+  if (array == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  return mir_tuple_get(builder, &t_int, origin, array, 1);
 }
 
 static MirValueId mir_array_view(MirBuilder *builder, Type *array_type,
-                                 Ast *origin, MirValueId size,
+                                 Ast *origin, MirValueId size, MirValueId offset,
                                  MirValueId data_ptr) {
-  if (size == MIR_NO_VALUE || data_ptr == MIR_NO_VALUE) {
+  if (size == MIR_NO_VALUE || offset == MIR_NO_VALUE ||
+      data_ptr == MIR_NO_VALUE) {
     return MIR_NO_VALUE;
   }
 
   MirValueIdVec fields = {0};
   mir_value_id_vec_push(builder->fn->arena, &fields, size);
+  mir_value_id_vec_push(builder->fn->arena, &fields, offset);
   mir_value_id_vec_push(builder->fn->arena, &fields, data_ptr);
   return mir_tuple(builder, array_type, origin, fields);
 }
@@ -299,10 +310,13 @@ static MirValueId mir_array_range(MirBuilder *builder, Type *type, Ast *origin,
   }
 
   Type *ptr_type = ptr_of_type(element_type);
+  MirValueId current_offset = mir_array_offset_field(builder, origin, array);
   MirValueId data_ptr = mir_array_data_ptr(builder, type, origin, array);
   MirValueId new_data_ptr =
       mir_ptr_offset(builder, ptr_type, origin, data_ptr, offset);
-  return mir_array_view(builder, type, origin, size, new_data_ptr);
+  MirValueId new_offset =
+      mir_iadd(builder, &t_int, origin, current_offset, offset);
+  return mir_array_view(builder, type, origin, size, new_offset, new_data_ptr);
 }
 
 static MirValueId mir_array_succ(MirBuilder *builder, Type *type, Ast *origin,
@@ -324,10 +338,14 @@ static MirValueId mir_array_succ(MirBuilder *builder, Type *type, Ast *origin,
       mir_primitive_cast(builder, &t_bool, &t_int, origin, has_items);
   MirValueId new_size = mir_isub(builder, &t_int, origin, size, offset);
   Type *ptr_type = ptr_of_type(element_type);
+  MirValueId current_offset = mir_array_offset_field(builder, origin, array);
   MirValueId data_ptr = mir_array_data_ptr(builder, type, origin, array);
   MirValueId new_data_ptr =
       mir_ptr_offset(builder, ptr_type, origin, data_ptr, offset);
-  return mir_array_view(builder, type, origin, new_size, new_data_ptr);
+  MirValueId new_offset =
+      mir_iadd(builder, &t_int, origin, current_offset, offset);
+  return mir_array_view(builder, type, origin, new_size, new_offset,
+                        new_data_ptr);
 }
 
 static MirValueId mir_array_offset(MirBuilder *builder, Type *type, Ast *origin,
@@ -350,10 +368,14 @@ static MirValueId mir_array_offset(MirBuilder *builder, Type *type, Ast *origin,
   MirValueId size_decrement = mir_imul(builder, &t_int, origin, offset, mask);
   MirValueId new_size = mir_isub(builder, &t_int, origin, size, size_decrement);
   Type *ptr_type = ptr_of_type(element_type);
+  MirValueId current_offset = mir_array_offset_field(builder, origin, array);
   MirValueId data_ptr = mir_array_data_ptr(builder, type, origin, array);
   MirValueId new_data_ptr =
-      mir_ptr_offset(builder, ptr_type, origin, data_ptr, offset);
-  return mir_array_view(builder, type, origin, new_size, new_data_ptr);
+      mir_ptr_offset(builder, ptr_type, origin, data_ptr, size_decrement);
+  MirValueId new_offset =
+      mir_iadd(builder, &t_int, origin, current_offset, size_decrement);
+  return mir_array_view(builder, type, origin, new_size, new_offset,
+                        new_data_ptr);
 }
 
 static Type *mir_coro_yield_type(Type *type) {

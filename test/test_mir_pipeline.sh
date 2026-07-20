@@ -403,10 +403,10 @@ extract_function "$COROUTINE_MIR" "coroutine_map_returned" "$COROUTINE_MAP_RETUR
 extract_function "$COROUTINE_MIR" "coroutine_duplicate_returned" "$COROUTINE_DUP_RETURNED_BODY"
 
 ARRAY_SIZE_MIR='extract\.field %[0-9]+, 0 : Int ; ops \[%[0-9]+:container/borrow#0\]'
-ARRAY_DATA_MIR='extract\.field %[0-9]+, 1 : Ptr ; ops \[%[0-9]+:container/borrow#0\]'
+ARRAY_DATA_MIR='extract\.field %[0-9]+, 2 : Ptr ; ops \[%[0-9]+:container/borrow#0\]'
 ARRAY_PTR_OFFSET_MIR='ptr_offset %[0-9]+, %[0-9]+ : Ptr ; ops \[%[0-9]+:value/borrow#0, %[0-9]+:index/borrow#1\]'
 ARRAY_LOAD_MIR='load %[0-9]+ :'
-ARRAY_VIEW_MIR='construct\.tuple \{ %[0-9]+, %[0-9]+ \} : Array.*ops \[%[0-9]+:field/borrow#0, %[0-9]+:field/borrow#1\]'
+ARRAY_VIEW_MIR='construct\.tuple \{ %[0-9]+, %[0-9]+, %[0-9]+ \} : Array.*ops \[%[0-9]+:field/borrow#0, %[0-9]+:field/borrow#1, %[0-9]+:field/borrow#2\]'
 
 section "MIR generation"
 assert_contains "$RANGE_BORROW_BODY" '^  bb1 loop\.cond:' "range loop should create a loop condition block"
@@ -1160,13 +1160,13 @@ assert_contains "$COROUTINE_LLVM_IR" 'call void @__ylc_dup\(ptr' "coroutine Perc
 assert_contains "$COROUTINE_LLVM_IR" 'call void @__ylc_drop\(ptr' "coroutine Perceus drop markers should lower to __ylc_drop calls"
 assert_contains "$LLVM_IR" '^%YlcRcHeader = type \{ i32, i32 \}' "MIR heap-managed payloads should declare an RC header layout"
 assert_order "$LLVM_IR" "heap array literal should allocate header plus payload and initialize RC header" \
-  'define \{ i32, ptr \} @returned_array' \
+  'define \{ i32, i32, ptr \} @returned_array' \
   'tail call ptr @malloc\(i32 ptrtoint \(ptr getelementptr \(\{ %YlcRcHeader, \[2 x i32\] \}, ptr null, i32 1\) to i32\)\)' \
   'getelementptr inbounds nuw \{ %YlcRcHeader, \[2 x i32\] \}, ptr %array\.data\.heap, i32 0, i32 0' \
   'store i32 1, ptr %rc\.count\.ptr' \
   'store i32 0, ptr %rc\.tag\.ptr' \
   'getelementptr inbounds nuw \{ %YlcRcHeader, \[2 x i32\] \}, ptr %array\.data\.heap, i32 0, i32 1' \
-  'insertvalue \{ i32, ptr \} \{ i32 2, ptr undef \}, ptr %rc\.payload\.ptr, 1'
+  'insertvalue \{ i32, i32, ptr \} \{ i32 2, i32 0, ptr undef \}, ptr %rc\.payload\.ptr, 2'
 assert_order "$CLOSURE_LLVM_IR" "heap closure env should allocate header plus payload and initialize RC header" \
   'define %Closure @make_adder' \
   'tail call ptr @malloc\(i32 ptrtoint \(ptr getelementptr \(\{ %YlcRcHeader, \{ i32 \} \}, ptr null, i32 1\) to i32\)\)' \
@@ -1177,24 +1177,24 @@ assert_order "$CLOSURE_LLVM_IR" "heap closure env should allocate header plus pa
   'insertvalue %Closure undef, ptr %rc\.payload\.ptr, 1'
 assert_order "$LLVM_IR" "managed array_set lowering should load old slot, store new value, then drop old payload" \
   'loop\.body:' \
-  'extractvalue \{ i32, ptr \} %array\.data, 1' \
-  'getelementptr \{ i32, ptr \}, ptr %extract\.field, i32 0' \
-  'load \{ i32, ptr \}, ptr %ptr\.offset' \
-  'store \{ i32, ptr \} %[A-Za-z0-9_.]+, ptr %ptr\.offset' \
+  'extractvalue \{ i32, i32, ptr \} %array\.data, 2' \
+  'getelementptr \{ i32, i32, ptr \}, ptr %extract\.field, i32 0' \
+  'load \{ i32, i32, ptr \}, ptr %ptr\.offset' \
+  'store \{ i32, i32, ptr \} %[A-Za-z0-9_.]+, ptr %ptr\.offset' \
   'call void @__ylc_drop\(ptr'
 assert_order "$LLVM_IR" "returned extraction lowering should dup before dropping its source container" \
   'loop\.after:' \
-  'extractvalue \{ i32, ptr \} %array\.data, 1' \
-  'getelementptr \{ i32, ptr \}, ptr %extract\.field[0-9]*, i32 0' \
-  'load \{ i32, ptr \}, ptr %ptr\.offset[0-9]*' \
+  'extractvalue \{ i32, i32, ptr \} %array\.data, 2' \
+  'getelementptr \{ i32, i32, ptr \}, ptr %extract\.field[0-9]*, i32 0' \
+  'load \{ i32, i32, ptr \}, ptr %ptr\.offset[0-9]*' \
   'call void @__ylc_dup\(ptr' \
   'call void @__ylc_drop\(ptr' \
-  'ret \{ i32, ptr \}'
+  'ret \{ i32, i32, ptr \}'
 assert_order "$LLVM_IR" "preexisting managed phi consume should lower selected phi into consume call" \
   'define i32 @phi_select_preexisting_array_consume' \
   '^match\.cont:' \
-  '%phi = phi \{ i32, ptr \}' \
-  'call i32 @consume_array\.Array_Int\.Int\(\{ i32, ptr \} %phi\)'
+  '%phi = phi \{ i32, i32, ptr \}' \
+  'call i32 @consume_array\.Array_Int\.Int\(\{ i32, i32, ptr \} %phi\)'
 assert_order "$LLVM_IR" "preexisting managed phi consume should lower unselected owner edge drops" \
   'define i32 @phi_select_preexisting_array_consume' \
   '^perceus\.edge\.drop:' \
@@ -1202,18 +1202,18 @@ assert_order "$LLVM_IR" "preexisting managed phi consume should lower unselected
   '^perceus\.edge\.drop1:' \
   'call void @__ylc_drop\(ptr'
 assert_order "$LLVM_IR" "duplicated managed phi should lower RC dup before tuple insertvalues" \
-  'define \{ \{ i32, ptr \}, \{ i32, ptr \} \} @phi_select_preexisting_array_duplicate' \
+  'define \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} @phi_select_preexisting_array_duplicate' \
   '^match\.cont:' \
-  '%phi = phi \{ i32, ptr \}' \
+  '%phi = phi \{ i32, i32, ptr \}' \
   'call void @__ylc_dup\(ptr' \
-  'insertvalue \{ \{ i32, ptr \}, \{ i32, ptr \} \} undef, \{ i32, ptr \} %phi, 0' \
-  'insertvalue \{ \{ i32, ptr \}, \{ i32, ptr \} \}'
+  'insertvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} undef, \{ i32, i32, ptr \} %phi, 0' \
+  'insertvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \}'
 assert_order "$LLVM_IR" "borrowed-return managed phi should lower array size read before returning phi" \
-  'define \{ i32, ptr \} @phi_select_preexisting_array_borrow_return' \
+  'define \{ i32, i32, ptr \} @phi_select_preexisting_array_borrow_return' \
   '^match\.cont:' \
-  '%phi = phi \{ i32, ptr \}' \
-  'extractvalue \{ i32, ptr \} %phi, 0' \
-  'ret \{ i32, ptr \} %phi'
+  '%phi = phi \{ i32, i32, ptr \}' \
+  'extractvalue \{ i32, i32, ptr \} %phi, 0' \
+  'ret \{ i32, i32, ptr \} %phi'
 assert_contains "$EXTERN_LLVM_IR" '^declare i32 @abs\(i32' "specialized extern should declare the base C symbol"
 assert_contains "$EXTERN_LLVM_IR" 'call i32 @abs\(i32 -1\)' "specialized extern calls should target the base C symbol"
 assert_not_contains "$EXTERN_LLVM_IR" 'abs\.Int\.Int' "specialized extern MIR names should not become LLVM symbols"
@@ -1258,11 +1258,11 @@ assert_order "$LLVM_SHAPE_IR" "closure construct/env/fn/field should lower to cl
   'getelementptr inbounds nuw \{ i32 \}, ptr %0, i32 0, i32 0' \
   'load i32'
 assert_order "$LLVM_SHAPE_IR" "array literal/at/set should lower to data insert, store, and load" \
-  'insertvalue \{ i32, ptr \} \{ i32 2, ptr undef \}, ptr %array\.data\.stack, 1' \
-  'extractvalue \{ i32, ptr \} %array\.data, 1' \
+  'insertvalue \{ i32, i32, ptr \} \{ i32 2, i32 0, ptr undef \}, ptr %array\.data\.stack, 2' \
+  'extractvalue \{ i32, i32, ptr \} %array\.data, 2' \
   'getelementptr i32, ptr %extract\.field, i32 0' \
   'store i32 .* ptr %ptr\.offset' \
-  'extractvalue \{ i32, ptr \} %array\.data, 1' \
+  'extractvalue \{ i32, i32, ptr \} %array\.data, 2' \
   'getelementptr i32, ptr %extract\.field[0-9]*, i32 0' \
   'load i32, ptr %ptr\.offset[0-9]*'
 assert_contains "$MATCH_DESTRUCTURE_LLVM_IR" 'define i32 @tuple_let_record_destructure\(i32 %0, i32 %1\)' "destructure LLVM fixture should lower tuple let-binding function"
@@ -1298,9 +1298,9 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "nested array record destructure shoul
 assert_contains "$MATCH_DESTRUCTURE_LLVM_IR" 'load \{ \{ i32 \} \}, ptr %ptr\.offset[0-9]*' "nested array record destructure should lower array element loads"
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "variant record payload destructure should lower payload extraction" \
   'define i32 @variant_record_payload_match' \
-  'extractvalue \{ i8, \{ \{ i32, ptr \}, i32 \} \} %phi, 1' \
-  'insertvalue \{ \{ \{ i32, ptr \}, i32 \} \} undef' \
-  'extractvalue \{ \{ \{ i32, ptr \}, i32 \} \}'
+  'extractvalue \{ i8, \{ \{ i32, i32, ptr \}, i32 \} \} %phi, 1' \
+  'insertvalue \{ \{ \{ i32, i32, ptr \}, i32 \} \} undef' \
+  'extractvalue \{ \{ \{ i32, i32, ptr \}, i32 \} \}'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "variant record payload arm should lower RC dup before consume" \
   'define i32 @variant_record_payload_match' \
   'call void @__ylc_dup\(ptr' \
@@ -1315,17 +1315,17 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "literal-pattern failure should lower 
   'br label %match\.arm\.1\.test'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "array-pattern fallback should lower second length test before one-element payload consume" \
   'define i32 @array_pattern_failure_then_payload_match' \
-  'extractvalue \{ i32, ptr \} %array\.data, 0' \
+  'extractvalue \{ i32, i32, ptr \} %array\.data, 0' \
   'icmp eq i32 %extract\.field, 2' \
-  'extractvalue \{ i32, ptr \} %array\.data, 0' \
+  'extractvalue \{ i32, i32, ptr \} %array\.data, 0' \
   'icmp eq i32 %extract\.field[0-9]+, 1' \
-  'load \{ \{ i32, ptr \} \}, ptr %ptr\.offset[0-9]*' \
+  'load \{ \{ i32, i32, ptr \} \}, ptr %ptr\.offset[0-9]*' \
   'call i32 @consume_array\.Array_Int\.Int'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "list record array payload match should lower list loads into record field extraction" \
   'define i32 @list_record_array_payload_match' \
-  'load \{ \{ i32, ptr \} \}, ptr %list\.head\.ptr' \
+  'load \{ \{ i32, i32, ptr \} \}, ptr %list\.head\.ptr' \
   'load ptr, ptr %list\.tail\.ptr' \
-  'extractvalue \{ \{ i32, ptr \} \} %list\.head, 0' \
+  'extractvalue \{ \{ i32, i32, ptr \} \} %list\.head, 0' \
   'call i32 @consume_array\.Array_Int\.Int'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "list record array payload match should expose a match continuation phi" \
   'define i32 @list_record_array_payload_match' \
@@ -1333,11 +1333,11 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "list record array payload match shoul
   '%phi = phi i32'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "array record list payload match should length-check before loading the record payload" \
   'define i32 @array_record_list_payload_match' \
-  'extractvalue \{ i32, ptr \} %array\.data, 0' \
+  'extractvalue \{ i32, i32, ptr \} %array\.data, 0' \
   'icmp eq i32 %extract\.field, 1'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "array record list payload match should load the record payload" \
   'define i32 @array_record_list_payload_match' \
-  'extractvalue \{ i32, ptr \} %array\.data, 1' \
+  'extractvalue \{ i32, i32, ptr \} %array\.data, 2' \
   'getelementptr \{ ptr \}, ptr %extract\.field[0-9]*, i32 0' \
   'load \{ ptr \}, ptr %ptr\.offset[0-9]*' \
   'br label %match\.arm\.0\.body'
@@ -1348,17 +1348,17 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "array record list payload match shoul
   'call i32 @consume_list\.List_Cons_Cons_Array_Int_List\.Int'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "variant first-field failure should compare before extracting the managed payload field" \
   'define i32 @variant_first_field_failure_payload_match' \
-  'extractvalue \{ i8, \{ i32, \{ i32, ptr \} \} \} %phi, 1' \
-  'extractvalue \{ i32, \{ i32, ptr \} \} %extract\.field, 0' \
+  'extractvalue \{ i8, \{ i32, \{ i32, i32, ptr \} \} \} %phi, 1' \
+  'extractvalue \{ i32, \{ i32, i32, ptr \} \} %extract\.field, 0' \
   'icmp eq i32 %extract\.field[0-9]+, 2' \
   'br i1 %eq, label %match\.tuple\.[0-9]+\.1, label %match\.arm\.1\.test' \
-  'extractvalue \{ i32, \{ i32, ptr \} \} %extract\.field, 1' \
+  'extractvalue \{ i32, \{ i32, i32, ptr \} \} %extract\.field, 1' \
   'call void @__ylc_dup\(ptr'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "heap array pattern failure should lower retry-edge drop after failed length tests" \
   'define i32 @heap_array_pattern_failure_then_payload_match' \
-  'extractvalue \{ i32, ptr \} %call, 0' \
+  'extractvalue \{ i32, i32, ptr \} %call, 0' \
   'icmp eq i32 %extract\.field, 2' \
-  'extractvalue \{ i32, ptr \} %call, 0' \
+  'extractvalue \{ i32, i32, ptr \} %call, 0' \
   'icmp eq i32 %extract\.field[0-9]+, 1' \
   'br i1 %eq[0-9]*, label %match\.array\.bb5, label %perceus\.edge\.drop' \
   '^perceus\.edge\.drop:' \
@@ -1371,7 +1371,7 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "heap list pattern failure should lowe
   '^perceus\.edge\.drop[0-9]*:' \
   'call void @__ylc_drop\(ptr %list\.tail[0-9]*\)'
 assert_contains "$RECURSIVE_DESTRUCTURE_LLVM_IR" '^%DirectNode = type \{ i32, ptr \}' "recursive list record should lower to named LLVM struct"
-assert_contains "$RECURSIVE_DESTRUCTURE_LLVM_IR" '^%DirectArrayNode = type \{ i32, \{ i32, ptr \} \}' "recursive array record should lower to named LLVM struct"
+assert_contains "$RECURSIVE_DESTRUCTURE_LLVM_IR" '^%DirectArrayNode = type \{ i32, \{ i32, i32, ptr \} \}' "recursive array record should lower to named LLVM struct"
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive list constructor should lower to list node stores and record insertvalue" \
   'define %DirectNode @direct_pair' \
   'getelementptr \(\{ %YlcRcHeader, \{ %DirectNode, ptr \} \}, ptr null, i32 1\)' \
@@ -1387,7 +1387,7 @@ assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive array constructor shoul
   'store i32 0, ptr %rc\.tag\.ptr' \
   'store %DirectArrayNode %0, ptr %array\.item\.ptr' \
   'store %DirectArrayNode %1, ptr %array\.item\.ptr' \
-  'insertvalue %DirectArrayNode \{ i32 3, \{ i32, ptr \} undef \}, \{ i32, ptr \} %array\.data, 1'
+  'insertvalue %DirectArrayNode \{ i32 3, \{ i32, i32, ptr \} undef \}, \{ i32, i32, ptr \} %array\.data, 1'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive list match should lower list head loads and RC edge drops" \
   'define i32 @direct_recursive_record_list_match' \
   'extractvalue %DirectNode %[A-Za-z0-9_.]+, 1' \
@@ -1398,25 +1398,25 @@ assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive list match should lower
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive array match should lower element loads and RC edge drop" \
   'define i32 @direct_recursive_record_array_match' \
   'extractvalue %DirectArrayNode %[A-Za-z0-9_.]+, 1' \
-  'extractvalue \{ i32, ptr \} %extract\.field, 1' \
+  'extractvalue \{ i32, i32, ptr \} %extract\.field, 2' \
   'load %DirectArrayNode, ptr %ptr\.offset' \
   'perceus\.edge\.drop:' \
   'call void @__ylc_drop\(ptr'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum constructor should lower payload tuple and tagged storage" \
-  'define \{ i32, ptr \} @tensor_add' \
-  'insertvalue \{ \{ i32, ptr \}, \{ i32, ptr \} \} undef' \
-  'insertvalue \{ \{ \{ i32, ptr \}, \{ i32, ptr \} \} \} undef' \
+  'define \{ i32, i32, ptr \} @tensor_add' \
+  'insertvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} undef' \
+  'insertvalue \{ \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} \} undef' \
   'insertvalue \{ i8, \[32 x i8\] \} \{ i8 1, \[32 x i8\] undef \}' \
-  'store \{ \{ i32, ptr \}, \{ i32, ptr \}, \{ i32, ptr \}, \{ i8, \[32 x i8\] \} \}'
+  'store \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i8, \[32 x i8\] \} \}'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef op projection should lower array load and op extractvalue" \
   'define \{ i8, \[32 x i8\] \} @tensor_op' \
-  'load \{ \{ i32, ptr \}, \{ i32, ptr \}, \{ i32, ptr \}, \{ i8, \[32 x i8\] \} \}' \
-  'extractvalue \{ \{ i32, ptr \}, \{ i32, ptr \}, \{ i32, ptr \}, \{ i8, \[32 x i8\] \} \} %ptr\.load, 3'
+  'load \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i8, \[32 x i8\] \} \}' \
+  'extractvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i8, \[32 x i8\] \} \} %ptr\.load, 3'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum match should lower array_size uses and drop duplicated payloads" \
   'define i32 @tensor_op_add_payload_match' \
   '^match\.arm\.0\.body:' \
-  'extractvalue \{ i32, ptr \} %extract\.field[0-9]+, 0' \
-  'extractvalue \{ i32, ptr \} %extract\.field[0-9]+, 0' \
+  'extractvalue \{ i32, i32, ptr \} %extract\.field[0-9]+, 0' \
+  'extractvalue \{ i32, i32, ptr \} %extract\.field[0-9]+, 0' \
   'add i32' \
   'call void @__ylc_drop\(ptr' \
   'call void @__ylc_drop\(ptr' \
@@ -1424,18 +1424,18 @@ assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum match should lower 
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum match should lower payload unpack and RC dup" \
   'define i32 @tensor_op_add_payload_match' \
   'extractvalue \{ i8, \[32 x i8\] \} %call[0-9]*, 1' \
-  'load \{ \{ \{ i32, ptr \}, \{ i32, ptr \} \} \}, ptr %union_cast_temp' \
-  'extractvalue \{ \{ i32, ptr \}, \{ i32, ptr \} \} %extract\.field, 0' \
+  'load \{ \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} \}, ptr %union_cast_temp' \
+  'extractvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} %extract\.field, 0' \
   'call void @__ylc_dup\(ptr' \
-  'extractvalue \{ \{ i32, ptr \}, \{ i32, ptr \} \} %extract\.field, 1' \
+  'extractvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} %extract\.field, 1' \
   'call void @__ylc_dup\(ptr'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum consuming arm should lower owned consume call" \
   'define i32 @tensor_op_add_payload_consume' \
   '^match\.arm\.0\.body:' \
-  'call i32 @consume_tensor.*\(\{ i32, ptr \} %extract\.field[0-9]+\)'
+  'call i32 @consume_tensor.*\(\{ i32, i32, ptr \} %extract\.field[0-9]+\)'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum consuming arm should lower RC dup for selected payload" \
   'define i32 @tensor_op_add_payload_consume' \
-  'extractvalue \{ \{ i32, ptr \}, \{ i32, ptr \} \} %extract\.field, 0' \
+  'extractvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} %extract\.field, 0' \
   'call void @__ylc_dup\(ptr'
 
 section "MIR test mode"

@@ -801,7 +801,10 @@ static LLVMValueRef lower_mir_const_string(MirFunction *fn, MirInstr *instr,
       builder, result,
       LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), (uint64_t)len, false), 0,
       "string.size");
-  return LLVMBuildInsertValue(builder, result, data, 1, "string.data");
+  result = LLVMBuildInsertValue(
+      builder, result, LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 0, false),
+      1, "string.offset");
+  return LLVMBuildInsertValue(builder, result, data, 2, "string.data");
 }
 
 static LLVMValueRef lower_mir_const(MirFunction *fn, MirInstr *instr,
@@ -3589,6 +3592,34 @@ static LLVMValueRef lower_mir_rc_hook(LLVMModuleRef module, const char *name) {
   return LLVMAddFunction(module, name, fn_type);
 }
 
+static bool lower_mir_llvm_type_is_sized(LLVMTypeRef type) {
+  if (!type) {
+    return false;
+  }
+
+  switch (LLVMGetTypeKind(type)) {
+  case LLVMVoidTypeKind:
+  case LLVMLabelTypeKind:
+  case LLVMMetadataTypeKind:
+  case LLVMFunctionTypeKind:
+    return false;
+  case LLVMStructTypeKind:
+    if (LLVMIsOpaqueStruct(type)) {
+      return false;
+    }
+    for (unsigned i = 0; i < LLVMCountStructElementTypes(type); i++) {
+      if (!lower_mir_llvm_type_is_sized(LLVMStructGetTypeAtIndex(type, i))) {
+        return false;
+      }
+    }
+    return true;
+  case LLVMArrayTypeKind:
+    return lower_mir_llvm_type_is_sized(LLVMGetElementType(type));
+  default:
+    return true;
+  }
+}
+
 static LLVMValueRef lower_mir_rc_managed_ptr(MirFunction *fn, MirInstr *instr,
                                              MirLlvmValueMap *values,
                                              LLVMModuleRef module,
@@ -3605,10 +3636,8 @@ static LLVMValueRef lower_mir_rc_managed_ptr(MirFunction *fn, MirInstr *instr,
   }
 
   Type *type = mir_function_value_type(fn, value_id);
-  if (type && is_string_type(type)) {
-    value = LLVMBuildExtractValue(builder, value, 1, "rc.payload");
-  } else if (type && is_array_type(type) && type->data.T_CONS.args &&
-             type->data.T_CONS.num_args > 0) {
+  if (type && is_array_type(type) && type->data.T_CONS.args &&
+      type->data.T_CONS.num_args > 0) {
     LLVMTypeRef element_type =
         lower_mir_value_storage_type(type->data.T_CONS.args[0], ctx, module);
     LLVMValueRef offset =
@@ -3618,10 +3647,14 @@ static LLVMValueRef lower_mir_rc_managed_ptr(MirFunction *fn, MirInstr *instr,
     if (!element_type || !offset || !data) {
       return NULL;
     }
-    LLVMValueRef neg_offset =
-        LLVMBuildNeg(builder, offset, "rc.array.base.offset");
-    value = LLVMBuildGEP2(builder, element_type, data, &neg_offset, 1,
-                          "rc.array.base");
+    if (lower_mir_llvm_type_is_sized(element_type)) {
+      LLVMValueRef neg_offset =
+          LLVMBuildNeg(builder, offset, "rc.array.base.offset");
+      value = LLVMBuildGEP2(builder, element_type, data, &neg_offset, 1,
+                            "rc.array.base");
+    } else {
+      value = data;
+    }
   } else if (type && is_closure(type)) {
     value = LLVMBuildExtractValue(builder, value, 1, "rc.payload");
   }
@@ -3695,7 +3728,7 @@ static LLVMValueRef lower_mir_print(MirFunction *fn, MirInstr *instr,
   LLVMValueRef format_str =
       LLVMBuildGlobalStringPtr(builder, "%.*s", "print.fmt");
   LLVMValueRef len = LLVMBuildExtractValue(builder, str, 0, "print.len");
-  LLVMValueRef chars = LLVMBuildExtractValue(builder, str, 1, "print.chars");
+  LLVMValueRef chars = LLVMBuildExtractValue(builder, str, 2, "print.chars");
   LLVMValueRef printf_args[] = {format_str, len, chars};
   LLVMBuildCall2(builder, printf_type, printf_func, printf_args, 3, "");
   return LLVMGetUndef(void_type);
@@ -3741,6 +3774,66 @@ static LLVMValueRef lower_mir_str(MirFunction *fn, MirInstr *instr,
   return stringify_value(value, type, ctx, module, builder);
 }
 
+static LLVMValueRef lower_mir_as_bytes(MirFunction *fn, MirInstr *instr,
+                                       MirLlvmValueMap *values,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder, JITLangCtx *ctx) {
+  if (!fn || !instr || !values || instr->data.op.argc != 1) {
+    return NULL;
+  }
+
+  MirValueId value_id = instr->data.op.operands[0];
+  LLVMValueRef value = mir_llvm_value_get_rvalue(values, value_id, builder);
+  Type *type = mir_function_value_type(fn, value_id);
+  if (!value || !type) {
+    return NULL;
+  }
+
+  type = resolve_type_in_env(type, ctx ? ctx->env : NULL);
+  if (!type ||
+      !(type->kind == T_INT || type->kind == T_UINT64 || type->kind == T_NUM)) {
+    return NULL;
+  }
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef char_type = LLVMInt8TypeInContext(llvm_ctx);
+  LLVMTypeRef value_type = lower_mir_type(type, ctx, module, LLVMTypeOf(value));
+  if (!value_type) {
+    return NULL;
+  }
+
+  if (type->kind == T_NUM) {
+    value_type = LLVMInt64TypeInContext(llvm_ctx);
+    value = LLVMBuildBitCast(builder, value, value_type, "double.as.int");
+  }
+
+  LLVMTargetDataRef target_data = LLVMGetModuleDataLayout(module);
+  unsigned width = (unsigned)LLVMStoreSizeOfType(target_data, value_type);
+  if (width == 0) {
+    return NULL;
+  }
+
+  LLVMTypeRef array_type = LLVMArrayType(char_type, width);
+  LLVMValueRef byte_array_ptr =
+      lower_mir_heap_alloc_payload(module, builder, array_type, "bytes.heap");
+  if (!byte_array_ptr) {
+    return NULL;
+  }
+
+  LLVMBuildStore(builder, value, byte_array_ptr);
+
+  LLVMTypeRef string_type = codegen_string_type(char_type);
+  LLVMValueRef result = LLVMGetUndef(string_type);
+  result = LLVMBuildInsertValue(
+      builder, result, LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), width, 0),
+      0, "bytes.size");
+  result = LLVMBuildInsertValue(
+      builder, result, LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 0, 0), 1,
+      "bytes.offset");
+  return LLVMBuildInsertValue(builder, result, byte_array_ptr, 2,
+                              "bytes.data");
+}
+
 static LLVMValueRef lower_mir_op(MirFunction *fn, MirInstr *instr,
                                  MirLlvmValueMap *values, MirLlvmCtx *lctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder,
@@ -3774,6 +3867,8 @@ static LLVMValueRef lower_mir_op(MirFunction *fn, MirInstr *instr,
     return lower_mir_tag_eq(instr, values, builder);
   case MIR_OP_KIND_STR:
     return lower_mir_str(fn, instr, values, module, builder, ctx);
+  case MIR_OP_KIND_AS_BYTES:
+    return lower_mir_as_bytes(fn, instr, values, module, builder, ctx);
   case MIR_OP_KIND_DUP:
   case MIR_OP_KIND_DROP:
     return lower_mir_rc_marker(fn, instr, values, module, builder, ctx);

@@ -604,11 +604,10 @@ LLVMValueRef array_eq(LLVMValueRef arr1, LLVMValueRef arr2, Type *arr_type,
   LLVMPositionBuilderAtEnd(builder, cmp_block);
 
   // Get data pointers from both arrays
-  unsigned data_index = is_string_type(arr_type) ? 1 : 2;
   LLVMValueRef data1 =
-      LLVMBuildExtractValue(builder, arr1, data_index, "get_array1_data_ptr");
+      LLVMBuildExtractValue(builder, arr1, 2, "get_array1_data_ptr");
   LLVMValueRef data2 =
-      LLVMBuildExtractValue(builder, arr2, data_index, "get_array2_data_ptr");
+      LLVMBuildExtractValue(builder, arr2, 2, "get_array2_data_ptr");
 
   // Get or declare strncmp function
   LLVMTypeRef strncmp_args[] = {

@@ -282,6 +282,10 @@ static bool mir_escape_seed_instruction(MirFunction *fn, MirInstr *instr,
     } else if (instr->data.op.kind == MIR_OP_KIND_STORE) {
       changed |= mir_escape_mark(state->mutable, fn,
                                  instr->data.op.operands[0]);
+      MirValueId stored = instr->data.op.operands[1];
+      if (mir_escape_may_be_tracked_type(mir_function_value_type(fn, stored))) {
+        changed |= mir_escape_mark(state->escaped, fn, stored);
+      }
     }
     break;
   default:
@@ -402,7 +406,8 @@ static bool mir_escape_propagate_mutability(MirFunction *fn, MirInstr *instr,
     if (instr->data.construct.kind == MIR_CONSTRUCT_TUPLE &&
         is_array_type(instr->type) && instr->data.construct.items.len > 1) {
       return mir_escape_mark(state->mutable, fn,
-                             instr->data.construct.items.items[1]);
+                             instr->data.construct.items.items
+                                 [instr->data.construct.items.len - 1]);
     }
     return false;
   case MIR_EXTRACT:

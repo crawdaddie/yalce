@@ -2669,6 +2669,9 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
                                                    const char *name,
                                                    Type *specialized_type);
 static void mir_call_apply_callee_summary(MirBuilder *builder, MirInstr *call);
+static Type *mir_call_type_from_operand_values(MirBuilder *builder,
+                                               MirInstr *call,
+                                               Type *result_type);
 
 typedef struct MirTypeSubst {
   int id;
@@ -3268,6 +3271,15 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
       if (clone.kind == MIR_EXTRACT &&
           clone.data.extract.kind == MIR_EXTRACT_FIELD) {
         mir_resolve_named_extract_field(fn, &clone);
+      }
+      if (mir_instr_is_call_like(&clone) &&
+          (!clone.data.call.callee_type ||
+           mir_type_has_type_vars(clone.data.call.callee_type))) {
+        Type *callee_type =
+            mir_call_type_from_operand_values(&builder, &clone, clone.type);
+        if (callee_type && !mir_type_has_type_vars(callee_type)) {
+          clone.data.call.callee_type = callee_type;
+        }
       }
       if (clone.kind == MIR_CALL && clone.data.call.builtin) {
         Type *callee_type = mir_clone_call_type_from_source_operands(
@@ -4836,6 +4848,168 @@ static bool mir_compile_module_body(MirBuilder *builder, Ast *module_ast,
   return value != MIR_NO_VALUE;
 }
 
+static Type *mir_module_result_type(Type *type) {
+  Type *cur = type;
+  while (cur && cur->kind == T_FN) {
+    cur = cur->data.T_FN.to;
+  }
+  return cur && cur->kind == T_MODULE ? cur : NULL;
+}
+
+static ModuleTypeMeta *mir_module_type_meta(Type *type) {
+  Type *module_type = mir_module_result_type(type);
+  return module_type ? (ModuleTypeMeta *)module_type->meta : NULL;
+}
+
+static bool mir_module_param_is_type(Ast *param, Ast *annotation) {
+  return param && param->tag == AST_IDENTIFIER && annotation == NULL;
+}
+
+static bool mir_bind_specialized_module_param(MirBuilder *builder,
+                                              MirCtx *parent_ctx,
+                                              MirCtx *module_ctx,
+                                              Ast *param_ast, Ast *arg_ast) {
+  if (!builder || !parent_ctx || !module_ctx || !param_ast || !arg_ast) {
+    return false;
+  }
+
+  MirValueId value = mir_expr(builder, arg_ast, parent_ctx);
+  if (value == MIR_NO_VALUE ||
+      !mir_bind_pattern(builder, module_ctx, param_ast, value, arg_ast->type)) {
+    return false;
+  }
+
+  if (param_ast->tag != AST_IDENTIFIER || ast_is_placeholder_id(param_ast)) {
+    return true;
+  }
+
+  MirFunction *target =
+      mir_value_fn_ref_target(builder->program, builder->fn, value);
+  if (!target) {
+    return true;
+  }
+
+  return mir_bind_function_symbol(builder, module_ctx,
+                                  param_ast->data.AST_IDENTIFIER.value, target,
+                                  arg_ast, true);
+}
+
+static MirValueId
+mir_specialized_module_binding_value(MirBuilder *builder, Ast *ast,
+                                     MirCtx *ctx) {
+  if (!builder || !builder->program || !ast || ast->tag != AST_LET || !ctx ||
+      !ast->data.AST_LET.binding ||
+      ast->data.AST_LET.binding->tag != AST_IDENTIFIER ||
+      !ast->data.AST_LET.expr ||
+      ast->data.AST_LET.expr->tag != AST_APPLICATION) {
+    return MIR_NO_VALUE;
+  }
+
+  Ast *app = mir_application_flatten_if_saturated(builder->program->arena,
+                                                  ast->data.AST_LET.expr);
+  if (!app || app->tag != AST_APPLICATION) {
+    return MIR_NO_VALUE;
+  }
+
+  MirSymbol *generic =
+      mir_resolve_ast_symbol(builder, app->data.AST_APPLICATION.function, ctx);
+  if (!generic || generic->kind != MIR_SYMBOL_GENERIC_MODULE ||
+      !generic->as.expr || generic->as.expr->tag != AST_MODULE) {
+    return MIR_NO_VALUE;
+  }
+
+  const char *local_name =
+      ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+  const char *module_name = mir_qualified_symbol_name(builder->program, ctx,
+                                                      local_name);
+  Type *module_type = ast->data.AST_LET.binding->type
+                          ? ast->data.AST_LET.binding->type
+                          : mir_module_result_type(app->type);
+  if (!module_type || module_type->kind != T_MODULE) {
+    module_type = mir_module_result_type(generic->type);
+  }
+  if (!module_type || module_type->kind != T_MODULE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirModule *module =
+      mir_program_add_module(builder->program, module_name, module_type,
+                             generic->as.expr, ctx->current_module);
+  if (!module) {
+    return MIR_NO_VALUE;
+  }
+  module->init = builder->fn ? builder->fn->id : MIR_NO_FUNCTION;
+
+  MirSymbol *module_symbol =
+      mir_symbol_new(builder->program->arena, MIR_SYMBOL_MODULE, module_type,
+                     generic->as.expr, ctx->current_module);
+  if (!module_symbol) {
+    return MIR_NO_VALUE;
+  }
+  module_symbol->as.module = module->id;
+  if (!mir_bind_export_symbol(builder, ctx, local_name, module_symbol)) {
+    return MIR_NO_VALUE;
+  }
+
+  ht module_table;
+  MirStackFrame module_frame;
+  mir_stack_frame_init(builder->program->arena, &module_table, &module_frame,
+                       NULL);
+  MirCtx module_ctx = {
+      .env = ctx->env,
+      .frame = &module_frame,
+      .current_module = module->id,
+      .export_bindings = true,
+  };
+
+  ModuleTypeMeta *meta = mir_module_type_meta(generic->type);
+  int arg_i = meta ? meta->num_type_params : 0;
+  AstList *param = generic->as.expr->data.AST_LAMBDA.params;
+  AstList *annotation = generic->as.expr->data.AST_LAMBDA.type_annotations;
+  for (; param; param = param->next) {
+    Ast *annotation_ast = annotation ? annotation->ast : NULL;
+    if (annotation) {
+      annotation = annotation->next;
+    }
+    if (mir_module_param_is_type(param->ast, annotation_ast)) {
+      continue;
+    }
+    if (arg_i >= app->data.AST_APPLICATION.len) {
+      return MIR_NO_VALUE;
+    }
+    if (!mir_bind_specialized_module_param(
+            builder, ctx, &module_ctx, param->ast,
+            app->data.AST_APPLICATION.args + arg_i)) {
+      return MIR_NO_VALUE;
+    }
+    arg_i++;
+  }
+
+  if (!mir_compile_module_body(builder, generic->as.expr, &module_ctx)) {
+    return MIR_NO_VALUE;
+  }
+
+  return mir_const_void(builder, &t_void, ast);
+}
+
+static bool mir_is_specialized_module_binding_expr(MirBuilder *builder,
+                                                   Ast *expr, MirCtx *ctx) {
+  if (!builder || !builder->program || !expr ||
+      expr->tag != AST_APPLICATION) {
+    return false;
+  }
+
+  Ast *app = mir_application_flatten_if_saturated(builder->program->arena,
+                                                  expr);
+  if (!app || app->tag != AST_APPLICATION) {
+    return false;
+  }
+
+  MirSymbol *generic =
+      mir_resolve_ast_symbol(builder, app->data.AST_APPLICATION.function, ctx);
+  return generic && generic->kind == MIR_SYMBOL_GENERIC_MODULE;
+}
+
 static MirValueId mir_module_binding_value(MirBuilder *builder, Ast *ast,
                                            MirCtx *ctx) {
   if (!builder || !builder->program || !ast || ast->tag != AST_LET || !ctx ||
@@ -4986,6 +5160,13 @@ static MirValueId mir_let_value(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
 
   if (expr && expr->tag == AST_MODULE) {
     return mir_module_binding_value(builder, ast, ctx);
+  } else if (expr && expr->tag == AST_APPLICATION) {
+    MirValueId module_value =
+        mir_specialized_module_binding_value(builder, ast, ctx);
+    if (module_value != MIR_NO_VALUE) {
+      return module_value;
+    }
+    return mir_expr(builder, expr, ctx);
   } else if (expr && expr->tag == AST_LAMBDA) {
     ObjString name = {0};
     const char *fn_name = NULL;
@@ -5015,6 +5196,9 @@ static MirValueId mir_let_value(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
 static MirValueId mir_let(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
   Ast *binding = ast->data.AST_LET.binding;
   Ast *expr = ast->data.AST_LET.expr;
+  bool is_module_binding =
+      expr && (expr->tag == AST_MODULE ||
+               mir_is_specialized_module_binding_expr(builder, expr, ctx));
 
   if (ast->data.AST_LET.in_expr && ctx) {
     MIR_STACK_ALLOC_CTX_PUSH(cont_ctx, builder, ctx)
@@ -5024,7 +5208,7 @@ static MirValueId mir_let(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
       mir_builder_set_unreachable_if_open(builder);
       return MIR_NO_VALUE;
     }
-    if (expr && expr->tag == AST_MODULE) {
+    if (is_module_binding) {
       return mir_expr(builder, ast->data.AST_LET.in_expr, &cont_ctx);
     }
     if (!mir_bind_pattern(builder, &cont_ctx, binding, value,
@@ -5040,7 +5224,7 @@ static MirValueId mir_let(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
     mir_builder_set_unreachable_if_open(builder);
     return MIR_NO_VALUE;
   }
-  if (expr && expr->tag == AST_MODULE) {
+  if (is_module_binding) {
     return value;
   }
   if (expr && expr->tag == AST_EXTERN_FN) {
@@ -5631,7 +5815,7 @@ static MirValueId mir_pattern_array_at(MirBuilder *builder, Type *type,
   }
 
   Type *ptr_type = ptr_of_type(array_type->data.T_CONS.args[0]);
-  MirValueId data_ptr = mir_tuple_get(builder, ptr_type, origin, array, 1);
+  MirValueId data_ptr = mir_tuple_get(builder, ptr_type, origin, array, 2);
   MirValueId element_ptr =
       mir_ptr_offset(builder, ptr_type, origin, data_ptr, index);
   return mir_ptr_load(builder, type, origin, element_ptr);

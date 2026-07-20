@@ -171,7 +171,8 @@ static MirValueId mir_perceus_borrow_parent_for_instr(MirInstr *instr) {
   case MIR_CONSTRUCT:
     if (instr->data.construct.kind == MIR_CONSTRUCT_TUPLE &&
         is_array_type(instr->type) && instr->data.construct.items.len > 1) {
-      return instr->data.construct.items.items[1];
+      return instr->data.construct.items
+          .items[instr->data.construct.items.len - 1];
     }
     return MIR_NO_VALUE;
   case MIR_EXTRACT:

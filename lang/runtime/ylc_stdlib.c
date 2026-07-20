@@ -104,7 +104,7 @@ _String string_concat(_String *strings, int num_strings) {
     offset += lengths[i];
   }
 
-  return (_String){total_len, concatted};
+  return (_String){total_len, 0, concatted};
 }
 
 _String string_add(_String a, _String b) {
@@ -112,7 +112,7 @@ _String string_add(_String a, _String b) {
 }
 
 char *cstr(_String s) { return s.chars; }
-_String from_cstr(int len, char *s) { return (_String){len, s}; }
+_String from_cstr(int len, char *s) { return (_String){len, 0, s}; }
 
 int char_to_hex_int(char c) {
   // Convert the character to lowercase for easier processing
@@ -145,7 +145,7 @@ _String transpose_string(int input_rows, int input_cols, int output_rows,
     }
   }
   transposed[output_idx + 1] = '\0';
-  _String result = {output_idx, transposed};
+  _String result = {output_idx, 0, transposed};
   return result;
 }
 
@@ -238,6 +238,7 @@ ReadLinesResult read_lines(FILE *f) {
 
   head->data.chars = NULL;
   head->data.size = 0;
+  head->data.offset = 0;
   head->next = NULL;
 
   _YLC__String_List *current = head;
@@ -263,6 +264,7 @@ ReadLinesResult read_lines(FILE *f) {
 
       new_node->data.chars = line_start;
       new_node->data.size = line_length;
+      new_node->data.offset = 0;
       new_node->next = NULL;
 
       current->next = new_node;
@@ -277,6 +279,7 @@ ReadLinesResult read_lines(FILE *f) {
   }
 
   head->data.chars = file_bytes.bytes;
+  head->data.offset = 0;
 
   _YLC__String_List *result = head->next;
   free(head);
@@ -468,7 +471,7 @@ double *mmap_double_array(int32_t data_size, double *data,
 }
 
 _DoubleArray double_array_from_raw(int32_t size, double *data) {
-  return (_DoubleArray){size, data};
+  return (_DoubleArray){size, 0, data};
 }
 
 void mmap_sync_array(int32_t size, double *data) {
@@ -571,6 +574,7 @@ STRLIST *string_split(_String str, _String delim) {
     if (strncmp(str.chars + i, delim.chars, delim.size) == 0) {
       STRLIST *new_node = malloc(sizeof(STRLIST));
       new_node->data.size = i - start;
+      new_node->data.offset = 0;
       new_node->data.chars = str.chars + start;
       new_node->next = NULL;
 
@@ -590,6 +594,7 @@ STRLIST *string_split(_String str, _String delim) {
 
   STRLIST *new_node = malloc(sizeof(STRLIST));
   new_node->data.size = str.size - start;
+  new_node->data.offset = 0;
   new_node->data.chars = str.chars + start;
   new_node->next = NULL;
 
@@ -650,7 +655,7 @@ int parse_num(const char *str) {
 }
 
 _String cstr_to_str(char *chars) {
-  return (_String){.size = strlen(chars), .chars = chars};
+  return (_String){.size = strlen(chars), .offset = 0, .chars = chars};
 }
 
 int set_env(_String varname, _String val) {
@@ -727,7 +732,7 @@ _String char_to_hex_string(char byte) {
 
   char *result = malloc(3); // 2 hex chars + null terminator
   if (!result) {
-    return (_String){.size = 0, .chars = NULL};
+    return (_String){.size = 0, .offset = 0, .chars = NULL};
   }
 
   unsigned char ubyte =
@@ -736,7 +741,7 @@ _String char_to_hex_string(char byte) {
   result[1] = hex_chars[ubyte & 0x0F];        // Low nibble
   result[2] = '\0';
 
-  return (_String){.size = 2, .chars = result};
+  return (_String){.size = 2, .offset = 0, .chars = result};
 }
 int ilog2(long long x) { return 64 - __builtin_clzl(x) - 1; }
 

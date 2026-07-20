@@ -42,16 +42,17 @@ LLVMTypeRef codegen_array_type(LLVMTypeRef element_type) {
       3, 0); // 3 elements, not packed
 }
 
-// Strings keep the C runtime ABI: { i32 size, i8* chars }.
+// Strings use the same view layout as arrays: { i32 size, i32 offset, i8* data }.
 LLVMTypeRef codegen_string_type(LLVMTypeRef char_type) {
   LLVMContextRef llvm_ctx = type_context(char_type);
   return LLVMStructTypeInContext(
       llvm_ctx,
       (LLVMTypeRef[]){
           LLVMInt32TypeInContext(llvm_ctx), // size
+          LLVMInt32TypeInContext(llvm_ctx), // offset from allocation base
           LLVMPointerType(char_type, 0)     // chars pointer
       },
-      2, 0);
+      3, 0);
 }
 
 // Creates a generic array value type: { i32, i32, i8* }
@@ -148,7 +149,9 @@ LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
     if (is_string_type(ast->type)) {
       LLVMValueRef null_data =
           LLVMConstNull(LLVMPointerType(LLVMInt8TypeInContext(llvm_ctx), 0));
-      array_struct = LLVMBuildInsertValue(builder, array_struct, null_data, 1,
+      array_struct = LLVMBuildInsertValue(builder, array_struct, size_const, 1,
+                                          "insert_array_offset");
+      array_struct = LLVMBuildInsertValue(builder, array_struct, null_data, 2,
                                           "insert_array_data");
     } else {
       Type *element_type_ref = ast->type->data.T_CONS.args[0];
@@ -656,8 +659,7 @@ LLVMValueRef CStrHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       codegen(ast->data.AST_APPLICATION.args, ctx, module, builder);
   arr = get_array_struct(arr, llvm_arr_type, builder);
 
-  return LLVMBuildExtractValue(builder, arr, is_string_type(arr_type) ? 1 : 2,
-                               "get_array_data_ptr");
+  return LLVMBuildExtractValue(builder, arr, 2, "get_array_data_ptr");
 }
 
 LLVMValueRef ArrayConstructor(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
