@@ -24,6 +24,26 @@ static MirFunction *mir_program_find_function_by_name(MirProgram *program,
                                                       const char *name);
 MirValueId mir_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx);
 
+static void mir_builder_error_at(MirBuilder *builder, Ast *origin,
+                                 const char *fmt, ...) {
+  if (!builder || !builder->program || builder->program->had_error) {
+    return;
+  }
+
+  builder->program->had_error = true;
+  va_list args;
+  va_start(args, fmt);
+  fputs("MIR Error: ", stderr);
+  vfprintf(stderr, fmt, args);
+  va_end(args);
+  fputc(' ', stderr);
+  if (origin) {
+    print_location(origin);
+  } else {
+    fputc('\n', stderr);
+  }
+}
+
 static size_t align_forward(size_t value, size_t align) {
   size_t mask = align - 1;
   return (value + mask) & ~mask;
@@ -1094,6 +1114,8 @@ static MirOperandRole mir_op_operand_role(const MirInstr *instr, size_t index) {
     return MIR_OPERAND_ROLE_VALUE;
   case MIR_OP_KIND_STORE:
     return index == 1 ? MIR_OPERAND_ROLE_ELEMENT : MIR_OPERAND_ROLE_VALUE;
+  case MIR_OP_KIND_GLOBAL_STORE:
+    return MIR_OPERAND_ROLE_VALUE;
   default:
     return MIR_OPERAND_ROLE_VALUE;
   }
@@ -3108,6 +3130,13 @@ static void mir_resolve_named_extract_field(MirFunction *fn, MirInstr *instr) {
 
   Type *record_type = mir_function_value_type(fn, instr->data.extract.value);
   Type *record_view = mir_record_access_type_view(record_type);
+  if ((!record_view || record_view->kind != T_CONS ||
+       is_generic(record_view)) &&
+      instr->origin && instr->origin->tag == AST_RECORD_ACCESS &&
+      instr->origin->data.AST_RECORD_ACCESS.record) {
+    record_view = mir_record_access_type_view(
+        instr->origin->data.AST_RECORD_ACCESS.record->type);
+  }
   if (!record_view || record_view->kind != T_CONS) {
     return;
   }
@@ -3115,10 +3144,11 @@ static void mir_resolve_named_extract_field(MirFunction *fn, MirInstr *instr) {
   bool has_named_fields = record_view->data.T_CONS.names != NULL;
   int member_index =
       get_struct_member_idx(instr->data.extract.name, record_view);
+  if (member_index < 0 && !has_named_fields && !is_generic(record_view) &&
+      instr->origin && instr->origin->tag == AST_RECORD_ACCESS) {
+    member_index = instr->origin->data.AST_RECORD_ACCESS.index;
+  }
   if (member_index < 0) {
-    if (!has_named_fields && !is_generic(record_view)) {
-      return;
-    }
     return;
   }
   if (member_index >= record_view->data.T_CONS.num_args) {
@@ -3129,6 +3159,38 @@ static void mir_resolve_named_extract_field(MirFunction *fn, MirInstr *instr) {
   if ((!instr->type || is_generic(instr->type)) &&
       record_view->data.T_CONS.args) {
     instr->type = record_view->data.T_CONS.args[member_index];
+  }
+}
+
+static void mir_resolve_named_extract_fields(MirFunction *fn) {
+  if (!fn) {
+    return;
+  }
+
+  for (size_t i = 0; i < fn->blocks.len; i++) {
+    MirBlock *block = fn->blocks.items ? fn->blocks.items[i] : NULL;
+    if (!block) {
+      continue;
+    }
+    for (size_t j = 0; j < block->instrs.len; j++) {
+      MirInstr *instr = &block->instrs.items[j];
+      if (instr->kind == MIR_EXTRACT &&
+          instr->data.extract.kind == MIR_EXTRACT_FIELD) {
+        mir_resolve_named_extract_field(fn, instr);
+      }
+    }
+  }
+}
+
+static void mir_resolve_named_extract_fields_program(MirProgram *program) {
+  if (!program) {
+    return;
+  }
+
+  for (size_t i = 0; i < program->functions.len; i++) {
+    MirFunction *fn =
+        program->functions.items ? program->functions.items[i] : NULL;
+    mir_resolve_named_extract_fields(fn);
   }
 }
 
@@ -3412,6 +3474,7 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
   }
 
   mir_remap_deferred_phi_incomings(fn, value_map, value_map_len);
+  mir_resolve_named_extract_fields(fn);
   return fn;
 }
 
@@ -4655,6 +4718,48 @@ static const char *mir_scoped_function_name(MirBuilder *builder, MirCtx *ctx,
   return mir_unique_function_name(builder->program, base);
 }
 
+static const char *mir_global_storage_name(MirBuilder *builder, MirCtx *ctx,
+                                           const char *name) {
+  if (!builder || !builder->program || !builder->program->arena || !name) {
+    return NULL;
+  }
+
+  const char *qualified = mir_qualified_symbol_name(builder->program, ctx, name);
+  if (!qualified) {
+    return NULL;
+  }
+  return mir_arena_printf(builder->program->arena, "$global.%s", qualified);
+}
+
+static MirValueId mir_global_load(MirBuilder *builder, Type *type, Ast *origin,
+                                  const char *global_name) {
+  if (!builder || !global_name) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_OP, type, origin);
+  instr.data.op.kind = MIR_OP_KIND_GLOBAL_LOAD;
+  instr.data.op.argc = 0;
+  instr.data.op.global_name = global_name;
+  return mir_builder_append_instr(builder, instr);
+}
+
+static MirValueId mir_global_store(MirBuilder *builder, Type *type,
+                                   Ast *origin, const char *global_name,
+                                   MirValueId value) {
+  if (!builder || !global_name || value == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_OP, &t_void, origin);
+  instr.data.op.kind = MIR_OP_KIND_GLOBAL_STORE;
+  instr.data.op.argc = 1;
+  instr.data.op.operands[0] = value;
+  instr.data.op.to_type = type;
+  instr.data.op.global_name = global_name;
+  return mir_builder_append_instr(builder, instr);
+}
+
 static const char *mir_scoped_lambda_name(MirBuilder *builder, MirCtx *ctx,
                                           Ast *lambda) {
   if (!builder || !builder->program || !lambda || lambda->tag != AST_LAMBDA) {
@@ -4755,19 +4860,35 @@ static bool mir_export_fn_ref_binding(MirBuilder *builder, MirCtx *ctx,
 }
 
 static bool mir_export_expr_binding(MirBuilder *builder, MirCtx *ctx,
-                                    Ast *binding, Ast *expr) {
+                                    Ast *binding, Ast *expr,
+                                    MirValueId value) {
   if (!mir_ctx_should_export(ctx, binding) || !expr) {
     return true;
   }
 
-  MirSymbol *symbol = mir_symbol_new(builder->program->arena, MIR_SYMBOL_EXPR,
-                                     expr->type, expr, ctx->current_module);
+  Type *type = expr->type ? expr->type : binding->type;
+  if (!type && builder && builder->fn) {
+    type = mir_function_value_type(builder->fn, value);
+  }
+  if (!type || type->kind == T_VOID) {
+    return true;
+  }
+
+  const char *name = mir_identifier_name(binding);
+  const char *global_name = mir_global_storage_name(builder, ctx, name);
+  if (!global_name ||
+      mir_global_store(builder, type, expr, global_name, value) ==
+          MIR_NO_VALUE) {
+    return false;
+  }
+
+  MirSymbol *symbol = mir_symbol_new(builder->program->arena, MIR_SYMBOL_GLOBAL,
+                                     type, expr, ctx->current_module);
   if (!symbol) {
     return false;
   }
-  symbol->as.expr = expr;
-  return mir_bind_export_symbol(builder, ctx, mir_identifier_name(binding),
-                                symbol);
+  symbol->as.global_name = global_name;
+  return mir_bind_export_symbol(builder, ctx, name, symbol);
 }
 
 static MirValueId mir_lambda_value(MirBuilder *builder, Ast *expr, MirCtx *ctx,
@@ -5239,7 +5360,7 @@ static MirValueId mir_let(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
       return MIR_NO_VALUE;
     }
   } else if (expr && expr->tag != AST_LAMBDA) {
-    if (!mir_export_expr_binding(builder, ctx, binding, expr)) {
+    if (!mir_export_expr_binding(builder, ctx, binding, expr, value)) {
       mir_builder_set_unreachable_if_open(builder);
       return MIR_NO_VALUE;
     }
@@ -5280,6 +5401,10 @@ static MirValueId mir_symbol_to_value(MirBuilder *builder, Ast *origin,
     }
     Type *ref_type = expected_type ? expected_type : symbol->type;
     return mir_fn_ref(builder, ref_type, origin, fn);
+  }
+  case MIR_SYMBOL_GLOBAL: {
+    Type *type = expected_type ? expected_type : symbol->type;
+    return mir_global_load(builder, type, origin, symbol->as.global_name);
   }
   case MIR_SYMBOL_EXPR: {
     if (!symbol->as.expr || symbol->rematerializing) {
@@ -5379,6 +5504,9 @@ static MirValueId mir_identifier(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
     if (constructor != MIR_NO_VALUE) {
       return constructor;
     }
+
+    mir_builder_error_at(builder, ast, "unresolved identifier `%s`",
+                         ast->data.AST_IDENTIFIER.value);
   }
 
   return MIR_NO_VALUE;
@@ -6314,7 +6442,11 @@ static MirValueId mir_match_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
   }
 
   mir_builder_position_at_end(builder, no_match_block);
-  mir_builder_set_unreachable(builder);
+  if (ast->data.AST_MATCH.allow_no_match && !collect_value) {
+    mir_builder_set_br(builder, continuation_block->id);
+  } else {
+    mir_builder_set_unreachable(builder);
+  }
 
   mir_builder_position_at_end(builder, continuation_block);
   if (!collect_value) {
@@ -6741,6 +6873,10 @@ static const char *mir_op_kind_name(MirOpKind kind) {
     return "load_owned";
   case MIR_OP_KIND_STORE:
     return "store";
+  case MIR_OP_KIND_GLOBAL_LOAD:
+    return "global_load";
+  case MIR_OP_KIND_GLOBAL_STORE:
+    return "global_store";
   case MIR_OP_KIND_STR:
     return "str";
   case MIR_OP_KIND_PRINT:
@@ -7214,6 +7350,30 @@ static void dump_instr(FILE *stream, const MirFunction *fn,
           fputs(", ", stream);
         }
         dump_value(stream, instr->data.op.operands[i]);
+      }
+      break;
+    case MIR_OP_KIND_GLOBAL_LOAD:
+      fprintf(stream, " @%s", instr->data.op.global_name
+                                  ? instr->data.op.global_name
+                                  : "<global>");
+      if (instr->type) {
+        fputs(STYLE_DIM " : ", stream);
+        print_type_to_stream(instr->type, stream);
+        fputs(STYLE_RESET_ALL, stream);
+      }
+      break;
+    case MIR_OP_KIND_GLOBAL_STORE:
+      fprintf(stream, " @%s", instr->data.op.global_name
+                                  ? instr->data.op.global_name
+                                  : "<global>");
+      for (size_t i = 0; i < instr->data.op.argc; i++) {
+        fputs(", ", stream);
+        dump_value(stream, instr->data.op.operands[i]);
+      }
+      if (instr->data.op.to_type) {
+        fputs(STYLE_DIM " : ", stream);
+        print_type_to_stream(instr->data.op.to_type, stream);
+        fputs(STYLE_RESET_ALL, stream);
       }
       break;
     default:
@@ -7773,9 +7933,17 @@ MirProgram *mir_build_program(MirArena *arena, Ast *prog, MirCtx *ctx) {
   return program;
 }
 
+bool mir_program_had_error(MirProgram *program) {
+  return !program || program->had_error;
+}
+
 void mir_program_destroy(MirProgram *program) { (void)program; }
 
 void mir_run_passes(MirProgram *program) {
+  if (mir_program_had_error(program)) {
+    return;
+  }
+  mir_resolve_named_extract_fields_program(program);
   mir_escape_analysis(program);
   if (ylc_config.perceus_rc) {
     mir_perceus_instrumentation(program);
@@ -7809,8 +7977,18 @@ int mir(Ast *prog, TypeEnv *type_env) {
     mir_arena_destroy(arena);
     return 0;
   }
+  if (mir_program_had_error(program)) {
+    mir_program_destroy(program);
+    mir_arena_destroy(arena);
+    return 0;
+  }
 
   mir_run_passes(program);
+  if (mir_program_had_error(program)) {
+    mir_program_destroy(program);
+    mir_arena_destroy(arena);
+    return 0;
+  }
   if (ylc_config.dump_mir) {
     mir_dump_program(program, stdout);
   }

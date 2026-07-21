@@ -346,7 +346,17 @@ static ORCCompiledModule compile_source(const char *filename,
   mir_stack_frame_init(mir_arena, &mir_table, &mir_initial_stack_frame, NULL);
   MirCtx mir_ctx = {.env = ti_ctx.env, .frame = &mir_initial_stack_frame};
   MirProgram *mir_program = mir_build_program(mir_arena, prog, &mir_ctx);
+  if (mir_program_had_error(mir_program)) {
+    mir_program_destroy(mir_program);
+    mir_arena_destroy(mir_arena);
+    return dispose_compile_artifacts(context, module, builder);
+  }
   mir_run_passes(mir_program);
+  if (mir_program_had_error(mir_program)) {
+    mir_program_destroy(mir_program);
+    mir_arena_destroy(mir_arena);
+    return dispose_compile_artifacts(context, module, builder);
+  }
   if (ylc_config.dump_mir) {
     mir_dump_program(mir_program, stdout);
   }

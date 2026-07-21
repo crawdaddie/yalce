@@ -33,6 +33,7 @@ typedef enum {
   MIR_SYMBOL_EXTERN_FUNCTION,
   MIR_SYMBOL_MODULE,
   MIR_SYMBOL_GENERIC_MODULE,
+  MIR_SYMBOL_GLOBAL,
   MIR_SYMBOL_EXPR,
   MIR_SYMBOL_TYPE,
 } MirSymbolKind;
@@ -48,6 +49,7 @@ typedef struct MirSymbol {
     MirFunctionId function;
     MirModuleId module;
     Ast *expr;
+    const char *global_name;
   } as;
 } MirSymbol;
 
@@ -99,6 +101,8 @@ typedef enum {
   MIR_OP_KIND_LOAD,
   MIR_OP_KIND_LOAD_OWNED,
   MIR_OP_KIND_STORE,
+  MIR_OP_KIND_GLOBAL_LOAD,
+  MIR_OP_KIND_GLOBAL_STORE,
   MIR_OP_KIND_STR,
   MIR_OP_KIND_PRINT,
   MIR_OP_KIND_FPRINT,
@@ -305,6 +309,7 @@ typedef struct {
   Type *to_type;
   int constructor_index;
   const char *constructor_name;
+  const char *global_name;
 } MirOp;
 
 typedef struct {
@@ -463,6 +468,7 @@ struct MirProgram {
   MirFunctionVec functions;
   MirModuleVec modules;
   MirModuleId root_module;
+  bool had_error;
 };
 
 struct MirBuilder {
@@ -499,6 +505,7 @@ bool mir_ctx_lookup_value(MirCtx *ctx, const char *name, MirValueId *out);
   _ctx_name.frame = &_ctx_name##_frame;
 
 MirProgram *mir_build_program(MirArena *arena, Ast *prog, MirCtx *ctx);
+bool mir_program_had_error(MirProgram *program);
 void mir_program_destroy(MirProgram *program);
 void mir_run_passes(MirProgram *program);
 void mir_escape_analysis(MirProgram *program);

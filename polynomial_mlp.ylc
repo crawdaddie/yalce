@@ -146,7 +146,7 @@ let pclose = extern fn Ptr -> Int;
 
 let plot_losses = fn losses epochs ->
   let gp = popen (cstr "gnuplot") (cstr "w"); 
-  fprintf gp "set terminal kittycairo size 900,500\n";
+  fprintf gp "set terminal kittycairo size 900,500 scroll\n";
   fprintf gp "set title 'Polynomial MLP training loss'\n";
   fprintf gp "set xlabel 'epoch'\n";
   fprintf gp "set ylabel 'total loss'\n";
@@ -177,7 +177,7 @@ let grid_value = fn i: (Int) steps: (Int) ->
 
 let plot_target_surface = fn steps ->
   let gp = popen (cstr "gnuplot") (cstr "w"); 
-  fprintf gp "set terminal kittycairo size 900,650\n";
+  fprintf gp "set terminal kittycairo size 900,650 scroll\n";
   fprintf gp "set title 'Polynomial surface and trained MLP predictions'\n";
   fprintf gp "set xlabel 'x'\n";
   fprintf gp "set ylabel 'y'\n";

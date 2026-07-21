@@ -286,6 +286,11 @@ static bool mir_escape_seed_instruction(MirFunction *fn, MirInstr *instr,
       if (mir_escape_may_be_tracked_type(mir_function_value_type(fn, stored))) {
         changed |= mir_escape_mark(state->escaped, fn, stored);
       }
+    } else if (instr->data.op.kind == MIR_OP_KIND_GLOBAL_STORE) {
+      MirValueId stored = instr->data.op.operands[0];
+      if (mir_escape_may_be_tracked_type(mir_function_value_type(fn, stored))) {
+        changed |= mir_escape_mark(state->escaped, fn, stored);
+      }
     }
     break;
   default:

@@ -55,6 +55,14 @@ typedef struct {
   LLVMBasicBlockRef start_bb;
 } MirLlvmCoroCtx;
 
+typedef struct MirDlopenCacheEntry {
+  LLVMModuleRef module;
+  char *path;
+  struct MirDlopenCacheEntry *next;
+} MirDlopenCacheEntry;
+
+static MirDlopenCacheEntry *mir_dlopen_cache = NULL;
+
 static LLVMValueRef lower_mir_void_stub(LLVMModuleRef module,
                                         LLVMBuilderRef builder) {
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
@@ -102,6 +110,13 @@ static Type *mir_function_return_type(MirFunction *fn) {
 static LLVMTypeRef lower_mir_type(Type *type, JITLangCtx *ctx,
                                   LLVMModuleRef module, LLVMTypeRef fallback) {
   LLVMTypeRef llvm_type = type_to_llvm_type(type, ctx, module);
+  return llvm_type ? llvm_type : fallback;
+}
+
+static LLVMTypeRef lower_mir_aggregate_type(Type *type, JITLangCtx *ctx,
+                                            LLVMModuleRef module,
+                                            LLVMTypeRef fallback) {
+  LLVMTypeRef llvm_type = type_to_llvm_aggregate_type(type, ctx, module);
   return llvm_type ? llvm_type : fallback;
 }
 
@@ -730,6 +745,72 @@ static MirFunction *lower_mir_find_function_by_name(MirProgram *program,
   return NULL;
 }
 
+typedef struct {
+  MirValueId value;
+  bool allowed;
+  bool has_dlopen;
+} MirDlopenStringUseCtx;
+
+static bool lower_mir_dlopen_string_use_visitor(MirInstr *instr,
+                                                MirOperand operand,
+                                                void *ctx) {
+  MirDlopenStringUseCtx *use_ctx = ctx;
+  if (!use_ctx || operand.value != use_ctx->value) {
+    return true;
+  }
+
+  if (!instr || instr->kind != MIR_OP) {
+    use_ctx->allowed = false;
+    return false;
+  }
+
+  switch (instr->data.op.kind) {
+  case MIR_OP_KIND_DLOPEN:
+    use_ctx->has_dlopen = true;
+    return true;
+  case MIR_OP_KIND_DUP:
+  case MIR_OP_KIND_DROP:
+    return true;
+  default:
+    use_ctx->allowed = false;
+    return false;
+  }
+}
+
+static bool lower_mir_const_string_only_feeds_dlopen(MirFunction *fn,
+                                                    MirValueId value) {
+  if (!fn || value == MIR_NO_VALUE) {
+    return false;
+  }
+
+  MirDlopenStringUseCtx use_ctx = {
+      .value = value,
+      .allowed = true,
+      .has_dlopen = false,
+  };
+
+  for (size_t i = 0; i < fn->blocks.len && use_ctx.allowed; i++) {
+    MirBlock *block = fn->blocks.items ? fn->blocks.items[i] : NULL;
+    if (!block) {
+      continue;
+    }
+    for (size_t j = 0; j < block->instrs.len && use_ctx.allowed; j++) {
+      MirInstr *instr = block->instrs.items + j;
+      if (instr->result == value) {
+        continue;
+      }
+      mir_instr_for_each_operand(instr, lower_mir_dlopen_string_use_visitor,
+                                 &use_ctx);
+    }
+    if (use_ctx.allowed) {
+      mir_term_for_each_operand(&block->term,
+                                lower_mir_dlopen_string_use_visitor, &use_ctx);
+    }
+  }
+
+  return use_ctx.allowed && use_ctx.has_dlopen;
+}
+
 static bool lower_mir_value_allocates_on_stack(MirFunction *fn,
                                                MirValueId value) {
   EscapeMeta *meta = mir_value_escape_meta(fn, value);
@@ -777,6 +858,10 @@ static LLVMValueRef lower_mir_const_string(MirFunction *fn, MirInstr *instr,
   }
 
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  if (lower_mir_const_string_only_feeds_dlopen(fn, instr->result)) {
+    return LLVMGetUndef(LLVMVoidTypeInContext(llvm_ctx));
+  }
+
   LLVMTypeRef char_type = LLVMInt8TypeInContext(llvm_ctx);
   size_t len = instr->data.const_value.as.string_value.len;
   const char *chars = instr->data.const_value.as.string_value.chars;
@@ -1160,6 +1245,77 @@ static LLVMValueRef lower_mir_ptr_store(MirFunction *fn, MirInstr *instr,
   return LLVMGetUndef(LLVMVoidTypeInContext(LLVMGetModuleContext(module)));
 }
 
+static LLVMValueRef lower_mir_global_value(LLVMModuleRef module,
+                                           const char *name,
+                                           LLVMTypeRef storage_type) {
+  if (!module || !name || !storage_type) {
+    return NULL;
+  }
+
+  LLVMValueRef global = LLVMGetNamedGlobal(module, name);
+  if (global) {
+    return global;
+  }
+
+  global = LLVMAddGlobal(module, storage_type, name);
+  if (!global) {
+    return NULL;
+  }
+  LLVMSetLinkage(global, LLVMInternalLinkage);
+  LLVMSetInitializer(global, LLVMConstNull(storage_type));
+  return global;
+}
+
+static LLVMValueRef lower_mir_global_load(MirInstr *instr,
+                                          LLVMModuleRef module,
+                                          LLVMBuilderRef builder,
+                                          JITLangCtx *ctx) {
+  if (!instr || !instr->data.op.global_name) {
+    return NULL;
+  }
+
+  LLVMTypeRef storage_type =
+      lower_mir_value_storage_type(instr->type, ctx, module);
+  LLVMValueRef global =
+      lower_mir_global_value(module, instr->data.op.global_name, storage_type);
+  if (!storage_type || !global) {
+    return NULL;
+  }
+
+  return LLVMBuildLoad2(builder, storage_type, global, "global.load");
+}
+
+static LLVMValueRef lower_mir_global_store(MirFunction *fn, MirInstr *instr,
+                                           MirLlvmValueMap *values,
+                                           LLVMModuleRef module,
+                                           LLVMBuilderRef builder,
+                                           JITLangCtx *ctx) {
+  if (!fn || !instr || !values || !instr->data.op.global_name ||
+      instr->data.op.argc != 1) {
+    return NULL;
+  }
+
+  MirValueId value_id = instr->data.op.operands[0];
+  Type *type = instr->data.op.to_type ? instr->data.op.to_type
+                                      : mir_function_value_type(fn, value_id);
+  LLVMTypeRef storage_type = lower_mir_value_storage_type(type, ctx, module);
+  LLVMValueRef value = mir_llvm_value_get_rvalue(values, value_id, builder);
+  LLVMValueRef global =
+      lower_mir_global_value(module, instr->data.op.global_name, storage_type);
+  if (!storage_type || !value || !global) {
+    return NULL;
+  }
+
+  value = lower_mir_cast_value_to_storage(value, type, ctx, module, builder,
+                                          "global.store.value");
+  if (!value) {
+    return NULL;
+  }
+
+  LLVMBuildStore(builder, value, global);
+  return LLVMGetUndef(LLVMVoidTypeInContext(LLVMGetModuleContext(module)));
+}
+
 static LLVMValueRef lower_mir_array_succ(MirFunction *fn, MirInstr *instr,
                                          MirLlvmValueMap *values,
                                          LLVMModuleRef module,
@@ -1463,7 +1619,8 @@ static LLVMValueRef lower_mir_tuple(MirFunction *fn, MirInstr *instr,
     return NULL;
   }
 
-  LLVMTypeRef tuple_type = lower_mir_type(instr->type, ctx, module, NULL);
+  LLVMTypeRef tuple_type =
+      lower_mir_aggregate_type(instr->type, ctx, module, NULL);
   if (!tuple_type) {
     return NULL;
   }
@@ -1498,6 +1655,15 @@ static LLVMValueRef lower_mir_tuple(MirFunction *fn, MirInstr *instr,
     tuple = LLVMBuildInsertValue(builder, tuple, item, (unsigned)i, "tuple");
   }
 
+  if (type_uses_boxed_recursive_storage(instr->type)) {
+    LLVMValueRef boxed = LLVMBuildMalloc(builder, tuple_type, "boxed.record");
+    if (!boxed) {
+      return NULL;
+    }
+    LLVMBuildStore(builder, tuple, boxed);
+    return boxed;
+  }
+
   return tuple;
 }
 
@@ -1510,7 +1676,7 @@ static LLVMValueRef lower_mir_constructor_payload_value(
 
   Type *constructor_type = instr->data.construct.constructor_type;
   LLVMTypeRef payload_type =
-      lower_mir_value_storage_type(constructor_type, ctx, module);
+      lower_mir_aggregate_type(constructor_type, ctx, module, NULL);
   if (!payload_type) {
     return NULL;
   }
@@ -2701,7 +2867,7 @@ static LLVMTypeRef lower_mir_extract_record_type(MirFunction *fn,
   if (lower_mir_value_is_env(fn, value)) {
     return lower_mir_closure_env_record_type(logical_type, ctx, module);
   }
-  return lower_mir_type(logical_type, ctx, module, NULL);
+  return lower_mir_aggregate_type(logical_type, ctx, module, NULL);
 }
 
 static LLVMValueRef lower_mir_extract_field(MirFunction *fn, MirInstr *instr,
@@ -3645,8 +3811,15 @@ static LLVMValueRef lower_mir_rc_managed_ptr(MirFunction *fn, MirInstr *instr,
   }
 
   Type *type = mir_function_value_type(fn, value_id);
-  if (type && is_array_type(type) && type->data.T_CONS.args &&
-      type->data.T_CONS.num_args > 0) {
+  LLVMTypeRef value_type = LLVMTypeOf(value);
+  LLVMTypeKind value_kind = LLVMGetTypeKind(value_type);
+  if (value_kind == LLVMPointerTypeKind) {
+    /* Already lowered as a managed pointer, usually for recursive storage. */
+  } else if (type && is_array_type(type) && type->data.T_CONS.args &&
+             type->data.T_CONS.num_args > 0) {
+    if (value_kind != LLVMStructTypeKind) {
+      return NULL;
+    }
     LLVMTypeRef element_type =
         lower_mir_value_storage_type(type->data.T_CONS.args[0], ctx, module);
     LLVMValueRef offset =
@@ -3665,6 +3838,9 @@ static LLVMValueRef lower_mir_rc_managed_ptr(MirFunction *fn, MirInstr *instr,
       value = data;
     }
   } else if (type && is_closure(type)) {
+    if (value_kind != LLVMStructTypeKind) {
+      return NULL;
+    }
     value = LLVMBuildExtractValue(builder, value, 1, "rc.payload");
   }
 
@@ -3781,7 +3957,7 @@ static LLVMValueRef lower_mir_flush(MirInstr *instr, LLVMModuleRef module,
   if (!fflush_func) {
     fflush_func = LLVMAddFunction(module, "fflush", fflush_type);
   }
-  set_memory_effects(fflush_func, MEM_INACCESSIBLE_MODREF);
+  set_memory_effects(fflush_func, MEM_ARGMEM_MODREF | MEM_INACCESSIBLE_MODREF);
 
   LLVMValueRef null_ptr = LLVMConstNull(i8_ptr_type);
   LLVMBuildCall2(builder, fflush_type, fflush_func, &null_ptr, 1, "");
@@ -3857,6 +4033,40 @@ static char *lower_mir_resolve_dlopen_path(const char *path) {
   return full_path;
 }
 
+static bool lower_mir_dlopen_cache_contains(LLVMModuleRef module,
+                                            const char *path) {
+  if (!path) {
+    return false;
+  }
+  for (MirDlopenCacheEntry *entry = mir_dlopen_cache; entry;
+       entry = entry->next) {
+    if (entry->module == module && entry->path &&
+        strcmp(entry->path, path) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void lower_mir_dlopen_cache_insert(LLVMModuleRef module,
+                                          const char *path) {
+  if (!path || lower_mir_dlopen_cache_contains(module, path)) {
+    return;
+  }
+  MirDlopenCacheEntry *entry = calloc(1, sizeof(MirDlopenCacheEntry));
+  if (!entry) {
+    return;
+  }
+  entry->module = module;
+  entry->path = strdup(path);
+  if (!entry->path) {
+    free(entry);
+    return;
+  }
+  entry->next = mir_dlopen_cache;
+  mir_dlopen_cache = entry;
+}
+
 static const char *lower_mir_const_string_operand(MirFunction *fn,
                                                   MirValueId value) {
   MirInstr *def = mir_function_find_def_instr(fn, value);
@@ -3889,6 +4099,13 @@ static LLVMValueRef lower_mir_dlopen(MirFunction *fn, MirInstr *instr,
   if (!full_path) {
     return LLVMGetUndef(void_type);
   }
+
+  if (lower_mir_dlopen_cache_contains(module, full_path)) {
+    free(full_path);
+    return LLVMGetUndef(void_type);
+  }
+
+  lower_mir_dlopen_cache_insert(module, full_path);
 
   ylc_jit_ctx = lctx ? &lctx->jit_ctx : NULL;
   ylc_jit_module = module;
@@ -4017,6 +4234,10 @@ static LLVMValueRef lower_mir_op(MirFunction *fn, MirInstr *instr,
     return lower_mir_ptr_load(fn, instr, values, module, builder, ctx);
   case MIR_OP_KIND_STORE:
     return lower_mir_ptr_store(fn, instr, values, module, builder, ctx);
+  case MIR_OP_KIND_GLOBAL_LOAD:
+    return lower_mir_global_load(instr, module, builder, ctx);
+  case MIR_OP_KIND_GLOBAL_STORE:
+    return lower_mir_global_store(fn, instr, values, module, builder, ctx);
   case MIR_OP_KIND_SIZEOF:
     return lower_mir_sizeof(instr, module, ctx);
   case MIR_OP_KIND_LIST_IS_EMPTY:
