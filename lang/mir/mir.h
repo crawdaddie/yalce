@@ -44,6 +44,12 @@ typedef struct MirSymbol {
   Ast *origin;
   MirModuleId owner_module;
   bool rematerializing;
+  // Generation of the MirProgram this symbol was bound in. Symbols that
+  // carry program-relative ids (MIR_SYMBOL_VALUE / FUNCTION) become stale
+  // across MirProgram boundaries; the generation stamp lets lookups skip
+  // them in favor of name-keyed symbols (MIR_SYMBOL_GLOBAL) that re-resolve
+  // in the current program. 0 = unbound / current.
+  unsigned generation;
   union {
     MirValueId value;
     MirFunctionId function;
@@ -57,7 +63,6 @@ typedef struct MirStackFrame {
   ht *table;
   struct MirStackFrame *next;
 } MirStackFrame;
-
 typedef struct MirCtx {
   MirStackFrame *frame;
   TypeEnv *env;
@@ -469,6 +474,11 @@ struct MirProgram {
   MirModuleVec modules;
   MirModuleId root_module;
   bool had_error;
+  // Monotonic per-MirProgram stamp; symbols bound into the persistent
+  // top-level frame record this generation, and lookups skip stale
+  // id-keyed symbols (MIR_SYMBOL_VALUE / FUNCTION) whose generation
+  // doesn't match the program they're being resolved against.
+  unsigned generation;
 };
 
 struct MirBuilder {

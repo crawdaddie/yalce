@@ -1,89 +1,94 @@
 import { WASI, OpenFile, ConsoleStdout, File } from "https://cdn.jsdelivr.net/npm/@bjorn3/browser_wasi_shim@0.3.0/dist/index.js";
 
+// ylc-wasm contract (see wasm/main.c):
+//   ylc_wasm_init()                 -> i32  (status; 0 = ok)
+//   ylc_wasm_compile(srcPtr, lenPtr) -> ptr  (heap ptr to a wasm module;
+//                                             its byte length is written to
+//                                             *lenPtr as a little-endian u32;
+//                                             0 on failure)
+//   ylc_wasm_dump_mir(srcPtr)       -> i32  (status; prints MIR to wasi stdout)
+//
+// The compiled module is the *output* of running the YLC frontend (lex,
+// parse, typecheck, escape analysis, MIR build + passes) and then lowering
+// the MirProgram straight to wasm — no LLVM involvement. js instantiates
+// that generated module and calls its exported entry point to evaluate.
 let wasmInstance = null;
 let wasmMemory = null;
-let context = null;
 let wasi = null;
 let repl = null;
 
-// REPL for incremental WASM execution
+// Generated YLC modules import this runtime surface from their host. The
+// names below mirror the env the legacy backend_wasm emitted; wasm/main.c
+// will reference the same imports once the MIR->wasm lowering is filled
+// in. Keep them here so the runtime contract lives in one place.
+const GENERATED_MODULE_IMPORTS = (instance, memory) => ({
+  env: {
+    memory,
+    // Integer arithmetic + I/O builtins the lowering will emit calls to.
+    // All are no-op stubs for now; replace with real implementations as
+    // the lowering in wasm/main.c grows.
+    ylc_print_int: (v) => console.log("[ylc] int:", v),
+    ylc_print_string: (ptr) => {
+      const view = new DataView(memory.buffer);
+      let len = 0; let p = ptr;
+      while (view.getUint8(p) !== 0) { len++; p++; }
+      const bytes = new Uint8Array(memory.buffer, ptr, len);
+      console.log("[ylc] str:", new TextDecoder().decode(bytes));
+    },
+    ylc_abort: () => { throw new Error("ylc runtime abort"); },
+  },
+});
+
+// REPL for incremental WASM execution.
 class YLCWasmREPL {
-  constructor(wasmInstance, wasmMemory, context, baseModule) {
+  constructor(wasmInstance, wasmMemory) {
     this.wasmInstance = wasmInstance;
     this.wasmMemory = wasmMemory;
-    this.context = context;
-    this.baseModule = baseModule; // Base module with shared table/memory
-    this.codeHistory = [];
-    this.lastModule = null;
   }
 
-  addCode(input) {
-    this.codeHistory.push(input);
-  }
+  clear() {}
 
-  getFullProgram() {
-    return this.codeHistory.join('\n');
-  }
-
-  clear() {
-    this.codeHistory = [];
-    this.lastModule = null;
-  }
-
-  async execute() {
-    // const fullProgram = this.getFullProgram();
-    const fullProgram = this.codeHistory[this.codeHistory.length - 1];
-
-    if (!fullProgram.trim()) {
+  // Compile the most recent REPL line into a wasm module and run it.
+  // Returns whatever the generated module's entry function returns, or
+  // null if there is no entry point.
+  async execute(source) {
+    if (!source || !source.trim()) {
       return null;
     }
+    const exports = this.wasmInstance.exports;
 
-    console.log(fullProgram);
+    // Hand the source string to the compiler.
+    const srcPtr = this.writeString(source);
+    const lenPtr = exports.malloc(4);
+    new DataView(this.wasmMemory.buffer).setUint32(lenPtr, 0, true);
 
-    try {
-      // Parse, typecheck, and generate executable WASM module
-      const inputPtr = this.writeString(fullProgram);
-      const moduleSizePtr = this.wasmInstance.exports.malloc(4);
-      const modulePtr = this.wasmInstance.exports.generate_executable_module(
-        this.context, inputPtr, moduleSizePtr
-      );
+    const modulePtr = exports.ylc_wasm_compile(srcPtr, lenPtr);
+    exports.free(srcPtr);
 
-      if (!modulePtr || modulePtr === 0) {
-        this.wasmInstance.exports.free(inputPtr);
-        this.wasmInstance.exports.free(moduleSizePtr);
-        throw new Error("Parse, type error, or code generation failed");
-      }
-
-      // Read module size
-      const dataView = new DataView(this.wasmMemory.buffer);
-      const moduleSize = dataView.getUint32(moduleSizePtr, true);
-
-      // Copy module bytes
-      const moduleBytes = new Uint8Array(this.wasmMemory.buffer, modulePtr, moduleSize);
-      const moduleCopy = new Uint8Array(moduleBytes);
-
-      // Free C memory
-      this.wasmInstance.exports.free(inputPtr);
-      this.wasmInstance.exports.free(modulePtr);
-      this.wasmInstance.exports.free(moduleSizePtr);
-
-      // Instantiate the generated module with base module imports
-      const imports = this.createImports();
-      const { instance } = await WebAssembly.instantiate(moduleCopy, imports);
-
-      this.lastModule = instance;
-
-      // Execute the eval function
-      if (instance.exports.eval) {
-        const result = instance.exports.eval();
-        return result;
-      }
-
-      return null;
-    } catch (error) {
-      console.error('REPL execution error:', error);
-      throw error;
+    if (!modulePtr || modulePtr === 0) {
+      exports.free(lenPtr);
+      throw new Error("YLC compile failed (see console for frontend errors)");
     }
+
+    // Copy the generated module bytes out of linear memory, then free.
+    const dataView = new DataView(this.wasmMemory.buffer);
+    const moduleSize = dataView.getUint32(lenPtr, true);
+    const moduleBytes = new Uint8Array(
+      this.wasmMemory.buffer, modulePtr, moduleSize
+    ).slice();
+    exports.free(modulePtr);
+    exports.free(lenPtr);
+
+    // Instantiate the generated module against the runtime imports.
+    const imports =
+      GENERATED_MODULE_IMPORTS(this.wasmInstance, this.wasmMemory);
+    const { instance } = await WebAssembly.instantiate(moduleBytes, imports);
+
+    // Call the generated module's entry point. The lowering in
+    // wasm/main.c is expected to export `ylc_entry` (or `eval` for back
+    // compat with the legacy backend); call whichever exists.
+    const entry = instance.exports.ylc_entry || instance.exports.eval;
+    return entry ? entry() : null;
   }
 
   writeString(str) {
@@ -93,18 +98,6 @@ class YLCWasmREPL {
     const mem = new Uint8Array(this.wasmMemory.buffer, ptr, bytes.length);
     mem.set(bytes);
     return ptr;
-  }
-
-  createImports() {
-    return {
-      env: {
-        // Import shared resources from base module
-        table: this.baseModule.exports.table,
-        memory: this.baseModule.exports.memory,
-        store_value: this.baseModule.exports.store_value,
-        load_value: this.baseModule.exports.load_value,
-      }
-    };
   }
 }
 
@@ -153,9 +146,11 @@ async function loadWasm() {
     ];
     wasi = new WASI([], [], fds);
 
-    // Custom env imports for functions not provided by WASI
+    // Custom env imports for functions not provided by WASI.
+    // parse.c references these (get_dirname/normalize_path/...) for file
+    // imports, which the browser host never exercises; stub them to no-ops
+    // so wasm-ld's --allow-undefined link resolves at instantiation time.
     const envImports = {
-      // YLC-specific functions (not available in browser)
       repl_input: () => 0,
       read_script: () => 0,
       get_dirname: () => 0,
@@ -175,43 +170,21 @@ async function loadWasm() {
     wasmInstance = result.instance;
     wasmMemory = wasmInstance.exports.memory;
 
-    // Initialize WASI
+    // Initialize WASI (so printf/fprintf from the frontend route to the
+    // console via the fds set up above).
     wasi.inst = wasmInstance;
 
-    // Create context
-    if (wasmInstance.exports.create_wasm_context) {
-      context = wasmInstance.exports.create_wasm_context();
-      console.log('Created context:', context);
+    // One-time compiler init: module registry + builtin types + config.
+    if (wasmInstance.exports.ylc_wasm_init) {
+      const status = wasmInstance.exports.ylc_wasm_init();
+      if (status !== 0) {
+        throw new Error(`ylc_wasm_init failed (status ${status})`);
+      }
+    } else {
+      throw new Error("jit.wasm missing ylc_wasm_init export; rebuild with `make -C wasm`");
     }
 
-    // Generate and instantiate base module
-    console.log('Generating base module...');
-    const baseSizePtr = wasmInstance.exports.malloc(4);
-    const baseModulePtr = wasmInstance.exports.generate_base_module(baseSizePtr);
-
-    if (!baseModulePtr || baseModulePtr === 0) {
-      wasmInstance.exports.free(baseSizePtr);
-      throw new Error("Failed to generate base module");
-    }
-
-    const dataView = new DataView(wasmMemory.buffer);
-    const baseModuleSize = dataView.getUint32(baseSizePtr, true);
-    console.log('Base module size:', baseModuleSize);
-    const baseModuleBytes = new Uint8Array(wasmMemory.buffer, baseModulePtr, baseModuleSize);
-    const baseModuleCopy = new Uint8Array(baseModuleBytes);
-
-    // Debug: print first 30 bytes
-    // console.log('Base module first 30 bytes:', Array.from(baseModuleCopy.slice(0, 50)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
-
-    wasmInstance.exports.free(baseModulePtr);
-    wasmInstance.exports.free(baseSizePtr);
-
-    console.log('Instantiating base module...');
-    const { instance: baseModule } = await WebAssembly.instantiate(baseModuleCopy, {});
-    console.log('Base module loaded:', Object.keys(baseModule.exports));
-
-    // Initialize REPL with base module
-    repl = new YLCWasmREPL(wasmInstance, wasmMemory, context, baseModule);
+    repl = new YLCWasmREPL(wasmInstance, wasmMemory);
     console.log('REPL initialized');
 
     setStatus('WASM module loaded successfully!', 'success');
@@ -305,12 +278,11 @@ async function executeCurrentLine() {
 
   try {
 
-    // Add code to REPL history
+    // Compile + execute the current line.
     console.log(`execute '${input}'`)
-    repl.addCode(input);
 
-    // Execute
-    const result = await repl.execute();
+    // Execute (compile -> instantiate generated module -> run entry)
+    const result = await repl.execute(input);
 
     // Append result to terminal
     if (result !== null && result !== undefined) {
@@ -330,9 +302,6 @@ async function executeCurrentLine() {
     terminal.appendChild(document.createTextNode(`\n❌ Error: ${error.message}\n`));
     // setStatus(`Error: ${error.message}`, 'error');
     console.error('Execution error:', error);
-
-    // Remove last code from history on error
-    repl.codeHistory.pop();
 
     // Add new prompt
     terminal.appendChild(createPrompt());
@@ -552,6 +521,24 @@ function setupTerminal() {
 
 // Expose functions to window for onclick handlers
 window.clearREPL = clearREPL;
+
+// Debug helper: dump the MIR for a YLC source string to the console.
+// Usage in the browser console: ylcDumpMir("let x = 1 in x")
+// The MIR text is written to wasi stdout, which the shim routes to
+// console.log("[stdout]", ...) and to the terminal element.
+window.ylcDumpMir = (source) => {
+  if (!wasmInstance) {
+    console.error('WASM not loaded yet');
+    return;
+  }
+  const ptr = repl.writeString(source);
+  const status = wasmInstance.exports.ylc_wasm_dump_mir(ptr);
+  wasmInstance.exports.free(ptr);
+  if (status !== 0) {
+    console.error('ylc_wasm_dump_mir failed (status ' + status + ')');
+  }
+  return status;
+};
 
 // Load WASM on page load
 window.addEventListener('load', () => {

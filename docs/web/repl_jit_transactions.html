@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YLC Documentation</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="top-bar">
+      <div class="top-bar-content">
+        <h1><a href="index.html">🦔 YLC</a></h1>
+        <nav>
+          <a href="repl.html">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2 3.75C2 2.784 2.784 2 3.75 2h8.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 12.25 14h-8.5A1.75 1.75 0 0 1 2 12.25Zm1.75-.25a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25ZM5 6.5h6v1H5Zm0 3h6v1H5Z"/>
+            </svg>
+            REPL
+          </a>
+          <a href="https://github.com/crawdaddie/yalce" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            GitHub
+          </a>
+        </nav>
+      </div>
+    </header>
+    <main class="content">
+      <h1 id="repl-jit-transaction-modules">REPL JIT Transaction Modules</h1>
+<p>This is a design note for moving the YLC REPL away from a single growing LLVM
+module and toward small per-input modules. The goal is lower REPL latency, more
+predictable JIT ownership, and a cleaner path to either MCJIT <code>addModule</code> or
+ORC/LLJIT.</p>
+<h2 id="vocabulary">Vocabulary</h2>
+<p><strong>MCJIT</strong> is LLVM's older execution engine. It owns LLVM modules, compiles them
+to native code, links them into the process, and lets the host look up addresses
+for functions or globals. YLC currently uses this family through the LLVM C
+ExecutionEngine API in <code>lang/backend_llvm/jit.c</code>.</p>
+<p><strong>ORC</strong> means "On-Request-Compilation". It is LLVM's newer JIT framework. It is
+not one fixed JIT; it is a set of layers and symbol-resolution machinery for
+building a JIT. ORC is the third generation LLVM JIT API after the deleted
+legacy JIT and MCJIT.</p>
+<p><strong>LLJIT</strong> is the off-the-shelf ORC JIT that most closely matches MCJIT's role.
+It accepts LLVM IR modules, compiles them, links them, and supports symbol
+lookup. LLVM describes LLJIT as a suitable MCJIT replacement for most use cases.</p>
+<p><strong>LLLazyJIT</strong> extends LLJIT with lazy compilation. That is probably not the first
+step for YLC's REPL, but it may become useful if larger scripts define many
+functions that are not immediately called.</p>
+<p><strong>JITDylib</strong> is ORC's JIT-side symbol table and link unit. For a YLC REPL, a
+single main JITDylib is probably enough initially. More JITDylibs become useful
+if modules need isolated symbol namespaces.</p>
+<p><strong>ResourceTracker</strong> is ORC's ownership handle for removing JIT'd code and
+associated resources. This is a major reason to prefer ORC once the basic
+transaction model works.</p>
+<h2 id="current-ylc-shape">Current YLC Shape</h2>
+<p>The current REPL path is still based on one accumulated LLVM module:</p>
+<ul>
+<li><code>codegen_repl_top_level</code> in <code>lang/backend_llvm/codegen.c</code> emits a function
+  named <code>top</code> into the current module.</li>
+<li>REPL input is typechecked against the persistent YLC type environment.</li>
+<li>The backend codegen reuses the same LLVM module and symbol table.</li>
+<li>Recent changes run a smaller function-only optimization pipeline for REPL
+  submissions and create the REPL MCJIT engine with a lower MCJIT opt level.</li>
+<li>Top-level YLC values are stored through <code>global_storage_array</code> in
+  <code>lang/backend_llvm/globals.c</code>.</li>
+</ul>
+<p>That already improved latency, but the architecture is still awkward. The REPL
+mutates a module after it has been used for JIT execution, and each later REPL
+submission carries the weight of all previous LLVM IR.</p>
+<h2 id="transaction-module-model">Transaction Module Model</h2>
+<p>A transaction module is a fresh LLVM module for one REPL submission.</p>
+<p>The persistent compiler state remains in C/YLC data structures:</p>
+<ul>
+<li>type environment</li>
+<li>symbol table</li>
+<li>global storage slots</li>
+<li>loaded dynamic libraries</li>
+<li>module imports</li>
+<li>generic specialization cache, if retained</li>
+</ul>
+<p>The LLVM module for a single transaction contains only:</p>
+<ul>
+<li>a uniquely named entry function, for example <code>__ylc_repl_top_42</code></li>
+<li>any helper functions or specialized functions generated for this transaction</li>
+<li>declarations for older functions it calls</li>
+<li>declarations for runtime functions and externs</li>
+<li>declarations for <code>global_storage_array</code> and <code>global_storage_size</code></li>
+</ul>
+<p>The key rule is that codegen for a new transaction must not directly reuse
+<code>LLVMValueRef</code>s from an old module. Cross-transaction references should be
+lowered by name, by global-storage slot, or by explicit runtime address.</p>
+<h2 id="why-this-helps">Why This Helps</h2>
+<p>Small transaction modules keep optimization and machine-code emission bounded by
+the new input. This is the most direct latency win for notebook-style REPL use.</p>
+<p>They also clarify ownership. Once a module has been handed to a JIT engine, YLC
+should treat it as immutable and owned by the JIT. Future REPL inputs should
+generate new modules instead of appending to the old one.</p>
+<p>Finally, transactions are a better match for graph compilation later. A compiled
+autograd graph, a CUDA/MLIR lowering, or a specialized tensor kernel can become
+one transaction artifact with explicit inputs, outputs, dependencies, and
+lifetime.</p>
+<h2 id="required-codegen-changes">Required Codegen Changes</h2>
+<p>The hard part is not creating a new LLVM module. The hard part is making symbol
+lowering module-independent.</p>
+<h3 id="unique-top-functions">Unique Top Functions</h3>
+<p><code>codegen_repl_top_level</code> should stop emitting a fixed <code>top</code>. It should emit a
+unique name per input, such as:</p>
+<div class="codehilite"><pre><span></span><code>__ylc_repl_top_0
+__ylc_repl_top_1
+__ylc_repl_top_2
+</code></pre></div>
+
+<p>The REPL then looks up exactly that symbol and calls it.</p>
+<h3 id="top-level-variables">Top-Level Variables</h3>
+<p>Top-level variables are already close to the desired design. A symbol for a
+top-level value should mean:</p>
+<div class="codehilite"><pre><span></span><code>load slot N from global_storage_array and cast/load it as type T
+</code></pre></div>
+
+<p>This is better than carrying an old <code>LLVMValueRef</code> into a new module. The
+transaction module only needs an external declaration of <code>global_storage_array</code>
+with the same LLVM type.</p>
+<h3 id="top-level-functions">Top-Level Functions</h3>
+<p>Functions need a similar symbolic representation:</p>
+<div class="codehilite"><pre><span></span><code>function name + function type + linkage/import/export status
+</code></pre></div>
+
+<p>When a later transaction calls an earlier function, codegen should call
+<code>LLVMGetNamedFunction</code> in the transaction module and create an external
+declaration if it is missing. It should not reuse the original function's
+<code>LLVMValueRef</code>.</p>
+<h3 id="generated-helpers">Generated Helpers</h3>
+<p>Any generated helper with a stable user-visible name can be exported. Any helper
+that is purely internal to one transaction should have either:</p>
+<ul>
+<li>a unique generated name, or</li>
+<li>internal/private linkage.</li>
+</ul>
+<p>This matters because duplicated helper names across transactions will collide
+once all transactions live in the same JIT symbol namespace.</p>
+<h3 id="runtime-and-extern-symbols">Runtime and Extern Symbols</h3>
+<p>Runtime functions, C externs, and symbols from loaded libraries need to be
+available to the JIT linker. With MCJIT this usually means process symbol lookup,
+explicit global mappings, or dynamic-library loading. With ORC/LLJIT this should
+be modeled with symbol generators or absolute symbols.</p>
+<h2 id="mcjit-addmodule-path">MCJIT addModule Path</h2>
+<p>This is the smaller migration from the current implementation.</p>
+<p>The model would be:</p>
+<ol>
+<li>Create one MCJIT execution engine.</li>
+<li>Add the initial script module.</li>
+<li>For every REPL input, create a fresh transaction module.</li>
+<li>Give it the same target triple and data layout.</li>
+<li>Add declarations for referenced previous symbols and runtime globals.</li>
+<li>Run a small pass pipeline on the transaction module.</li>
+<li>Add it to the existing engine with <code>LLVMAddModule</code>.</li>
+<li>Look up <code>__ylc_repl_top_N</code> with <code>LLVMGetFunctionAddress</code>.</li>
+<li>Call the returned function pointer.</li>
+</ol>
+<p>Pros:</p>
+<ul>
+<li>smaller change from current C API usage</li>
+<li>likely enough to remove most REPL latency from large accumulated modules</li>
+<li>easier stepping stone before ORC</li>
+</ul>
+<p>Cons:</p>
+<ul>
+<li>MCJIT is the older API generation</li>
+<li>code removal and per-transaction lifetime control are weak</li>
+<li>symbol behavior is less explicit than ORC</li>
+<li>modules should be treated as immutable after being added to the engine</li>
+</ul>
+<h2 id="orclljit-path">ORC/LLJIT Path</h2>
+<p>This is the cleaner long-term model.</p>
+<p>The model would be:</p>
+<ol>
+<li>Create one <code>LLVMOrcLLJITRef</code>.</li>
+<li>Use the main JITDylib as the REPL symbol namespace.</li>
+<li>Add the initial script module as a <code>ThreadSafeModule</code>.</li>
+<li>For every REPL input, create a new transaction module.</li>
+<li>Add it with <code>LLVMOrcLLJITAddLLVMIRModule</code> or
+   <code>LLVMOrcLLJITAddLLVMIRModuleWithRT</code>.</li>
+<li>Look up <code>__ylc_repl_top_N</code> with <code>LLVMOrcLLJITLookup</code>.</li>
+<li>Call the returned address as a function pointer.</li>
+</ol>
+<p>Pros:</p>
+<ul>
+<li>LLVM's current JIT architecture</li>
+<li>designed for REPLs, interpreters, and composable JITs</li>
+<li>explicit JIT symbol tables through JITDylibs</li>
+<li>clear ownership of modules and JIT'd code</li>
+<li>ResourceTrackers can remove code later</li>
+<li>natural path to lazy compilation or concurrent compilation</li>
+</ul>
+<p>Cons:</p>
+<ul>
+<li>larger migration</li>
+<li>requires ThreadSafeModule/ThreadSafeContext plumbing</li>
+<li>symbol mangling and process symbol setup are more explicit</li>
+<li>the C ORC API is more verbose than MCJIT's ExecutionEngine API</li>
+</ul>
+<h2 id="recommended-migration-path">Recommended Migration Path</h2>
+<ol>
+<li>Keep the current faster REPL path as the baseline.</li>
+<li>Make REPL top-level function names unique.</li>
+<li>Introduce a module-independent symbol-lowering layer:</li>
+<li>top-level vars lower through <code>global_storage_array</code> slots</li>
+<li>functions lower through named declarations</li>
+<li>externs lower through named declarations plus runtime/JIT symbol setup</li>
+<li>Create transaction modules while still using the existing MCJIT approach for
+   experiments.</li>
+<li>Move to one MCJIT engine plus <code>LLVMAddModule</code>.</li>
+<li>Once that works, port the same transaction module interface to LLJIT.</li>
+<li>Add ResourceTrackers only after basic LLJIT add/lookup/call is stable.</li>
+</ol>
+<p>The important design boundary is step 3. If symbols can be lowered into any
+module on demand, the choice between MCJIT <code>addModule</code> and ORC/LLJIT becomes
+mostly a JIT backend decision.</p>
+<h2 id="suggested-experiments">Suggested Experiments</h2>
+<ul>
+<li>Submit <code>1 + 1</code> as a transaction and call <code>__ylc_repl_top_0</code>.</li>
+<li>Define <code>let x = 10;;</code>, then submit <code>x + 1</code> in a new transaction.</li>
+<li>Define a function in the base script, then call it from a later transaction.</li>
+<li>Define a function in one REPL transaction, then call it from the next.</li>
+<li>Load a C extern and call it from a transaction module.</li>
+<li>Submit two transactions that both need generated helper functions and verify
+  that symbol names do not collide.</li>
+<li>Print or dump each transaction module before adding it to the JIT.</li>
+</ul>
+<h2 id="how-this-relates-to-autograd-graph-compilation">How This Relates to Autograd Graph Compilation</h2>
+<p>For autograd, the same idea can be used above the LLVM layer:</p>
+<ul>
+<li>flatten the graph into a normalized IR</li>
+<li>choose graph inputs, parameter tensors, outputs, and mutable gradients</li>
+<li>emit one transaction module for the graph or graph segment</li>
+<li>compile and cache it by graph shape/op signature</li>
+<li>call the compiled entry point from YLC</li>
+</ul>
+<p>The transaction module should not depend on incidental heap addresses for graph
+nodes. It should depend on explicit buffers, shapes, op IDs, and stable runtime
+entry points.</p>
+<h2 id="research-links">Research Links</h2>
+<ul>
+<li><a href="https://llvm.org/docs/ORCv2.html">LLVM ORC Design and Implementation</a></li>
+<li><a href="https://llvm.org/docs/tutorial/BuildingAJIT1.html">LLVM Building an ORC-based JIT tutorial</a></li>
+<li><a href="https://llvm.org/docs/MCJITDesignAndImplementation.html">LLVM MCJIT Design and Implementation</a></li>
+<li><a href="https://llvm.org/doxygen/group__LLVMCExecutionEngine.html">LLVM C ExecutionEngine API</a></li>
+<li><a href="https://llvm.org/doxygen/group__LLVMCExecutionEngineLLJIT.html">LLVM C LLJIT API</a></li>
+<li><a href="https://llvm.org/docs/tutorial/MyFirstLanguageFrontend/LangImpl04.html">LLVM Kaleidoscope JIT and Optimizer chapter</a></li>
+</ul>
+    </main>
+    <script>
+      // Add copy buttons to code blocks
+      document.addEventListener('DOMContentLoaded', function() {
+        const codeBlocks = document.querySelectorAll('.codehilite');
+
+        codeBlocks.forEach(function(codeBlock) {
+          const button = document.createElement('button');
+          button.className = 'copy-button';
+          button.setAttribute('aria-label', 'Copy code to clipboard');
+          button.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"></path><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"></path></svg>';
+
+          button.addEventListener('click', function() {
+            const code = codeBlock.querySelector('pre').textContent;
+
+            navigator.clipboard.writeText(code).then(function() {
+              button.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path></svg>';
+              button.classList.add('copied');
+
+              setTimeout(function() {
+                button.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"></path><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"></path></svg>';
+                button.classList.remove('copied');
+              }, 2000);
+            }).catch(function(err) {
+              console.error('Failed to copy:', err);
+            });
+          });
+
+          codeBlock.style.position = 'relative';
+          codeBlock.appendChild(button);
+        });
+      });
+    </script>
+  </body>
+</html>

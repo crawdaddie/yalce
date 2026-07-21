@@ -17,6 +17,16 @@
 #define MIR_ARENA_DEFAULT_BLOCK_SIZE 32768
 #define MIR_ALIGNOF(T) __alignof__(T)
 
+// Monotonic generation counter, bumped at the start of each mir_build_program.
+// mir_symbol_new stamps symbols with the current value; lookups compare a
+// symbol's generation against the program it's resolved in so that
+// id-keyed symbols (MIR_SYMBOL_VALUE / FUNCTION) bound in a prior
+// MirProgram are skipped in favor of name-keyed symbols (MIR_SYMBOL_GLOBAL)
+// that re-resolve fresh in the current program. This is what lets the
+// persistent top-level MIR scope carry names across REPL inputs without
+// leaking stale program-relative ids.
+static unsigned mir_current_generation = 0;
+
 void print_type_to_stream(Type *t, FILE *stream);
 
 static Type *mir_closure_callable_type(MirArena *arena, Type *closure_type);
@@ -346,26 +356,55 @@ static void *mir_ht_alloc(void *ctx, size_t size, size_t align) {
   return mir_arena_alloc(ctx, size, align);
 }
 
+// Persistent (malloc-backed) allocator for the top-level MIR scope, so the
+// root frame's ht and the symbols bound into it outlive any single
+// MirProgram. Lets the REPL thread the same root frame across compile
+// calls; mir_build_program honors a caller-supplied ctx->frame. Nested
+// scopes keep using the program arena (they're unreachable once their
+// program is destroyed), so only the root path passes NULL here.
+static void *mir_ht_alloc_persistent(void *ctx, size_t size, size_t align) {
+  (void)ctx;
+  (void)align;
+  return malloc(size ? size : 1);
+}
+
+static void mir_ht_free_persistent(void *ctx, void *ptr) {
+  (void)ctx;
+  free(ptr);
+}
+
 void mir_stack_frame_init(MirArena *arena, ht *table, MirStackFrame *frame,
                           MirStackFrame *next) {
   if (!table || !frame) {
     return;
   }
 
-  ht_init_with_allocator(
-      table, (ht_allocator){.alloc = mir_ht_alloc, .free = NULL, .ctx = arena});
+  if (arena) {
+    ht_init_with_allocator(
+        table, (ht_allocator){.alloc = mir_ht_alloc, .free = NULL, .ctx = arena});
+  } else {
+    // NULL arena => persistent (malloc-backed) root frame.
+    ht_init_with_allocator(
+        table,
+        (ht_allocator){.alloc = mir_ht_alloc_persistent,
+                       .free = mir_ht_free_persistent,
+                       .ctx = NULL});
+  }
   *frame = (MirStackFrame){.table = table, .next = next};
 }
 
 static MirSymbol *mir_symbol_new(MirArena *arena, MirSymbolKind kind,
                                  Type *type, Ast *origin,
                                  MirModuleId owner_module) {
-  if (!arena) {
-    return NULL;
+  // NULL arena => persistent (malloc-backed) symbol, for top-level scope
+  // entries that must outlive any single MirProgram (see
+  // mir_stack_frame_init). Nested symbols keep using the program arena.
+  MirSymbol *symbol;
+  if (arena) {
+    symbol = mir_arena_alloc(arena, sizeof(MirSymbol), MIR_ALIGNOF(MirSymbol));
+  } else {
+    symbol = malloc(sizeof(MirSymbol));
   }
-
-  MirSymbol *symbol =
-      mir_arena_alloc(arena, sizeof(MirSymbol), MIR_ALIGNOF(MirSymbol));
   if (!symbol) {
     return NULL;
   }
@@ -375,6 +414,7 @@ static MirSymbol *mir_symbol_new(MirArena *arena, MirSymbolKind kind,
   symbol->origin = origin;
   symbol->owner_module = owner_module;
   symbol->as.value = MIR_NO_VALUE;
+  symbol->generation = mir_current_generation;
   return symbol;
 }
 
@@ -401,6 +441,20 @@ bool mir_ctx_bind_value(MirCtx *ctx, const char *name, MirValueId value) {
   return mir_ctx_bind_symbol(ctx, name, symbol);
 }
 
+// Resolve the allocator arena for the current MIR scope. The root frame's
+// ht is malloc-backed (allocator.ctx == NULL), so top-level symbols get
+// mir_symbol_new(NULL, ...) -> malloc and survive mir_program_destroy.
+// Nested scopes use the program arena (allocator.ctx != NULL) and die with
+// their program. Callers that bind at top level should pass this instead
+// of builder->program->arena so persistence follows the frame, not the
+// program.
+static MirArena *mir_scope_arena(MirCtx *ctx) {
+  if (ctx && ctx->frame && ctx->frame->table) {
+    return ctx->frame->table->allocator.ctx;
+  }
+  return NULL;
+}
+
 bool mir_ctx_lookup_value(MirCtx *ctx, const char *name, MirValueId *out) {
   if (!ctx || !name) {
     return false;
@@ -411,8 +465,14 @@ bool mir_ctx_lookup_value(MirCtx *ctx, const char *name, MirValueId *out) {
       continue;
     }
     MirSymbol *symbol = ht_get(frame->table, name);
+    // Skip MIR_SYMBOL_VALUE entries bound in a prior MirProgram: their
+    // as.value is a program-relative id that's stale here. The durable
+    // name-keyed symbol (MIR_SYMBOL_GLOBAL) is resolved separately by
+    // mir_identifier -> mir_ctx_lookup_symbol, which emits a fresh
+    // global_load in the current program.
     if (symbol && symbol->kind == MIR_SYMBOL_VALUE &&
-        symbol->as.value != MIR_NO_VALUE) {
+        symbol->as.value != MIR_NO_VALUE &&
+        symbol->generation == mir_current_generation) {
       if (out) {
         *out = symbol->as.value;
       }
@@ -726,9 +786,23 @@ static MirSymbol *mir_ctx_lookup_symbol(MirProgram *program, MirCtx *ctx,
         continue;
       }
       MirSymbol *symbol = ht_get(frame->table, name);
-      if (symbol) {
-        return symbol;
+      if (!symbol) {
+        continue;
       }
+      // Skip id-keyed symbols bound in a prior MirProgram: their
+      // as.value / as.function are program-relative ids that are stale
+      // in this program. Name-keyed kinds (GLOBAL, MODULE, EXPR) are
+      // durable and re-resolve in the current program (via global_load,
+      // module lookup, or re-lowering the retained AST). Falling
+      // through lets the caller reach the name-based resolution paths
+      // (mir_program_find_function_by_name, builtin lookup) that emit
+      // fresh references here.
+      if (program && (symbol->kind == MIR_SYMBOL_VALUE ||
+                      symbol->kind == MIR_SYMBOL_FUNCTION) &&
+          symbol->generation != program->generation) {
+        continue;
+      }
+      return symbol;
     }
 
     MirSymbol *symbol =
@@ -4830,7 +4904,7 @@ static bool mir_bind_function_symbol(MirBuilder *builder, MirCtx *ctx,
     return false;
   }
 
-  MirSymbol *symbol = mir_symbol_new(builder->program->arena,
+  MirSymbol *symbol = mir_symbol_new(mir_scope_arena(ctx),
                                      fn->is_extern ? MIR_SYMBOL_EXTERN_FUNCTION
                                                    : MIR_SYMBOL_FUNCTION,
                                      fn->type, origin, ctx->current_module);
@@ -4902,10 +4976,21 @@ static bool mir_export_expr_binding(MirBuilder *builder, MirCtx *ctx,
     return false;
   }
 
-  MirSymbol *symbol = mir_symbol_new(builder->program->arena, MIR_SYMBOL_GLOBAL,
+  MirSymbol *symbol = mir_symbol_new(mir_scope_arena(ctx), MIR_SYMBOL_GLOBAL,
                                      type, expr, ctx->current_module);
   if (!symbol) {
     return false;
+  }
+  // The global_name string is arena-owned (mir_global_storage_name uses
+  // mir_arena_printf). For a persistent top-level frame (malloc-backed
+  // symbol) the arena will be freed when this MirProgram is destroyed,
+  // leaving symbol->as.global_name dangling; strdup into malloc so the
+  // name survives across REPL inputs.
+  if (!mir_scope_arena(ctx) && global_name) {
+    char *persistent_name = strdup(global_name);
+    if (persistent_name) {
+      global_name = persistent_name;
+    }
   }
   symbol->as.global_name = global_name;
   return mir_bind_export_symbol(builder, ctx, name, symbol);
@@ -5141,7 +5226,7 @@ static MirValueId mir_specialized_module_binding_value(MirBuilder *builder,
   }
 
   MirSymbol *module_symbol =
-      mir_symbol_new(builder->program->arena, MIR_SYMBOL_MODULE, module_type,
+      mir_symbol_new(mir_scope_arena(ctx), MIR_SYMBOL_MODULE, module_type,
                      generic->as.expr, ctx->current_module);
   if (!module_symbol) {
     return MIR_NO_VALUE;
@@ -5226,7 +5311,7 @@ static MirValueId mir_module_binding_value(MirBuilder *builder, Ast *ast,
 
   if (module_ast->data.AST_LAMBDA.len > 0) {
     MirSymbol *symbol =
-        mir_symbol_new(builder->program->arena, MIR_SYMBOL_GENERIC_MODULE,
+        mir_symbol_new(mir_scope_arena(ctx), MIR_SYMBOL_GENERIC_MODULE,
                        module_ast->type, module_ast, ctx->current_module);
     if (!symbol) {
       return MIR_NO_VALUE;
@@ -5249,7 +5334,7 @@ static MirValueId mir_module_binding_value(MirBuilder *builder, Ast *ast,
   module->init = builder->fn ? builder->fn->id : MIR_NO_FUNCTION;
 
   MirSymbol *symbol =
-      mir_symbol_new(builder->program->arena, MIR_SYMBOL_MODULE,
+      mir_symbol_new(mir_scope_arena(ctx), MIR_SYMBOL_MODULE,
                      module_ast->type, module_ast, ctx->current_module);
   if (!symbol) {
     return MIR_NO_VALUE;
@@ -5318,7 +5403,7 @@ static MirValueId mir_import_value(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
   module->path = mir_arena_strdup(builder->program->arena, import_path);
 
   MirSymbol *symbol =
-      mir_symbol_new(builder->program->arena, MIR_SYMBOL_MODULE, module->type,
+      mir_symbol_new(mir_scope_arena(ctx), MIR_SYMBOL_MODULE, module->type,
                      imported->ast, ctx->current_module);
   if (!symbol) {
     return MIR_NO_VALUE;
@@ -5453,11 +5538,24 @@ static MirValueId mir_let(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
       return MIR_NO_VALUE;
     }
   }
+  // Whether a durable top-level binding (global, function, or module)
+  // was just recorded into the current frame. When true and there's no
+  // in_expr, skip mir_bind_pattern: it would bind a MIR_SYMBOL_VALUE
+  // (program-local id) under the same name and clobber the durable
+  // MIR_SYMBOL_GLOBAL, breaking cross-input references in the REPL.
+  // Same-input references resolve via mir_ctx_lookup_symbol -> the
+  // global -> global_load instead.
+  bool durable_bound =
+      expr != NULL && (expr->tag == AST_EXTERN_FN || expr->tag == AST_MODULE ||
+                       (expr->tag != AST_LAMBDA &&
+                        mir_ctx_should_export(ctx, binding)));
   if (!ast->data.AST_LET.in_expr) {
-    if (!mir_bind_pattern(builder, ctx, binding, value,
-                          expr ? expr->type : binding->type)) {
-      mir_builder_set_unreachable_if_open(builder);
-      return MIR_NO_VALUE;
+    if (!durable_bound) {
+      if (!mir_bind_pattern(builder, ctx, binding, value,
+                            expr ? expr->type : binding->type)) {
+        mir_builder_set_unreachable_if_open(builder);
+        return MIR_NO_VALUE;
+      }
     }
     return value;
   }
@@ -7816,8 +7914,9 @@ static bool mir_build_test_top(MirProgram *program, Ast *prog, MirCtx *root_ctx,
   }
 
   MirSymbol *symbol =
-      mir_symbol_new(program->arena, MIR_SYMBOL_MODULE, test_module->type,
-                     test_module, root_ctx->current_module);
+      mir_symbol_new(mir_scope_arena(root_ctx), MIR_SYMBOL_MODULE,
+                     test_module->type, test_module,
+                     root_ctx->current_module);
   if (!symbol) {
     return false;
   }
@@ -7977,6 +8076,13 @@ MirProgram *mir_build_program(MirArena *arena, Ast *prog, MirCtx *ctx) {
     return NULL;
   }
 
+  // Bump the generation before any symbols are created in this program
+  // so every symbol bound during this build stamps the same generation.
+  // Persistent top-level symbols from a prior MirProgram keep their old
+  // generation and are skipped by id-keyed lookups in the new program
+  // (see mir_ctx_lookup_value).
+  unsigned program_generation = ++mir_current_generation;
+
   MirCtx fallback_ctx = {.env = NULL, .current_module = MIR_NO_MODULE};
   if (!ctx) {
     ctx = &fallback_ctx;
@@ -8000,6 +8106,7 @@ MirProgram *mir_build_program(MirArena *arena, Ast *prog, MirCtx *ctx) {
   memset(program, 0, sizeof(MirProgram));
   program->arena = arena;
   program->type_env = build_ctx.env;
+  program->generation = program_generation;
   ht_init_with_allocator(
       &program->builtins,
       (ht_allocator){.alloc = mir_ht_alloc, .free = NULL, .ctx = arena});

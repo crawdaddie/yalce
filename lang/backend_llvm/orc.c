@@ -288,11 +288,11 @@ static LLVMValueRef codegen_orc_test_module(Ast *ast, JITLangCtx *ctx,
   return func;
 }
 
-static ORCCompiledModule compile_source(const char *filename,
-                                        const char *source, bool print_result,
-                                        TypeEnv **env, JITLangCtx *ctx,
-                                        LLVMOrcLLJITRef jit,
-                                        LLVMTargetMachineRef target_machine) {
+static ORCCompiledModule
+compile_source(const char *filename, const char *source, bool print_result,
+               TypeEnv **env, JITLangCtx *ctx, LLVMOrcLLJITRef jit,
+               LLVMTargetMachineRef target_machine,
+               MirStackFrame *mir_root_frame) {
   if (!filename || !source) {
     return compiled_module_none();
   }
@@ -340,11 +340,14 @@ static ORCCompiledModule compile_source(const char *filename,
     return dispose_compile_artifacts(context, module, builder);
   }
 
+  // The MIR top-level scope persists across REPL inputs: the root frame
+  // is malloc-backed (mir_stack_frame_init(NULL, ...) in orcjit) and
+  // held in the session, so top-level bindings (value globals, functions,
+  // module members) survive mir_program_destroy + mir_arena_destroy
+  // below. mir_build_program honors a caller-supplied ctx->frame, so it
+  // reuses this frame instead of allocating a fresh one per input.
   MirArena *mir_arena = mir_arena_create();
-  ht mir_table;
-  MirStackFrame mir_initial_stack_frame;
-  mir_stack_frame_init(mir_arena, &mir_table, &mir_initial_stack_frame, NULL);
-  MirCtx mir_ctx = {.env = ti_ctx.env, .frame = &mir_initial_stack_frame};
+  MirCtx mir_ctx = {.env = ti_ctx.env, .frame = mir_root_frame};
   MirProgram *mir_program = mir_build_program(mir_arena, prog, &mir_ctx);
   if (mir_program_had_error(mir_program)) {
     mir_program_destroy(mir_program);
@@ -421,7 +424,8 @@ static ORCCompiledModule compile_source(const char *filename,
 
 static ORCCompiledModule compile_script(const char *filename, TypeEnv **env,
                                         JITLangCtx *ctx, LLVMOrcLLJITRef jit,
-                                        LLVMTargetMachineRef target_machine) {
+                                        LLVMTargetMachineRef target_machine,
+                                        MirStackFrame *mir_root_frame) {
   char *source = read_script(filename);
   if (!source) {
     fprintf(stderr, "Error: failed reading input %s\n", filename);
@@ -429,7 +433,8 @@ static ORCCompiledModule compile_script(const char *filename, TypeEnv **env,
   }
 
   ORCCompiledModule compiled =
-      compile_source(filename, source, false, env, ctx, jit, target_machine);
+      compile_source(filename, source, false, env, ctx, jit, target_machine,
+                      mir_root_frame);
   free(source);
   return compiled;
 }
@@ -541,6 +546,14 @@ int orcjit(int argc, char **argv) {
   StackFrame initial_stack_frame;
   lang_init(&table, env, &ctx, &initial_stack_frame);
 
+  // Persistent MIR top-level scope: malloc-backed root frame that outlives
+  // any single MirProgram, so top-level bindings (values, functions,
+  // module members) accumulate across compile_script / compile_source
+  // calls. Nested scopes stay program-arena-bound (see mir_scope_arena).
+  ht mir_root_table;
+  MirStackFrame mir_root_frame;
+  mir_stack_frame_init(NULL, &mir_root_table, &mir_root_frame, NULL);
+
   if (!ylc_config.num_input_scripts && !ylc_config.interactive_mode) {
     LLVMDisposeTargetMachine(target_machine);
     LLVMOrcDisposeLLJIT(jit);
@@ -549,7 +562,8 @@ int orcjit(int argc, char **argv) {
   int result = 0;
   for (int i = 0; i < ylc_config.num_input_scripts; i++) {
     ORCCompiledModule compiled = compile_script(
-        ylc_config.input_scripts[i], &env, &ctx, jit, target_machine);
+        ylc_config.input_scripts[i], &env, &ctx, jit, target_machine,
+        &mir_root_frame);
     if (ylc_config.test_mode) {
       printf("\n## Test %s\n", ylc_config.input_scripts[i]);
     }
@@ -584,7 +598,8 @@ int orcjit(int argc, char **argv) {
     snprintf(repl_filename, sizeof(repl_filename), "<repl:%d>", repl_counter++);
 
     ORCCompiledModule compiled = compile_source(
-        repl_filename, input, true, &env, &ctx, jit, target_machine);
+        repl_filename, input, true, &env, &ctx, jit, target_machine,
+        &mir_root_frame);
     free(input);
     if (!compiled.module) {
       continue;

@@ -1,5 +1,43 @@
 #ifndef _LANG_FORMAT_UTILS_H
 #define _LANG_FORMAT_UTILS_H
+
+// Compile-time color/escape-code toggle. Define YLC_NO_COLOR (e.g.
+// `-DYLC_NO_COLOR` on the compiler command line) to emit plain-text MIR
+// dumps without ANSI escape sequences — useful for the wasm browser
+// build, where the terminal element renders escape codes literally.
+#ifdef YLC_NO_COLOR
+#define COLOR_BLACK ""
+#define COLOR_RED ""
+#define COLOR_GREEN ""
+#define COLOR_YELLOW ""
+#define COLOR_BLUE ""
+#define COLOR_MAGENTA ""
+#define COLOR_CYAN ""
+#define COLOR_RESET ""
+
+#define BG_RED ""
+#define BG_GREEN ""
+#define BG_YELLOW ""
+#define BG_BLUE ""
+#define BG_MAGENTA ""
+#define BG_CYAN ""
+
+#define STYLE_BOLD ""
+#define STYLE_UNDERLINE ""
+#define STYLE_REVERSED ""
+#define STYLE_DIM ""
+#define STYLE_ITALIC ""
+#define STYLE_BLINK ""
+#define STYLE_HIDDEN ""
+#define STYLE_STRIKETHROUGH ""
+
+#define STYLE_UNDERLINE_DOUBLE ""
+#define STYLE_UNDERLINE_OFF ""
+
+#define STYLE_OVERLINE ""
+
+#define STYLE_RESET_ALL ""
+#else
 // Text colors
 #define COLOR_BLACK "\x1b[030m"
 #define COLOR_RED "\x1b[31m"
@@ -37,4 +75,5 @@
 
 // Reset
 #define STYLE_RESET_ALL "\x1b[0m"
+#endif
 #endif

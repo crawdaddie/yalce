@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YLC Documentation</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="top-bar">
+      <div class="top-bar-content">
+        <h1><a href="index.html">🦔 YLC</a></h1>
+        <nav>
+          <a href="repl.html">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2 3.75C2 2.784 2.784 2 3.75 2h8.5c.966 0 1.75.784 1.75 1.75v8.5A1.75 1.75 0 0 1 12.25 14h-8.5A1.75 1.75 0 0 1 2 12.25Zm1.75-.25a.25.25 0 0 0-.25.25v8.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25v-8.5a.25.25 0 0 0-.25-.25ZM5 6.5h6v1H5Zm0 3h6v1H5Z"/>
+            </svg>
+            REPL
+          </a>
+          <a href="https://github.com/crawdaddie/yalce" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            GitHub
+          </a>
+        </nav>
+      </div>
+    </header>
+    <main class="content">
+      <h1 id="sequence-pipeline-ir-unified-deforestation-for-lists-and-coroutines">Sequence Pipeline IR — Unified Deforestation for Lists and Coroutines</h1>
+<h2 id="problem">Problem</h2>
+<p>List operations like <code>map f (map g xs)</code> produce intermediate lists that are immediately consumed. With the current <code>map</code> implementation (<code>aux f l [] |&gt; rev</code>), a chain of two maps performs 4 list traversals and 2 intermediate allocations for what could be 1 traversal and 0 intermediates.</p>
+<p>The same problem exists for coroutine combinators (<code>cor_map f (cor_map g cor)</code> creates intermediate coroutine frames), which is already partially addressed by <code>fuse_cor_maps</code> in <code>coroutine_extensions.c</code>.</p>
+<p>The goal: a unified framework that handles both list and coroutine fusion with a single optimization pass.</p>
+<h2 id="background-buildfoldr-short-cut-deforestation">Background: Build/Foldr (Short-cut Deforestation)</h2>
+<p>Lists have exactly one way to construct (<code>::</code> and <code>[]</code>) and one universal way to consume (<code>foldr</code>):</p>
+<div class="codehilite"><pre><span></span><code>build g   = g (::) []
+foldr k z (build g) = g k z    -- fusion rule
+</code></pre></div>
+
+<p>When <code>map</code> is expressed as:</p>
+<div class="codehilite"><pre><span></span><code>map f xs = build (\cons nil -&gt; foldr (\x acc -&gt; cons (f x) acc) nil xs)
+</code></pre></div>
+
+<p>then <code>map f (map g xs)</code> expands, the inner <code>build</code> meets the outer <code>foldr</code>, and the intermediate list vanishes.</p>
+<h3 id="coroutine-analogy">Coroutine analogy</h3>
+<table>
+<thead>
+<tr>
+<th>Lists</th>
+<th>Coroutines</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>(:)</code> constructor</td>
+<td><code>yield</code></td>
+</tr>
+<tr>
+<td><code>[]</code> constructor</td>
+<td><code>done</code> / return</td>
+</tr>
+<tr>
+<td><code>foldr</code> (universal consumer)</td>
+<td><code>cor_loop</code> / resume-until-done</td>
+</tr>
+<tr>
+<td><code>build</code> (abstract producer)</td>
+<td>coroutine body (function that calls yield)</td>
+</tr>
+</tbody>
+</table>
+<p>The same fusion rule applies: when a coroutine producer feeds directly into a consumer,
+eliminate the intermediate coroutine frame by inlining yields into the consumer.</p>
+<p>The existing <code>fuse_cor_maps</code> already implements a specialized version of this
+— composing transformation functions when adjacent <code>cor_map</code> calls are detected.</p>
+<h2 id="design-sequence-pipeline-ir">Design: Sequence Pipeline IR</h2>
+<p>Rather than encoding <code>Sequence</code> as a type-level relationship (subtyping would break Hindley-Milner), encode it as a <strong>compiler-internal IR</strong> between the typed AST and codegen. Recognize sequence patterns, lift them into a pipeline representation, optimize the pipeline, then lower to concrete code.</p>
+<h3 id="pipeline-structure">Pipeline structure</h3>
+<p>A pipeline has three parts:</p>
+<div class="codehilite"><pre><span></span><code>Source  -&gt;  [Op_1 -&gt; Op_2 -&gt; ... -&gt; Op_n]  -&gt;  Sink
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>Source = List expr
+       | Array expr
+       | Coroutine expr
+       | Range(from, to)
+
+Op     = Map (T -&gt; U)
+       | Filter (T -&gt; Bool)
+       | Take Int
+       | FlatMap (T -&gt; Seq U)
+
+Sink   = Fold (R -&gt; T -&gt; R) R      -- consume to scalar
+       | CollectList               -- materialize as List&lt;T&gt;
+       | CollectArray              -- materialize as Array&lt;T&gt;
+       | ForEach (T -&gt; Void)       -- side effects only
+       | YieldCoroutine            -- produce a Coroutine&lt;T&gt;
+</code></pre></div>
+
+<h3 id="concrete-c-structure">Concrete C structure</h3>
+<div class="codehilite"><pre><span></span><code><span class="k">typedef</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">SeqPipeline</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">enum</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">SRC_LIST</span><span class="p">,</span><span class="w"> </span><span class="n">SRC_ARRAY</span><span class="p">,</span><span class="w"> </span><span class="n">SRC_COROUTINE</span><span class="p">,</span><span class="w"> </span><span class="n">SRC_RANGE</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="n">source</span><span class="p">;</span>
+<span class="w">    </span><span class="n">Ast</span><span class="w"> </span><span class="o">*</span><span class="n">source_expr</span><span class="p">;</span>
+<span class="w">    </span><span class="n">Type</span><span class="w"> </span><span class="o">*</span><span class="n">source_el_type</span><span class="p">;</span>
+
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">num_ops</span><span class="p">;</span>
+<span class="w">    </span><span class="k">struct</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">enum</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">OP_MAP</span><span class="p">,</span><span class="w"> </span><span class="n">OP_FILTER</span><span class="p">,</span><span class="w"> </span><span class="n">OP_TAKE</span><span class="p">,</span><span class="w"> </span><span class="n">OP_FLAT_MAP</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="n">kind</span><span class="p">;</span>
+<span class="w">        </span><span class="n">Ast</span><span class="w"> </span><span class="o">*</span><span class="n">func</span><span class="p">;</span>
+<span class="w">        </span><span class="n">Type</span><span class="w"> </span><span class="o">*</span><span class="n">output_type</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="n">ops</span><span class="p">[</span><span class="mi">16</span><span class="p">];</span>
+
+<span class="w">    </span><span class="k">enum</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">SINK_FOLD</span><span class="p">,</span><span class="w"> </span><span class="n">SINK_LIST</span><span class="p">,</span><span class="w"> </span><span class="n">SINK_ARRAY</span><span class="p">,</span><span class="w"> </span><span class="n">SINK_FOR_EACH</span><span class="p">,</span><span class="w"> </span><span class="n">SINK_COROUTINE</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="n">sink</span><span class="p">;</span>
+<span class="w">    </span><span class="n">Ast</span><span class="w"> </span><span class="o">*</span><span class="n">sink_func</span><span class="p">;</span><span class="w">   </span><span class="c1">// for fold</span>
+<span class="w">    </span><span class="n">Ast</span><span class="w"> </span><span class="o">*</span><span class="n">sink_init</span><span class="p">;</span><span class="w">   </span><span class="c1">// for fold</span>
+<span class="w">    </span><span class="n">Type</span><span class="w"> </span><span class="o">*</span><span class="n">result_type</span><span class="p">;</span>
+<span class="p">}</span><span class="w"> </span><span class="n">SeqPipeline</span><span class="p">;</span>
+</code></pre></div>
+
+<h3 id="how-list-and-coroutine-unify">How List and Coroutine unify</h3>
+<p>Both are valid <strong>sources</strong> and <strong>sinks</strong> of the same pipeline. The pipeline operates on the abstract sequence of elements flowing through, regardless of representation.</p>
+<div class="codehilite"><pre><span></span><code>-- List -&gt; List
+[1,2,3] |&gt; map f |&gt; map g |&gt; filter p
+  = Pipeline(Source.List([1,2,3]), [Map f, Map g, Filter p], Sink.CollectList)
+
+-- List -&gt; scalar
+[1,2,3] |&gt; map f |&gt; fold (+) 0
+  = Pipeline(Source.List([1,2,3]), [Map f], Sink.Fold((+), 0))
+
+-- Coroutine -&gt; Coroutine
+cor |&gt; cor_map f |&gt; cor_map g
+  = Pipeline(Source.Coroutine(cor), [Map f, Map g], Sink.YieldCoroutine)
+
+-- Cross-representation: List -&gt; Coroutine
+[1,2,3] |&gt; cor_of_list |&gt; cor_map f
+  = Pipeline(Source.List([1,2,3]), [Map f], Sink.YieldCoroutine)
+
+-- Cross-representation: Coroutine -&gt; List
+cor |&gt; cor_to_list |&gt; map f
+  = Pipeline(Source.Coroutine(cor), [Map f], Sink.CollectList)
+</code></pre></div>
+
+<h2 id="rewrite-rules">Rewrite Rules</h2>
+<p>Once in pipeline form, optimizations are local pattern matches on the ops array:</p>
+<div class="codehilite"><pre><span></span><code>-- Map fusion: adjacent maps compose
+[... Map f, Map g ...] -&gt; [... Map (g . f) ...]
+
+-- Map-fold fusion: map absorbed into fold
+[... Map f], Fold k z -&gt; [...], Fold (\acc x -&gt; k acc (f x)) z
+
+-- Map-filter reorder: push filters toward source (reduces work)
+[... Map f, Filter p ...] -&gt; [... Filter (p . f), Map f ...]
+  (valid because the language is pure)
+
+-- Identity elimination
+[... Map id ...] -&gt; [...]
+
+-- Source-sink cancellation
+Source(List xs), [], Sink(CollectList) -&gt; xs
+</code></pre></div>
+
+<p>Function composition uses the existing <code>codegen_compose_functions</code> in <code>function.c</code>.</p>
+<h2 id="lowering-strategies">Lowering Strategies</h2>
+<p>After rewrite rules are applied, lower the remaining pipeline to concrete code. The choice depends on source/sink/ops combination:</p>
+<h3 id="option-a-direct-loop-best-for-pure-map-chains-known-length-sources">Option A: Direct loop (best for pure map chains, known-length sources)</h3>
+<div class="codehilite"><pre><span></span><code>Pipeline(Source.List(xs), [Map (g . f)], Sink.CollectList)
+</code></pre></div>
+
+<p>becomes a single traversal with direct list construction (no reverse needed):</p>
+<div class="codehilite"><pre><span></span><code><span class="err">f</span><span class="k">or</span><span class="w"> </span><span class="err">each</span><span class="w"> </span><span class="err">node</span><span class="w"> </span><span class="err">in</span><span class="w"> </span><span class="nl">xs:</span>
+<span class="w">    </span><span class="err">res</span><span class="k">ult</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="err">append</span><span class="p">(</span><span class="err">g</span><span class="p">(</span><span class="err">f</span><span class="p">(</span><span class="err">node</span><span class="p">.</span><span class="err">data</span><span class="p">)))</span>
+</code></pre></div>
+
+<h3 id="option-b-coroutine-pipeline-best-when-filterflatmap-is-involved">Option B: Coroutine pipeline (best when filter/flatmap is involved)</h3>
+<div class="codehilite"><pre><span></span><code>Pipeline(Source.List(xs), [Map f, Filter p], Sink.CollectList)
+</code></pre></div>
+
+<p>becomes:</p>
+<div class="codehilite"><pre><span></span><code>cor_to_list(cor_filter(p, cor_map(f, cor_of_list(xs))))
+</code></pre></div>
+
+<p>Then existing <code>fuse_cor_maps</code> + LLVM coro-elide optimize further.</p>
+<h3 id="option-c-fold-loop-when-sink-is-fold-zero-allocation">Option C: Fold loop (when sink is Fold, zero allocation)</h3>
+<div class="codehilite"><pre><span></span><code>Pipeline(Source.List(xs), [Map (g . f)], Sink.Fold(k, z))
+</code></pre></div>
+
+<p>becomes:</p>
+<div class="codehilite"><pre><span></span><code><span class="err">a</span><span class="k">cc</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="err">z</span>
+<span class="err">f</span><span class="k">or</span><span class="w"> </span><span class="err">each</span><span class="w"> </span><span class="err">node</span><span class="w"> </span><span class="err">in</span><span class="w"> </span><span class="nl">xs:</span>
+<span class="w">    </span><span class="err">a</span><span class="k">cc</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="err">k</span><span class="p">(</span><span class="err">a</span><span class="k">cc</span><span class="p">,</span><span class="w"> </span><span class="err">g</span><span class="p">(</span><span class="err">f</span><span class="p">(</span><span class="err">node</span><span class="p">.</span><span class="err">data</span><span class="p">)))</span>
+<span class="err">return</span><span class="w"> </span><span class="err">a</span><span class="k">cc</span>
+</code></pre></div>
+
+<h3 id="lowering-decision-matrix">Lowering decision matrix</h3>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Ops</th>
+<th>Sink</th>
+<th>Strategy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>List/Array</td>
+<td>Map only</td>
+<td>CollectList</td>
+<td>Direct loop (no reverse)</td>
+</tr>
+<tr>
+<td>List/Array</td>
+<td>Map only</td>
+<td>Fold</td>
+<td>Single fold loop</td>
+</tr>
+<tr>
+<td>Any</td>
+<td>Contains Filter</td>
+<td>CollectList</td>
+<td>Coroutine pipeline</td>
+</tr>
+<tr>
+<td>Any</td>
+<td>Contains FlatMap</td>
+<td>Any</td>
+<td>Coroutine pipeline</td>
+</tr>
+<tr>
+<td>Coroutine</td>
+<td>Any</td>
+<td>YieldCoroutine</td>
+<td>Coroutine pipeline</td>
+</tr>
+<tr>
+<td>Coroutine</td>
+<td>Map only</td>
+<td>CollectList</td>
+<td>Direct loop over resume</td>
+</tr>
+</tbody>
+</table>
+<h2 id="implementation-plan">Implementation Plan</h2>
+<h3 id="phase-1-detection">Phase 1: Detection</h3>
+<p>In <code>codegen_application</code> (or a new pre-codegen pass), when a call to a known function is seen (<code>map</code>, <code>filter</code>, <code>fold</code>, <code>cor_map</code>, <code>cor_filter</code>, etc.), walk the nested applications and try to build a <code>SeqPipeline</code>.</p>
+<p>Functions to recognize (by module-qualified name or symbol tag):
+- <code>Lists.map</code> -&gt; Source from arg, Op.Map from function arg
+- <code>Lists.filter</code> -&gt; Source from arg, Op.Filter from function arg
+- <code>Lists.fold</code> -&gt; Sink.Fold, source from list arg
+- <code>Lists.print_list</code> -&gt; Sink.ForEach
+- <code>cor_map</code> -&gt; Op.Map
+- <code>cor_filter</code> -&gt; Op.Filter
+- <code>cor_of_list</code> -&gt; boundary: List source into coroutine pipeline
+- <code>cor_to_list</code> -&gt; boundary: coroutine pipeline into List sink
+- <code>cor_loop</code> -&gt; Sink.ForEach</p>
+<h3 id="phase-2-optimization">Phase 2: Optimization</h3>
+<p>Apply rewrite rules on the <code>SeqPipeline.ops</code> array:
+- Collapse adjacent OP_MAP entries using <code>codegen_compose_functions</code>
+- Absorb trailing maps into fold sinks
+- Push filters toward source</p>
+<h3 id="phase-3-lowering">Phase 3: Lowering</h3>
+<p>Based on the decision matrix, emit either:
+- A direct loop (new codegen, avoids reverse by building in-order)
+- A coroutine pipeline (reuse existing cor_map/cor_filter infrastructure)
+- A fold loop (straightforward iteration)</p>
+<h3 id="phase-4-integration-with-escape-analysis">Phase 4: Integration with escape analysis</h3>
+<p>For pipelines that lower to direct loops with CollectList sink, the output list can potentially be stack-allocated if escape analysis determines it doesn't escape. The pipeline IR makes this easier because the allocation site is explicit in the lowering.</p>
+<h2 id="relationship-to-existing-code">Relationship to Existing Code</h2>
+<ul>
+<li><strong>Replaces</strong> <code>fuse_cor_maps</code> in <code>coroutine_extensions.c</code> (subsumed by the general framework)</li>
+<li><strong>Uses</strong> <code>codegen_compose_functions</code> in <code>function.c</code> for map fusion</li>
+<li><strong>Uses</strong> existing coroutine infrastructure for filter/flatmap lowering</li>
+<li><strong>Extends</strong> escape analysis in <code>escape_analysis.c</code> for stack allocation of pipeline results</li>
+<li><strong>Detection</strong> sits in <code>codegen_application</code> in <code>application.c</code> (or a new pre-codegen pass)</li>
+</ul>
+    </main>
+    <script>
+      // Add copy buttons to code blocks
+      document.addEventListener('DOMContentLoaded', function() {
+        const codeBlocks = document.querySelectorAll('.codehilite');
+
+        codeBlocks.forEach(function(codeBlock) {
+          const button = document.createElement('button');
+          button.className = 'copy-button';
+          button.setAttribute('aria-label', 'Copy code to clipboard');
+          button.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"></path><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"></path></svg>';
+
+          button.addEventListener('click', function() {
+            const code = codeBlock.querySelector('pre').textContent;
+
+            navigator.clipboard.writeText(code).then(function() {
+              button.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path></svg>';
+              button.classList.add('copied');
+
+              setTimeout(function() {
+                button.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"></path><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"></path></svg>';
+                button.classList.remove('copied');
+              }, 2000);
+            }).catch(function(err) {
+              console.error('Failed to copy:', err);
+            });
+          });
+
+          codeBlock.style.position = 'relative';
+          codeBlock.appendChild(button);
+        });
+      });
+    </script>
+  </body>
+</html>
