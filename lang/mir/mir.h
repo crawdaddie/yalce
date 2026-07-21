@@ -50,6 +50,14 @@ typedef struct MirSymbol {
   // them in favor of name-keyed symbols (MIR_SYMBOL_GLOBAL) that re-resolve
   // in the current program. 0 = unbound / current.
   unsigned generation;
+  // Program-local value id attached to a MIR_SYMBOL_GLOBAL so a
+  // top-level binding carries BOTH the durable global name (for
+  // cross-input REPL references, via global_load) AND the current-program
+  // value (for same-input use, e.g. a curried `let cc = sum4 1 2` later
+  // called as `cc 3`). Generation-guarded: stale when the current program
+  // differs from `generation`. Mirrors the old backend_llvm JITSymbol,
+  // which kept `val` and a storage slot on one STYPE_TOP_LEVEL_VAR entry.
+  MirValueId global_value;
   union {
     MirValueId value;
     MirFunctionId function;

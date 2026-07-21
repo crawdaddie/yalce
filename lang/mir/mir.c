@@ -414,6 +414,7 @@ static MirSymbol *mir_symbol_new(MirArena *arena, MirSymbolKind kind,
   symbol->origin = origin;
   symbol->owner_module = owner_module;
   symbol->as.value = MIR_NO_VALUE;
+  symbol->global_value = MIR_NO_VALUE;
   symbol->generation = mir_current_generation;
   return symbol;
 }
@@ -465,18 +466,29 @@ bool mir_ctx_lookup_value(MirCtx *ctx, const char *name, MirValueId *out) {
       continue;
     }
     MirSymbol *symbol = ht_get(frame->table, name);
-    // Skip MIR_SYMBOL_VALUE entries bound in a prior MirProgram: their
-    // as.value is a program-relative id that's stale here. The durable
-    // name-keyed symbol (MIR_SYMBOL_GLOBAL) is resolved separately by
-    // mir_identifier -> mir_ctx_lookup_symbol, which emits a fresh
-    // global_load in the current program.
-    if (symbol && symbol->kind == MIR_SYMBOL_VALUE &&
-        symbol->as.value != MIR_NO_VALUE &&
-        symbol->generation == mir_current_generation) {
-      if (out) {
-        *out = symbol->as.value;
+    // Skip id-keyed entries bound in a prior MirProgram: their id is a
+    // program-relative value that's stale here. The durable global name
+    // is resolved separately by mir_identifier -> mir_ctx_lookup_symbol,
+    // which emits a fresh global_load in the current program.
+    if (symbol && symbol->generation == mir_current_generation) {
+      if (symbol->kind == MIR_SYMBOL_VALUE &&
+          symbol->as.value != MIR_NO_VALUE) {
+        if (out) {
+          *out = symbol->as.value;
+        }
+        return true;
       }
-      return true;
+      // A MIR_SYMBOL_GLOBAL may carry a program-local value attached
+      // by mir_bind_identifier for same-input use (e.g. a curried
+      // binding referenced later in the same scope). Fall through to
+      // the global name only when no current-program value is attached.
+      if (symbol->kind == MIR_SYMBOL_GLOBAL &&
+          symbol->global_value != MIR_NO_VALUE) {
+        if (out) {
+          *out = symbol->global_value;
+        }
+        return true;
+      }
     }
   }
   return false;
@@ -487,7 +499,23 @@ static bool mir_bind_identifier(MirCtx *ctx, Ast *binding, MirValueId value) {
       ast_is_placeholder_id(binding)) {
     return false;
   }
-  return mir_ctx_bind_value(ctx, binding->data.AST_IDENTIFIER.value, value);
+  const char *name = binding->data.AST_IDENTIFIER.value;
+  // If a durable MIR_SYMBOL_GLOBAL already occupies this name in the
+  // current frame (bound just before the value bind by
+  // mir_export_expr_binding), attach the program-local value to it
+  // rather than creating a separate MIR_SYMBOL_VALUE that would
+  // clobber the global. Same-input references resolve the value via
+  // mir_ctx_lookup_value (reading symbol->global_value); cross-input
+  // references fall through to the global name.
+  if (ctx && ctx->frame && ctx->frame->table) {
+    MirSymbol *existing = ht_get(ctx->frame->table, name);
+    if (existing && existing->kind == MIR_SYMBOL_GLOBAL) {
+      existing->global_value = value;
+      existing->generation = mir_current_generation;
+      return true;
+    }
+  }
+  return mir_ctx_bind_value(ctx, name, value);
 }
 
 static Type *mir_tuple_field_type(Type *type, size_t index) {
@@ -5538,19 +5566,28 @@ static MirValueId mir_let(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
       return MIR_NO_VALUE;
     }
   }
-  // Whether a durable top-level binding (global, function, or module)
-  // was just recorded into the current frame. When true and there's no
-  // in_expr, skip mir_bind_pattern: it would bind a MIR_SYMBOL_VALUE
-  // (program-local id) under the same name and clobber the durable
-  // MIR_SYMBOL_GLOBAL, breaking cross-input references in the REPL.
-  // Same-input references resolve via mir_ctx_lookup_symbol -> the
-  // global -> global_load instead.
-  bool durable_bound =
-      expr != NULL && (expr->tag == AST_EXTERN_FN || expr->tag == AST_MODULE ||
-                       (expr->tag != AST_LAMBDA &&
-                        mir_ctx_should_export(ctx, binding)));
+  // A durable top-level global was just bound for this binding (the
+  // export-expr path ran for a non-lambda value). Bind the program-local
+  // value onto the SAME global symbol (symbol->as.value) rather than a
+  // separate MIR_SYMBOL_VALUE, so the two coexist without clobbering:
+  // same-input references resolve the value via mir_ctx_lookup_value
+  // (generation-guarded), cross-input references fall through to the
+  // global name via mir_symbol_to_value -> global_load. This mirrors
+  // the old backend_llvm JITSymbol, which carried both `val` and a
+  // storage slot on one STYPE_TOP_LEVEL_VAR entry.
+  bool durable_global_bound =
+      expr != NULL && expr->tag != AST_LAMBDA && expr->tag != AST_EXTERN_FN &&
+      expr->tag != AST_MODULE && mir_ctx_should_export(ctx, binding);
   if (!ast->data.AST_LET.in_expr) {
-    if (!durable_bound) {
+    if (durable_global_bound) {
+      // The global was bound by mir_export_expr_binding; attach the
+      // program-local value to it for same-input use.
+      if (!mir_bind_pattern(builder, ctx, binding, value,
+                            expr ? expr->type : binding->type)) {
+        mir_builder_set_unreachable_if_open(builder);
+        return MIR_NO_VALUE;
+      }
+    } else {
       if (!mir_bind_pattern(builder, ctx, binding, value,
                             expr ? expr->type : binding->type)) {
         mir_builder_set_unreachable_if_open(builder);
