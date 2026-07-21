@@ -7717,6 +7717,14 @@ static Type *mir_dump_function_return_type(const MirFunction *fn) {
       type->data.T_FN.from->kind == T_VOID) {
     return type->data.T_FN.to;
   }
+  // A nullary function (T_FN from T_VOID to X) has no real parameter, so its
+  // return type is X regardless of how many params the MIR function carries.
+  // A closure value is also a T_FN, but it is a value type, not a function
+  // type, so it must not be unwrapped here.
+  if (type && type->kind == T_FN && !is_closure(type) && type->data.T_FN.from &&
+      type->data.T_FN.from->kind == T_VOID) {
+    return type->data.T_FN.to;
+  }
   return type;
 }
 
@@ -7778,11 +7786,21 @@ void dump_function(FILE *stream, const MirFunction *fn) {
   fputs("}\n", stream);
 }
 
-static bool mir_build_test_top(MirProgram *program, Ast *prog,
-                               MirCtx *root_ctx, MirBuilder *builder) {
+static bool mir_build_test_top(MirProgram *program, Ast *prog, MirCtx *root_ctx,
+                               MirBuilder *builder) {
   Ast *test_module = mir_get_test_module_ast(prog);
+  if (!test_module) {
+    // No test module: $top is a Bool entry point, so terminate it with
+    // `return true` rather than leaving it open for the LLVM lowering.
+    if (builder->block && builder->block->term.kind == MIR_TERM_NONE) {
+      mir_builder_set_return(builder,
+                             mir_const_bool(builder, &t_bool, prog, true));
+    }
+    return true;
+  }
   AstList *stmts =
       mir_test_module_stmts(program ? program->arena : NULL, test_module);
+
   if (!program || !root_ctx || !builder || !builder->fn || !test_module ||
       !stmts) {
     return false;
@@ -7790,16 +7808,16 @@ static bool mir_build_test_top(MirProgram *program, Ast *prog,
 
   const char *module_name =
       mir_qualified_symbol_name(program, root_ctx, "test");
-  MirModule *module = mir_program_add_module(program, module_name,
-                                              test_module->type, test_module,
-                                              root_ctx->current_module);
+  MirModule *module =
+      mir_program_add_module(program, module_name, test_module->type,
+                             test_module, root_ctx->current_module);
   if (!module) {
     return false;
   }
 
-  MirSymbol *symbol = mir_symbol_new(program->arena, MIR_SYMBOL_MODULE,
-                                     test_module->type, test_module,
-                                     root_ctx->current_module);
+  MirSymbol *symbol =
+      mir_symbol_new(program->arena, MIR_SYMBOL_MODULE, test_module->type,
+                     test_module, root_ctx->current_module);
   if (!symbol) {
     return false;
   }

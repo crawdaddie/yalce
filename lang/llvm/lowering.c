@@ -100,8 +100,14 @@ static Type *mir_function_return_type(MirFunction *fn) {
     type = type->data.T_FN.to;
   }
 
-  if (has_env_param && type && type->kind == T_FN && type->data.T_FN.from &&
-      type->data.T_FN.from->kind == T_VOID) {
+  // A nullary void function (T_FN from T_VOID to T_VOID) has no real
+  // parameter and no real return value; lower it as returning void regardless
+  // of how many params the MIR function carries. A closure value is also a
+  // T_FN, but it is a value type, not a function type, so it must not be
+  // unwrapped here.
+  if (type && type->kind == T_FN && !is_closure(type) &&
+      type->data.T_FN.from && type->data.T_FN.from->kind == T_VOID &&
+      type->data.T_FN.to && type->data.T_FN.to->kind == T_VOID) {
     return type->data.T_FN.to;
   }
   return type;
