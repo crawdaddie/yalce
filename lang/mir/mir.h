@@ -537,6 +537,42 @@ MirInstr mir_make_instr(MirInstrKind kind, Type *type, Ast *origin);
 MirValueId mir_function_add_value(MirFunction *fn, Type *type, Ast *origin);
 MirValueId mir_append_instr(MirFunction *fn, MirBlock *block, MirInstr instr);
 MirValueId mir_builder_append_instr(MirBuilder *builder, MirInstr instr);
+
+// Low-level emission helpers. Each builds a single instruction of the given
+// kind, fills in the obvious operands/fields, appends it to the builder's
+// current block, and returns the new value id. The helpers return
+// MIR_NO_VALUE (without appending) when a required operand is MIR_NO_VALUE.
+// Public mir_* wrappers (mir_const_int, mir_tuple, ...) forward to these so
+// their bodies stay one or two lines.
+MirValueId mir_emit_const(MirBuilder *builder, MirConst const_value,
+                          Type *type, Ast *origin);
+MirValueId mir_emit_op0(MirBuilder *builder, MirOpKind kind, Type *type,
+                        Ast *origin);
+MirValueId mir_emit_op1(MirBuilder *builder, MirOpKind kind, Type *type,
+                        Ast *origin, MirValueId a);
+MirValueId mir_emit_op2(MirBuilder *builder, MirOpKind kind, Type *type,
+                        Ast *origin, MirValueId a, MirValueId b);
+MirValueId mir_emit_op3(MirBuilder *builder, MirOpKind kind, Type *type,
+                        Ast *origin, MirValueId a, MirValueId b, MirValueId c);
+MirValueId mir_emit_extract(MirBuilder *builder, MirExtractKind kind,
+                            Type *type, Ast *origin, MirValueId value);
+MirValueId mir_emit_extract_field(MirBuilder *builder, Type *type,
+                                  Ast *origin, MirValueId value, size_t index,
+                                  const char *name);
+MirValueId mir_emit_construct(MirBuilder *builder, MirConstructKind kind,
+                              Type *type, Ast *origin);
+MirValueId mir_emit_construct_items(MirBuilder *builder, MirConstructKind kind,
+                                    Type *type, Ast *origin,
+                                    MirValueIdVec items);
+MirValueId mir_emit_construct_ops2(MirBuilder *builder, MirConstructKind kind,
+                                    Type *type, Ast *origin, MirValueId a,
+                                    MirValueId b);
+// Fills the common call-shaped payload (callee, builtin, callee_type,
+// specialized_fn) shared by MIR_CALL/MIR_CORO_NEW/MIR_CORO_NEXT/MIR_CORO_RESET
+// on an instr already produced by mir_make_instr.
+void mir_emit_call_init(MirInstr *instr, MirValueId callee,
+                        MirBuiltinSymbol *builtin, Type *callee_type);
+
 bool mir_instr_for_each_operand(MirInstr *instr, MirOperandVisitor visitor,
                                 void *ctx);
 void mir_instr_rewrite_operands(MirInstr *instr, MirOperandRewriter rewriter,

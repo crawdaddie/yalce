@@ -8,6 +8,7 @@ let M = module () ->
     a + b
   ;;
 ;
+
 let test = module () ->
 let test_module_member_fn       = (M.z 1 2) == 3 ;
 

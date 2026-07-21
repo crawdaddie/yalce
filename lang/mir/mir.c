@@ -882,6 +882,7 @@ MirBlock *mir_function_add_block(MirFunction *fn, const char *name) {
 
   MirBlock *block =
       mir_arena_alloc(fn->arena, sizeof(MirBlock), MIR_ALIGNOF(MirBlock));
+
   if (!block) {
     return NULL;
   }
@@ -982,6 +983,131 @@ MirInstr mir_make_instr(MirInstrKind kind, Type *type, Ast *origin) {
       .type = type,
       .origin = origin,
   };
+}
+
+// Private emission helpers. Each one builds a single MIR_OP/MIR_EXTRACT/
+// MIR_CONSTRUCT/MIR_CONST/MIR_CALL-like instruction from its operands and
+// appends it to the builder's current block, returning the new value id. The
+// public mir_* wrappers below keep their existing signatures and just forward
+// to these so the per-opcode bodies stay one or two lines.
+
+MirValueId mir_emit_const(MirBuilder *builder, MirConst const_value, Type *type,
+                          Ast *origin) {
+  MirInstr instr = mir_make_instr(MIR_CONST, type, origin);
+  instr.data.const_value = const_value;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_emit_op0(MirBuilder *builder, MirOpKind kind, Type *type,
+                        Ast *origin) {
+  MirInstr instr = mir_make_instr(MIR_OP, type, origin);
+  instr.data.op.kind = kind;
+  instr.data.op.argc = 0;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_emit_op1(MirBuilder *builder, MirOpKind kind, Type *type,
+                        Ast *origin, MirValueId a) {
+  if (a == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+  MirInstr instr = mir_make_instr(MIR_OP, type, origin);
+  instr.data.op.kind = kind;
+  instr.data.op.argc = 1;
+  instr.data.op.operands[0] = a;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_emit_op2(MirBuilder *builder, MirOpKind kind, Type *type,
+                        Ast *origin, MirValueId a, MirValueId b) {
+  if (a == MIR_NO_VALUE || b == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+  MirInstr instr = mir_make_instr(MIR_OP, type, origin);
+  instr.data.op.kind = kind;
+  instr.data.op.argc = 2;
+  instr.data.op.operands[0] = a;
+  instr.data.op.operands[1] = b;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_emit_op3(MirBuilder *builder, MirOpKind kind, Type *type,
+                        Ast *origin, MirValueId a, MirValueId b, MirValueId c) {
+  if (a == MIR_NO_VALUE || b == MIR_NO_VALUE || c == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+  MirInstr instr = mir_make_instr(MIR_OP, type, origin);
+  instr.data.op.kind = kind;
+  instr.data.op.argc = 3;
+  instr.data.op.operands[0] = a;
+  instr.data.op.operands[1] = b;
+  instr.data.op.operands[2] = c;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_emit_extract(MirBuilder *builder, MirExtractKind kind,
+                            Type *type, Ast *origin, MirValueId value) {
+  if (value == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+  MirInstr instr = mir_make_instr(MIR_EXTRACT, type, origin);
+  instr.data.extract.kind = kind;
+  instr.data.extract.value = value;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_emit_extract_field(MirBuilder *builder, Type *type, Ast *origin,
+                                  MirValueId value, size_t index,
+                                  const char *name) {
+  if (value == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+  MirInstr instr = mir_make_instr(MIR_EXTRACT, type, origin);
+  instr.data.extract.kind = MIR_EXTRACT_FIELD;
+  instr.data.extract.value = value;
+  instr.data.extract.index = index;
+  instr.data.extract.name = name;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_emit_construct(MirBuilder *builder, MirConstructKind kind,
+                              Type *type, Ast *origin) {
+  MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
+  instr.data.construct.kind = kind;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_emit_construct_items(MirBuilder *builder, MirConstructKind kind,
+                                    Type *type, Ast *origin,
+                                    MirValueIdVec items) {
+  MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
+  instr.data.construct.kind = kind;
+  instr.data.construct.items = items;
+  return mir_builder_append_instr(builder, instr);
+}
+
+MirValueId mir_emit_construct_ops2(MirBuilder *builder, MirConstructKind kind,
+                                   Type *type, Ast *origin, MirValueId a,
+                                   MirValueId b) {
+  if (a == MIR_NO_VALUE || b == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+  MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
+  instr.data.construct.kind = kind;
+  instr.data.construct.operands[0] = a;
+  instr.data.construct.operands[1] = b;
+  return mir_builder_append_instr(builder, instr);
+}
+
+// Initialize the common call-shaped payload shared by MIR_CALL, MIR_CORO_NEW,
+// MIR_CORO_NEXT and MIR_CORO_RESET. The caller still owns specialization of
+// the instr (callee_type, builtin, etc.) before appending.
+void mir_emit_call_init(MirInstr *instr, MirValueId callee,
+                        MirBuiltinSymbol *builtin, Type *callee_type) {
+  instr->data.call.callee = callee;
+  instr->data.call.builtin = builtin;
+  instr->data.call.callee_type = callee_type;
+  instr->data.call.specialized_fn = MIR_NO_FUNCTION;
 }
 
 MirValueId mir_function_add_value(MirFunction *fn, Type *type, Ast *origin) {
@@ -1630,77 +1756,78 @@ void mir_instr_rewrite_operands(MirInstr *instr, MirOperandRewriter rewriter,
 
 MirValueId mir_const_int(MirBuilder *builder, Type *type, Ast *origin,
                          int value) {
-  MirInstr instr = mir_make_instr(MIR_CONST, type, origin);
-  instr.data.const_value.kind = MIR_CONST_KIND_INT;
-  instr.data.const_value.as.int_value = value;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_const(
+      builder, (MirConst){.kind = MIR_CONST_KIND_INT, .as.int_value = value},
+      type, origin);
 }
 
 MirValueId mir_const_uint64(MirBuilder *builder, Type *type, Ast *origin,
                             uint64_t value) {
-  MirInstr instr = mir_make_instr(MIR_CONST, type, origin);
-  instr.data.const_value.kind = MIR_CONST_KIND_UINT64;
-  instr.data.const_value.as.uint64_value = value;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_const(
+      builder,
+      (MirConst){.kind = MIR_CONST_KIND_UINT64, .as.uint64_value = value}, type,
+      origin);
 }
 
 MirValueId mir_const_float(MirBuilder *builder, Type *type, Ast *origin,
                            float value) {
-  MirInstr instr = mir_make_instr(MIR_CONST, type, origin);
-  instr.data.const_value.kind = MIR_CONST_KIND_FLOAT;
-  instr.data.const_value.as.float_value = value;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_const(
+      builder,
+      (MirConst){.kind = MIR_CONST_KIND_FLOAT, .as.float_value = value}, type,
+      origin);
 }
 
 MirValueId mir_const_double(MirBuilder *builder, Type *type, Ast *origin,
                             double value) {
-  MirInstr instr = mir_make_instr(MIR_CONST, type, origin);
-  instr.data.const_value.kind = MIR_CONST_KIND_DOUBLE;
-  instr.data.const_value.as.double_value = value;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_const(
+      builder,
+      (MirConst){.kind = MIR_CONST_KIND_DOUBLE, .as.double_value = value}, type,
+      origin);
 }
 
 MirValueId mir_const_char(MirBuilder *builder, Type *type, Ast *origin,
                           char value) {
-  MirInstr instr = mir_make_instr(MIR_CONST, type, origin);
-  instr.data.const_value.kind = MIR_CONST_KIND_CHAR;
-  instr.data.const_value.as.char_value = value;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_const(
+      builder, (MirConst){.kind = MIR_CONST_KIND_CHAR, .as.char_value = value},
+      type, origin);
 }
 
 MirValueId mir_const_bool(MirBuilder *builder, Type *type, Ast *origin,
                           bool value) {
-  MirInstr instr = mir_make_instr(MIR_CONST, type, origin);
-  instr.data.const_value.kind = MIR_CONST_KIND_BOOL;
-  instr.data.const_value.as.bool_value = value;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_const(
+      builder, (MirConst){.kind = MIR_CONST_KIND_BOOL, .as.bool_value = value},
+      type, origin);
 }
 
 MirValueId mir_const_string(MirBuilder *builder, Type *type, Ast *origin,
                             const char *chars, size_t len) {
-  MirInstr instr = mir_make_instr(MIR_CONST, type, origin);
-  instr.data.const_value.kind = MIR_CONST_KIND_STRING;
   if (!chars) {
     len = 0;
   }
-  instr.data.const_value.as.string_value.chars =
-      builder && builder->fn && chars
-          ? mir_arena_strndup(builder->fn->arena, chars, len)
-          : NULL;
-  instr.data.const_value.as.string_value.len = len;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_const(
+      builder,
+      (MirConst){
+          .kind = MIR_CONST_KIND_STRING,
+          .as.string_value =
+              {
+                  .chars =
+                      builder && builder->fn && chars
+                          ? mir_arena_strndup(builder->fn->arena, chars, len)
+                          : NULL,
+                  .len = len,
+              },
+      },
+      type, origin);
 }
 
 MirValueId mir_const_void(MirBuilder *builder, Type *type, Ast *origin) {
-  MirInstr instr = mir_make_instr(MIR_CONST, type, origin);
-  instr.data.const_value.kind = MIR_CONST_KIND_VOID;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_const(builder, (MirConst){.kind = MIR_CONST_KIND_VOID}, type,
+                        origin);
 }
 
 MirValueId mir_const_undef(MirBuilder *builder, Type *type, Ast *origin) {
-  MirInstr instr = mir_make_instr(MIR_CONST, type, origin);
-  instr.data.const_value.kind = MIR_CONST_KIND_UNDEF;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_const(builder, (MirConst){.kind = MIR_CONST_KIND_UNDEF}, type,
+                        origin);
 }
 
 static MirValueId mir_extract_field(MirBuilder *builder, Type *type,
@@ -1715,8 +1842,8 @@ static Type *mir_coroutine_instance_yield_type(Type *type) {
   return type->data.T_CONS.args[0];
 }
 
-MirValueId mir_coro_next(MirBuilder *builder, Ast *origin,
-                         MirValueId coroutine, Type *coroutine_type) {
+MirValueId mir_coro_next(MirBuilder *builder, Ast *origin, MirValueId coroutine,
+                         Type *coroutine_type) {
   Type *yield_type = mir_coroutine_instance_yield_type(coroutine_type);
   if (!builder || coroutine == MIR_NO_VALUE || !yield_type) {
     return MIR_NO_VALUE;
@@ -1724,9 +1851,7 @@ MirValueId mir_coro_next(MirBuilder *builder, Ast *origin,
 
   MirInstr instr =
       mir_make_instr(MIR_CORO_NEXT, create_option_type(yield_type), origin);
-  instr.data.call.callee = coroutine;
-  instr.data.call.callee_type = coroutine_type;
-  instr.data.call.specialized_fn = MIR_NO_FUNCTION;
+  mir_emit_call_init(&instr, coroutine, NULL, coroutine_type);
   return mir_builder_append_instr(builder, instr);
 }
 
@@ -1738,9 +1863,7 @@ MirValueId mir_coro_reset(MirBuilder *builder, Ast *origin,
   }
 
   MirInstr instr = mir_make_instr(MIR_CORO_RESET, coroutine_type, origin);
-  instr.data.call.callee = coroutine;
-  instr.data.call.callee_type = coroutine_type;
-  instr.data.call.specialized_fn = MIR_NO_FUNCTION;
+  mir_emit_call_init(&instr, coroutine, NULL, coroutine_type);
   return mir_builder_append_instr(builder, instr);
 }
 
@@ -1968,23 +2091,13 @@ MirValueId mir_phi(MirBuilder *builder, Type *type, Ast *origin,
 
 MirValueId mir_tuple(MirBuilder *builder, Type *type, Ast *origin,
                      MirValueIdVec items) {
-  MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
-  instr.data.construct.kind = MIR_CONSTRUCT_TUPLE;
-  instr.data.construct.items = items;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_construct_items(builder, MIR_CONSTRUCT_TUPLE, type, origin,
+                                  items);
 }
 
 MirValueId mir_tuple_get(MirBuilder *builder, Type *type, Ast *origin,
                          MirValueId tuple, size_t index) {
-  if (tuple == MIR_NO_VALUE) {
-    return MIR_NO_VALUE;
-  }
-
-  MirInstr instr = mir_make_instr(MIR_EXTRACT, type, origin);
-  instr.data.extract.kind = MIR_EXTRACT_FIELD;
-  instr.data.extract.value = tuple;
-  instr.data.extract.index = index;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_extract_field(builder, type, origin, tuple, index, NULL);
 }
 
 MirValueId mir_variant(MirBuilder *builder, Type *type, Ast *origin,
@@ -1993,7 +2106,6 @@ MirValueId mir_variant(MirBuilder *builder, Type *type, Ast *origin,
   if (!constructor_type || constructor_index < 0 || !constructor_name) {
     return MIR_NO_VALUE;
   }
-
   MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
   instr.data.construct.kind = MIR_CONSTRUCT_VARIANT;
   instr.data.construct.constructor_type = constructor_type;
@@ -2004,14 +2116,8 @@ MirValueId mir_variant(MirBuilder *builder, Type *type, Ast *origin,
 }
 
 MirValueId mir_variant_tag(MirBuilder *builder, Ast *origin, MirValueId value) {
-  if (value == MIR_NO_VALUE) {
-    return MIR_NO_VALUE;
-  }
-
-  MirInstr instr = mir_make_instr(MIR_EXTRACT, &t_char, origin);
-  instr.data.extract.kind = MIR_EXTRACT_VARIANT_TAG;
-  instr.data.extract.value = value;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_extract(builder, MIR_EXTRACT_VARIANT_TAG, &t_char, origin,
+                          value);
 }
 
 MirValueId mir_tag_eq(MirBuilder *builder, Ast *origin, MirValueId tag,
@@ -2019,7 +2125,6 @@ MirValueId mir_tag_eq(MirBuilder *builder, Ast *origin, MirValueId tag,
   if (tag == MIR_NO_VALUE || constructor_index < 0) {
     return MIR_NO_VALUE;
   }
-
   MirInstr instr = mir_make_instr(MIR_OP, &t_bool, origin);
   instr.data.op.kind = MIR_OP_KIND_TAG_EQ;
   instr.data.op.argc = 1;
@@ -2036,7 +2141,6 @@ MirValueId mir_variant_payload(MirBuilder *builder, Ast *origin,
   if (value == MIR_NO_VALUE || !constructor_type || constructor_index < 0) {
     return MIR_NO_VALUE;
   }
-
   MirInstr instr = mir_make_instr(MIR_EXTRACT, constructor_type, origin);
   instr.data.extract.kind = MIR_EXTRACT_VARIANT_PAYLOAD;
   instr.data.extract.value = value;
@@ -2050,61 +2154,38 @@ MirValueId mir_list_empty(MirBuilder *builder, Type *type, Ast *origin) {
   if (!type || !is_list_type(type)) {
     return MIR_NO_VALUE;
   }
-
-  MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
-  instr.data.construct.kind = MIR_CONSTRUCT_LIST_EMPTY;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_construct(builder, MIR_CONSTRUCT_LIST_EMPTY, type, origin);
 }
 
 MirValueId mir_list_cons(MirBuilder *builder, Type *type, Ast *origin,
                          MirValueId head, MirValueId tail) {
-  if (!type || !is_list_type(type) || head == MIR_NO_VALUE ||
-      tail == MIR_NO_VALUE) {
+  if (!type || !is_list_type(type)) {
     return MIR_NO_VALUE;
   }
-
-  MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
-  instr.data.construct.kind = MIR_CONSTRUCT_LIST_CONS;
-  instr.data.construct.operands[0] = head;
-  instr.data.construct.operands[1] = tail;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_construct_ops2(builder, MIR_CONSTRUCT_LIST_CONS, type, origin,
+                                 head, tail);
 }
 
 MirValueId mir_list_is_empty(MirBuilder *builder, Ast *origin,
                              MirValueId list) {
-  if (list == MIR_NO_VALUE) {
-    return MIR_NO_VALUE;
-  }
-
-  MirInstr instr = mir_make_instr(MIR_OP, &t_bool, origin);
-  instr.data.op.kind = MIR_OP_KIND_LIST_IS_EMPTY;
-  instr.data.op.argc = 1;
-  instr.data.op.operands[0] = list;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_op1(builder, MIR_OP_KIND_LIST_IS_EMPTY, &t_bool, origin,
+                      list);
 }
 
 MirValueId mir_list_head(MirBuilder *builder, Type *type, Ast *origin,
                          MirValueId list) {
-  if (list == MIR_NO_VALUE || !type) {
+  if (!type) {
     return MIR_NO_VALUE;
   }
-
-  MirInstr instr = mir_make_instr(MIR_EXTRACT, type, origin);
-  instr.data.extract.kind = MIR_EXTRACT_LIST_HEAD;
-  instr.data.extract.value = list;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_extract(builder, MIR_EXTRACT_LIST_HEAD, type, origin, list);
 }
 
 MirValueId mir_list_tail(MirBuilder *builder, Type *type, Ast *origin,
                          MirValueId list) {
-  if (list == MIR_NO_VALUE || !type || !is_list_type(type)) {
+  if (!type || !is_list_type(type)) {
     return MIR_NO_VALUE;
   }
-
-  MirInstr instr = mir_make_instr(MIR_EXTRACT, type, origin);
-  instr.data.extract.kind = MIR_EXTRACT_LIST_TAIL;
-  instr.data.extract.value = list;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_extract(builder, MIR_EXTRACT_LIST_TAIL, type, origin, list);
 }
 
 MirValueId mir_primitive_cast(MirBuilder *builder, Type *from_type,
@@ -2112,7 +2193,6 @@ MirValueId mir_primitive_cast(MirBuilder *builder, Type *from_type,
   if (value == MIR_NO_VALUE) {
     return MIR_NO_VALUE;
   }
-
   MirInstr instr = mir_make_instr(MIR_OP, to_type, origin);
   instr.data.op.kind = MIR_OP_KIND_CAST;
   instr.data.op.argc = 1;
@@ -2127,7 +2207,6 @@ MirValueId mir_fn_ref(MirBuilder *builder, Type *type, Ast *origin,
   if (!fn) {
     return MIR_NO_VALUE;
   }
-
   MirInstr instr = mir_make_instr(MIR_FN_REF, type, origin);
   instr.data.fn_ref.fn = fn->id;
   instr.data.fn_ref.name = fn->name;
@@ -2136,31 +2215,20 @@ MirValueId mir_fn_ref(MirBuilder *builder, Type *type, Ast *origin,
 
 MirValueId mir_ptr_offset(MirBuilder *builder, Type *ptr_type, Ast *origin,
                           MirValueId ptr, MirValueId index) {
-  if (!builder || !ptr_type || !is_pointer_type(ptr_type) ||
-      ptr == MIR_NO_VALUE || index == MIR_NO_VALUE) {
+  if (!builder || !ptr_type || !is_pointer_type(ptr_type)) {
     return MIR_NO_VALUE;
   }
-
-  MirInstr instr = mir_make_instr(MIR_OP, ptr_type, origin);
-  instr.data.op.kind = MIR_OP_KIND_PTR_OFFSET;
-  instr.data.op.argc = 2;
-  instr.data.op.operands[0] = ptr;
-  instr.data.op.operands[1] = index;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_op2(builder, MIR_OP_KIND_PTR_OFFSET, ptr_type, origin, ptr,
+                      index);
 }
 
 static MirValueId mir_ptr_load_with_kind(MirBuilder *builder, MirOpKind kind,
                                          Type *type, Ast *origin,
                                          MirValueId ptr) {
-  if (!builder || !type || ptr == MIR_NO_VALUE) {
+  if (!builder || !type) {
     return MIR_NO_VALUE;
   }
-
-  MirInstr instr = mir_make_instr(MIR_OP, type, origin);
-  instr.data.op.kind = kind;
-  instr.data.op.argc = 1;
-  instr.data.op.operands[0] = ptr;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_op1(builder, kind, type, origin, ptr);
 }
 
 MirValueId mir_ptr_load(MirBuilder *builder, Type *type, Ast *origin,
@@ -2176,16 +2244,10 @@ MirValueId mir_ptr_load_owned(MirBuilder *builder, Type *type, Ast *origin,
 
 MirValueId mir_ptr_store(MirBuilder *builder, Ast *origin, MirValueId ptr,
                          MirValueId value) {
-  if (!builder || ptr == MIR_NO_VALUE || value == MIR_NO_VALUE) {
+  if (!builder) {
     return MIR_NO_VALUE;
   }
-
-  MirInstr instr = mir_make_instr(MIR_OP, &t_void, origin);
-  instr.data.op.kind = MIR_OP_KIND_STORE;
-  instr.data.op.argc = 2;
-  instr.data.op.operands[0] = ptr;
-  instr.data.op.operands[1] = value;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_op2(builder, MIR_OP_KIND_STORE, &t_void, origin, ptr, value);
 }
 
 static MirValueId mir_closure_env(MirBuilder *builder, Type *type, Ast *origin,
@@ -2193,11 +2255,8 @@ static MirValueId mir_closure_env(MirBuilder *builder, Type *type, Ast *origin,
   if (!builder || !type) {
     return MIR_NO_VALUE;
   }
-
-  MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
-  instr.data.construct.kind = MIR_CONSTRUCT_CLOSURE_ENV;
-  instr.data.construct.items = fields;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_construct_items(builder, MIR_CONSTRUCT_CLOSURE_ENV, type,
+                                  origin, fields);
 }
 
 static MirValueId mir_closure(MirBuilder *builder, Type *type, Ast *origin,
@@ -2207,7 +2266,6 @@ static MirValueId mir_closure(MirBuilder *builder, Type *type, Ast *origin,
       !impl_fn) {
     return MIR_NO_VALUE;
   }
-
   MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
   instr.data.construct.kind = MIR_CONSTRUCT_CLOSURE;
   instr.data.construct.operands[0] = fn;
@@ -2220,40 +2278,28 @@ static MirValueId mir_closure(MirBuilder *builder, Type *type, Ast *origin,
 static MirValueId mir_extract_field(MirBuilder *builder, Type *type,
                                     Ast *origin, MirValueId value, size_t index,
                                     const char *name) {
-  if (!builder || !type || value == MIR_NO_VALUE) {
+  if (!builder || !type) {
     return MIR_NO_VALUE;
   }
-
-  MirInstr instr = mir_make_instr(MIR_EXTRACT, type, origin);
-  instr.data.extract.kind = MIR_EXTRACT_FIELD;
-  instr.data.extract.value = value;
-  instr.data.extract.index = index;
-  instr.data.extract.name = name;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_extract_field(builder, type, origin, value, index, name);
 }
 
 static MirValueId mir_closure_fn(MirBuilder *builder, Type *type, Ast *origin,
                                  MirValueId closure) {
-  if (!builder || !type || closure == MIR_NO_VALUE) {
+  if (!builder || !type) {
     return MIR_NO_VALUE;
   }
-
-  MirInstr instr = mir_make_instr(MIR_EXTRACT, type, origin);
-  instr.data.extract.kind = MIR_EXTRACT_CLOSURE_FN;
-  instr.data.extract.value = closure;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_extract(builder, MIR_EXTRACT_CLOSURE_FN, type, origin,
+                          closure);
 }
 
 static MirValueId mir_closure_get_env(MirBuilder *builder, Type *type,
                                       Ast *origin, MirValueId closure) {
-  if (!builder || !type || closure == MIR_NO_VALUE) {
+  if (!builder || !type) {
     return MIR_NO_VALUE;
   }
-
-  MirInstr instr = mir_make_instr(MIR_EXTRACT, type, origin);
-  instr.data.extract.kind = MIR_EXTRACT_CLOSURE_ENV;
-  instr.data.extract.value = closure;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_extract(builder, MIR_EXTRACT_CLOSURE_ENV, type, origin,
+                          closure);
 }
 
 MirValueId mir_primitive_instr(MirBuilder *builder, MirPrimitiveOp op,
@@ -2292,76 +2338,67 @@ static MirValueId mir_primitive_binary(MirBuilder *builder, MirPrimitiveOp op,
   return mir_primitive_instr(builder, op, type, origin, operands, 2);
 }
 
+// Primitive arithmetic/equality wrappers. Each forwards to
+// mir_primitive_binary (or mir_primitive_unary for lnot) with the matching
+// MirPrimitiveOp; kept as named entry points so call sites read naturally and
+// the result type is fixed for the comparison ops.
+
 MirValueId mir_iadd(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_IADD, type, origin, lhs, rhs);
 }
-
 MirValueId mir_uadd(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_UADD, type, origin, lhs, rhs);
 }
-
 MirValueId mir_fadd(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_FADD, type, origin, lhs, rhs);
 }
-
 MirValueId mir_isub(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_ISUB, type, origin, lhs, rhs);
 }
-
 MirValueId mir_usub(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_USUB, type, origin, lhs, rhs);
 }
-
 MirValueId mir_fsub(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_FSUB, type, origin, lhs, rhs);
 }
-
 MirValueId mir_imul(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_IMUL, type, origin, lhs, rhs);
 }
-
 MirValueId mir_umul(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_UMUL, type, origin, lhs, rhs);
 }
-
 MirValueId mir_fmul(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_FMUL, type, origin, lhs, rhs);
 }
-
 MirValueId mir_idiv(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_IDIV, type, origin, lhs, rhs);
 }
-
 MirValueId mir_udiv(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_UDIV, type, origin, lhs, rhs);
 }
-
 MirValueId mir_fdiv(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_FDIV, type, origin, lhs, rhs);
 }
-
 MirValueId mir_imod(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_IMOD, type, origin, lhs, rhs);
 }
-
 MirValueId mir_umod(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_UMOD, type, origin, lhs, rhs);
 }
-
 MirValueId mir_fmod(MirBuilder *builder, Type *type, Ast *origin,
                     MirValueId lhs, MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_FMOD, type, origin, lhs, rhs);
@@ -2371,22 +2408,18 @@ MirValueId mir_ieq(MirBuilder *builder, Ast *origin, MirValueId lhs,
                    MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_IEQ, &t_bool, origin, lhs, rhs);
 }
-
 MirValueId mir_ueq(MirBuilder *builder, Ast *origin, MirValueId lhs,
                    MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_UEQ, &t_bool, origin, lhs, rhs);
 }
-
 MirValueId mir_feq(MirBuilder *builder, Ast *origin, MirValueId lhs,
                    MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_FEQ, &t_bool, origin, lhs, rhs);
 }
-
 MirValueId mir_ceq(MirBuilder *builder, Ast *origin, MirValueId lhs,
                    MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_CEQ, &t_bool, origin, lhs, rhs);
 }
-
 MirValueId mir_beq(MirBuilder *builder, Ast *origin, MirValueId lhs,
                    MirValueId rhs) {
   return mir_primitive_binary(builder, MIR_OP_BEQ, &t_bool, origin, lhs, rhs);
@@ -3841,10 +3874,7 @@ static MirFunction *mir_materialize_builtin_function(MirProgram *program,
 
   MirInstr call =
       mir_make_instr(MIR_CALL, fn_return_type(builtin->type), origin);
-  call.data.call.callee = MIR_NO_VALUE;
-  call.data.call.builtin = builtin;
-  call.data.call.callee_type = builtin->type;
-  call.data.call.specialized_fn = MIR_NO_FUNCTION;
+  mir_emit_call_init(&call, MIR_NO_VALUE, builtin, builtin->type);
 
   size_t index = 0;
   for (Type *cursor = builtin->type; cursor && cursor->kind == T_FN;
@@ -3949,9 +3979,6 @@ mir_append_curried_inner_call(MirBuilder *wrapper_builder, Ast *origin,
   }
 
   MirInstr call = mir_make_instr(MIR_CALL, result_type, origin);
-  call.data.call.callee = callee_ref;
-  call.data.call.builtin = NULL;
-  call.data.call.specialized_fn = MIR_NO_FUNCTION;
   call.data.call.operands = operands;
   call.data.call.operand_uses = (MirOperandUseVec){0};
   for (size_t i = 0; i < operands.len; i++) {
@@ -3959,9 +3986,10 @@ mir_append_curried_inner_call(MirBuilder *wrapper_builder, Ast *origin,
                              &call.data.call.operand_uses,
                              MIR_OPERAND_USE_CONSUME);
   }
-  call.data.call.callee_type =
-      mir_fn_type_from_args(wrapper_builder->program->arena, operand_types,
-                            operand_count, result_type);
+  mir_emit_call_init(&call, callee_ref, NULL,
+                     mir_fn_type_from_args(wrapper_builder->program->arena,
+                                           operand_types, operand_count,
+                                           result_type));
   mir_specialize_call_fn_ref_operands(wrapper_builder, &call);
   call.data.call.specialized_name =
       mir_call_specialized_name(wrapper_builder, &call);
@@ -4099,18 +4127,14 @@ void mir_prepare_call(MirBuilder *builder, MirInstr *call) {
 MirValueId mir_call_value(MirBuilder *builder, Type *type, Ast *origin,
                           MirValueId callee, Type *callee_type,
                           const MirValueId *args, size_t argc) {
-  if (!builder || !builder->program || !builder->fn ||
-      callee == MIR_NO_VALUE || !callee_type || callee_type->kind != T_FN ||
-      (argc > 0 && !args)) {
+  if (!builder || !builder->program || !builder->fn || callee == MIR_NO_VALUE ||
+      !callee_type || callee_type->kind != T_FN || (argc > 0 && !args)) {
     return MIR_NO_VALUE;
   }
 
   MirInstr call = mir_make_instr(MIR_CALL, type, origin);
   MirArena *arena = builder->fn->arena;
-  call.data.call.callee = callee;
-  call.data.call.builtin = NULL;
-  call.data.call.callee_type = callee_type;
-  call.data.call.specialized_fn = MIR_NO_FUNCTION;
+  mir_emit_call_init(&call, callee, NULL, callee_type);
 
   if (is_closure(callee_type) && callee_type->closure_meta) {
     MirInstr *callee_def = mir_function_find_def_instr(builder->fn, callee);
@@ -4420,11 +4444,9 @@ MirValueId mir_application(MirBuilder *builder, Type *type, Ast *ast,
   MirInstr call = mir_make_instr(MIR_CALL, type, ast);
   MirArena *arena = builder->fn->arena;
 
-  call.data.call.callee = MIR_NO_VALUE;
-  call.data.call.builtin = builtin;
-  call.data.call.specialized_fn = MIR_NO_FUNCTION;
-  call.data.call.callee_type =
-      mir_application_expected_callee_type(arena, ast, function_type);
+  mir_emit_call_init(
+      &call, MIR_NO_VALUE, builtin,
+      mir_application_expected_callee_type(arena, ast, function_type));
   if (!builtin) {
     MirValueId callee_value =
         mir_expr(builder, ast->data.AST_APPLICATION.function, ctx);
@@ -4724,7 +4746,8 @@ static const char *mir_global_storage_name(MirBuilder *builder, MirCtx *ctx,
     return NULL;
   }
 
-  const char *qualified = mir_qualified_symbol_name(builder->program, ctx, name);
+  const char *qualified =
+      mir_qualified_symbol_name(builder->program, ctx, name);
   if (!qualified) {
     return NULL;
   }
@@ -4744,9 +4767,8 @@ static MirValueId mir_global_load(MirBuilder *builder, Type *type, Ast *origin,
   return mir_builder_append_instr(builder, instr);
 }
 
-static MirValueId mir_global_store(MirBuilder *builder, Type *type,
-                                   Ast *origin, const char *global_name,
-                                   MirValueId value) {
+static MirValueId mir_global_store(MirBuilder *builder, Type *type, Ast *origin,
+                                   const char *global_name, MirValueId value) {
   if (!builder || !global_name || value == MIR_NO_VALUE) {
     return MIR_NO_VALUE;
   }
@@ -4860,8 +4882,7 @@ static bool mir_export_fn_ref_binding(MirBuilder *builder, MirCtx *ctx,
 }
 
 static bool mir_export_expr_binding(MirBuilder *builder, MirCtx *ctx,
-                                    Ast *binding, Ast *expr,
-                                    MirValueId value) {
+                                    Ast *binding, Ast *expr, MirValueId value) {
   if (!mir_ctx_should_export(ctx, binding) || !expr) {
     return true;
   }
@@ -4876,9 +4897,8 @@ static bool mir_export_expr_binding(MirBuilder *builder, MirCtx *ctx,
 
   const char *name = mir_identifier_name(binding);
   const char *global_name = mir_global_storage_name(builder, ctx, name);
-  if (!global_name ||
-      mir_global_store(builder, type, expr, global_name, value) ==
-          MIR_NO_VALUE) {
+  if (!global_name || mir_global_store(builder, type, expr, global_name,
+                                       value) == MIR_NO_VALUE) {
     return false;
   }
 
@@ -5021,9 +5041,64 @@ static bool mir_bind_specialized_module_param(MirBuilder *builder,
                                   arg_ast, true);
 }
 
-static MirValueId
-mir_specialized_module_binding_value(MirBuilder *builder, Ast *ast,
-                                     MirCtx *ctx) {
+static MirFunction *mir_build_module_init_fn(MirBuilder *parent_builder,
+                                             MirModule *module, Ast *module_ast,
+                                             MirCtx *module_ctx) {
+  if (!parent_builder || !parent_builder->program || !module || !module_ast ||
+      !module_ctx) {
+    return NULL;
+  }
+
+  const char *init_name =
+      mir_arena_printf(parent_builder->program->arena, "$%s_module_init",
+                       module->name ? module->name : "");
+  Type *init_type = type_fn(&t_void, &t_void);
+  MirFunction *init_fn = mir_program_add_function(
+      parent_builder->program, init_name, init_type, module_ast);
+  if (!init_fn) {
+    return NULL;
+  }
+  module->init = init_fn->id;
+
+  MirBlock *entry = mir_function_add_block(init_fn, "entry");
+  if (!entry) {
+    return NULL;
+  }
+
+  MirBuilder init_builder;
+  mir_builder_init(&init_builder, parent_builder->program, init_fn);
+  mir_builder_position_at_end(&init_builder, entry);
+
+  if (!mir_compile_module_body(&init_builder, module_ast, module_ctx)) {
+    return NULL;
+  }
+
+  if (init_builder.block && init_builder.block->term.kind == MIR_TERM_NONE) {
+    mir_builder_set_return(&init_builder,
+                           mir_const_void(&init_builder, &t_void, module_ast));
+  }
+
+  return init_fn;
+}
+
+static bool mir_emit_call_to_fn(MirBuilder *builder, MirFunction *callee,
+                                Ast *origin) {
+  if (!builder || !builder->program || !callee || !origin) {
+    return false;
+  }
+
+  MirValueId callee_ref = mir_fn_ref(builder, callee->type, origin, callee);
+  if (callee_ref == MIR_NO_VALUE) {
+    return false;
+  }
+  MirInstr call = mir_make_instr(MIR_CALL, &t_void, origin);
+  mir_emit_call_init(&call, callee_ref, NULL, callee->type);
+  mir_call_apply_callee_summary(builder, &call);
+  return mir_builder_append_instr(builder, call) != MIR_NO_VALUE;
+}
+
+static MirValueId mir_specialized_module_binding_value(MirBuilder *builder,
+                                                       Ast *ast, MirCtx *ctx) {
   if (!builder || !builder->program || !ast || ast->tag != AST_LET || !ctx ||
       !ast->data.AST_LET.binding ||
       ast->data.AST_LET.binding->tag != AST_IDENTIFIER ||
@@ -5045,10 +5120,9 @@ mir_specialized_module_binding_value(MirBuilder *builder, Ast *ast,
     return MIR_NO_VALUE;
   }
 
-  const char *local_name =
-      ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
-  const char *module_name = mir_qualified_symbol_name(builder->program, ctx,
-                                                      local_name);
+  const char *local_name = ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+  const char *module_name =
+      mir_qualified_symbol_name(builder->program, ctx, local_name);
   Type *module_type = ast->data.AST_LET.binding->type
                           ? ast->data.AST_LET.binding->type
                           : mir_module_result_type(app->type);
@@ -5065,7 +5139,6 @@ mir_specialized_module_binding_value(MirBuilder *builder, Ast *ast,
   if (!module) {
     return MIR_NO_VALUE;
   }
-  module->init = builder->fn ? builder->fn->id : MIR_NO_FUNCTION;
 
   MirSymbol *module_symbol =
       mir_symbol_new(builder->program->arena, MIR_SYMBOL_MODULE, module_type,
@@ -5112,7 +5185,9 @@ mir_specialized_module_binding_value(MirBuilder *builder, Ast *ast,
     arg_i++;
   }
 
-  if (!mir_compile_module_body(builder, generic->as.expr, &module_ctx)) {
+  MirFunction *init_fn =
+      mir_build_module_init_fn(builder, module, generic->as.expr, &module_ctx);
+  if (!init_fn || !mir_emit_call_to_fn(builder, init_fn, ast)) {
     return MIR_NO_VALUE;
   }
 
@@ -5121,13 +5196,12 @@ mir_specialized_module_binding_value(MirBuilder *builder, Ast *ast,
 
 static bool mir_is_specialized_module_binding_expr(MirBuilder *builder,
                                                    Ast *expr, MirCtx *ctx) {
-  if (!builder || !builder->program || !expr ||
-      expr->tag != AST_APPLICATION) {
+  if (!builder || !builder->program || !expr || expr->tag != AST_APPLICATION) {
     return false;
   }
 
-  Ast *app = mir_application_flatten_if_saturated(builder->program->arena,
-                                                  expr);
+  Ast *app =
+      mir_application_flatten_if_saturated(builder->program->arena, expr);
   if (!app || app->tag != AST_APPLICATION) {
     return false;
   }
@@ -5196,7 +5270,9 @@ static MirValueId mir_module_binding_value(MirBuilder *builder, Ast *ast,
       .export_bindings = true,
   };
 
-  if (!mir_compile_module_body(builder, module_ast, &module_ctx)) {
+  MirFunction *init_fn =
+      mir_build_module_init_fn(builder, module, module_ast, &module_ctx);
+  if (!init_fn || !mir_emit_call_to_fn(builder, init_fn, ast)) {
     return MIR_NO_VALUE;
   }
 
@@ -5240,7 +5316,6 @@ static MirValueId mir_import_value(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
     return MIR_NO_VALUE;
   }
   module->path = mir_arena_strdup(builder->program->arena, import_path);
-  module->init = builder->fn ? builder->fn->id : MIR_NO_FUNCTION;
 
   MirSymbol *symbol =
       mir_symbol_new(builder->program->arena, MIR_SYMBOL_MODULE, module->type,
@@ -5266,7 +5341,17 @@ static MirValueId mir_import_value(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
       .export_bindings = true,
   };
 
-  if (!mir_compile_module_body(builder, imported->ast, &module_ctx)) {
+  MirFunction *init_fn = NULL;
+  if (imported->ref) {
+    init_fn = (MirFunction *)imported->ref;
+  } else {
+    init_fn =
+        mir_build_module_init_fn(builder, module, imported->ast, &module_ctx);
+    if (init_fn) {
+      imported->ref = init_fn;
+    }
+  }
+  if (!init_fn || !mir_emit_call_to_fn(builder, init_fn, ast)) {
     return MIR_NO_VALUE;
   }
 
@@ -5286,6 +5371,9 @@ static MirValueId mir_let_value(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
   Ast *expr = ast->data.AST_LET.expr;
 
   if (expr && expr->tag == AST_MODULE) {
+    if (ylc_config.test_mode && mir_is_test_binding(ast)) {
+      return mir_const_void(builder, &t_void, ast);
+    }
     return mir_module_binding_value(builder, ast, ctx);
   } else if (expr && expr->tag == AST_APPLICATION) {
     MirValueId module_value =
@@ -7353,9 +7441,9 @@ static void dump_instr(FILE *stream, const MirFunction *fn,
       }
       break;
     case MIR_OP_KIND_GLOBAL_LOAD:
-      fprintf(stream, " @%s", instr->data.op.global_name
-                                  ? instr->data.op.global_name
-                                  : "<global>");
+      fprintf(stream, " @%s",
+              instr->data.op.global_name ? instr->data.op.global_name
+                                         : "<global>");
       if (instr->type) {
         fputs(STYLE_DIM " : ", stream);
         print_type_to_stream(instr->type, stream);
@@ -7363,9 +7451,9 @@ static void dump_instr(FILE *stream, const MirFunction *fn,
       }
       break;
     case MIR_OP_KIND_GLOBAL_STORE:
-      fprintf(stream, " @%s", instr->data.op.global_name
-                                  ? instr->data.op.global_name
-                                  : "<global>");
+      fprintf(stream, " @%s",
+              instr->data.op.global_name ? instr->data.op.global_name
+                                         : "<global>");
       for (size_t i = 0; i < instr->data.op.argc; i++) {
         fputs(", ", stream);
         dump_value(stream, instr->data.op.operands[i]);
@@ -7691,43 +7779,57 @@ void dump_function(FILE *stream, const MirFunction *fn) {
 }
 
 static bool mir_build_test_top(MirProgram *program, Ast *prog,
-                               MirCtx *root_ctx) {
+                               MirCtx *root_ctx, MirBuilder *builder) {
   Ast *test_module = mir_get_test_module_ast(prog);
   AstList *stmts =
       mir_test_module_stmts(program ? program->arena : NULL, test_module);
-  if (!program || !root_ctx || !test_module || !stmts) {
+  if (!program || !root_ctx || !builder || !builder->fn || !test_module ||
+      !stmts) {
     return false;
   }
 
-  MirFunction *top = mir_program_add_function(program, "$top", &t_bool, prog);
-  MirBlock *entry = mir_function_add_block(top, "entry");
-  if (!top || !entry) {
+  const char *module_name =
+      mir_qualified_symbol_name(program, root_ctx, "test");
+  MirModule *module = mir_program_add_module(program, module_name,
+                                              test_module->type, test_module,
+                                              root_ctx->current_module);
+  if (!module) {
     return false;
   }
 
-  MirBuilder builder;
-  mir_builder_init(&builder, program, top);
-  mir_builder_position_at_end(&builder, entry);
-
-  ht test_table;
-  MirStackFrame test_frame;
-  mir_stack_frame_init(program->arena, &test_table, &test_frame, NULL);
-  MirModuleId test_module_id = root_ctx->current_module;
-  MirSymbol *test_symbol =
-      mir_module_lookup_symbol(program, root_ctx->current_module, "test", true);
-  if (test_symbol && test_symbol->kind == MIR_SYMBOL_MODULE) {
-    test_module_id = test_symbol->as.module;
+  MirSymbol *symbol = mir_symbol_new(program->arena, MIR_SYMBOL_MODULE,
+                                     test_module->type, test_module,
+                                     root_ctx->current_module);
+  if (!symbol) {
+    return false;
   }
-  MirCtx test_ctx = {
+  symbol->as.module = module->id;
+  if (!mir_bind_export_symbol(builder, root_ctx, "test", symbol)) {
+    return false;
+  }
+
+  ht module_table;
+  MirStackFrame module_frame;
+  mir_stack_frame_init(program->arena, &module_table, &module_frame, NULL);
+  MirCtx module_ctx = {
       .env = root_ctx->env,
-      .frame = &test_frame,
-      .current_module = test_module_id,
-      .export_bindings = false,
+      .frame = &module_frame,
+      .current_module = module->id,
+      .export_bindings = true,
   };
 
-  MirValueId result = mir_const_bool(&builder, &t_bool, test_module, true);
+  MirFunction *init_fn =
+      mir_build_module_init_fn(builder, module, test_module, &module_ctx);
+  if (!init_fn || !mir_emit_call_to_fn(builder, init_fn, test_module)) {
+    mir_builder_set_unreachable_if_open(builder);
+    return false;
+  }
+
+  MirModuleId test_module_id = module->id;
+
+  MirValueId result = mir_const_bool(builder, &t_bool, test_module, true);
   if (result == MIR_NO_VALUE) {
-    mir_builder_set_unreachable_if_open(&builder);
+    mir_builder_set_unreachable_if_open(builder);
     return false;
   }
 
@@ -7738,18 +7840,18 @@ static bool mir_build_test_top(MirProgram *program, Ast *prog,
   MirFunction *report_totals_fn = mir_program_add_extern_function(
       program, "_report_test_totals", report_totals_type, test_module);
   if (!report_result_fn || !report_totals_fn) {
-    mir_builder_set_unreachable_if_open(&builder);
+    mir_builder_set_unreachable_if_open(builder);
     return false;
   }
   MirValueId report_result_ref =
-      mir_fn_ref(&builder, report_result_type, test_module, report_result_fn);
+      mir_fn_ref(builder, report_result_type, test_module, report_result_fn);
   MirValueId report_totals_ref =
-      mir_fn_ref(&builder, report_totals_type, test_module, report_totals_fn);
-  MirValueId num_tests = mir_const_int(&builder, &t_int, test_module, 0);
-  MirValueId num_passes = mir_const_int(&builder, &t_int, test_module, 0);
+      mir_fn_ref(builder, report_totals_type, test_module, report_totals_fn);
+  MirValueId num_tests = mir_const_int(builder, &t_int, test_module, 0);
+  MirValueId num_passes = mir_const_int(builder, &t_int, test_module, 0);
   if (report_result_ref == MIR_NO_VALUE || report_totals_ref == MIR_NO_VALUE ||
       num_tests == MIR_NO_VALUE || num_passes == MIR_NO_VALUE) {
-    mir_builder_set_unreachable_if_open(&builder);
+    mir_builder_set_unreachable_if_open(builder);
     return false;
   }
 
@@ -7759,106 +7861,95 @@ static bool mir_build_test_top(MirProgram *program, Ast *prog,
       if (stmt && stmt->tag == AST_TYPE_DECL) {
         continue;
       }
-      MirValueId setup = mir_expr(&builder, stmt, &test_ctx);
-      if (setup == MIR_NO_VALUE) {
-        mir_builder_set_unreachable_if_open(&builder);
-        return false;
-      }
       continue;
-    }
-
-    Ast *expr = stmt->data.AST_LET.expr;
-    MirValueId value = MIR_NO_VALUE;
-    if (expr && expr->tag == AST_LAMBDA) {
-      MirValueId fn_ref = mir_let(&builder, stmt, &test_ctx);
-      if (fn_ref == MIR_NO_VALUE) {
-        mir_builder_set_unreachable_if_open(&builder);
-        return false;
-      }
-
-      MirInstr call = mir_make_instr(MIR_CALL, &t_bool, stmt);
-      call.data.call.callee = fn_ref;
-      call.data.call.builtin = NULL;
-      call.data.call.specialized_fn = MIR_NO_FUNCTION;
-      call.data.call.callee_type = expr->type;
-      mir_call_apply_callee_summary(&builder, &call);
-      value = mir_builder_append_instr(&builder, call);
-    } else if (expr && types_equal(expr->type, &t_bool)) {
-      value = mir_expr(&builder, expr, &test_ctx);
-      if (value != MIR_NO_VALUE &&
-          !mir_bind_pattern(&builder, &test_ctx, stmt->data.AST_LET.binding,
-                            value, expr->type)) {
-        value = MIR_NO_VALUE;
-      }
-    }
-
-    if (value == MIR_NO_VALUE) {
-      mir_builder_set_unreachable_if_open(&builder);
-      return false;
-    }
-
-    MirValueId one = mir_const_int(&builder, &t_int, stmt, 1);
-    MirValueId pass_increment =
-        mir_primitive_cast(&builder, &t_bool, &t_int, stmt, value);
-    if (one == MIR_NO_VALUE || pass_increment == MIR_NO_VALUE) {
-      mir_builder_set_unreachable_if_open(&builder);
-      return false;
-    }
-    num_tests = mir_iadd(&builder, &t_int, stmt, num_tests, one);
-    num_passes = mir_iadd(&builder, &t_int, stmt, num_passes, pass_increment);
-    if (num_tests == MIR_NO_VALUE || num_passes == MIR_NO_VALUE) {
-      mir_builder_set_unreachable_if_open(&builder);
-      return false;
     }
 
     const char *test_name =
         stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
+    MirSymbol *member_symbol =
+        mir_module_lookup_symbol(program, test_module_id, test_name, false);
+    if (!member_symbol) {
+      mir_builder_set_unreachable_if_open(builder);
+      return false;
+    }
+
+    Type *sym_type = member_symbol->type ? member_symbol->type : &t_bool;
+    MirValueId value = MIR_NO_VALUE;
+    if (sym_type->kind == T_FN) {
+      MirValueId callee =
+          mir_symbol_to_value(builder, stmt, NULL, member_symbol, sym_type);
+      if (callee == MIR_NO_VALUE) {
+        mir_builder_set_unreachable_if_open(builder);
+        return false;
+      }
+      MirInstr call = mir_make_instr(MIR_CALL, &t_bool, stmt);
+      mir_emit_call_init(&call, callee, NULL, sym_type);
+      mir_call_apply_callee_summary(builder, &call);
+      value = mir_builder_append_instr(builder, call);
+    } else {
+      value = mir_symbol_to_value(builder, stmt, NULL, member_symbol, sym_type);
+    }
+
+    if (value == MIR_NO_VALUE) {
+      mir_builder_set_unreachable_if_open(builder);
+      return false;
+    }
+
+    MirValueId one = mir_const_int(builder, &t_int, stmt, 1);
+    MirValueId pass_increment =
+        mir_primitive_cast(builder, &t_bool, &t_int, stmt, value);
+    if (one == MIR_NO_VALUE || pass_increment == MIR_NO_VALUE) {
+      mir_builder_set_unreachable_if_open(builder);
+      return false;
+    }
+    num_tests = mir_iadd(builder, &t_int, stmt, num_tests, one);
+    num_passes = mir_iadd(builder, &t_int, stmt, num_passes, pass_increment);
+    if (num_tests == MIR_NO_VALUE || num_passes == MIR_NO_VALUE) {
+      mir_builder_set_unreachable_if_open(builder);
+      return false;
+    }
+
     MirValueId name =
-        mir_const_string(&builder, &t_ptr, stmt, test_name, strlen(test_name));
+        mir_const_string(builder, &t_ptr, stmt, test_name, strlen(test_name));
     if (name == MIR_NO_VALUE) {
-      mir_builder_set_unreachable_if_open(&builder);
+      mir_builder_set_unreachable_if_open(builder);
       return false;
     }
 
     MirInstr report_call = mir_make_instr(MIR_CALL, &t_void, stmt);
-    report_call.data.call.callee = report_result_ref;
-    report_call.data.call.builtin = NULL;
-    report_call.data.call.specialized_fn = MIR_NO_FUNCTION;
-    report_call.data.call.callee_type = report_result_type;
+    mir_emit_call_init(&report_call, report_result_ref, NULL,
+                       report_result_type);
     mir_call_push_operand(program->arena, &report_call, name,
                           MIR_OPERAND_USE_BORROW);
     mir_call_push_operand(program->arena, &report_call, value,
                           MIR_OPERAND_USE_BORROW);
-    mir_call_apply_callee_summary(&builder, &report_call);
-    if (mir_builder_append_instr(&builder, report_call) == MIR_NO_VALUE) {
-      mir_builder_set_unreachable_if_open(&builder);
+    mir_call_apply_callee_summary(builder, &report_call);
+    if (mir_builder_append_instr(builder, report_call) == MIR_NO_VALUE) {
+      mir_builder_set_unreachable_if_open(builder);
       return false;
     }
 
-    result = mir_bool_and_values(&builder, stmt, result, value);
+    result = mir_bool_and_values(builder, stmt, result, value);
     if (result == MIR_NO_VALUE) {
-      mir_builder_set_unreachable_if_open(&builder);
+      mir_builder_set_unreachable_if_open(builder);
       return false;
     }
   }
 
   MirInstr totals_call = mir_make_instr(MIR_CALL, &t_void, test_module);
-  totals_call.data.call.callee = report_totals_ref;
-  totals_call.data.call.builtin = NULL;
-  totals_call.data.call.specialized_fn = MIR_NO_FUNCTION;
-  totals_call.data.call.callee_type = report_totals_type;
+  mir_emit_call_init(&totals_call, report_totals_ref, NULL, report_totals_type);
   mir_call_push_operand(program->arena, &totals_call, num_passes,
                         MIR_OPERAND_USE_BORROW);
   mir_call_push_operand(program->arena, &totals_call, num_tests,
                         MIR_OPERAND_USE_BORROW);
-  mir_call_apply_callee_summary(&builder, &totals_call);
-  if (mir_builder_append_instr(&builder, totals_call) == MIR_NO_VALUE) {
-    mir_builder_set_unreachable_if_open(&builder);
+  mir_call_apply_callee_summary(builder, &totals_call);
+  if (mir_builder_append_instr(builder, totals_call) == MIR_NO_VALUE) {
+    mir_builder_set_unreachable_if_open(builder);
     return false;
   }
 
-  if (builder.block && builder.block->term.kind == MIR_TERM_NONE) {
-    mir_builder_set_return(&builder, result);
+  if (builder->block && builder->block->term.kind == MIR_TERM_NONE) {
+    mir_builder_set_return(builder, result);
   }
   return true;
 }
@@ -7902,11 +7993,8 @@ MirProgram *mir_build_program(MirArena *arena, Ast *prog, MirCtx *ctx) {
   build_ctx.export_bindings = true;
 
   MirFunction *top = mir_program_add_function(
-      program, ylc_config.test_mode ? "$module_init" : "$top",
-      ylc_config.test_mode ? &t_void
-      : prog               ? prog->type
-                           : NULL,
-      prog);
+      program, "$top",
+      ylc_config.test_mode ? &t_bool : (prog ? prog->type : NULL), prog);
   MirBlock *entry = mir_function_add_block(top, "entry");
 
   if (!top || !entry) {
@@ -7919,15 +8007,13 @@ MirProgram *mir_build_program(MirArena *arena, Ast *prog, MirCtx *ctx) {
 
   MirValueId result = mir_expr(&builder, prog, &build_ctx);
 
-  if (result != MIR_NO_VALUE && builder.block &&
-      builder.block->term.kind == MIR_TERM_NONE) {
+  if (ylc_config.test_mode) {
+    mir_build_test_top(program, prog, &build_ctx, &builder);
+  } else if (result != MIR_NO_VALUE && builder.block &&
+             builder.block->term.kind == MIR_TERM_NONE) {
     mir_builder_set_return(&builder, result);
   } else if (result == MIR_NO_VALUE) {
     mir_builder_set_unreachable_if_open(&builder);
-  }
-
-  if (ylc_config.test_mode) {
-    mir_build_test_top(program, prog, &build_ctx);
   }
 
   return program;

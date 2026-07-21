@@ -170,10 +170,8 @@ static MirValueId mir_primitive_cast_if_needed(MirBuilder *builder,
 
 MirValueId mir_array_literal(MirBuilder *builder, Type *type, Ast *origin,
                              MirValueIdVec items) {
-  MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
-  instr.data.construct.kind = MIR_CONSTRUCT_ARRAY_LITERAL;
-  instr.data.construct.items = items;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_construct_items(builder, MIR_CONSTRUCT_ARRAY_LITERAL, type,
+                                  origin, items);
 }
 
 static MirValueId mir_array_size(MirBuilder *builder, Ast *origin,
@@ -273,28 +271,14 @@ static MirValueId mir_array_set(MirBuilder *builder, Type *type, Ast *origin,
 static MirValueId mir_array_fill_const(MirBuilder *builder, Type *type,
                                        Ast *origin, MirValueId size,
                                        MirValueId value) {
-  if (size == MIR_NO_VALUE || value == MIR_NO_VALUE) {
-    return MIR_NO_VALUE;
-  }
-
-  MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
-  instr.data.construct.kind = MIR_CONSTRUCT_ARRAY_FILL_CONST;
-  instr.data.construct.operands[0] = size;
-  instr.data.construct.operands[1] = value;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_construct_ops2(builder, MIR_CONSTRUCT_ARRAY_FILL_CONST, type,
+                                 origin, size, value);
 }
 
 static MirValueId mir_array_fill(MirBuilder *builder, Type *type, Ast *origin,
                                  MirValueId size, MirValueId fill_fn) {
-  if (size == MIR_NO_VALUE || fill_fn == MIR_NO_VALUE) {
-    return MIR_NO_VALUE;
-  }
-
-  MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
-  instr.data.construct.kind = MIR_CONSTRUCT_ARRAY_FILL;
-  instr.data.construct.operands[0] = size;
-  instr.data.construct.operands[1] = fill_fn;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_construct_ops2(builder, MIR_CONSTRUCT_ARRAY_FILL, type,
+                                 origin, size, fill_fn);
 }
 
 static MirValueId mir_array_range(MirBuilder *builder, Type *type, Ast *origin,
@@ -396,9 +380,7 @@ static MirValueId mir_coro_new_call_args(MirBuilder *builder, Type *type,
   }
 
   MirInstr instr = mir_make_instr(MIR_CORO_NEW, type, origin);
-  instr.data.call.callee = callee;
-  instr.data.call.callee_type = callee_type;
-  instr.data.call.specialized_fn = MIR_NO_FUNCTION;
+  mir_emit_call_init(&instr, callee, NULL, callee_type);
   for (size_t i = 0; i < argc; i++) {
     if (args[i] == MIR_NO_VALUE) {
       return MIR_NO_VALUE;
@@ -451,23 +433,12 @@ static const char *mir_iter_wrapper_name(MirProgram *program,
 
 static MirValueId mir_value_op(MirBuilder *builder, MirOpKind kind, Type *type,
                                Ast *origin, MirValueId value) {
-  if (value == MIR_NO_VALUE) {
-    return MIR_NO_VALUE;
-  }
-
-  MirInstr instr = mir_make_instr(MIR_OP, type, origin);
-  instr.data.op.kind = kind;
-  instr.data.op.argc = 1;
-  instr.data.op.operands[0] = value;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_op1(builder, kind, type, origin, value);
 }
 
 static MirValueId mir_value_op_no_operand(MirBuilder *builder, MirOpKind kind,
                                           Type *type, Ast *origin) {
-  MirInstr instr = mir_make_instr(MIR_OP, type, origin);
-  instr.data.op.kind = kind;
-  instr.data.op.argc = 0;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_op0(builder, kind, type, origin);
 }
 
 static MirValueId mir_primitive_ordered_binop(MirBuilder *builder, Ast *app,
@@ -1471,16 +1442,7 @@ static MirValueId MirPrintHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
 
 static MirValueId mir_fprint_value(MirBuilder *builder, Ast *origin,
                                    MirValueId file, MirValueId value) {
-  if (file == MIR_NO_VALUE || value == MIR_NO_VALUE) {
-    return MIR_NO_VALUE;
-  }
-
-  MirInstr instr = mir_make_instr(MIR_OP, &t_void, origin);
-  instr.data.op.kind = MIR_OP_KIND_FPRINT;
-  instr.data.op.argc = 2;
-  instr.data.op.operands[0] = file;
-  instr.data.op.operands[1] = value;
-  return mir_builder_append_instr(builder, instr);
+  return mir_emit_op2(builder, MIR_OP_KIND_FPRINT, &t_void, origin, file, value);
 }
 
 static MirValueId MirFPrintHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
