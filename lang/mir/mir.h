@@ -59,6 +59,16 @@ typedef struct MirSymbol {
   // differs from `generation`. Mirrors the old backend_llvm JITSymbol,
   // which kept `val` and a storage slot on one STYPE_TOP_LEVEL_VAR entry.
   MirValueId global_value;
+  // For imported module symbols held across REPL inputs, keep the import
+  // path so a later MirProgram can materialize a fresh program-local
+  // MirModule/export table instead of reusing a stale module id.
+  const char *module_path;
+  // For `open path/Module`, opened members are stored in the persistent REPL
+  // frame as imported-member stubs. The source module path plus member name let
+  // a later MirProgram rebuild the module and resolve a fresh program-local
+  // export symbol instead of reusing stale per-program pointers.
+  const char *module_member_name;
+  const char *module_import_name;
   // Slot index into the process-global storage array (global_storage_array)
   // for a MIR_SYMBOL_GLOBAL, so a value stored in one REPL input's LLVM
   // module loads in a later input's module via the same C array slot.

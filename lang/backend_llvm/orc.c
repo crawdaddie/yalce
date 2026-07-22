@@ -464,7 +464,6 @@ static int execute_module_top(ORCCompiledModule compiled, LLVMOrcLLJITRef jit,
 
   err = LLVMOrcLLJITAddLLVMIRModule(jit, jd, tsm);
   if (err) {
-    LLVMOrcDisposeThreadSafeModule(tsm);
     LLVMOrcDisposeThreadSafeContext(tsc);
     return consume_llvm_error(err, "Error adding LLVM IR module");
   }
@@ -609,12 +608,13 @@ int orcjit(int argc, char **argv) {
     ORCCompiledModule compiled = compile_source(
         repl_filename, input, true, &env, &ctx, jit, target_machine,
         &mir_root_frame);
-    free(input);
     if (!compiled.module) {
+      free(input);
       continue;
     }
 
     int repl_result = execute_module_top(compiled, jit, jd);
+    free(input);
     if (repl_result != 0) {
       fprintf(stderr, "REPL input failed\n");
     }

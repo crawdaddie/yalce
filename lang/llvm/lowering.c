@@ -102,14 +102,16 @@ static Type *mir_function_return_type(MirFunction *fn) {
     type = type->data.T_FN.to;
   }
 
-  // A nullary void function (T_FN from T_VOID to T_VOID) has no real
-  // parameter and no real return value; lower it as returning void regardless
-  // of how many params the MIR function carries. A closure value is also a
-  // T_FN, but it is a value type, not a function type, so it must not be
-  // unwrapped here.
+  if (has_env_param && type && type->kind == T_FN && type->data.T_FN.from &&
+      type->data.T_FN.from->kind == T_VOID) {
+    return type->data.T_FN.to;
+  }
+
+  // A nullary function (T_FN from T_VOID to X) has no real parameter, so its
+  // return type is X. A closure value is also a T_FN, but it is a value type,
+  // not a function type, so it must not be unwrapped here.
   if (type && type->kind == T_FN && !is_closure(type) &&
-      type->data.T_FN.from && type->data.T_FN.from->kind == T_VOID &&
-      type->data.T_FN.to && type->data.T_FN.to->kind == T_VOID) {
+      type->data.T_FN.from && type->data.T_FN.from->kind == T_VOID) {
     return type->data.T_FN.to;
   }
   return type;
@@ -1311,6 +1313,9 @@ static LLVMValueRef lower_mir_global_load(MirInstr *instr,
     return NULL;
   }
 
+  // Defensive: the build side only stamps global_slot >= 0 for durable
+  // globals, but guard explicitly so a negative value reaching here
+  // (future code path) cannot be cast to a huge unsigned GEP index.
   if (instr->data.op.global_slot >= 0) {
     LLVMValueRef storage_array = get_global_storage_array(module);
     if (!storage_array) {
@@ -1367,20 +1372,19 @@ static LLVMValueRef lower_mir_global_store(MirFunction *fn, MirInstr *instr,
     return NULL;
   }
 
+  // Defensive: guard explicitly (see lower_mir_global_load) so a
+  // negative slot cannot be cast to a huge unsigned GEP index.
   if (instr->data.op.global_slot >= 0) {
-    // Box the value in malloc'd storage and store its address into the
-    // process-global slot array (mirrors codegen_set_global), so the
-    // value survives across REPL inputs.
+    // Persist the value across REPL inputs by boxing it in the
+    // process-global storage array slot. On rebind (same name in a
+    // later input) the slot already holds a box of the same type, so
+    // reuse it: store the new value into the existing box in place
+    // rather than mallocing a fresh one (avoids leaking the old box).
     LLVMValueRef storage_array = get_global_storage_array(module);
     if (!storage_array) {
       return NULL;
     }
     LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
-    LLVMValueRef malloced = LLVMBuildMalloc(builder, storage_type, "global.malloc");
-    LLVMBuildStore(builder, value, malloced);
-    LLVMValueRef void_ptr = LLVMBuildBitCast(
-        builder, malloced, LLVMPointerType(LLVMInt8TypeInContext(llvm_ctx), 0),
-        "global.box.ptr");
     LLVMValueRef slot_index =
         LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx),
                      (unsigned long)instr->data.op.global_slot, true);
@@ -1389,7 +1393,40 @@ static LLVMValueRef lower_mir_global_store(MirFunction *fn, MirInstr *instr,
     LLVMValueRef slot_ptr = LLVMBuildGEP2(
         builder, lower_mir_global_slot_type(module), storage_array, indices, 2,
         "global.slot.ptr");
-    LLVMBuildStore(builder, void_ptr, slot_ptr);
+
+    LLVMValueRef i8_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(llvm_ctx), 0);
+    LLVMValueRef existing =
+        LLVMBuildLoad2(builder, i8_ptr_type, slot_ptr, "global.existing.ptr");
+    LLVMValueRef is_null = LLVMBuildIsNull(builder, existing, "global.slot.null");
+
+    LLVMValueRef fn = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+    LLVMBasicBlockRef reuse_bb =
+        LLVMAppendBasicBlockInContext(llvm_ctx, fn, "global.slot.reuse");
+    LLVMBasicBlockRef alloc_bb =
+        LLVMAppendBasicBlockInContext(llvm_ctx, fn, "global.slot.alloc");
+    LLVMBasicBlockRef cont_bb =
+        LLVMAppendBasicBlockInContext(llvm_ctx, fn, "global.slot.cont");
+    LLVMBuildCondBr(builder, is_null, alloc_bb, reuse_bb);
+
+    // Existing box: bitcast and store the new value into it in place.
+    LLVMPositionBuilderAtEnd(builder, reuse_bb);
+    LLVMValueRef reuse_typed =
+        LLVMBuildBitCast(builder, existing, LLVMPointerType(storage_type, 0),
+                         "global.reuse.ptr");
+    LLVMBuildStore(builder, value, reuse_typed);
+    LLVMBuildBr(builder, cont_bb);
+
+    // No existing box: malloc a fresh one, store the value, and record
+    // its address in the slot.
+    LLVMPositionBuilderAtEnd(builder, alloc_bb);
+    LLVMValueRef malloced = LLVMBuildMalloc(builder, storage_type, "global.malloc");
+    LLVMBuildStore(builder, value, malloced);
+    LLVMValueRef new_ptr =
+        LLVMBuildBitCast(builder, malloced, i8_ptr_type, "global.box.ptr");
+    LLVMBuildStore(builder, new_ptr, slot_ptr);
+    LLVMBuildBr(builder, cont_bb);
+
+    LLVMPositionBuilderAtEnd(builder, cont_bb);
     return LLVMGetUndef(LLVMVoidTypeInContext(llvm_ctx));
   }
 

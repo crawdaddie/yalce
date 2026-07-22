@@ -891,7 +891,7 @@ bool is_coroutine_constructor_type(Type *fn_type) {
 }
 
 bool is_coroutine_type(Type *fn_type) {
-  return fn_type->kind == T_CONS &&
+  return fn_type && fn_type->kind == T_CONS &&
          CHARS_EQ(fn_type->data.T_CONS.name, TYPE_NAME_COROUTINE_INSTANCE);
 }
 

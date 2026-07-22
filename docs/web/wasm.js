@@ -16,6 +16,796 @@ let wasmInstance = null;
 let wasmMemory = null;
 let wasi = null;
 let repl = null;
+let capturingMirDump = false;
+let capturedMirStdout = '';
+let capturedMirStderr = '';
+
+console.log('[ylc-wasm] wasm.js MIR + wasm dump logging enabled');
+
+const YLC_VIRTUAL_MODULE_ROOT = 'ylc://modules';
+const YLC_RAW_MODULE_BASE =
+  'https://raw.githubusercontent.com/crawdaddie/yalce/ylc-mir/';
+const ylcModuleSourceCache = new Map();
+
+function ylcReadCompilerCString(ptr) {
+  if (!ptr || !wasmInstance) {
+    return '';
+  }
+  const mem = new Uint8Array(wasmInstance.exports.memory.buffer);
+  let end = ptr;
+  while (end < mem.length && mem[end] !== 0) {
+    end++;
+  }
+  return new TextDecoder().decode(mem.subarray(ptr, end));
+}
+
+function ylcWriteCompilerCString(value) {
+  if (!wasmInstance) {
+    return 0;
+  }
+  const bytes = new TextEncoder().encode(`${value || ''}\0`);
+  const ptr = wasmInstance.exports.malloc(bytes.length);
+  if (!ptr) {
+    return 0;
+  }
+  new Uint8Array(wasmInstance.exports.memory.buffer, ptr, bytes.length)
+    .set(bytes);
+  return ptr;
+}
+
+function ylcNormalizePathString(path) {
+  if (!path) {
+    return '.';
+  }
+  const scheme = path.match(/^([A-Za-z][A-Za-z0-9+.-]*:\/\/)(.*)$/);
+  const prefix = scheme ? scheme[1] : '';
+  const rest = scheme ? scheme[2] : path;
+  const absolute = rest.startsWith('/');
+  const parts = [];
+
+  rest.split('/').forEach((part) => {
+    if (!part || part === '.') {
+      return;
+    }
+    if (part === '..') {
+      if (parts.length && parts[parts.length - 1] !== '..') {
+        parts.pop();
+      } else if (!absolute) {
+        parts.push(part);
+      }
+      return;
+    }
+    parts.push(part);
+  });
+
+  const normalized = `${absolute ? '/' : ''}${parts.join('/')}`;
+  return `${prefix}${normalized || '.'}`;
+}
+
+function ylcDirnameString(path) {
+  if (!path) {
+    return '.';
+  }
+  const normalized = ylcNormalizePathString(path);
+  const scheme = normalized.match(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//);
+  const minSlash = scheme ? scheme[0].length : 0;
+  const slash = normalized.lastIndexOf('/');
+  if (slash < minSlash) {
+    return '.';
+  }
+  if (slash === minSlash) {
+    return normalized.slice(0, slash + 1);
+  }
+  return normalized.slice(0, slash);
+}
+
+function ylcBasenameNoExt(path) {
+  const base = (path || '').split('/').pop() || '';
+  return base.endsWith('.ylc') ? base.slice(0, -4) : base;
+}
+
+function ylcResolveRelativePathString(base, relative) {
+  if (!relative) {
+    return ylcNormalizePathString(base || '.');
+  }
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(relative)) {
+    return ylcNormalizePathString(relative);
+  }
+  return ylcNormalizePathString(`${base || '.'}/${relative}`);
+}
+
+function ylcGithubBlobToRaw(url) {
+  try {
+    const parsed = new URL(url);
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    if (parsed.hostname === 'github.com' && parts.length >= 5 &&
+        parts[2] === 'blob') {
+      const [owner, repo, , branch, ...fileParts] = parts;
+      return `https://raw.githubusercontent.com/${owner}/${repo}/` +
+        `${branch}/${fileParts.join('/')}`;
+    }
+  } catch (_) {
+    return url;
+  }
+  return url;
+}
+
+function ylcModulePathFromVirtual(path) {
+  const normalized = ylcNormalizePathString(path);
+  if (normalized.startsWith(`${YLC_VIRTUAL_MODULE_ROOT}/`)) {
+    return normalized.slice(YLC_VIRTUAL_MODULE_ROOT.length + 1);
+  }
+  return normalized.replace(/^\.\//, '').replace(/^\/+/, '');
+}
+
+function ylcModuleCandidateUrls(path) {
+  const normalized = ylcNormalizePathString(path);
+  if (/^https?:\/\//.test(normalized)) {
+    return Array.from(new Set([ylcGithubBlobToRaw(normalized), normalized]));
+  }
+
+  const modulePath = ylcModulePathFromVirtual(normalized);
+  const urls = [];
+  const configuredBase = globalThis.YLC_MODULE_BASE_URL;
+  if (configuredBase) {
+    urls.push(new URL(modulePath, configuredBase).href);
+  }
+
+  if (typeof location !== 'undefined') {
+    const page = new URL(location.href);
+    const firstSegment = page.pathname.split('/').filter(Boolean)[0];
+    const projectBase = firstSegment
+      ? `${page.origin}/${firstSegment}/`
+      : `${page.origin}/`;
+    urls.push(new URL(modulePath, projectBase).href);
+  }
+
+  urls.push(new URL(`../../${modulePath}`, import.meta.url).href);
+  urls.push(new URL(`../${modulePath}`, import.meta.url).href);
+  urls.push(new URL(modulePath, import.meta.url).href);
+  urls.push(new URL(modulePath, YLC_RAW_MODULE_BASE).href);
+  return Array.from(new Set(urls.map(ylcGithubBlobToRaw)));
+}
+
+function ylcFetchTextSync(url) {
+  if (typeof XMLHttpRequest === 'undefined') {
+    throw new Error('synchronous module fetch requires XMLHttpRequest');
+  }
+  const xhr = new XMLHttpRequest();
+  xhr.open('GET', url, false);
+  xhr.overrideMimeType('text/plain');
+  xhr.send(null);
+  if ((xhr.status >= 200 && xhr.status < 300) ||
+      (xhr.status === 0 && xhr.responseText)) {
+    return xhr.responseText;
+  }
+  throw new Error(`${xhr.status} ${xhr.statusText}`.trim());
+}
+
+function ylcLoadModuleSource(path) {
+  const normalized = ylcNormalizePathString(path);
+  if (ylcModuleSourceCache.has(normalized)) {
+    return ylcModuleSourceCache.get(normalized);
+  }
+
+  const errors = [];
+  for (const url of ylcModuleCandidateUrls(normalized)) {
+    try {
+      const source = ylcFetchTextSync(url);
+      ylcModuleSourceCache.set(normalized, source);
+      console.info(`[ylc-module] loaded ${normalized} from ${url}`);
+      return source;
+    } catch (error) {
+      errors.push(`${url}: ${error.message}`);
+    }
+  }
+
+  console.error(`[ylc-module] failed to load ${normalized}\n${errors.join('\n')}`);
+  return null;
+}
+
+const WASM_SECTION_NAMES = {
+  0: 'custom',
+  1: 'type',
+  2: 'import',
+  3: 'function',
+  4: 'table',
+  5: 'memory',
+  6: 'global',
+  7: 'export',
+  8: 'start',
+  9: 'element',
+  10: 'code',
+  11: 'data',
+  12: 'data_count',
+};
+
+function ylcHexByte(value) {
+  return value.toString(16).padStart(2, '0');
+}
+
+function ylcHexOffset(value) {
+  return value.toString(16).padStart(8, '0');
+}
+
+function ylcFormatWasmHex(bytes) {
+  const lines = [];
+  for (let offset = 0; offset < bytes.length; offset += 16) {
+    const slice = bytes.slice(offset, offset + 16);
+    const hex = Array.from(slice, ylcHexByte).join(' ').padEnd(47, ' ');
+    const ascii = Array.from(slice, (byte) =>
+      byte >= 0x20 && byte <= 0x7e ? String.fromCharCode(byte) : '.'
+    ).join('');
+    lines.push(`${ylcHexOffset(offset)}  ${hex}  |${ascii}|`);
+  }
+  return lines.join('\n');
+}
+
+function ylcReadLebU32(bytes, cursor) {
+  let value = 0;
+  let shift = 0;
+  let pos = cursor;
+  while (pos < bytes.length) {
+    const byte = bytes[pos++];
+    value |= (byte & 0x7f) << shift;
+    if ((byte & 0x80) === 0) {
+      return { value: value >>> 0, next: pos };
+    }
+    shift += 7;
+  }
+  return null;
+}
+
+function ylcWasmSectionSummary(bytes) {
+  if (bytes.length < 8 ||
+      bytes[0] !== 0x00 || bytes[1] !== 0x61 ||
+      bytes[2] !== 0x73 || bytes[3] !== 0x6d) {
+    return '<invalid wasm header>';
+  }
+
+  const lines = ['00000000  header'];
+  let pos = 8;
+  while (pos < bytes.length) {
+    const sectionOffset = pos;
+    const id = bytes[pos++];
+    const size = ylcReadLebU32(bytes, pos);
+    if (!size) {
+      lines.push(`${ylcHexOffset(sectionOffset)}  section ${id}: malformed size`);
+      break;
+    }
+    pos = size.next;
+    const payloadOffset = pos;
+    const end = payloadOffset + size.value;
+    const name = WASM_SECTION_NAMES[id] || `unknown(${id})`;
+    lines.push(
+      `${ylcHexOffset(sectionOffset)}  section ${id} ${name}: ` +
+      `payload @ ${ylcHexOffset(payloadOffset)}, ${size.value} bytes`
+    );
+    if (end > bytes.length) {
+      lines.push(`${ylcHexOffset(payloadOffset)}  section extends past EOF`);
+      break;
+    }
+    pos = end;
+  }
+  return lines.join('\n');
+}
+
+function ylcWatString(value) {
+  return `"${String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t')}"`;
+}
+
+function ylcValType(byte) {
+  switch (byte) {
+  case 0x7f: return 'i32';
+  case 0x7e: return 'i64';
+  case 0x7d: return 'f32';
+  case 0x7c: return 'f64';
+  case 0x70: return 'funcref';
+  case 0x6f: return 'externref';
+  case 0x40: return '';
+  default: return `unknown_valtype_${ylcHexByte(byte)}`;
+  }
+}
+
+function ylcReadName(bytes, cursor) {
+  const len = ylcReadLebU32(bytes, cursor);
+  if (!len) {
+    return null;
+  }
+  const start = len.next;
+  const end = start + len.value;
+  if (end > bytes.length) {
+    return null;
+  }
+  return {
+    value: new TextDecoder('utf-8').decode(bytes.slice(start, end)),
+    next: end,
+  };
+}
+
+function ylcReadLebI32(bytes, cursor) {
+  let result = 0;
+  let shift = 0;
+  let pos = cursor;
+  let byte = 0;
+  while (pos < bytes.length) {
+    byte = bytes[pos++];
+    result |= (byte & 0x7f) << shift;
+    shift += 7;
+    if ((byte & 0x80) === 0) {
+      if (shift < 32 && (byte & 0x40)) {
+        result |= (~0 << shift);
+      }
+      return { value: result | 0, next: pos };
+    }
+  }
+  return null;
+}
+
+function ylcReadLebI64(bytes, cursor) {
+  let result = 0n;
+  let shift = 0n;
+  let pos = cursor;
+  let byte = 0;
+  while (pos < bytes.length) {
+    byte = bytes[pos++];
+    result |= BigInt(byte & 0x7f) << shift;
+    shift += 7n;
+    if ((byte & 0x80) === 0) {
+      if (shift < 64n && (byte & 0x40)) {
+        result |= (-1n) << shift;
+      }
+      return { value: result.toString(), next: pos };
+    }
+  }
+  return null;
+}
+
+function ylcReadLimits(bytes, cursor) {
+  const flags = bytes[cursor++];
+  const min = ylcReadLebU32(bytes, cursor);
+  if (!min) {
+    return null;
+  }
+  cursor = min.next;
+  let max = null;
+  if (flags & 0x01) {
+    max = ylcReadLebU32(bytes, cursor);
+    if (!max) {
+      return null;
+    }
+    cursor = max.next;
+  }
+  return { flags, min: min.value, max: max ? max.value : null, next: cursor };
+}
+
+function ylcWatType(type) {
+  const params = type.params.map((param) => `(param ${param})`).join(' ');
+  const results = type.results.map((result) => `(result ${result})`).join(' ');
+  const suffix = [params, results].filter(Boolean).join(' ');
+  return `(func${suffix ? ' ' + suffix : ''})`;
+}
+
+function ylcParseWasm(bytes) {
+  const module = {
+    types: [],
+    imports: [],
+    functionTypes: [],
+    exports: [],
+    codes: [],
+    importFuncCount: 0,
+    importMemoryCount: 0,
+  };
+
+  if (bytes.length < 8 ||
+      bytes[0] !== 0x00 || bytes[1] !== 0x61 ||
+      bytes[2] !== 0x73 || bytes[3] !== 0x6d) {
+    throw new Error('invalid wasm header');
+  }
+
+  let pos = 8;
+  while (pos < bytes.length) {
+    const id = bytes[pos++];
+    const size = ylcReadLebU32(bytes, pos);
+    if (!size) {
+      throw new Error(`malformed section size at ${pos}`);
+    }
+    pos = size.next;
+    const end = pos + size.value;
+    if (end > bytes.length) {
+      throw new Error(`section ${id} extends past EOF`);
+    }
+
+    if (id === 1) {
+      const count = ylcReadLebU32(bytes, pos);
+      pos = count.next;
+      for (let i = 0; i < count.value; i++) {
+        const form = bytes[pos++];
+        if (form !== 0x60) {
+          throw new Error(`unsupported type form 0x${ylcHexByte(form)}`);
+        }
+        const paramCount = ylcReadLebU32(bytes, pos);
+        pos = paramCount.next;
+        const params = [];
+        for (let p = 0; p < paramCount.value; p++) {
+          params.push(ylcValType(bytes[pos++]));
+        }
+        const resultCount = ylcReadLebU32(bytes, pos);
+        pos = resultCount.next;
+        const results = [];
+        for (let r = 0; r < resultCount.value; r++) {
+          results.push(ylcValType(bytes[pos++]));
+        }
+        module.types.push({ params, results });
+      }
+    } else if (id === 2) {
+      const count = ylcReadLebU32(bytes, pos);
+      pos = count.next;
+      for (let i = 0; i < count.value; i++) {
+        const moduleName = ylcReadName(bytes, pos);
+        pos = moduleName.next;
+        const fieldName = ylcReadName(bytes, pos);
+        pos = fieldName.next;
+        const kind = bytes[pos++];
+        const item = {
+          module: moduleName.value,
+          name: fieldName.value,
+          kind,
+          index: kind === 0 ? module.importFuncCount : module.importMemoryCount,
+        };
+        if (kind === 0) {
+          const typeIndex = ylcReadLebU32(bytes, pos);
+          pos = typeIndex.next;
+          item.typeIndex = typeIndex.value;
+          module.importFuncCount++;
+        } else if (kind === 2) {
+          const limits = ylcReadLimits(bytes, pos);
+          pos = limits.next;
+          item.limits = limits;
+          module.importMemoryCount++;
+        } else {
+          item.note = `unsupported import kind ${kind}`;
+        }
+        module.imports.push(item);
+      }
+    } else if (id === 3) {
+      const count = ylcReadLebU32(bytes, pos);
+      pos = count.next;
+      for (let i = 0; i < count.value; i++) {
+        const typeIndex = ylcReadLebU32(bytes, pos);
+        pos = typeIndex.next;
+        module.functionTypes.push(typeIndex.value);
+      }
+    } else if (id === 7) {
+      const count = ylcReadLebU32(bytes, pos);
+      pos = count.next;
+      for (let i = 0; i < count.value; i++) {
+        const name = ylcReadName(bytes, pos);
+        pos = name.next;
+        const kind = bytes[pos++];
+        const index = ylcReadLebU32(bytes, pos);
+        pos = index.next;
+        module.exports.push({ name: name.value, kind, index: index.value });
+      }
+    } else if (id === 10) {
+      const count = ylcReadLebU32(bytes, pos);
+      pos = count.next;
+      for (let i = 0; i < count.value; i++) {
+        const bodySize = ylcReadLebU32(bytes, pos);
+        pos = bodySize.next;
+        const bodyEnd = pos + bodySize.value;
+        const localDeclCount = ylcReadLebU32(bytes, pos);
+        pos = localDeclCount.next;
+        const locals = [];
+        for (let l = 0; l < localDeclCount.value; l++) {
+          const localCount = ylcReadLebU32(bytes, pos);
+          pos = localCount.next;
+          const type = ylcValType(bytes[pos++]);
+          locals.push({ count: localCount.value, type });
+        }
+        const instructions = ylcDecodeWatInstructions(bytes, pos, bodyEnd);
+        pos = bodyEnd;
+        module.codes.push({ locals, instructions });
+      }
+    }
+
+    pos = end;
+  }
+
+  return module;
+}
+
+const YLC_SIMPLE_WASM_OPS = {
+  0x00: 'unreachable',
+  0x01: 'nop',
+  0x0f: 'return',
+  0x1a: 'drop',
+  0x45: 'i32.eqz',
+  0x46: 'i32.eq',
+  0x47: 'i32.ne',
+  0x48: 'i32.lt_s',
+  0x49: 'i32.lt_u',
+  0x4a: 'i32.gt_s',
+  0x4b: 'i32.gt_u',
+  0x4c: 'i32.le_s',
+  0x4d: 'i32.le_u',
+  0x4e: 'i32.ge_s',
+  0x4f: 'i32.ge_u',
+  0x50: 'i64.eqz',
+  0x51: 'i64.eq',
+  0x52: 'i64.ne',
+  0x53: 'i64.lt_s',
+  0x54: 'i64.lt_u',
+  0x55: 'i64.gt_s',
+  0x56: 'i64.gt_u',
+  0x57: 'i64.le_s',
+  0x58: 'i64.le_u',
+  0x59: 'i64.ge_s',
+  0x5a: 'i64.ge_u',
+  0x5b: 'f32.eq',
+  0x5c: 'f32.ne',
+  0x5d: 'f32.lt',
+  0x5e: 'f32.gt',
+  0x5f: 'f32.le',
+  0x60: 'f32.ge',
+  0x61: 'f64.eq',
+  0x62: 'f64.ne',
+  0x63: 'f64.lt',
+  0x64: 'f64.gt',
+  0x65: 'f64.le',
+  0x66: 'f64.ge',
+  0x6a: 'i32.add',
+  0x6b: 'i32.sub',
+  0x6c: 'i32.mul',
+  0x6d: 'i32.div_s',
+  0x6e: 'i32.div_u',
+  0x6f: 'i32.rem_s',
+  0x70: 'i32.rem_u',
+  0x7c: 'i64.add',
+  0x7d: 'i64.sub',
+  0x7e: 'i64.mul',
+  0x7f: 'i64.div_s',
+  0x80: 'i64.div_u',
+  0x81: 'i64.rem_s',
+  0x82: 'i64.rem_u',
+  0x92: 'f32.add',
+  0x93: 'f32.sub',
+  0x94: 'f32.mul',
+  0x95: 'f32.div',
+  0xa0: 'f64.add',
+  0xa1: 'f64.sub',
+  0xa2: 'f64.mul',
+  0xa3: 'f64.div',
+  0xa7: 'i32.wrap_i64',
+  0xaa: 'i32.trunc_f64_s',
+  0xac: 'i64.extend_i32_s',
+  0xae: 'i64.trunc_f64_s',
+  0xb7: 'f64.convert_i32_s',
+  0xb9: 'f64.convert_i64_s',
+};
+
+const YLC_MEMORY_WASM_OPS = {
+  0x28: 'i32.load',
+  0x29: 'i64.load',
+  0x2a: 'f32.load',
+  0x2b: 'f64.load',
+  0x36: 'i32.store',
+  0x37: 'i64.store',
+  0x38: 'f32.store',
+  0x39: 'f64.store',
+};
+
+function ylcDecodeWatInstructions(bytes, cursor, end) {
+  const lines = [];
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let pos = cursor;
+  let blockDepth = 0;
+  let indent = 0;
+
+  const push = (text) => lines.push(`${'  '.repeat(indent)}${text}`);
+
+  while (pos < end) {
+    const opcode = bytes[pos++];
+
+    if (opcode === 0x0b) {
+      if (blockDepth === 0) {
+        break;
+      }
+      indent = Math.max(0, indent - 1);
+      blockDepth--;
+      push('end');
+      continue;
+    }
+
+    if (opcode === 0x05) {
+      indent = Math.max(0, indent - 1);
+      push('else');
+      indent++;
+      continue;
+    }
+
+    if (opcode === 0x02 || opcode === 0x03 || opcode === 0x04) {
+      const op = opcode === 0x02 ? 'block' : opcode === 0x03 ? 'loop' : 'if';
+      const blockType = ylcValType(bytes[pos++]);
+      push(blockType ? `${op} (result ${blockType})` : op);
+      blockDepth++;
+      indent++;
+      continue;
+    }
+
+    if (opcode === 0x0c || opcode === 0x0d) {
+      const label = ylcReadLebU32(bytes, pos);
+      pos = label.next;
+      push(`${opcode === 0x0c ? 'br' : 'br_if'} ${label.value}`);
+      continue;
+    }
+
+    if (opcode === 0x10) {
+      const fn = ylcReadLebU32(bytes, pos);
+      pos = fn.next;
+      push(`call ${fn.value}`);
+      continue;
+    }
+
+    if (opcode >= 0x20 && opcode <= 0x24) {
+      const local = ylcReadLebU32(bytes, pos);
+      pos = local.next;
+      const op = {
+        0x20: 'local.get',
+        0x21: 'local.set',
+        0x22: 'local.tee',
+        0x23: 'global.get',
+        0x24: 'global.set',
+      }[opcode];
+      push(`${op} ${local.value}`);
+      continue;
+    }
+
+    if (YLC_MEMORY_WASM_OPS[opcode]) {
+      const align = ylcReadLebU32(bytes, pos);
+      pos = align.next;
+      const offset = ylcReadLebU32(bytes, pos);
+      pos = offset.next;
+      push(`${YLC_MEMORY_WASM_OPS[opcode]} offset=${offset.value} align=${1 << align.value}`);
+      continue;
+    }
+
+    if (opcode === 0x41) {
+      const value = ylcReadLebI32(bytes, pos);
+      pos = value.next;
+      push(`i32.const ${value.value}`);
+      continue;
+    }
+
+    if (opcode === 0x42) {
+      const value = ylcReadLebI64(bytes, pos);
+      pos = value.next;
+      push(`i64.const ${value.value}`);
+      continue;
+    }
+
+    if (opcode === 0x43) {
+      const value = view.getFloat32(pos, true);
+      pos += 4;
+      push(`f32.const ${value}`);
+      continue;
+    }
+
+    if (opcode === 0x44) {
+      const value = view.getFloat64(pos, true);
+      pos += 8;
+      push(`f64.const ${value}`);
+      continue;
+    }
+
+    if (YLC_SIMPLE_WASM_OPS[opcode]) {
+      push(YLC_SIMPLE_WASM_OPS[opcode]);
+      continue;
+    }
+
+    push(`;; unsupported opcode 0x${ylcHexByte(opcode)}`);
+    break;
+  }
+
+  return lines;
+}
+
+function ylcExportKind(kind) {
+  switch (kind) {
+  case 0: return 'func';
+  case 1: return 'table';
+  case 2: return 'memory';
+  case 3: return 'global';
+  default: return `unknown_${kind}`;
+  }
+}
+
+function ylcWasmToWat(bytes) {
+  const parsed = ylcParseWasm(bytes);
+  const lines = ['(module'];
+
+  parsed.types.forEach((type, index) => {
+    lines.push(`  (type (;${index};) ${ylcWatType(type)})`);
+  });
+
+  parsed.imports.forEach((item) => {
+    if (item.kind === 0) {
+      lines.push(
+        `  (import ${ylcWatString(item.module)} ${ylcWatString(item.name)} ` +
+        `(func (;${item.index};) (type ${item.typeIndex})))`
+      );
+    } else if (item.kind === 2) {
+      const max = item.limits.max === null ? '' : ` ${item.limits.max}`;
+      lines.push(
+        `  (import ${ylcWatString(item.module)} ${ylcWatString(item.name)} ` +
+        `(memory (;${item.index};) ${item.limits.min}${max}))`
+      );
+    } else {
+      lines.push(`  ;; unsupported import kind ${item.kind}`);
+    }
+  });
+
+  parsed.codes.forEach((code, index) => {
+    const funcIndex = parsed.importFuncCount + index;
+    const typeIndex = parsed.functionTypes[index];
+    const type = parsed.types[typeIndex] || { params: [], results: [] };
+    const signature = [
+      `(type ${typeIndex})`,
+      ...type.params.map((param) => `(param ${param})`),
+      ...type.results.map((result) => `(result ${result})`),
+    ].join(' ');
+    lines.push(`  (func (;${funcIndex};) ${signature}`);
+    code.locals.forEach((local) => {
+      const locals = Array(local.count).fill(local.type).join(' ');
+      lines.push(`    (local ${locals})`);
+    });
+    code.instructions.forEach((instruction) => {
+      lines.push(`    ${instruction}`);
+    });
+    lines.push('  )');
+  });
+
+  parsed.exports.forEach((item) => {
+    lines.push(
+      `  (export ${ylcWatString(item.name)} ` +
+      `(${ylcExportKind(item.kind)} ${item.index}))`
+    );
+  });
+
+  lines.push(')');
+  return lines.join('\n');
+}
+
+function ylcDumpGeneratedWasm(source, moduleBytes) {
+  const label = source.replace(/\s+/g, ' ').trim();
+  let moduleInfo = '';
+  let wat = '';
+  try {
+    const module = new WebAssembly.Module(moduleBytes);
+    moduleInfo =
+      `imports: ${JSON.stringify(WebAssembly.Module.imports(module))}\n` +
+      `exports: ${JSON.stringify(WebAssembly.Module.exports(module))}`;
+    wat = ylcWasmToWat(moduleBytes);
+  } catch (error) {
+    moduleInfo = `module decode error: ${error.message}`;
+    wat = `;; failed to decode WAT: ${error.message}`;
+  }
+
+  console.log(
+    `[ylc-wasm-wat] ${label}\n` +
+    `bytes: ${moduleBytes.length}\n` +
+    `validate: ${WebAssembly.validate(moduleBytes)}\n` +
+    `${moduleInfo}\n` +
+    `sections:\n${ylcWasmSectionSummary(moduleBytes)}\n\n` +
+    `${wat}`,
+    moduleBytes
+  );
+}
 
 // Generated YLC modules import this runtime surface from their host. The
 // names below mirror the env the legacy backend_wasm emitted; wasm/main.c
@@ -36,6 +826,39 @@ const GENERATED_MODULE_IMPORTS = (instance, memory) => ({
       console.log("[ylc] str:", new TextDecoder().decode(bytes));
     },
     ylc_abort: () => { throw new Error("ylc runtime abort"); },
+    rand_int: (max) => Math.floor(Math.random() * Math.max(0, max | 0)),
+    rand_double: () => Math.random(),
+    rand_double_range: (min, max) => min + Math.random() * (max - min),
+    nonzero_randu_double: () => {
+      let value = 0;
+      while (value === 0) {
+        value = Math.random();
+      }
+      return value;
+    },
+    amp_db: (amp) => 20 * Math.log10(amp),
+    db_amp: (db) => Math.pow(10, db / 20),
+    sin: Math.sin,
+    cos: Math.cos,
+    pow: Math.pow,
+    tanh: Math.tanh,
+    tan: Math.tan,
+    atan: Math.atan,
+    atan2: Math.atan2,
+    log: Math.log,
+    exp: Math.exp,
+    sqrt: Math.sqrt,
+    floor: Math.floor,
+    round: Math.round,
+    ceil: Math.ceil,
+    ilog2: (value) => Math.floor(Math.log2(value | 0)) | 0,
+    ipow: (base, exp) => Math.trunc(Math.pow(base | 0, exp | 0)) | 0,
+    u64pow: (base, exp) => BigInt(base) ** BigInt(exp),
+    bipolar_scale: (value, min, max) => ((value + 1) * 0.5) * (max - min) + min,
+    unipolar_scale: (value, min, max) => value * (max - min) + min,
+    double_array_init: () => 0,
+    double_array: () => 0,
+    _randn_pair: () => 0,
   },
 });
 
@@ -46,7 +869,43 @@ class YLCWasmREPL {
     this.wasmMemory = wasmMemory;
   }
 
-  clear() {}
+  clear() { }
+
+  dumpMir(source) {
+    const dump = this.wasmInstance.exports.ylc_wasm_dump_mir;
+    if (!dump) {
+      console.warn('ylc_wasm_dump_mir export is not available');
+      return 1;
+    }
+
+    const ptr = this.writeString(source);
+    capturedMirStdout = '';
+    capturedMirStderr = '';
+    capturingMirDump = true;
+
+    let status = 1;
+    try {
+      status = dump(ptr);
+    } finally {
+      capturingMirDump = false;
+      this.wasmInstance.exports.free(ptr);
+    }
+
+    const label = source.replace(/\s+/g, ' ').trim();
+    if (capturedMirStdout) {
+      console.log(`[ylc-mir] ${label}\n${capturedMirStdout.trimEnd()}`);
+    } else {
+      console.log(`[ylc-mir] ${label}\n<no MIR output>`);
+    }
+    if (capturedMirStderr) {
+      console.error(`[ylc-mir stderr] ${label}\n${capturedMirStderr.trimEnd()}`);
+    }
+    if (status !== 0) {
+      console.error(`ylc_wasm_dump_mir failed (status ${status})`);
+    }
+
+    return status;
+  }
 
   // Compile the most recent REPL line into a wasm module and run it.
   // Returns whatever the generated module's entry function returns, or
@@ -78,6 +937,7 @@ class YLCWasmREPL {
     ).slice();
     exports.free(modulePtr);
     exports.free(lenPtr);
+    ylcDumpGeneratedWasm(source, moduleBytes);
 
     // Instantiate the generated module against the runtime imports.
     const imports =
@@ -118,7 +978,7 @@ function setStatus(message, type) {
 async function loadWasm() {
   setStatus('Loading WASM module...', 'loading');
   try {
-    const response = await fetch('jit.wasm');
+    const response = await fetch('jit.wasm?v=mir-persist', { cache: 'no-store' });
     const buffer = await response.arrayBuffer();
 
     // Create WASI instance with proper file descriptors
@@ -127,6 +987,10 @@ async function loadWasm() {
       new OpenFile(new File([])), // stdin
       new ConsoleStdout((buffer) => {
         const text = decoder.decode(buffer, { stream: true });
+        if (capturingMirDump) {
+          capturedMirStdout += text;
+          return;
+        }
         console.log("[stdout]", text);
         const terminal = document.getElementById('repl-terminal');
         if (terminal) {
@@ -136,10 +1000,14 @@ async function loadWasm() {
       }),
       new ConsoleStdout((buffer) => {
         const text = decoder.decode(buffer, { stream: true });
+        if (capturingMirDump) {
+          capturedMirStderr += text;
+          return;
+        }
         console.error("[stderr]", text);
         const terminal = document.getElementById('repl-terminal');
         if (terminal) {
-          terminal.appendChild(document.createTextNode('[ERROR] ' + text));
+          terminal.appendChild(document.createTextNode(text));
           terminal.scrollTop = terminal.scrollHeight;
         }
       }),
@@ -152,13 +1020,27 @@ async function loadWasm() {
     // so wasm-ld's --allow-undefined link resolves at instantiation time.
     const envImports = {
       repl_input: () => 0,
-      read_script: () => 0,
-      get_dirname: () => 0,
-      resolve_relative_path: () => 0,
-      normalize_path: () => 0,
+      read_script: (pathPtr) => {
+        const source = ylcLoadModuleSource(ylcReadCompilerCString(pathPtr));
+        return source == null ? 0 : ylcWriteCompilerCString(source);
+      },
+      get_dirname: (pathPtr) =>
+        ylcWriteCompilerCString(ylcDirnameString(ylcReadCompilerCString(pathPtr))),
+      resolve_relative_path: (basePtr, relativePtr) =>
+        ylcWriteCompilerCString(
+          ylcResolveRelativePathString(
+            ylcReadCompilerCString(basePtr),
+            ylcReadCompilerCString(relativePtr)
+          )
+        ),
+      normalize_path: (pathPtr) =>
+        ylcWriteCompilerCString(
+          ylcNormalizePathString(ylcReadCompilerCString(pathPtr))
+        ),
       init_readline: () => { },
       add_completion_item: () => { },
-      get_mod_name_from_path_identifier: () => 0,
+      get_mod_name_from_path_identifier: (pathPtr) =>
+        ylcWriteCompilerCString(ylcBasenameNoExt(ylcReadCompilerCString(pathPtr))),
     };
 
     const imports = {
@@ -280,6 +1162,7 @@ async function executeCurrentLine() {
 
     // Compile + execute the current line.
     console.log(`execute '${input}'`)
+    repl.dumpMir(input);
 
     // Execute (compile -> instantiate generated module -> run entry)
     const result = await repl.execute(input);
@@ -524,20 +1407,13 @@ window.clearREPL = clearREPL;
 
 // Debug helper: dump the MIR for a YLC source string to the console.
 // Usage in the browser console: ylcDumpMir("let x = 1 in x")
-// The MIR text is written to wasi stdout, which the shim routes to
-// console.log("[stdout]", ...) and to the terminal element.
+// The MIR text is captured from WASI stdout and printed to the JS console.
 window.ylcDumpMir = (source) => {
-  if (!wasmInstance) {
+  if (!wasmInstance || !repl) {
     console.error('WASM not loaded yet');
     return;
   }
-  const ptr = repl.writeString(source);
-  const status = wasmInstance.exports.ylc_wasm_dump_mir(ptr);
-  wasmInstance.exports.free(ptr);
-  if (status !== 0) {
-    console.error('ylc_wasm_dump_mir failed (status ' + status + ')');
-  }
-  return status;
+  return repl.dumpMir(source);
 };
 
 // Load WASM on page load

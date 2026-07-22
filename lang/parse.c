@@ -1249,7 +1249,17 @@ static ParsingContext save_parsing_context() {
 // Function to restore parsing context
 static void restore_parsing_context(ParsingContext ctx) { ctx = ctx; }
 
+static bool path_has_url_scheme(const char *path) {
+  return path && (strncmp(path, "http://", 7) == 0 ||
+                  strncmp(path, "https://", 8) == 0 ||
+                  strncmp(path, "ylc://", 6) == 0);
+}
+
 char *check_path(char *fully_qualified_name, char *rel_path) {
+  if (path_has_url_scheme(fully_qualified_name)) {
+    return fully_qualified_name;
+  }
+
   if (access(fully_qualified_name, F_OK) != 0 &&
       (ylc_config.base_libs_dir != NULL)) {
 
@@ -1259,6 +1269,10 @@ char *check_path(char *fully_qualified_name, char *rel_path) {
 
     sprintf(new_filename, "%s/%s", ylc_config.base_libs_dir, rel_path);
     fully_qualified_name = new_filename;
+
+    if (path_has_url_scheme(fully_qualified_name)) {
+      return fully_qualified_name;
+    }
 
     if (access(fully_qualified_name, F_OK) != 0) {
       return NULL;

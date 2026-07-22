@@ -74,6 +74,18 @@ assert_not_contains() {
   fi
 }
 
+assert_contains() {
+  local transcript="$1"
+  local pattern="$2"
+  local label="$3"
+  if printf '%s' "$transcript" | grep -Eq "$pattern"; then
+    pass "$label"
+  else
+    fail "$label (missing pattern: $pattern)"
+    printf '%s\n' "$transcript" | sed 's/^/      | /' >&2
+  fi
+}
+
 section() {
   echo
   echo "${BLUE}${BOLD}==>${NC} ${BOLD}$1${NC}"
@@ -185,6 +197,31 @@ let c = b + 1
 let d = c + 1')
 assert_not_contains "$OUT" 'unresolved identifier' "chain of 4 inputs resolves each prior binding"
 assert_not_contains "$OUT" 'Error' "a->b->c->d chain typechecks and lowers"
+
+# ---------------------------------------------------------------------------
+
+section "module imports persist across REPL inputs"
+
+OUT=$(printf '%s\n' 'import std/Math' 'Math.rand_double ()' |
+  "$YLC" --base "$ROOT_DIR" --dump-ir 2>&1 | strip_ansi)
+assert_contains "$OUT" 'tail call double @rand_double\(\)' "nullary imported extern call returns Double in LLVM IR"
+assert_contains "$OUT" 'declare double @rand_double\(\)' "nullary imported extern declaration uses Double return"
+assert_not_contains "$OUT" 'declare ptr @rand_double\(\)' "nullary imported extern is not lowered as a pointer return"
+assert_not_contains "$OUT" 'Error|JIT session error' "Math.rand_double call typechecks and lowers"
+
+OUT=$(printf '%s\n' 'open std/Math' 'rand_int 200' 'rand_double ()' 'abs -7' '%quit' |
+  "$YLC" -i --base "$ROOT_DIR" 2>&1 | strip_ansi)
+assert_contains "$OUT" 'Int: [0-9]+' "opened imported extern is visible in next REPL input"
+assert_contains "$OUT" 'Double: [0-9.-]+' "opened nullary Double extern runs in next REPL input"
+assert_contains "$OUT" 'Int: 7' "opened module-defined function runs in next REPL input"
+assert_not_contains "$OUT" 'Segmentation fault|SIGSEGV|JIT session error|Error' "open std/Math persists without crashing"
+
+SCRIPT=$(mktemp "${TMPDIR:-/tmp}/ylc-open-math.XXXXXX.ylc")
+printf '%s\n' 'open std/Math;' 'print `{ ' 'rand_double ()' '}`' > "$SCRIPT"
+OUT=$("$YLC" --base "$ROOT_DIR" "$SCRIPT" 2>&1 | strip_ansi)
+rm -f "$SCRIPT"
+assert_contains "$OUT" '[0-9]+\.[0-9]+' "open std/Math works in normal scripts"
+assert_not_contains "$OUT" 'Segmentation fault|SIGSEGV|JIT session error|Error' "normal-script open std/Math does not crash"
 
 # ---------------------------------------------------------------------------
 

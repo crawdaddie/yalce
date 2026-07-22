@@ -93,7 +93,7 @@ LDFLAGS += $(foreach e,$(EXPORTS),-Wl,--export=$(e))
 # ---------------------------------------------------------------------------
 # Build rules
 # ---------------------------------------------------------------------------
-.PHONY: all clean install
+.PHONY: all clean install watch check
 
 all: $(OUTPUT)
 
@@ -120,6 +120,14 @@ $(WEB_DIR):
 install: $(OUTPUT)
 	cp -f $(OUTPUT) $(WEB_DIR)/jit.wasm
 
+check: $(OUTPUT)
+	node -e "const b=require('fs').readFileSync('$(OUTPUT)'); console.log(WebAssembly.validate(b));"
+
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(OUTPUT)
+
+watch:
+	@while inotifywait -r -e close_write,create,delete,move --exclude '(^|/)build(/|$$)' .; do \
+		$(MAKE); \
+	done
