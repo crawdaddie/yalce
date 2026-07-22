@@ -2,11 +2,13 @@
 #include "backend_llvm/adt.h"
 #include "backend_llvm/array.h"
 #include "backend_llvm/coroutines/coroutines.h"
+#include "backend_llvm/globals.h"
 #include "backend_llvm/lib_registry.h"
 #include "backend_llvm/list.h"
 #include "backend_llvm/module.h"
 #include "backend_llvm/strings.h"
 #include "backend_llvm/types.h"
+#include "config.h"
 #include "escape_analysis.h"
 #include "input.h"
 #include "types/type_expressions.h"
@@ -597,28 +599,24 @@ static MirFunction *lower_mir_extern_symbol_function(MirLlvmCtx *lctx,
   }
 
   MirFunction *symbol_fn = fn;
-  MirFunctionId source_id = fn->specialization_of;
-  while (source_id != MIR_NO_FUNCTION &&
-         source_id < lctx->program->functions.len) {
-    MirFunction **items = lctx->program->functions.items;
-    MirFunction *source = items ? items[source_id] : NULL;
-    if (!source || !source->is_extern) {
+  MirFunction *source = fn->specialization_of;
+  while (source) {
+    if (!source->is_extern) {
       break;
     }
 
     symbol_fn = source;
-    if (source->specialization_of == MIR_NO_FUNCTION ||
-        source->specialization_of == source_id) {
+    if (!source->specialization_of || source->specialization_of == source) {
       break;
     }
-    source_id = source->specialization_of;
+    source = source->specialization_of;
   }
 
   return symbol_fn;
 }
 
 static const char *lower_mir_function_symbol_name(MirLlvmCtx *lctx,
-                                                  MirFunction *fn) {
+                                                   MirFunction *fn) {
   MirFunction *symbol_fn = lower_mir_extern_symbol_function(lctx, fn);
   const char *name = NULL;
   if (symbol_fn && symbol_fn->name) {
@@ -629,7 +627,24 @@ static const char *lower_mir_function_symbol_name(MirLlvmCtx *lctx,
   if (!name) {
     return "<anonymous>";
   }
-  return strcmp(name, "$top") == 0 ? "top" : name;
+  if (strcmp(name, "$top") == 0) {
+    return "top";
+  }
+  // Durable functions (bodies allocated from the persistent durable
+  // arena) are declared in every per-REPL-input LLVM module added to the
+  // same JIT dylib; a fixed name would collide across modules. Append the
+  // program generation for a per-input-unique LLVM symbol. The MIR
+  // identity is the pointer, so only the LLVM symbol changes. Only in
+  // interactive REPL mode: one-shot script compiles don't share a dylib
+  // across inputs, so the suffix is unnecessary (and would change the
+  // expected symbol name).
+  if (ylc_config.interactive_mode && lctx && lctx->program &&
+      lctx->program->durable_arena && fn &&
+      fn->arena == lctx->program->durable_arena) {
+    return mir_arena_printf(lctx->program->arena, "%s.%u", name,
+                            lctx->program->generation);
+  }
+  return name;
 }
 
 static LLVMTypeRef lower_mir_function_type(MirFunction *fn, JITLangCtx *ctx,
@@ -826,16 +841,17 @@ static bool lower_mir_value_allocates_on_stack(MirFunction *fn,
 static LLVMValueRef lower_mir_fn_ref(MirInstr *instr, MirLlvmCtx *lctx,
                                      LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
-  if (!instr || !lctx || instr->data.fn_ref.fn >= lctx->functions_len) {
+  if (!instr || !lctx || !instr->data.fn_ref.fn) {
     return NULL;
   }
 
-  LLVMValueRef fn = lctx->functions[instr->data.fn_ref.fn];
+  MirFunction *target = instr->data.fn_ref.fn;
+  if (target->id >= lctx->functions_len) {
+    return NULL;
+  }
+
+  LLVMValueRef fn = lctx->functions[target->id];
   if (!fn) {
-    MirFunction *target =
-        lctx->program && instr->data.fn_ref.fn < lctx->program->functions.len
-            ? lctx->program->functions.items[instr->data.fn_ref.fn]
-            : NULL;
     if (!target || !lower_mir_type_has_unresolved_vars(target->type)) {
       return NULL;
     }
@@ -1272,6 +1288,15 @@ static LLVMValueRef lower_mir_global_value(LLVMModuleRef module,
   return global;
 }
 
+static LLVMTypeRef lower_mir_global_slot_type(LLVMModuleRef module) {
+  LLVMContextRef ctx = LLVMGetModuleContext(module);
+  return LLVMArrayType(LLVMPointerType(LLVMInt8TypeInContext(ctx), 0), 1024);
+}
+
+// Lower a global_load. When the instr carries a durable slot (>= 0), load
+// through the process-global @global_storage_array[slot] (a void* slot),
+// which persists across per-REPL-input LLVM modules. Otherwise fall back
+// to a module-local per-name LLVM global (does not persist).
 static LLVMValueRef lower_mir_global_load(MirInstr *instr,
                                           LLVMModuleRef module,
                                           LLVMBuilderRef builder,
@@ -1282,12 +1307,38 @@ static LLVMValueRef lower_mir_global_load(MirInstr *instr,
 
   LLVMTypeRef storage_type =
       lower_mir_value_storage_type(instr->type, ctx, module);
-  LLVMValueRef global =
-      lower_mir_global_value(module, instr->data.op.global_name, storage_type);
-  if (!storage_type || !global) {
+  if (!storage_type) {
     return NULL;
   }
 
+  if (instr->data.op.global_slot >= 0) {
+    LLVMValueRef storage_array = get_global_storage_array(module);
+    if (!storage_array) {
+      return NULL;
+    }
+    LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+    LLVMValueRef slot_index =
+        LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx),
+                     (unsigned long)instr->data.op.global_slot, true);
+    LLVMValueRef indices[] = {
+        LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 0, true), slot_index};
+    LLVMValueRef slot_ptr = LLVMBuildGEP2(
+        builder, lower_mir_global_slot_type(module), storage_array, indices, 2,
+        "global.slot.ptr");
+    LLVMValueRef void_ptr =
+        LLVMBuildLoad2(builder,
+                        LLVMPointerType(LLVMInt8TypeInContext(llvm_ctx), 0),
+                        slot_ptr, "global.void.ptr");
+    LLVMValueRef typed_ptr = LLVMBuildBitCast(
+        builder, void_ptr, LLVMPointerType(storage_type, 0), "global.typed.ptr");
+    return LLVMBuildLoad2(builder, storage_type, typed_ptr, "global.load");
+  }
+
+  LLVMValueRef global =
+      lower_mir_global_value(module, instr->data.op.global_name, storage_type);
+  if (!global) {
+    return NULL;
+  }
   return LLVMBuildLoad2(builder, storage_type, global, "global.load");
 }
 
@@ -1306,9 +1357,7 @@ static LLVMValueRef lower_mir_global_store(MirFunction *fn, MirInstr *instr,
                                       : mir_function_value_type(fn, value_id);
   LLVMTypeRef storage_type = lower_mir_value_storage_type(type, ctx, module);
   LLVMValueRef value = mir_llvm_value_get_rvalue(values, value_id, builder);
-  LLVMValueRef global =
-      lower_mir_global_value(module, instr->data.op.global_name, storage_type);
-  if (!storage_type || !value || !global) {
+  if (!storage_type || !value) {
     return NULL;
   }
 
@@ -1318,6 +1367,37 @@ static LLVMValueRef lower_mir_global_store(MirFunction *fn, MirInstr *instr,
     return NULL;
   }
 
+  if (instr->data.op.global_slot >= 0) {
+    // Box the value in malloc'd storage and store its address into the
+    // process-global slot array (mirrors codegen_set_global), so the
+    // value survives across REPL inputs.
+    LLVMValueRef storage_array = get_global_storage_array(module);
+    if (!storage_array) {
+      return NULL;
+    }
+    LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+    LLVMValueRef malloced = LLVMBuildMalloc(builder, storage_type, "global.malloc");
+    LLVMBuildStore(builder, value, malloced);
+    LLVMValueRef void_ptr = LLVMBuildBitCast(
+        builder, malloced, LLVMPointerType(LLVMInt8TypeInContext(llvm_ctx), 0),
+        "global.box.ptr");
+    LLVMValueRef slot_index =
+        LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx),
+                     (unsigned long)instr->data.op.global_slot, true);
+    LLVMValueRef indices[] = {
+        LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 0, true), slot_index};
+    LLVMValueRef slot_ptr = LLVMBuildGEP2(
+        builder, lower_mir_global_slot_type(module), storage_array, indices, 2,
+        "global.slot.ptr");
+    LLVMBuildStore(builder, void_ptr, slot_ptr);
+    return LLVMGetUndef(LLVMVoidTypeInContext(llvm_ctx));
+  }
+
+  LLVMValueRef global =
+      lower_mir_global_value(module, instr->data.op.global_name, storage_type);
+  if (!global) {
+    return NULL;
+  }
   LLVMBuildStore(builder, value, global);
   return LLVMGetUndef(LLVMVoidTypeInContext(LLVMGetModuleContext(module)));
 }
@@ -3026,12 +3106,9 @@ static MirFunction *lower_mir_call_fn_ref_target(MirLlvmCtx *lctx,
     return NULL;
   }
 
-  if (instr->data.call.specialized_fn != MIR_NO_FUNCTION &&
-      instr->data.call.specialized_fn < lctx->functions_len && lctx->program &&
-      instr->data.call.specialized_fn < lctx->program->functions.len) {
-    return lctx->program->functions.items
-               ? lctx->program->functions.items[instr->data.call.specialized_fn]
-               : NULL;
+  if (instr->data.call.specialized_fn &&
+      instr->data.call.specialized_fn->id < lctx->functions_len) {
+    return instr->data.call.specialized_fn;
   }
 
   if (instr->data.call.callee == MIR_NO_VALUE) {
@@ -3041,14 +3118,12 @@ static MirFunction *lower_mir_call_fn_ref_target(MirLlvmCtx *lctx,
   MirInstr *callee_def =
       mir_function_find_def_instr(fn, instr->data.call.callee);
   if (!callee_def || callee_def->kind != MIR_FN_REF ||
-      callee_def->data.fn_ref.fn >= lctx->functions_len || !lctx->program ||
-      callee_def->data.fn_ref.fn >= lctx->program->functions.len) {
+      !callee_def->data.fn_ref.fn ||
+      callee_def->data.fn_ref.fn->id >= lctx->functions_len) {
     return NULL;
   }
 
-  return lctx->program->functions.items
-             ? lctx->program->functions.items[callee_def->data.fn_ref.fn]
-             : NULL;
+  return callee_def->data.fn_ref.fn;
 }
 
 static LLVMValueRef
@@ -3438,10 +3513,10 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
   LLVMValueRef callee = NULL;
   LLVMTypeRef callee_type = NULL;
 
-  if (instr->data.call.specialized_fn != MIR_NO_FUNCTION &&
-      instr->data.call.specialized_fn < lctx->functions_len) {
-    callee = lctx->functions[instr->data.call.specialized_fn];
-    callee_type = lctx->function_types[instr->data.call.specialized_fn];
+  if (instr->data.call.specialized_fn &&
+      instr->data.call.specialized_fn->id < lctx->functions_len) {
+    callee = lctx->functions[instr->data.call.specialized_fn->id];
+    callee_type = lctx->function_types[instr->data.call.specialized_fn->id];
   }
 
   if (!callee && instr->data.call.specialized_name) {
@@ -3457,13 +3532,10 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
     MirInstr *callee_def =
         mir_function_find_def_instr(fn, instr->data.call.callee);
     if (callee_def && callee_def->kind == MIR_FN_REF &&
-        callee_def->data.fn_ref.fn < lctx->functions_len) {
-      MirFunction *target =
-          lctx->program &&
-                  callee_def->data.fn_ref.fn < lctx->program->functions.len
-              ? lctx->program->functions.items[callee_def->data.fn_ref.fn]
-              : NULL;
-      if (target && lower_mir_type_has_unresolved_vars(target->type)) {
+        callee_def->data.fn_ref.fn &&
+        callee_def->data.fn_ref.fn->id < lctx->functions_len) {
+      MirFunction *target = callee_def->data.fn_ref.fn;
+      if (lower_mir_type_has_unresolved_vars(target->type)) {
         fprintf(stderr,
                 "MIR to LLVM lowering cannot lower unspecialized generic call "
                 "$%s in %s\n",
@@ -3471,13 +3543,13 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
                 fn && fn->name ? fn->name : "<anonymous>");
         return NULL;
       }
-      callee = lctx->functions[callee_def->data.fn_ref.fn];
-      callee_type = lctx->function_types[callee_def->data.fn_ref.fn];
-      if (!callee && target) {
+      callee = lctx->functions[target->id];
+      callee_type = lctx->function_types[target->id];
+      if (!callee) {
         callee = LLVMGetNamedFunction(
             module, lower_mir_function_symbol_name(lctx, target));
       }
-      if (!callee_type && target) {
+      if (!callee_type) {
         callee_type = lower_mir_function_type(target, &lctx->jit_ctx, module);
       }
     }

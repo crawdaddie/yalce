@@ -550,11 +550,20 @@ int orcjit(int argc, char **argv) {
   // any single MirProgram, so top-level bindings (values, functions,
   // module members) accumulate across compile_script / compile_source
   // calls. Nested scopes stay program-arena-bound (see mir_scope_arena).
+  // A durable arena backs top-level non-capturing function bodies so they
+  // persist across inputs (MIR_FUNCTION_IDENTITY_PLAN.md "Durable function
+  // allocation").
   ht mir_root_table;
   MirStackFrame mir_root_frame;
   mir_stack_frame_init(NULL, &mir_root_table, &mir_root_frame, NULL);
+  MirArena *mir_durable_arena = mir_arena_create();
+  ht *mir_durable_builtins = mir_durable_builtins_create();
+  mir_root_frame.durable_arena = mir_durable_arena;
+  mir_root_frame.durable_builtins = mir_durable_builtins;
 
   if (!ylc_config.num_input_scripts && !ylc_config.interactive_mode) {
+    mir_durable_builtins_destroy(mir_durable_builtins);
+    mir_arena_destroy(mir_durable_arena);
     LLVMDisposeTargetMachine(target_machine);
     LLVMOrcDisposeLLJIT(jit);
     return 0;
@@ -617,5 +626,7 @@ int orcjit(int argc, char **argv) {
 
   LLVMDisposeTargetMachine(target_machine);
   LLVMOrcDisposeLLJIT(jit);
+  mir_durable_builtins_destroy(mir_durable_builtins);
+  mir_arena_destroy(mir_durable_arena);
   return result;
 }

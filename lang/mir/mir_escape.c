@@ -44,14 +44,6 @@ static bool mir_escape_mark(bool *set, MirFunction *fn, MirValueId value) {
   return true;
 }
 
-static MirFunction *mir_escape_program_get_function(MirProgram *program,
-                                                    MirFunctionId id) {
-  if (!program || id == MIR_NO_FUNCTION || id >= program->functions.len) {
-    return NULL;
-  }
-  return program->functions.items[id];
-}
-
 static bool mir_escape_is_tracked_type(Type *type) {
   return type && (is_array_type(type) || is_list_type(type) ||
                   is_string_type(type) || is_closure(type) ||
@@ -184,23 +176,17 @@ static MirFunction *mir_escape_call_callee(MirEscapeProgramCtx *program_ctx,
     return NULL;
   }
 
-  if (call->data.call.specialized_fn != MIR_NO_FUNCTION) {
-    MirFunction *specialized = mir_escape_program_get_function(
-        program_ctx->program, call->data.call.specialized_fn);
-    if (specialized) {
-      return specialized;
-    }
+  if (call->data.call.specialized_fn) {
+    return call->data.call.specialized_fn;
   }
 
   MirInstr *callee =
       mir_function_find_def_instr(fn, call->data.call.callee);
-  if (!callee || callee->kind != MIR_FN_REF ||
-      callee->data.fn_ref.fn == MIR_NO_FUNCTION) {
+  if (!callee || callee->kind != MIR_FN_REF || !callee->data.fn_ref.fn) {
     return NULL;
   }
 
-  return mir_escape_program_get_function(program_ctx->program,
-                                         callee->data.fn_ref.fn);
+  return callee->data.fn_ref.fn;
 }
 
 static bool mir_escape_callee_param_escapes(MirEscapeProgramCtx *program_ctx,

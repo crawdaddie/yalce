@@ -16,6 +16,7 @@ typedef struct MirInstrVec MirInstrVec;
 typedef struct MirInstr MirInstr;
 typedef struct MirBuiltinSymbol MirBuiltinSymbol;
 typedef struct MirFnSummary MirFnSummary;
+typedef struct MirFunction MirFunction;
 
 typedef unsigned MirFunctionId;
 typedef unsigned MirBlockId;
@@ -58,9 +59,14 @@ typedef struct MirSymbol {
   // differs from `generation`. Mirrors the old backend_llvm JITSymbol,
   // which kept `val` and a storage slot on one STYPE_TOP_LEVEL_VAR entry.
   MirValueId global_value;
+  // Slot index into the process-global storage array (global_storage_array)
+  // for a MIR_SYMBOL_GLOBAL, so a value stored in one REPL input's LLVM
+  // module loads in a later input's module via the same C array slot.
+  // -1 = unassigned (non-durable global).
+  int global_slot;
   union {
     MirValueId value;
-    MirFunctionId function;
+    MirFunction *function;
     MirModuleId module;
     Ast *expr;
     const char *global_name;
@@ -70,6 +76,25 @@ typedef struct MirSymbol {
 typedef struct MirStackFrame {
   ht *table;
   struct MirStackFrame *next;
+  // Persistent arena backing durable top-level function bodies (see
+  // "Durable function allocation" in MIR_FUNCTION_IDENTITY_PLAN.md). Set
+  // only on the root frame held by the REPL session; NULL otherwise.
+  // Top-level non-capturing functions allocate their MirFunction/blocks/
+  // instrs from this arena so they outlive any single MirProgram, and the
+  // durable MIR_SYMBOL_FUNCTION (carrying the MirFunction *) re-resolves
+  // across inputs.
+  MirArena *durable_arena;
+  // Monotonic slot counter for durable MIR_SYMBOL_GLOBAL entries, so each
+  // top-level value global gets a unique index into the process-global
+  // storage array. Set only on the root frame held by the REPL session.
+  int global_slot_counter;
+  // Durable cache of core builtin symbols, keyed by name. Builtins are a
+  // fixed set; the MirBuiltinSymbol * is allocated once (from the durable
+  // arena) and reused across MirPrograms so that durable function bodies
+  // — whose MIR_CALL instrs hold MirBuiltinSymbol * pointers — keep
+  // valid builtin references after the defining MirProgram is destroyed.
+  // NULL when there is no durable arena (one-shot compilation).
+  ht *durable_builtins;
 } MirStackFrame;
 typedef struct MirCtx {
   MirStackFrame *frame;
@@ -323,6 +348,11 @@ typedef struct {
   int constructor_index;
   const char *constructor_name;
   const char *global_name;
+  // Slot index into the process-global storage array for
+  // MIR_OP_KIND_GLOBAL_LOAD / MIR_OP_KIND_GLOBAL_STORE. -1 = unassigned
+  // (the lowering falls back to a per-name LLVM global, which is
+  // module-local and does not persist across REPL inputs).
+  int global_slot;
 } MirOp;
 
 typedef struct {
@@ -390,7 +420,7 @@ typedef struct MirInstr {
     MirConstruct construct;
 
     struct {
-      MirFunctionId fn;
+      MirFunction *fn;
       const char *name;
     } fn_ref;
 
@@ -399,7 +429,7 @@ typedef struct MirInstr {
       MirBuiltinSymbol *builtin;
       Type *callee_type;
       const char *specialized_name;
-      MirFunctionId specialized_fn;
+      MirFunction *specialized_fn;
       MirValueIdVec operands;
       MirOperandUseVec operand_uses;
     } call;
@@ -443,7 +473,7 @@ typedef struct MirFunction {
   Type *type;
   Ast *origin;
   bool is_extern;
-  MirFunctionId specialization_of;
+  MirFunction *specialization_of;
   Type *specialization_type;
   MirFnSummary summary;
   MirParamVec params;
@@ -487,6 +517,10 @@ struct MirProgram {
   // id-keyed symbols (MIR_SYMBOL_VALUE / FUNCTION) whose generation
   // doesn't match the program they're being resolved against.
   unsigned generation;
+  // Durable builtin cache + durable arena shared across REPL inputs (see
+  // MirStackFrame). Set from the root frame in mir_build_program.
+  ht *durable_builtins;
+  MirArena *durable_arena;
 };
 
 struct MirBuilder {
@@ -500,6 +534,7 @@ void mir_arena_destroy(MirArena *arena);
 void *mir_arena_alloc(MirArena *arena, size_t size, size_t align);
 char *mir_arena_strdup(MirArena *arena, const char *str);
 char *mir_arena_strndup(MirArena *arena, const char *str, size_t len);
+char *mir_arena_printf(MirArena *arena, const char *fmt, ...);
 void mir_value_id_vec_push(MirArena *arena, MirValueIdVec *vec,
                            MirValueId value);
 void mir_phi_incoming_vec_push(MirArena *arena, MirPhiIncomingVec *vec,
@@ -510,6 +545,8 @@ void mir_instr_vec_push(MirArena *arena, MirInstrVec *vec, MirInstr value);
 
 void mir_stack_frame_init(MirArena *arena, ht *table, MirStackFrame *frame,
                           MirStackFrame *next);
+ht *mir_durable_builtins_create(void);
+void mir_durable_builtins_destroy(ht *table);
 bool mir_ctx_bind_symbol(MirCtx *ctx, const char *name, MirSymbol *symbol);
 bool mir_ctx_bind_value(MirCtx *ctx, const char *name, MirValueId value);
 bool mir_ctx_lookup_value(MirCtx *ctx, const char *name, MirValueId *out);
@@ -535,6 +572,9 @@ int mir(Ast *prog, TypeEnv *type_env);
 
 MirFunction *mir_program_add_function(MirProgram *program, const char *name,
                                       Type *type, Ast *origin);
+MirFunction *mir_program_add_function_arena(MirProgram *program,
+                                            const char *name, Type *type,
+                                            Ast *origin, MirArena *alloc_arena);
 MirValueId mir_function_add_param(MirFunction *fn, const char *name, Type *type,
                                   Ast *origin);
 MirBlock *mir_function_add_block(MirFunction *fn, const char *name);
