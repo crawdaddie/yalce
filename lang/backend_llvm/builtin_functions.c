@@ -1371,30 +1371,61 @@ LLVMValueRef SerializeBlobHandler(Ast *ast, JITLangCtx *ctx,
   return NULL;
 }
 
+static bool dlopen_path_should_resolve_from_source(const char *path) {
+  if (!path || path[0] == '\0' || path[0] == '/' || path[0] == '~' ||
+      path[0] == '@' || strstr(path, "://")) {
+    return false;
+  }
+  return strchr(path, '/') != NULL;
+}
+
+static const char *dlopen_source_path(Ast *ast) {
+  if (ast && ast->loc_info && ast->loc_info->src_file) {
+    return ast->loc_info->src_file;
+  }
+  return module_path;
+}
+
+static char *resolve_dlopen_path(const char *path, const char *source_path) {
+  if (!path) {
+    return NULL;
+  }
+  if (!dlopen_path_should_resolve_from_source(path) || !source_path) {
+    return strdup(path);
+  }
+
+  char *source_dir = get_dirname(source_path);
+  if (!source_dir) {
+    return strdup(path);
+  }
+
+  char *full_path = resolve_relative_path(source_dir, path);
+  free(source_dir);
+  if (!full_path) {
+    return strdup(path);
+  }
+
+  char *normalized = normalize_path(full_path);
+  if (!normalized) {
+    return full_path;
+  }
+  free(full_path);
+  return normalized;
+}
+
 LLVMValueRef DlOpenHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder) {
   const char *path = ast->data.AST_APPLICATION.args->data.AST_STRING.value;
-  const char *full_path;
-
-  if (module_path == NULL) {
-
-    full_path = path;
-  } else {
-    const char *_module_path = get_dirname(module_path);
-
-    while (strncmp(path, "../", 3) == 0) {
-      path = path + 3;
-      _module_path = get_dirname(_module_path);
-    }
-
-    full_path = calloc(strlen(path) + strlen(_module_path) + 2, sizeof(char));
-    snprintf(full_path, strlen(_module_path) + strlen(path) + 2, "%s/%s",
-             _module_path, path);
+  char *full_path = resolve_dlopen_path(path, dlopen_source_path(ast));
+  if (!full_path) {
+    return LLVMConstInt(module_i32_type(module), 0, 0);
   }
 
   ylc_jit_ctx = ctx;
   ylc_jit_module = module;
   ylc_jit_builder = builder;
+  ylc_mir_program = NULL;
+  ylc_mir_ctx = NULL;
 
   ylc_runtime_load_fn = NULL;
   void *handle = dlopen(full_path, RTLD_GLOBAL | RTLD_LAZY);
@@ -1406,6 +1437,8 @@ LLVMValueRef DlOpenHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   ylc_jit_ctx = NULL;
   ylc_jit_module = NULL;
   ylc_jit_builder = NULL;
+  ylc_mir_program = NULL;
+  ylc_mir_ctx = NULL;
 
   if (!handle) {
     fprintf(stderr, "Failed to load library globally: %s\n", dlerror());

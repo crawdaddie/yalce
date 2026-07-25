@@ -303,7 +303,7 @@ void print_type_env_stream(TypeEnv *env, FILE *stream) {
   if (!env) {
     return;
   }
-  // fprintf(stream, "'%s' : ", env->name);
+  fprintf(stream, "'%s' : ", env->name);
   if (env->scheme_vars) {
     fprintf(stream, "∀ ");
     for (TypeList *v = env->scheme_vars; v; v = v->next) {

@@ -66,14 +66,14 @@ static void ylc_wasm_error(const char *where) {
 // reference globals by their assigned address.
 // ---------------------------------------------------------------------------
 typedef struct {
-  TypeEnv *env;                  // persistent type environment across inputs
-  ht global_slots;               // MIR global name -> uint32_t linear-mem address
-  uint32_t global_bump;          // next free address in the global region
-  ht mir_root_table;             // persistent MIR top-level symbols
-  MirStackFrame mir_root_frame;  // root frame backed by mir_root_table
-  MirArena *mir_durable_arena;   // durable top-level function bodies
-  ht *mir_durable_builtins;      // durable builtin symbols
-  char *import_prelude;          // successful import/open statements
+  TypeEnv *env;         // persistent type environment across inputs
+  ht global_slots;      // MIR global name -> uint32_t linear-mem address
+  uint32_t global_bump; // next free address in the global region
+  ht mir_root_table;    // persistent MIR top-level symbols
+  MirStackFrame mir_root_frame; // root frame backed by mir_root_table
+  MirArena *mir_durable_arena;  // durable top-level function bodies
+  ht *mir_durable_builtins;     // durable builtin symbols
+  char *import_prelude;         // successful import/open statements
 } YlWasmSession;
 
 static YlWasmSession g_session;
@@ -127,8 +127,8 @@ static bool ylc_wasm_session_init(void) {
 }
 
 static bool ylc_wasm_is_space(char ch) {
-  return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' ||
-         ch == '\f' || ch == '\v';
+  return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '\f' ||
+         ch == '\v';
 }
 
 static bool ylc_wasm_is_ident_char(char ch) {
@@ -176,8 +176,7 @@ static bool ylc_wasm_source_is_import_only(const char *source,
 }
 
 static bool ylc_wasm_session_has_import(YlWasmSession *session,
-                                        const char *stmt,
-                                        size_t stmt_len) {
+                                        const char *stmt, size_t stmt_len) {
   if (!session || !session->import_prelude) {
     return false;
   }
@@ -201,13 +200,13 @@ static void ylc_wasm_session_remember_import(YlWasmSession *session,
                                              const char *source) {
   const char *stmt = NULL;
   size_t stmt_len = 0;
-  if (!session ||
-      !ylc_wasm_source_is_import_only(source, &stmt, &stmt_len) ||
+  if (!session || !ylc_wasm_source_is_import_only(source, &stmt, &stmt_len) ||
       ylc_wasm_session_has_import(session, stmt, stmt_len)) {
     return;
   }
 
-  size_t old_len = session->import_prelude ? strlen(session->import_prelude) : 0;
+  size_t old_len =
+      session->import_prelude ? strlen(session->import_prelude) : 0;
   char *next = (char *)malloc(old_len + stmt_len + 2);
   if (!next) {
     ylc_wasm_error("persistent import prelude allocation failed");
@@ -225,9 +224,6 @@ static void ylc_wasm_session_remember_import(YlWasmSession *session,
 
 static const char *ylc_wasm_source_with_imports(YlWasmSession *session,
                                                 const char *source) {
-  if (!session || !session->import_prelude || !session->import_prelude[0]) {
-    return source;
-  }
 
   const char *stmt = NULL;
   size_t stmt_len = 0;
@@ -290,17 +286,15 @@ static MirProgram *ylc_wasm_frontend(const char *filename, const char *source,
                                      bool persist_session) {
   *out_arena = NULL;
 
-  const char *frontend_source =
-      ylc_wasm_source_with_imports(session, source);
+  const char *frontend_source = ylc_wasm_source_with_imports(session, source);
   Ast *prog = parse_input_buffer(filename, frontend_source);
   if (!prog) {
     ylc_wasm_error("parse failed");
     return NULL;
   }
 
-  TICtx ti_ctx = {.env = session ? session->env : NULL,
-                  .scope = 0,
-                  .err_stream = stderr};
+  TICtx ti_ctx = {
+      .env = session ? session->env : NULL, .scope = 0, .err_stream = stderr};
   if (!infer(prog, &ti_ctx)) {
     ylc_wasm_error("typecheck failed");
     return NULL;
@@ -354,10 +348,9 @@ static MirProgram *ylc_wasm_frontend(const char *filename, const char *source,
 // ===========================================================================
 // MIR -> WebAssembly lowering
 // ===========================================================================
-// This is the scaffold you'll flesh out. The design mirrors the existing
-// LLVM lowering (lang/llvm/lowering.c) and the legacy AST->wasm backend
-// (lang/backend_wasm/), but walks the MirProgram directly so the browser
-// artifact never links against LLVM.
+// The design mirrors the existing LLVM lowering (lang/llvm/lowering.c) and the
+// legacy AST->wasm backend (lang/backend_wasm/), but walks the MirProgram
+// directly so the browser artifact never links against LLVM.
 //
 // Suggested layout (each section below has a stub):
 //   1. Byte buffer + LEB128 writers (lifted from lang/backend_wasm/util.c).
@@ -935,9 +928,9 @@ static bool yw_function_body_supported_for_now_depth(MirFunction *fn,
       case MIR_CALL: {
         MirFunction *target =
             yw_instr_direct_call_target(fn, &block->instrs.items[i]);
-        if (!target || (target != fn && !target->is_extern &&
-                        !yw_function_body_supported_for_now_depth(target,
-                                                                  depth + 1))) {
+        if (!target ||
+            (target != fn && !target->is_extern &&
+             !yw_function_body_supported_for_now_depth(target, depth + 1))) {
           return false;
         }
         break;
@@ -964,8 +957,8 @@ static bool yw_function_body_supported_for_now(MirFunction *fn) {
   return yw_function_body_supported_for_now_depth(fn, 0);
 }
 
-static bool yw_add_func_def(YwModuleCtx *m, MirFunction *fn,
-                            YwFuncDefVec *vec, uint32_t func_index) {
+static bool yw_add_func_def(YwModuleCtx *m, MirFunction *fn, YwFuncDefVec *vec,
+                            uint32_t func_index) {
   if (!m || !fn || !vec) {
     return false;
   }
@@ -1787,8 +1780,8 @@ static YwFuncDef *yw_call_target(YwFnCtx *c, MirInstr *instr) {
   return yw_module_find_func(c->module, callee_def->data.fn_ref.name);
 }
 
-static bool yw_emit_call_operands(YwFnCtx *c, MirInstr *instr, YwFuncDef *target,
-                                  WasmBuf *code) {
+static bool yw_emit_call_operands(YwFnCtx *c, MirInstr *instr,
+                                  YwFuncDef *target, WasmBuf *code) {
   if (!c || !instr || !target || !target->fn) {
     return false;
   }

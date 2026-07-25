@@ -138,6 +138,7 @@ static MockSynth *create_mock_synth(int num_inlets) {
   MockSynth *m = calloc(1, sizeof(MockSynth));
 
   m->node.perform = (perform_func_t)perform_audio_graph;
+  m->node.kind = NODE_KIND_AUDIO_GRAPH;
   m->node.state_ptr = &m->graph;
 
   m->graph.num_inlets = num_inlets;

@@ -1,6 +1,7 @@
 #ifndef AUDIO_JIT_H
 #define AUDIO_JIT_H
 
+#include "../../engine/node.h"
 #include "../../lang/backend_llvm/common.h"
 #include "../../lang/ylc_datatypes.h"
 
@@ -9,6 +10,12 @@ LLVMValueRef ensure_float(Type *in_type, LLVMValueRef val,
 
 void ylc_register_synth_ctor(int synth_id, void *ctor);
 void *ylc_get_synth_ctor(int synth_id);
+Node *ylc_create_audio_node(perform_func_t perform, int num_inputs,
+                            int output_layout, int state_bytes,
+                            const char *meta_name);
+Node *ylc_create_audio_frame_node(frame_perform_func_t frame_perform,
+                                  int num_inputs, int output_layout,
+                                  int state_bytes, const char *meta_name);
 int ylc_rand_int(int n);
 
 extern int STYPE_AUDIO_JIT_SYM;

@@ -80,37 +80,70 @@ void perform_graph(Node *head, int frame_count, double spf, double *dac_buf,
     return;
   }
 
-  offset_node_bufs(head, head->frame_offset);
-
   Node *inputs[MAX_INPUTS];
+  int frame_offset = head->frame_offset;
+  if (frame_offset < 0) {
+    frame_offset = 0;
+  }
+  if (frame_offset > frame_count) {
+    frame_offset = frame_count;
+  }
+  int rendered_frames = frame_count - frame_offset;
 
-  if (head->perform) {
-    void *state = head + 1;
-
-    if (head->state_ptr) {
-      state = head->state_ptr;
+  if (head->kind == NODE_KIND_FRAME && head->frame_perform) {
+    void *state = head->state_ptr ? head->state_ptr : (void *)(head + 1);
+    __node_get_inputs_raw(head, inputs);
+    for (int frame = frame_offset; frame < frame_count; frame++) {
+      head->frame_perform(head, state, inputs, frame, spf);
     }
 
-    __node_get_inputs_raw(head, inputs);
-    head->perform(head, state, inputs, frame_count, spf);
-
-    if (head->bus) {
-
+    if (head->bus && rendered_frames > 0) {
       NodeRef bus = head->bus;
       double *bus_buf = bus->output.buf;
-      int layout = bus->output.layout;
-      write_to_dac(layout, bus_buf + (head->frame_offset * layout),
-                   head->output.layout, head->output.buf, 1,
-                   frame_count - head->frame_offset);
+      int bus_layout = bus->output.layout;
+      write_to_dac(bus_layout, bus_buf + (frame_offset * bus_layout),
+                   head->output.layout,
+                   head->output.buf + (frame_offset * head->output.layout), 1,
+                   rendered_frames);
     }
-    // printf("perform graph %d %d\n", frame_count, head->output.layout);
-    if (head->write_to_output) {
-      write_to_dac(layout, dac_buf + (head->frame_offset * layout),
-                   head->output.layout, head->output.buf, output_num,
-                   frame_count - head->frame_offset);
+
+    if (head->write_to_output && rendered_frames > 0) {
+      write_to_dac(layout, dac_buf + (frame_offset * layout),
+                   head->output.layout,
+                   head->output.buf + (frame_offset * head->output.layout),
+                   output_num, rendered_frames);
     }
+    head->frame_offset = 0;
+  } else {
+    offset_node_bufs(head, frame_offset);
+
+    if (head->perform) {
+      void *state = head + 1;
+
+      if (head->state_ptr) {
+        state = head->state_ptr;
+      }
+
+      __node_get_inputs_raw(head, inputs);
+      head->perform(head, state, inputs, frame_count, spf);
+
+      if (head->bus) {
+
+        NodeRef bus = head->bus;
+        double *bus_buf = bus->output.buf;
+        int bus_layout = bus->output.layout;
+        write_to_dac(bus_layout, bus_buf + (frame_offset * bus_layout),
+                     head->output.layout, head->output.buf, 1, rendered_frames);
+      }
+      // printf("perform graph %d %d\n", frame_count, head->output.layout);
+      if (head->write_to_output) {
+        write_to_dac(layout, dac_buf + (frame_offset * layout),
+                     head->output.layout, head->output.buf, output_num,
+                     rendered_frames);
+      }
+    }
+    unoffset_node_bufs(head, frame_offset);
   }
-  unoffset_node_bufs(head, head->frame_offset);
 
   if (head->next) {
     perform_graph(head->next, frame_count, spf, dac_buf, layout,
@@ -367,6 +400,7 @@ Node *instantiate_template(InValList *input_vals, AudioGraph *g) {
 
   *ensemble = (Node){
       .perform = (perform_func_t)perform_audio_graph,
+      .kind = NODE_KIND_AUDIO_GRAPH,
       .node_index = -1, // Special index for ensemble nodes
       .num_inputs = 0,
       .output = output_node->output,
@@ -747,7 +781,7 @@ NodeRef set_input_buf(int input, NodeRef buf, NodeRef node) {
 
 NodeRef set_input_buf_immediate(int input, NodeRef buf, NodeRef node) {
 
-  if ((char *)node->perform == (char *)perform_audio_graph) {
+  if (node->kind == NODE_KIND_AUDIO_GRAPH) {
 
     AudioGraph *g = (AudioGraph *)((Node *)node + 1);
     if (node->state_ptr) {
@@ -763,6 +797,9 @@ NodeRef set_input_buf_immediate(int input, NodeRef buf, NodeRef node) {
     // for (int i= 0; i < inlet_node->output.size * inlet_node->output.layout;
     // i++) { printf("buf data inlet: %f\n", inlet_node->output.buf[i]);
     // }
+  } else if (input >= 0 && input < MAX_INPUTS) {
+    node->connections[input].input_index = input;
+    node->connections[input].source_node_index = (uint64_t)buf;
   }
   return node;
 }

@@ -55,6 +55,7 @@ NodeRef group_node() {
 
   *node = (Node){
       .perform = (perform_func_t)perform_ensemble,
+      .kind = NODE_KIND_GROUP,
       .num_inputs = 0,
       .output = (Signal){.layout = 2, .size = BUF_SIZE, .buf = buf},
       .write_to_output = true,

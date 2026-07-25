@@ -29,7 +29,7 @@ typedef struct {
 typedef struct {
 } AllocatorCtx;
 
-typedef struct {
+typedef struct JITLangCtx {
   // ht stack[STACK_MAX];
   int stack_ptr;
   StackFrame *frame;

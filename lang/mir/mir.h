@@ -17,6 +17,8 @@ typedef struct MirInstr MirInstr;
 typedef struct MirBuiltinSymbol MirBuiltinSymbol;
 typedef struct MirFnSummary MirFnSummary;
 typedef struct MirFunction MirFunction;
+typedef struct MirCtx MirCtx;
+typedef struct MirSymbol MirSymbol;
 
 typedef unsigned MirFunctionId;
 typedef unsigned MirBlockId;
@@ -28,6 +30,9 @@ typedef unsigned MirModuleId;
 #define MIR_NO_VALUE ((MirValueId) - 1)
 #define MIR_NO_MODULE ((MirModuleId) - 1)
 
+typedef MirValueId (*MirCustomSymbolHandler)(MirBuilder *builder, Ast *app,
+                                             MirCtx *ctx, MirSymbol *symbol);
+
 typedef enum {
   MIR_SYMBOL_VALUE,
   MIR_SYMBOL_FUNCTION,
@@ -37,9 +42,10 @@ typedef enum {
   MIR_SYMBOL_GLOBAL,
   MIR_SYMBOL_EXPR,
   MIR_SYMBOL_TYPE,
+  MIR_SYMBOL_CUSTOM,
 } MirSymbolKind;
 
-typedef struct MirSymbol {
+struct MirSymbol {
   MirSymbolKind kind;
   Type *type;
   Ast *origin;
@@ -80,8 +86,12 @@ typedef struct MirSymbol {
     MirModuleId module;
     Ast *expr;
     const char *global_name;
+    struct {
+      MirCustomSymbolHandler handler;
+      void *data;
+    } custom;
   } as;
-} MirSymbol;
+};
 
 typedef struct MirStackFrame {
   ht *table;
@@ -106,12 +116,14 @@ typedef struct MirStackFrame {
   // NULL when there is no durable arena (one-shot compilation).
   ht *durable_builtins;
 } MirStackFrame;
-typedef struct MirCtx {
+struct MirCtx {
   MirStackFrame *frame;
   TypeEnv *env;
   MirModuleId current_module;
   bool export_bindings;
-} MirCtx;
+  const char *extension_kind;
+  void *extension_data;
+};
 
 typedef enum {
   MIR_CONST,
@@ -141,6 +153,7 @@ typedef enum {
 typedef enum {
   MIR_OP_KIND_PRIMITIVE,
   MIR_OP_KIND_CAST,
+  MIR_OP_KIND_TRUNC_TO_INT,
   MIR_OP_KIND_TAG_EQ,
   MIR_OP_KIND_LIST_IS_EMPTY,
   MIR_OP_KIND_ARRAY_SIZE,
@@ -326,6 +339,12 @@ typedef enum {
   MIR_RESULT_BORROWED,
 } MirResultOwnership;
 
+typedef enum {
+  MIR_BUILTIN_SYMBOL_CORE,
+  MIR_BUILTIN_SYMBOL_EXTERNAL,
+  MIR_BUILTIN_SYMBOL_EXTENSION,
+} MirBuiltinSymbolKind;
+
 typedef struct {
   MirOperandUse *items;
   size_t len;
@@ -409,6 +428,7 @@ struct MirBuiltinSymbol {
   Type *type;
   MirBuiltinHandler handler;
   void *data;
+  MirBuiltinSymbolKind kind;
   MirFnSummary summary;
   MirFunctionId function;
 };
@@ -514,12 +534,19 @@ typedef struct {
   size_t cap;
 } MirModuleVec;
 
+typedef struct {
+  const char **items;
+  size_t len;
+  size_t cap;
+} MirStringVec;
+
 struct MirProgram {
   MirArena *arena;
   TypeEnv *type_env;
   ht builtins;
   MirFunctionVec functions;
   MirModuleVec modules;
+  MirStringVec llvm_bitcode_paths;
   MirModuleId root_module;
   bool had_error;
   // Monotonic per-MirProgram stamp; symbols bound into the persistent
@@ -559,6 +586,9 @@ ht *mir_durable_builtins_create(void);
 void mir_durable_builtins_destroy(ht *table);
 bool mir_ctx_bind_symbol(MirCtx *ctx, const char *name, MirSymbol *symbol);
 bool mir_ctx_bind_value(MirCtx *ctx, const char *name, MirValueId value);
+bool mir_ctx_bind_custom_symbol(MirCtx *ctx, const char *name, Type *type,
+                                Ast *origin, MirCustomSymbolHandler handler,
+                                void *data);
 bool mir_ctx_lookup_value(MirCtx *ctx, const char *name, MirValueId *out);
 
 #define MIR_STACK_ALLOC_CTX_PUSH(_ctx_name, _builder, _ctx)                    \
@@ -585,6 +615,10 @@ MirFunction *mir_program_add_function(MirProgram *program, const char *name,
 MirFunction *mir_program_add_function_arena(MirProgram *program,
                                             const char *name, Type *type,
                                             Ast *origin, MirArena *alloc_arena);
+MirFunction *mir_program_add_extern_function(MirProgram *program,
+                                             const char *name, Type *type,
+                                             Ast *origin);
+bool mir_program_add_llvm_bitcode(MirProgram *program, const char *path);
 MirValueId mir_function_add_param(MirFunction *fn, const char *name, Type *type,
                                   Ast *origin);
 MirBlock *mir_function_add_block(MirFunction *fn, const char *name);
@@ -612,8 +646,8 @@ MirValueId mir_builder_append_instr(MirBuilder *builder, MirInstr instr);
 // MIR_NO_VALUE (without appending) when a required operand is MIR_NO_VALUE.
 // Public mir_* wrappers (mir_const_int, mir_tuple, ...) forward to these so
 // their bodies stay one or two lines.
-MirValueId mir_emit_const(MirBuilder *builder, MirConst const_value,
-                          Type *type, Ast *origin);
+MirValueId mir_emit_const(MirBuilder *builder, MirConst const_value, Type *type,
+                          Ast *origin);
 MirValueId mir_emit_op0(MirBuilder *builder, MirOpKind kind, Type *type,
                         Ast *origin);
 MirValueId mir_emit_op1(MirBuilder *builder, MirOpKind kind, Type *type,
@@ -624,8 +658,8 @@ MirValueId mir_emit_op3(MirBuilder *builder, MirOpKind kind, Type *type,
                         Ast *origin, MirValueId a, MirValueId b, MirValueId c);
 MirValueId mir_emit_extract(MirBuilder *builder, MirExtractKind kind,
                             Type *type, Ast *origin, MirValueId value);
-MirValueId mir_emit_extract_field(MirBuilder *builder, Type *type,
-                                  Ast *origin, MirValueId value, size_t index,
+MirValueId mir_emit_extract_field(MirBuilder *builder, Type *type, Ast *origin,
+                                  MirValueId value, size_t index,
                                   const char *name);
 MirValueId mir_emit_construct(MirBuilder *builder, MirConstructKind kind,
                               Type *type, Ast *origin);
@@ -633,8 +667,8 @@ MirValueId mir_emit_construct_items(MirBuilder *builder, MirConstructKind kind,
                                     Type *type, Ast *origin,
                                     MirValueIdVec items);
 MirValueId mir_emit_construct_ops2(MirBuilder *builder, MirConstructKind kind,
-                                    Type *type, Ast *origin, MirValueId a,
-                                    MirValueId b);
+                                   Type *type, Ast *origin, MirValueId a,
+                                   MirValueId b);
 // Fills the common call-shaped payload (callee, builtin, callee_type,
 // specialized_fn) shared by MIR_CALL/MIR_CORO_NEW/MIR_CORO_NEXT/MIR_CORO_RESET
 // on an instr already produced by mir_make_instr.
@@ -670,6 +704,8 @@ MirValueId mir_phi(MirBuilder *builder, Type *type, Ast *origin,
                    MirPhiIncomingVec incoming);
 MirValueId mir_primitive_cast(MirBuilder *builder, Type *from_type,
                               Type *to_type, Ast *origin, MirValueId value);
+MirValueId mir_trunc_to_int(MirBuilder *builder, Type *from_type, Ast *origin,
+                            MirValueId value);
 MirValueId mir_tuple(MirBuilder *builder, Type *type, Ast *origin,
                      MirValueIdVec items);
 MirValueId mir_tuple_get(MirBuilder *builder, Type *type, Ast *origin,
@@ -718,8 +754,8 @@ void mir_prepare_call(MirBuilder *builder, MirInstr *call);
 MirValueId mir_call_value(MirBuilder *builder, Type *type, Ast *origin,
                           MirValueId callee, Type *callee_type,
                           const MirValueId *args, size_t argc);
-MirValueId mir_coro_next(MirBuilder *builder, Ast *origin,
-                         MirValueId coroutine, Type *coroutine_type);
+MirValueId mir_coro_next(MirBuilder *builder, Ast *origin, MirValueId coroutine,
+                         Type *coroutine_type);
 MirValueId mir_coro_reset(MirBuilder *builder, Ast *origin,
                           MirValueId coroutine, Type *coroutine_type);
 MirValueId mir_primitive_instr(MirBuilder *builder, MirPrimitiveOp op,
@@ -770,6 +806,12 @@ MirBuiltinSymbol *mir_program_register_builtin(MirProgram *program,
                                                const char *name, Type *type,
                                                MirBuiltinHandler handler,
                                                void *data);
+MirBuiltinSymbol *mir_register_builtin(MirProgram *program, TypeEnv *entry,
+                                       MirBuiltinHandler handler,
+                                       MirBuiltinSymbolKind kind,
+                                       const MirOperandUse *param_uses,
+                                       size_t param_uses_len,
+                                       MirResultOwnership result);
 MirBuiltinSymbol *mir_program_lookup_builtin(MirProgram *program,
                                              const char *name);
 void mir_register_core_builtins(MirProgram *program);

@@ -288,11 +288,12 @@ static LLVMValueRef codegen_orc_test_module(Ast *ast, JITLangCtx *ctx,
   return func;
 }
 
-static ORCCompiledModule
-compile_source(const char *filename, const char *source, bool print_result,
-               TypeEnv **env, JITLangCtx *ctx, LLVMOrcLLJITRef jit,
-               LLVMTargetMachineRef target_machine,
-               MirStackFrame *mir_root_frame) {
+static ORCCompiledModule compile_source(const char *filename,
+                                        const char *source, bool print_result,
+                                        TypeEnv **env, JITLangCtx *ctx,
+                                        LLVMOrcLLJITRef jit,
+                                        LLVMTargetMachineRef target_machine,
+                                        MirStackFrame *mir_root_frame) {
   if (!filename || !source) {
     return compiled_module_none();
   }
@@ -432,9 +433,8 @@ static ORCCompiledModule compile_script(const char *filename, TypeEnv **env,
     return compiled_module_none();
   }
 
-  ORCCompiledModule compiled =
-      compile_source(filename, source, false, env, ctx, jit, target_machine,
-                      mir_root_frame);
+  ORCCompiledModule compiled = compile_source(
+      filename, source, false, env, ctx, jit, target_machine, mir_root_frame);
   free(source);
   return compiled;
 }
@@ -569,9 +569,9 @@ int orcjit(int argc, char **argv) {
   }
   int result = 0;
   for (int i = 0; i < ylc_config.num_input_scripts; i++) {
-    ORCCompiledModule compiled = compile_script(
-        ylc_config.input_scripts[i], &env, &ctx, jit, target_machine,
-        &mir_root_frame);
+    ORCCompiledModule compiled =
+        compile_script(ylc_config.input_scripts[i], &env, &ctx, jit,
+                       target_machine, &mir_root_frame);
     if (ylc_config.test_mode) {
       printf("\n## Test %s\n", ylc_config.input_scripts[i]);
     }
@@ -586,6 +586,9 @@ int orcjit(int argc, char **argv) {
 
   int repl_counter = 0;
   const char *prompt = COLOR_RED "λ " COLOR_RESET COLOR_CYAN;
+  if (ylc_config.num_input_scripts && ylc_config.interactive_mode) {
+    printf("\n");
+  }
   while (ylc_config.interactive_mode) {
     char *input = repl_input(prompt);
     if (!input) {
@@ -605,9 +608,9 @@ int orcjit(int argc, char **argv) {
     char repl_filename[64];
     snprintf(repl_filename, sizeof(repl_filename), "<repl:%d>", repl_counter++);
 
-    ORCCompiledModule compiled = compile_source(
-        repl_filename, input, true, &env, &ctx, jit, target_machine,
-        &mir_root_frame);
+    ORCCompiledModule compiled =
+        compile_source(repl_filename, input, true, &env, &ctx, jit,
+                       target_machine, &mir_root_frame);
     if (!compiled.module) {
       free(input);
       continue;

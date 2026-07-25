@@ -10,6 +10,16 @@ typedef struct summed_inlet_state {
   struct summed_inlet_state *next;
 } summed_inlet_state;
 
+static AudioGraph *embedded_graph_for_node(NodeRef node) {
+  if (!node) {
+    return NULL;
+  }
+  if (node->state_ptr) {
+    return node->state_ptr;
+  }
+  return (AudioGraph *)((char *)node + sizeof(Node));
+}
+
 void *summed_inlet_perform(Node *node, summed_inlet_state *state,
                            Node *inputs[], int nframes, double spf) {
   int output_num = 0;
@@ -35,9 +45,20 @@ void *summed_inlet_perform(Node *node, summed_inlet_state *state,
 NodeRef pipe_into(NodeRef filter, int idx, NodeRef node) {
   // if (filter->)
   // printf("pipe %p into %p\n", node, filter);
-  AudioGraph *g = filter + 1;
-  if (filter->state_ptr) {
-    g = filter->state_ptr;
+  if (!filter || !node || idx < 0 || idx >= MAX_INPUTS) {
+    return filter;
+  }
+
+  if (filter->kind != NODE_KIND_AUDIO_GRAPH) {
+    filter->connections[idx].input_index = idx;
+    filter->connections[idx].source_node_index = (uint64_t)node;
+    node->write_to_output = false;
+    return filter;
+  }
+
+  AudioGraph *g = embedded_graph_for_node(filter);
+  if (!g || idx >= g->num_inlets) {
+    return filter;
   }
   int inlet_idx = g->inlets[idx];
   NodeRef inlet_node = g->nodes + inlet_idx;
@@ -50,18 +71,19 @@ NodeRef pipe_into(NodeRef filter, int idx, NodeRef node) {
     inlet_node->output = (Signal){
         .layout = _layout,
         .size = BUF_SIZE,
-        .buf = malloc(sizeof(BUF_SIZE * _layout)),
+        .buf = malloc(sizeof(double) * BUF_SIZE * _layout),
     };
   }
 
   if (inlet_node->perform == NULL) {
     inlet_node->perform = (perform_func_t)summed_inlet_perform;
+    inlet_node->kind = NODE_KIND_SUMMED_INLET;
     inlet_node->state_ptr = malloc(sizeof(summed_inlet_state));
     summed_inlet_state *st = inlet_node->state_ptr;
     *st = (summed_inlet_state){.sig = node, .next = NULL};
     inlet_node->state_ptr = st;
 
-  } else if (((char *)inlet_node->perform) == (char *)summed_inlet_perform) {
+  } else if (inlet_node->kind == NODE_KIND_SUMMED_INLET) {
 
     summed_inlet_state *st = inlet_node->state_ptr;
     summed_inlet_state *new_st = malloc(sizeof(summed_inlet_state));
@@ -75,15 +97,7 @@ NodeRef pipe_into(NodeRef filter, int idx, NodeRef node) {
 }
 
 NodeRef plug_node(NodeRef filter, int idx, NodeRef node) {
-  AudioGraph *g = filter + 1;
-  if (filter->state_ptr) {
-    g = filter->state_ptr;
-  }
-  int inlet_idx = g->inlets[idx];
-  NodeRef inlet_node = g->nodes + inlet_idx;
-  int layout = inlet_node->output.layout;
-
-  int _layout = node->output.layout;
+  return pipe_into(filter, idx, node);
 }
 
 void *bus_perform(Node *node, void *state, Node *inputs[], int nframes,
@@ -92,4 +106,5 @@ void *bus_perform(Node *node, void *state, Node *inputs[], int nframes,
   double *out = node->output.buf;
   int layout = node->output.layout;
   memset(out, 0, layout * node->output.size * sizeof(double));
+  return out;
 }

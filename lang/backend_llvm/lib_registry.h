@@ -1,42 +1,44 @@
 #ifndef YLC_LIB_REGISTRY_H
 #define YLC_LIB_REGISTRY_H
 
-#include "./common.h"
+#include <stdbool.h>
 #include <llvm-c/Types.h>
 
+typedef struct JITLangCtx JITLangCtx;
+typedef struct MirProgram MirProgram;
+typedef struct MirCtx MirCtx;
+
 /*
- * Set by DlOpenHandler immediately before calling dlopen().
- * Cleared to NULL after the call returns.
+ * Set immediately before a compiler-triggered dlopen() and cleared after the
+ * call returns. A loaded library can inspect these from an
+ * __attribute__((constructor)) function to register compiler extensions.
  *
- * Libraries loaded via `dlopen` can declare these as extern and read them
- * inside a __attribute__((constructor)) function to register new builtins
- * into the active JIT context — the same way initialize_builtin_funcs() does.
+ * During AST-to-MIR construction, ylc_mir_program and ylc_mir_ctx are set.
+ * During LLVM lowering, ylc_jit_ctx, ylc_jit_module and ylc_jit_builder are
+ * set instead.
  *
- * Usage in a library:
+ * Usage in a library constructor:
  *
  *   #include "backend_llvm/lib_registry.h"
- *   #include "backend_llvm/symbols.h"
- *   #include "common.h"
- *
- *   static LLVMValueRef MyHandler(Ast *ast, JITLangCtx *ctx,
- *                                 LLVMModuleRef module, LLVMBuilderRef builder)
- *   { ... }
  *
  *   __attribute__((constructor))
  *   static void ylc_mylib_init(void) {
- *       if (!ylc_jit_ctx) return;
- *       ht *stack = ylc_jit_ctx->frame->table;
- *       JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, NULL, NULL, NULL);
- *       sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler = MyHandler;
- *       const char *name = "my_builtin";
- *       ht_set_hash(stack, name, hash_string(name, strlen(name)), sym);
+ *       if (ylc_mir_program) {
+ *           // Register MIR builtins / extension ops.
+ *       } else if (ylc_jit_ctx) {
+ *           // Register legacy LLVM backend builtins.
+ *       }
  *   }
  */
 extern JITLangCtx *ylc_jit_ctx;
 extern LLVMModuleRef ylc_jit_module;
 extern LLVMBuilderRef ylc_jit_builder;
+extern MirProgram *ylc_mir_program;
+extern MirCtx *ylc_mir_ctx;
 typedef void (*YlcRuntimeLoadFn)(void);
 
 extern YlcRuntimeLoadFn ylc_runtime_load_fn;
+
+bool ylc_link_llvm_bitcode_file(LLVMModuleRef module, const char *path);
 
 #endif

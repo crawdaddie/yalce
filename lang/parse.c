@@ -1250,9 +1250,9 @@ static ParsingContext save_parsing_context() {
 static void restore_parsing_context(ParsingContext ctx) { ctx = ctx; }
 
 static bool path_has_url_scheme(const char *path) {
-  return path && (strncmp(path, "http://", 7) == 0 ||
-                  strncmp(path, "https://", 8) == 0 ||
-                  strncmp(path, "ylc://", 6) == 0);
+  return path &&
+         (strncmp(path, "http://", 7) == 0 ||
+          strncmp(path, "https://", 8) == 0 || strncmp(path, "ylc://", 6) == 0);
 }
 
 char *check_path(char *fully_qualified_name, char *rel_path) {
@@ -1438,6 +1438,11 @@ bool find_top_level_range_at_line(Ast *root, const char *src, int line,
   }
 
   return false;
+}
+
+Ast *ast_import_from_uri(ObjString uri, bool import_all) {
+  printf("import from uri %s\n", uri.chars);
+  return NULL;
 }
 
 Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {

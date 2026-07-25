@@ -1667,7 +1667,8 @@ int resolve_predicates(Subst **subst_ptr, Predicate *preds) {
 
         // Check the trait
         if ((strcmp(p->trait->name, "Eq") != 0) &&
-            !get_typeclass_instance(t, p->trait->name, params)) {
+            !get_typeclass_instance(t, p->trait->name, params) &&
+            !is_pointer_type(t)) {
           if (err_stream) {
             fprintf(err_stream, "Type Error: ");
             if (strcmp(p->trait->name, TYPE_NAME_TYPECLASS_FROM) == 0 &&

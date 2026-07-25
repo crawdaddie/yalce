@@ -56,7 +56,7 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
       break;
     }
 
-    if ((char *)node->perform == (char *)perform_audio_graph) {
+    if (node->kind == NODE_KIND_AUDIO_GRAPH) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
       if (node->state_ptr) {
         g = node->state_ptr;
@@ -86,7 +86,7 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
       break;
     }
 
-    if ((char *)node->perform == (char *)perform_audio_graph) {
+    if (node->kind == NODE_KIND_AUDIO_GRAPH) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
       if (node->state_ptr) {
         g = node->state_ptr;
@@ -96,6 +96,9 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
       inlet_node->output.layout = buf->output.layout;
       inlet_node->output.size = buf->output.size;
       inlet_node->output.buf = buf->output.buf;
+    } else if (payload.input >= 0 && payload.input < MAX_INPUTS) {
+      node->connections[payload.input].input_index = payload.input;
+      node->connections[payload.input].source_node_index = (uint64_t)buf;
     }
 
     break;
@@ -108,7 +111,7 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
       break;
     }
 
-    if ((char *)node->perform == (char *)perform_audio_graph) {
+    if (node->kind == NODE_KIND_AUDIO_GRAPH) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
       if (node->state_ptr) {
         g = node->state_ptr;
@@ -148,7 +151,7 @@ static void process_msg_post(int frame_offset, audio_instruction msg) {
       break;
     }
 
-    if ((char *)node->perform == (char *)perform_audio_graph) {
+    if (node->kind == NODE_KIND_AUDIO_GRAPH) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
       if (node->state_ptr) {
         g = node->state_ptr;
@@ -177,7 +180,7 @@ static void process_msg_post(int frame_offset, audio_instruction msg) {
       break;
     }
 
-    if ((char *)node->perform == (char *)perform_audio_graph) {
+    if (node->kind == NODE_KIND_AUDIO_GRAPH) {
       AudioGraph *g = (AudioGraph *)((Node *)node + 1);
 
       if (node->state_ptr) {

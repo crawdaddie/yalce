@@ -396,8 +396,8 @@ LLVMValueRef rematerialize_function_symbol(JITSymbol *sym, JITLangCtx *ctx,
     LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
     LLVMTypeRef generic_ptr =
         LLVMPointerType(LLVMInt8TypeInContext(llvm_ctx), 0);
-    fn_type =
-        codegen_coro_fn_type(generic_ptr, sym->symbol_type, fn_len, ctx, module);
+    fn_type = codegen_coro_fn_type(generic_ptr, sym->symbol_type, fn_len, ctx,
+                                   module);
   } else {
     fn_type = codegen_fn_type(NULL, sym->symbol_type, fn_len, ctx, module);
   }

@@ -59,10 +59,20 @@ char *state_ptr(AudioGraph *graph, NodeRef node) {
   return graph->nodes_state_memory + node->state_offset;
 }
 
+static bool audio_graph_contains_node(AudioGraph *graph, NodeRef node) {
+  return graph && graph->nodes && node >= graph->nodes &&
+         node < graph->nodes + graph->node_count;
+}
+
 void plug_input_in_graph(int idx, NodeRef node, NodeRef input) {
+  if (!node || idx < 0 || idx >= MAX_INPUTS) {
+    return;
+  }
 
-  if (_graph) {
+  node->connections[idx].input_index = idx;
 
+  if (audio_graph_contains_node(_graph, node) &&
+      audio_graph_contains_node(_graph, input)) {
     node->connections[idx].source_node_index = input->node_index;
     return;
   }
@@ -195,17 +205,22 @@ void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
 
   while (node_count--) {
 
-    if (node->perform) {
+    bool rendered = false;
+    if (node->kind == NODE_KIND_FRAME && node->frame_perform) {
+      __node_get_inputs(node, graph, inputs);
+      char *state = __node_get_state(node, graph);
+      for (int frame = 0; frame < nframes; frame++) {
+        node->frame_perform(node, state, inputs, frame, spf);
+      }
+      rendered = true;
+    } else if (node->perform) {
       __node_get_inputs(node, graph, inputs);
       char *state = __node_get_state(node, graph);
       node->perform(node, state, inputs, nframes, spf);
+      rendered = true;
+    }
 
-      // if (node->node_math) {
-      //   for (int i = 0; i < node->output.size * node->output.layout; i++) {
-      //     node->output.buf[i] = node->node_math(node->output.buf[i]);
-      //   }
-      // }
-      //
+    if (rendered) {
       if (node->trig_end == true) {
         _node->trig_end = true;
         memset(_node->output.buf, 0,

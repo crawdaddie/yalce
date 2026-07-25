@@ -511,4 +511,6 @@ Ast *ast_decorated_signature(ObjString decorator, ObjString binding,
 Ast *ast_variadic_expr(Ast *ast);
 Ast *ast_not(Ast *ast);
 // Ast *array_offset_expression(Ast *array, Ast *index_expr);
+//
+Ast *ast_import_from_uri(ObjString uri, bool import_all);
 #endif

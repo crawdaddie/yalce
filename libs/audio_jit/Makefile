@@ -4,6 +4,7 @@ CC ?= clang
 CXX ?= clang++
 LLVM        = ${LLVM_PATH}
 LLVM_CONFIG = $(LLVM)/bin/llvm-config
+CLANG       = $(LLVM)/bin/clang
 
 CFLAGS  = -Wall -Wextra -fPIC -g
 CFLAGS += -I../../lang
@@ -13,13 +14,15 @@ CFLAGS += `$(LLVM_CONFIG) --cflags`
 
 # Suppress warnings from unused Yalce include surface
 CFLAGS += -Wno-unused-parameter -Wno-unused-function
+BITCODE_CFLAGS = $(filter-out -g,$(CFLAGS)) -g0
 
 CXXFLAGS  = $(CFLAGS)
 CXXFLAGS += -std=c++17
 
 LDFLAGS   = -shared
 LDFLAGS  += `$(LLVM_CONFIG) --libs core linker passes` -lLLVM-21
-LDFLAGS  += -lfftw3 -lm
+LDFLAGS  += -lm
+LDFLAGS  += -L../../engine/build -Wl,-rpath,'$$ORIGIN/../../engine/build'
 
 ifeq ($(shell uname -s),Darwin)
 LDFLAGS += -framework Accelerate
@@ -29,18 +32,19 @@ LIB_NAME    = libaudio_jit
 DYNAMIC_LIB = $(LIB_NAME).so
 BUILD_DIR   = build
 
-C_SOURCES = audio_jit.c compile_synth.c dsp_fn_application.c dsp_build_expr.c pattern_coroutine.c dsp_array_proc.c dsp_fork.c dsp_runtime.c dsp_spectral.c play_handler.c 
+C_SOURCES = audio_jit.c
 CPP_SOURCES =
 OBJECTS = $(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SOURCES))
 OBJECTS += $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(CPP_SOURCES))
+KERNEL_BITCODE = $(BUILD_DIR)/osc_kernels.bc
 LOCAL_HEADERS = $(wildcard *.h)
 ENGINE_HEADERS = $(wildcard ../../engine/*.h)
 ENGINE_LIB = ../../engine/build/libyalce_synth.so
 
 all: $(DYNAMIC_LIB)
 
-$(DYNAMIC_LIB): $(OBJECTS)
-	$(CXX) $(LDFLAGS) -o $@ $^
+$(DYNAMIC_LIB): $(OBJECTS) $(ENGINE_LIB) $(KERNEL_BITCODE)
+	$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) -lyalce_synth
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -50,6 +54,9 @@ $(BUILD_DIR)/%.o: %.c $(LOCAL_HEADERS) $(ENGINE_HEADERS) $(ENGINE_LIB) | $(BUILD
 
 $(BUILD_DIR)/%.o: %.cpp $(LOCAL_HEADERS) $(ENGINE_HEADERS) $(ENGINE_LIB) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/%.bc: %.c $(LOCAL_HEADERS) | $(BUILD_DIR)
+	$(CLANG) $(BITCODE_CFLAGS) -O3 -emit-llvm -c $< -o $@
 
 clean:
 	rm -rf $(BUILD_DIR) $(DYNAMIC_LIB)

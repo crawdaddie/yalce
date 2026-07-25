@@ -285,6 +285,8 @@ let_binding:
   | OPEN PATH_IDENTIFIER              { $$ = ast_import_stmt($2, true); SET_AST_LOC($$, @$); }
   | IMPORT IDENTIFIER                 { $$ = ast_import_stmt($2, false); SET_AST_LOC($$, @$); }
   | OPEN IDENTIFIER                   { $$ = ast_import_stmt($2, true); SET_AST_LOC($$, @$); }
+  | IMPORT TOK_STRING                       { $$ = ast_import_from_uri($2, false); SET_AST_LOC($$, @$); }
+  | OPEN TOK_STRING                          { $$ = ast_import_from_uri($2, true); SET_AST_LOC($$, @$); }
   | LET IDENTIFIER ':' IDENTIFIER '=' lambda_expr { $$ = ast_trait_impl($4, $2, $6); SET_AST_LOC($$, @$); }
   | LET IDENTIFIER '=' AT IDENTIFIER lambda_expr  { $$ = ast_decorated_lambda($5, $2, $6); }
   | LET IDENTIFIER '=' AT IDENTIFIER EXTERN FN fn_signature  { $$ = ast_decorated_signature($5, $2, $8); }
