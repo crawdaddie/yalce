@@ -32,8 +32,7 @@ void print_type_to_stream(Type *t, FILE *stream);
 static Type *mir_closure_callable_type(MirArena *arena, Type *closure_type);
 static MirFunction *mir_program_find_function_by_name(MirProgram *program,
                                                       const char *name);
-static MirSymbol *mir_resolve_ast_symbol(MirBuilder *builder, Ast *ast,
-                                         MirCtx *ctx);
+MirSymbol *mir_resolve_ast_symbol(MirBuilder *builder, Ast *ast, MirCtx *ctx);
 MirValueId mir_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx);
 
 static void mir_builder_error_at(MirBuilder *builder, Ast *origin,
@@ -762,8 +761,7 @@ static MirFunction *mir_builder_function(MirProgram *program, Ast *fn_ast,
 static bool mir_populate_function_body(MirProgram *program, MirFunction *fn,
                                        Ast *fn_ast, MirCtx *ctx,
                                        const char *self_name);
-static MirSymbol *mir_resolve_ast_symbol(MirBuilder *builder, Ast *ast,
-                                         MirCtx *ctx);
+MirSymbol *mir_resolve_ast_symbol(MirBuilder *builder, Ast *ast, MirCtx *ctx);
 
 MirInstr *mir_function_find_def_instr(MirFunction *fn, MirValueId value) {
   if (!fn || value == MIR_NO_VALUE) {
@@ -914,8 +912,8 @@ static MirSymbol *mir_module_lookup_symbol(MirProgram *program,
   return NULL;
 }
 
-static MirSymbol *mir_ctx_lookup_symbol(MirProgram *program, MirCtx *ctx,
-                                        const char *name) {
+MirSymbol *mir_ctx_lookup_symbol(MirProgram *program, MirCtx *ctx,
+                                 const char *name) {
   if (!name) {
     return NULL;
   }
@@ -968,6 +966,24 @@ static MirSymbol *mir_ctx_lookup_symbol(MirProgram *program, MirCtx *ctx,
   }
 
   return NULL;
+}
+
+bool mir_ctx_bind_export_custom_symbol(MirProgram *program, MirCtx *ctx,
+                                       const char *name, Type *type,
+                                       Ast *origin,
+                                       MirCustomSymbolHandler handler,
+                                       void *data) {
+  if (!mir_ctx_bind_custom_symbol(ctx, name, type, origin, handler, data)) {
+    return false;
+  }
+
+  if (!ctx || !ctx->export_bindings || ctx->current_module == MIR_NO_MODULE) {
+    return true;
+  }
+
+  MirSymbol *symbol = mir_ctx_lookup_symbol(program, ctx, name);
+  return symbol &&
+         mir_module_bind_symbol(program, ctx->current_module, name, symbol);
 }
 
 static MirFunction *mir_program_find_specialization(MirProgram *program,
@@ -3651,6 +3667,7 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
     return NULL;
   }
   fn->is_extern = source->is_extern;
+  fn->skip_rc_markers = source->skip_rc_markers;
   fn->specialization_of = source;
   fn->specialization_type = specialized_type;
 
@@ -4809,6 +4826,18 @@ MirValueId mir_application(MirBuilder *builder, Type *type, Ast *ast,
     }
   }
 
+  if (function && function->tag == AST_RECORD_ACCESS) {
+    MirSymbol *custom_symbol = mir_resolve_ast_symbol(builder, function, ctx);
+    if (custom_symbol && custom_symbol->kind == MIR_SYMBOL_CUSTOM &&
+        custom_symbol->as.custom.handler) {
+      MirValueId value =
+          custom_symbol->as.custom.handler(builder, ast, ctx, custom_symbol);
+      if (value != MIR_NO_VALUE) {
+        return value;
+      }
+    }
+  }
+
   if (mir_application_is_partial(ast)) {
     return mir_partial_application(builder, type, ast, ctx);
   }
@@ -5368,6 +5397,15 @@ static bool mir_export_expr_binding(MirBuilder *builder, MirCtx *ctx,
   return mir_bind_export_symbol(builder, ctx, name, symbol);
 }
 
+static bool mir_current_binding_is_custom_symbol(MirCtx *ctx, Ast *binding) {
+  const char *name = mir_identifier_name(binding);
+  if (!ctx || !ctx->frame || !ctx->frame->table || !name) {
+    return false;
+  }
+  MirSymbol *symbol = ht_get(ctx->frame->table, name);
+  return symbol && symbol->kind == MIR_SYMBOL_CUSTOM;
+}
+
 static MirValueId mir_lambda_value(MirBuilder *builder, Ast *expr, MirCtx *ctx,
                                    const char *fn_name,
                                    const char *binding_name,
@@ -5894,6 +5932,9 @@ static MirValueId mir_let(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
     if (is_module_binding) {
       return mir_expr(builder, ast->data.AST_LET.in_expr, &cont_ctx);
     }
+    if (mir_current_binding_is_custom_symbol(&cont_ctx, binding)) {
+      return mir_expr(builder, ast->data.AST_LET.in_expr, &cont_ctx);
+    }
     if (!mir_bind_pattern(builder, &cont_ctx, binding, value,
                           expr ? expr->type : binding->type)) {
       mir_builder_set_unreachable_if_open(builder);
@@ -5920,6 +5961,9 @@ static MirValueId mir_let(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
       mir_builder_set_unreachable_if_open(builder);
       return MIR_NO_VALUE;
     }
+  }
+  if (mir_current_binding_is_custom_symbol(ctx, binding)) {
+    return value;
   }
   // A durable top-level global was just bound for this binding (the
   // export-expr path ran for a non-lambda value). Bind the program-local
@@ -5973,6 +6017,9 @@ static MirValueId mir_let(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
     return value;
   }
 
+  if (mir_current_binding_is_custom_symbol(ctx, binding)) {
+    return mir_expr(builder, ast->data.AST_LET.in_expr, ctx);
+  }
   if (!mir_bind_pattern(builder, ctx, binding, value,
                         expr ? expr->type : binding->type)) {
     mir_builder_set_unreachable_if_open(builder);
@@ -6248,8 +6295,7 @@ static MirSymbol *mir_materialize_opened_import_member_symbol(
   return symbol;
 }
 
-static MirSymbol *mir_resolve_ast_symbol(MirBuilder *builder, Ast *ast,
-                                         MirCtx *ctx) {
+MirSymbol *mir_resolve_ast_symbol(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
   if (!builder || !builder->program || !ast) {
     return NULL;
   }
@@ -7930,6 +7976,17 @@ static void dump_call_type(FILE *stream, Type *type) {
   fputc(')', stream);
 }
 
+static void dump_cast_type(FILE *stream, Type *type) {
+  if (type && is_pointer_type(type) && type->data.T_CONS.num_args > 0 &&
+      type->data.T_CONS.args && type->data.T_CONS.args[0]) {
+    fputs("Ptr of ", stream);
+    print_type_to_stream(type->data.T_CONS.args[0], stream);
+    return;
+  }
+
+  print_type_to_stream(type, stream);
+}
+
 static void dump_block_ref(FILE *stream, MirBlockId block) {
   if (block == MIR_NO_BLOCK) {
     fputs("bb?", stream);
@@ -8160,9 +8217,9 @@ static void dump_instr(FILE *stream, const MirFunction *fn,
       fputc(' ', stream);
       dump_value(stream, instr->data.op.operands[0]);
       fputs(" from ", stream);
-      print_type_to_stream(instr->data.op.from_type, stream);
+      dump_cast_type(stream, instr->data.op.from_type);
       fputs(" to ", stream);
-      print_type_to_stream(instr->data.op.to_type, stream);
+      dump_cast_type(stream, instr->data.op.to_type);
       break;
     case MIR_OP_KIND_TAG_EQ:
       fputc(' ', stream);
@@ -8506,6 +8563,9 @@ void dump_function(FILE *stream, const MirFunction *fn) {
     print_type_to_stream(return_type, stream);
     dump_result_summary(stream, fn);
     fputs(STYLE_RESET_ALL, stream);
+  }
+  if (fn->skip_rc_markers) {
+    fputs(STYLE_DIM " @skip_rc" STYLE_RESET_ALL, stream);
   }
   if (fn->is_extern) {
     fputs(";\n", stream);

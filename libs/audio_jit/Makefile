@@ -55,7 +55,7 @@ $(BUILD_DIR)/%.o: %.c $(LOCAL_HEADERS) $(ENGINE_HEADERS) $(ENGINE_LIB) | $(BUILD
 $(BUILD_DIR)/%.o: %.cpp $(LOCAL_HEADERS) $(ENGINE_HEADERS) $(ENGINE_LIB) | $(BUILD_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.bc: %.c $(LOCAL_HEADERS) | $(BUILD_DIR)
+$(BUILD_DIR)/%.bc: %.c $(LOCAL_HEADERS) $(ENGINE_HEADERS) | $(BUILD_DIR)
 	$(CLANG) $(BITCODE_CFLAGS) -O3 -emit-llvm -c $< -o $@
 
 clean:

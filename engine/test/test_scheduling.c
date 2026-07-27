@@ -15,7 +15,6 @@
 
 /* ── Headers (types only) ─────────────────────────────────── */
 
-#include "../audio_graph.h"
 #include "../audio_instructions.h"
 #include "../common.h"
 #include "../ctx.h"
@@ -25,36 +24,24 @@
 
 Ctx ctx;
 
-/* audio_graph.h externs */
-AudioGraph *_graph = NULL;
-Node *_chain_head = NULL;
-Node *_chain_tail = NULL;
-
 /* ── Stubs for functions we don't need ────────────────────── */
 
-void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
-                         int nframes, double spf) {
-  (void)_node;
-  (void)graph;
-  (void)_inputs;
-  (void)nframes;
-  (void)spf;
-}
-
-NodeRef group_add(NodeRef node, NodeRef group) {
-  (void)node;
-  (void)group;
-  return NULL;
-}
-
 void audio_ctx_add(Node *node) { (void)node; }
-void offset_node_bufs(Node *node, int f) {
+void audio_ctx_add_before(Node *target, Node *node) {
+  (void)target;
   (void)node;
-  (void)f;
 }
-void unoffset_node_bufs(Node *node, int f) {
-  (void)node;
-  (void)f;
+void audio_ctx_mark_dirty(void) {}
+
+void node_connect_input(int idx, NodeRef node, NodeRef input) {
+  if (!node || idx < 0 || idx >= MAX_INPUTS) {
+    return;
+  }
+  node->connections[idx].input_index = idx;
+  node->connections[idx].source_node_index = (uint64_t)input;
+  if (idx >= node->num_inputs) {
+    node->num_inputs = idx + 1;
+  }
 }
 
 double pow2table_read(double pos, int tabsize, double *table) {
@@ -123,13 +110,12 @@ static void process_scheduler_events(uint64_t current_sample) {
 }
 
 /*
- * Create a minimal Node + AudioGraph that process_msg_pre/post can operate on.
- * Memory layout: [Node][AudioGraph][inlet_nodes...]
+ * Create a minimal Node with raw input nodes. This mirrors the new runtime
+ * graph model used by process_msg_pre/post.
  * Returns the outer Node*. Caller must free().
  */
 typedef struct {
   Node node;
-  AudioGraph graph;
   Node inlet_nodes[MAX_INPUTS];
   double inlet_bufs[MAX_INPUTS][BUF_SIZE];
 } MockSynth;
@@ -137,18 +123,14 @@ typedef struct {
 static MockSynth *create_mock_synth(int num_inlets) {
   MockSynth *m = calloc(1, sizeof(MockSynth));
 
-  m->node.perform = (perform_func_t)perform_audio_graph;
-  m->node.kind = NODE_KIND_AUDIO_GRAPH;
-  m->node.state_ptr = &m->graph;
-
-  m->graph.num_inlets = num_inlets;
-  m->graph.nodes = m->inlet_nodes;
+  m->node.num_inputs = num_inlets;
 
   for (int i = 0; i < num_inlets; i++) {
-    m->graph.inlets[i] = i;
     m->inlet_nodes[i].output.buf = m->inlet_bufs[i];
     m->inlet_nodes[i].output.layout = 1;
     m->inlet_nodes[i].output.size = BUF_SIZE;
+    m->node.connections[i].input_index = i;
+    m->node.connections[i].source_node_index = (uint64_t)&m->inlet_nodes[i];
   }
 
   return m;
@@ -615,6 +597,31 @@ static void test_pre_post_trig(void) {
   free(m);
 }
 
+static void test_pre_pipe_input_sets_dependency(void) {
+  reset_all();
+  MockSynth *m = create_mock_synth(1);
+  Node source = {
+      .output = {.layout = 1, .size = BUF_SIZE, .buf = m->inlet_bufs[0]},
+      .write_to_output = true,
+  };
+
+  audio_instruction msg = {.type = NODE_PIPE_INPUT, .tick = 25};
+  msg.payload.NODE_PIPE_INPUT.target = &m->node;
+  msg.payload.NODE_PIPE_INPUT.input = 0;
+  msg.payload.NODE_PIPE_INPUT.value = &source;
+
+  push_msg(&ctx.msg_queue, msg);
+
+  int consumed = process_msg_queue_pre(10, BUF_SIZE, &ctx.msg_queue);
+  assert(consumed == 1);
+  assert(m->node.connections[0].source_node_index == (uint64_t)&source);
+  assert(m->node.connections[0].input_index == 0);
+  assert(source.frame_offset == 15);
+  assert(source.write_to_output == false);
+
+  free(m);
+}
+
 static void test_pre_multiple_messages_ordering(void) {
   reset_all();
   MockSynth *m = create_mock_synth(1);
@@ -774,6 +781,7 @@ int main(void) {
   RUN_TEST(test_pre_late_message);
   RUN_TEST(test_pre_early_message_deferred);
   RUN_TEST(test_pre_post_trig);
+  RUN_TEST(test_pre_pipe_input_sets_dependency);
   RUN_TEST(test_pre_multiple_messages_ordering);
   RUN_TEST(test_pre_post_full_buffer_coverage);
 

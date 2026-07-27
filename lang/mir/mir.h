@@ -503,6 +503,8 @@ typedef struct MirFunction {
   Type *type;
   Ast *origin;
   bool is_extern;
+  // Function-local allocations are lifetime-managed outside Perceus lowering.
+  bool skip_rc_markers;
   MirFunction *specialization_of;
   Type *specialization_type;
   MirFnSummary summary;
@@ -589,7 +591,15 @@ bool mir_ctx_bind_value(MirCtx *ctx, const char *name, MirValueId value);
 bool mir_ctx_bind_custom_symbol(MirCtx *ctx, const char *name, Type *type,
                                 Ast *origin, MirCustomSymbolHandler handler,
                                 void *data);
+bool mir_ctx_bind_export_custom_symbol(MirProgram *program, MirCtx *ctx,
+                                       const char *name, Type *type,
+                                       Ast *origin,
+                                       MirCustomSymbolHandler handler,
+                                       void *data);
 bool mir_ctx_lookup_value(MirCtx *ctx, const char *name, MirValueId *out);
+MirSymbol *mir_ctx_lookup_symbol(MirProgram *program, MirCtx *ctx,
+                                 const char *name);
+MirSymbol *mir_resolve_ast_symbol(MirBuilder *builder, Ast *ast, MirCtx *ctx);
 
 #define MIR_STACK_ALLOC_CTX_PUSH(_ctx_name, _builder, _ctx)                    \
   MirCtx _ctx_name = *(_ctx);                                                  \

@@ -1,0 +1,365 @@
+let Audio = extern fn (T: (Double ... -> Double)) -> T;
+
+# Table-lookup sine oscillator. Arg: frequency in Hz.
+
+let ~ = extern fn Array of T -> T;
+let sin_osc = extern fn Double -> Double;
+let sq_osc = extern fn Double -> Double;
+let saw_osc = extern fn Double -> Double;
+let pm_osc = extern fn Double -> Double -> Double -> Double;
+let phasor = extern fn Double -> Double;
+
+# Resettable phasor. Args: frequency, trigger/reset signal.
+# let phasor_sinc = extern fn Double -> Double -> Double;
+# Impulse generator. Arg: trigger frequency; `0` is commonly used for a one-shot trigger.
+let trig = extern fn Double -> Double;
+
+# Emits a trigger when the input value changes.
+let changed = extern fn Double -> Double;
+# Read a table by normalized phase.
+let tabread = extern fn Array of Double -> Double -> Double;
+# Read a table by sample index.
+let tabread_samp = extern fn Array of Double -> Double -> Double;
+# Exponential decay envelope. Args: decay time, trigger.
+let decay = extern fn Double -> Double -> Double;
+# Unipolar scale from `[0, 1]` into `[lo, hi]`. Args: lo, hi, value.
+let scale = extern fn Double -> Double -> Double -> Double;
+# Bipolar scale from `[-1, 1]` into `[lo, hi]`. Args: lo, hi, value.
+let scale_bp = extern fn Double -> Double -> Double -> Double;
+let array_of_buf = extern fn Ptr -> Array of Double;
+let bufsize = extern fn Ptr -> Int;
+# Linearly interpolated low-frequency noise. Args: update frequency, low bound, high bound.
+let lfnoise = extern fn Double -> Double -> Double -> Double;
+# Stepped low-frequency noise. Args: update frequency, low bound, high bound.
+let lfnoise0 = extern fn Double -> Double -> Double -> Double;
+# Marks a signal as done when it reaches its natural end.
+let kill_on_end = extern fn Double -> Double;
+# ADSR envelope. Args: attack, decay, sustain, release, trigger.
+let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
+# Rectangular gate envelope. Args: duration, trigger.
+let rect = extern fn Double -> Double -> Double;
+
+# Buffer playback. Args: buffer, rate, start position, trigger.
+let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;
+# Multichannel buffer playback. Args: channel count, buffer, rate, start position, trigger.
+# Compile-time constant: arg 1 (`channel count`) must be a constant integer > 0.
+let mbufplay = extern fn Int -> Array of Double -> Double -> Double -> Double -> Double;
+
+
+let dsp_iter = module () ->
+  # let int_fold = extern fn (R -> Int -> R) -> Int -> R -> R;
+  let int_fold = extern fn (Int -> R -> R) -> Int -> R -> R;
+  let int_foldi = extern fn (Int -> R -> R) -> Int -> R -> R;
+
+  let list_map = extern fn (T -> R) -> List of T -> List of R;
+  let list_fold = extern fn (R -> T -> R) -> List of T -> R -> R;
+  let list_foldi = extern fn (Int -> R -> T -> R) -> List of T -> R -> R;
+
+  let array_map = extern fn (T -> R) -> Array of T -> Array of R;
+  let array_fold = extern fn (R -> T -> R) -> Array of T -> R -> R;
+  let array_foldi = extern fn (Int -> R -> T -> R) -> Array of T -> R -> R;
+;
+
+let play_node = extern fn Ptr -> Ptr;
+
+let _ = dlopen "libs/audio_jit/libaudio_jit.so";
+# let s = @Audio fn freq ->
+#   let y = pm_osc 2. 1. in
+#   y (~[freq, freq])
+# ;;
+#
+import std/Math;
+
+
+let Filter = module () ->
+
+let _min = fn a: (Double) b: (Double) -> Math.min a b;;
+let biquad = @Audio fn b0 b1 b2 a1 a2 x ->
+  let X = [| 0., 0. |];
+  let Y = [| 0., 0. |];
+  let y = b0 * x + b1 * X[0] + b2 * X[1] - a1 * Y[0] - a2 * Y[1];
+  X[1] := X[0];
+  X[0] := x;
+  Y[1] := Y[0];
+  Y[0] := y;
+  y
+;;
+
+# basic 1st-order IIR filter
+let iir1 = @Audio fn b0 b1 a1 x ->
+  let X = [| 0. |];
+  let Y = [| 0. |];
+  let y = b0 * x + b1 * X[0] - a1 * Y[0];
+  X[0] := x;
+  Y[0] := y;
+  y
+;;
+
+let allpass = @Audio fn freq x ->
+  let k = Math.tan (Math.PI * freq * spf) in
+  let a = (k - 1.0) / (k + 1.0) in
+  iir1 a 1.0 a x
+;;
+
+let lpf = @Audio fn freq q x ->
+  let w0   = 2.0 * Math.PI * freq * spf in
+  let cosw = Math.cos w0 in
+  let sinw = Math.sin w0 in
+  let alpha = sinw / (2.0 * q) in
+
+  let b0 = (1.0 - cosw) / 2.0 in
+  let b1 = 1.0 - cosw in
+  let b2 = (1.0 - cosw) / 2.0 in
+  let a0 = 1.0 + alpha in
+  let a1 = -2.0 * cosw in
+  let a2 = 1.0 - alpha in
+
+  let b0n = b0 / a0 in
+  let b1n = b1 / a0 in
+  let b2n = b2 / a0 in
+  let a1n = a1 / a0 in
+  let a2n = a2 / a0 in
+
+  biquad b0n b1n b2n a1n a2n x
+;;
+
+let hpf = @Audio fn freq q x ->
+  let w0   = 2.0 * Math.PI * freq * spf in
+  let cosw = Math.cos w0 in
+  let sinw = Math.sin w0 in
+  let alpha = sinw / (2.0 * q) in
+
+  let b0 = (1.0 + cosw) / 2.0 in
+  let b1 = -1 * (1.0 + cosw) in
+  let b2 = (1.0 + cosw) / 2.0 in
+  let a0 = 1.0 + alpha in
+  let a1 = -2.0 * cosw in
+  let a2 = 1.0 - alpha in
+
+  let b0n = b0 / a0 in
+  let b1n = b1 / a0 in
+  let b2n = b2 / a0 in
+  let a1n = a1 / a0 in
+  let a2n = a2 / a0 in
+
+  biquad b0n b1n b2n a1n a2n x
+;;
+
+let bpf = @Audio fn freq q x ->
+  let w0   = 2.0 * Math.PI * freq * spf in
+  let cosw = Math.cos w0 in
+  let sinw = Math.sin w0 in
+  let alpha = sinw / (2.0 * q) in
+
+  let b0 =  alpha in
+  let b1 =  0.0 in
+  let b2 = -1 * alpha in
+  let a0 =  1.0 + alpha in
+  let a1 = -2.0 * cosw in
+  let a2 =  1.0 - alpha in
+
+  let b0n = b0 / a0 in
+  let b1n = b1 / a0 in
+  let b2n = b2 / a0 in
+  let a1n = a1 / a0 in
+  let a2n = a2 / a0 in
+
+  biquad b0n b1n b2n a1n a2n x
+;;
+
+let notch = @Audio fn freq q x ->
+  let w0   = 2.0 * Math.PI * freq * spf in
+  let cosw = Math.cos w0 in
+  let sinw = Math.sin w0 in
+  let alpha = sinw / (2.0 * q) in
+
+  let b0 =  1.0 in
+  let b1 = -2.0 * cosw in
+  let b2 =  1.0 in
+  let a0 =  1.0 + alpha in
+  let a1 = -2.0 * cosw in
+  let a2 =  1.0 - alpha in
+
+  let b0n = b0 / a0 in
+  let b1n = b1 / a0 in
+  let b2n = b2 / a0 in
+  let a1n = a1 / a0 in
+  let a2n = a2 / a0 in
+
+  biquad b0n b1n b2n a1n a2n x
+;;
+
+let lowshelf = @Audio fn freq q gain_db x ->
+  let w0   = 2.0 * Math.PI * freq * spf in
+  let cosw = Math.cos w0 in
+  let sinw = Math.sin w0 in
+  let A = Math.pow 10.0 (gain_db / 40.0) in
+  let alpha = sinw / (2.0 * q) in
+  let sqrtA = Math.sqrt A in
+
+  let b0 = A * ( (A + 1.0) - (A - 1.0) * cosw + 2.0 * sqrtA * alpha ) in
+  let b1 = 2.0 * A * ( (A - 1.0) - (A + 1.0) * cosw ) in
+  let b2 = A * ( (A + 1.0) - (A - 1.0) * cosw - 2.0 * sqrtA * alpha ) in
+  let a0 = (A + 1.0) + (A - 1.0) * cosw + 2.0 * sqrtA * alpha in
+  let a1 = -2.0 * ( (A - 1.0) + (A + 1.0) * cosw ) in
+  let a2 = (A + 1.0) + (A - 1.0) * cosw - 2.0 * sqrtA * alpha in
+
+  let b0n = b0 / a0 in
+  let b1n = b1 / a0 in
+  let b2n = b2 / a0 in
+  let a1n = a1 / a0 in
+  let a2n = a2 / a0 in
+
+  biquad b0n b1n b2n a1n a2n x
+;;
+
+let highshelf = @Audio fn freq q gain_db x ->
+  let w0   = 2.0 * Math.PI * freq * spf in
+  let cosw = Math.cos w0 in
+  let sinw = Math.sin w0 in
+  let A = Math.pow 10.0 (gain_db / 40.0) in
+  let alpha = sinw / (2.0 * q) in
+  let sqrtA = Math.sqrt A in
+
+  let b0 = A * ( (A + 1.0) + (A - 1.0) * cosw + 2.0 * sqrtA * alpha ) in
+  let b1 = -2.0 * A * ( (A - 1.0) + (A + 1.0) * cosw ) in
+  let b2 = A * ( (A + 1.0) + (A - 1.0) * cosw - 2.0 * sqrtA * alpha ) in
+  let a0 = (A + 1.0) - (A - 1.0) * cosw + 2.0 * sqrtA * alpha in
+  let a1 = 2.0 * ( (A - 1.0) - (A + 1.0) * cosw ) in
+  let a2 = (A + 1.0) - (A - 1.0) * cosw - 2.0 * sqrtA * alpha in
+
+  let b0n = b0 / a0 in
+  let b1n = b1 / a0 in
+  let b2n = b2 / a0 in
+  let a1n = a1 / a0 in
+  let a2n = a2 / a0 in
+
+  biquad b0n b1n b2n a1n a2n x
+;;
+
+let peak = @Audio fn freq q gain_db x ->
+  let w0   = 2.0 * Math.PI * freq * spf in
+  let cosw = Math.cos w0 in
+  let sinw = Math.sin w0 in
+  let alpha = sinw / (2.0 * q) in
+  let A = Math.pow 10.0 (gain_db / 40.0) in
+
+  let b0 = 1.0 + alpha * A in
+  let b1 = -2.0 * cosw in
+  let b2 = 1.0 - alpha * A in
+  let a0 = 1.0 + alpha / A in
+  let a1 = -2.0 * cosw in
+  let a2 = 1.0 - alpha / A in
+
+  let b0n = b0 / a0 in
+  let b1n = b1 / a0 in
+  let b2n = b2 / a0 in
+  let a1n = a1 / a0 in
+  let a2n = a2 / a0 in
+
+  biquad b0n b1n b2n a1n a2n x
+;;
+
+let pole = @Audio fn g x z ->
+  let y = z + g * (x - z) in
+  y
+;;
+
+let lpf1p = @Audio fn freq x ->
+  let Z = [| 0. |];
+  let g = _min 0.999 (2.0 * Math.PI * freq * spf );
+  let y = Z[0] |> pole g x;
+  Z[0] := y;
+  y
+;;
+
+let hpf1p = @Audio fn freq x ->
+  let Z = [| 0. |];
+  let g = _min 0.999 (2.0 * Math.PI * freq * spf);
+  let lp = Z[0] |> pole g x;
+  Z[0] := lp;
+  x - lp
+;;
+
+let ladder = @Audio fn cutoff res drive x ->
+  let Z = [| 0., 0., 0., 0. |];  # z1..z4
+  let g = 2.0 * Math.PI * cutoff * spf in
+  let g1 = _min 0.99 g in
+
+  # input drive + feedback
+  let u = Math.tanh (drive * x - (res * (Z[3]))) in
+
+  let y1 = Z[0] |> pole g1 u in
+  let y2 = Z[1] |> pole g1 y1 in
+  let y3 = Z[2] |> pole g1 y2 in
+  let y4 = Z[3] |> pole g1 y3 in
+
+  Z[0] := y1 in
+  Z[1] := y2 in
+  Z[2] := y3 in
+  Z[3] := y4 in
+
+  y4
+;;
+
+let allpass2 = @Audio fn freq q x ->
+  let w0 = 2.0 * Math.PI * freq * spf in
+  let cosw = Math.cos w0 in
+  let sinw = Math.sin w0 in
+  let alpha = sinw / (2.0 * q) in
+
+  let a0 = 1.0 + alpha in
+  let a1 = (-2.0 * cosw) / a0 in
+  let a2 = (1.0 - alpha) / a0 in
+
+  biquad a2 a1 1.0 a1 a2 x
+;;
+
+let dispersion32 = @Audio fn base amount x ->
+  x |> dsp_iter.int_fold (fn i acc ->
+    let fi = i + 1 in
+    let f = base * Math.pow 1.18 fi in
+    let q = 1.2 + amount * 24.0 / fi in
+    acc |> allpass2 f q
+  ) 32
+;;
+;
+
+let white = @Audio fn () ->
+  Math.rrand -1. 1.
+;;
+  # let dist = fn x ->
+  #   x * 4. |> Math.tanh
+  # ;;
+
+#
+# let s = @Audio fn f ->
+#   let snd = saw_osc (~[f, f * 1.01]) |> (*) (lfnoise 1 1 16 |> trig |> decay 0.04) in
+#   snd
+#   |> Filter.dispersion32 120 (lfnoise 4 1 8) 
+# ;;
+# let x = s 60. |> play_node;
+# let b = 
+  # |> (*) 0.2
+  # |> dist
+
+  # sin_osc 0.2
+  # |> scale_bp 3 10 
+  # |> trig
+  # |> decay 0.05
+  # |> (*) snd
+# let k = load_souf
+# let s = @Audio fn () ->
+#   trig 0.5 |> bufplay 
+# ;;
+# let x = s () |> play_node;
+  # let y = pm_osc 6. 1.2 in
+  # ~[freq, freq* 1.01] |> y 
+  # # # freq |> y 
+  # # y freq
+
+# let fx = @Audio fn input ->
+#   input |> (*) 20 |> Math.tanh
+# ;;
+
+# let x = s 60. |> fx |> play_node;

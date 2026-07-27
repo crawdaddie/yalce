@@ -5,8 +5,6 @@
 #include "audio_loop_utils.h"
 #include "audio_routing.h"
 #include "ctx.h"
-#include "node_gc.h"
-#include "osc.h"
 #include "scheduling.h"
 #include <soundio/soundio.h>
 #include <stdarg.h>
@@ -17,7 +15,7 @@
 #include <unistd.h>
 #define RING_BUFFER_CAPACITY_SCALING 10
 
-static void (*write_sample)(char *ptr, double sample);
+static write_sample_func_t write_sample;
 int scheduler_event_loop();
 
 uint64_t get_frame_offset() {
@@ -25,7 +23,11 @@ uint64_t get_frame_offset() {
   struct timespec btime = get_block_time();
   uint64_t frame = get_current_sample();
   set_block_time(&t);
-  int frame_offset = get_block_frame_offset(btime, t, 48000);
+  int sample_rate = ctx_sample_rate();
+  if (sample_rate <= 0) {
+    sample_rate = 48000;
+  }
+  int frame_offset = get_block_frame_offset(btime, t, sample_rate);
   return frame + frame_offset;
 }
 
@@ -37,18 +39,23 @@ void set_block_time(struct timespec *to_set) {
 }
 
 uint64_t us_offset(struct timespec start, struct timespec end) {
-  clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-  uint64_t delta_us = (end.tv_sec - start.tv_sec) * 1000 +
-                      (end.tv_nsec - start.tv_nsec) / 1000000;
-  return delta_us;
+  int64_t delta_ns = ((int64_t)end.tv_sec - (int64_t)start.tv_sec) *
+                         1000000000LL +
+                     ((int64_t)end.tv_nsec - (int64_t)start.tv_nsec);
+  if (delta_ns <= 0) {
+    return 0;
+  }
+  return (uint64_t)(delta_ns / 1000);
 }
 
 int get_block_frame_offset(struct timespec start, struct timespec end,
                            int sample_rate) {
-
-  double ms_per_frame = 1000.0 / sample_rate;
-  uint64_t ms = us_offset(start, end);
-  return ((int)(ms / ms_per_frame)) % BUF_SIZE;
+  if (sample_rate <= 0) {
+    return 0;
+  }
+  double us_per_frame = 1000000.0 / (double)sample_rate;
+  uint64_t us = us_offset(start, end);
+  return ((int)((double)us / us_per_frame)) % BUF_SIZE;
 }
 
 struct timespec get_block_time() { return block_time; }
@@ -56,7 +63,7 @@ struct timespec get_start_time() { return start_time; }
 
 struct SoundIoRingBuffer *ring_buffer = NULL;
 
-static char *preferred_input_device_name = NULL;
+static const char *preferred_input_device_name = NULL;
 
 static enum SoundIoFormat prioritized_formats[] = {
     SoundIoFormatFloat32NE, SoundIoFormatFloat32FE, SoundIoFormatS32NE,
@@ -262,7 +269,7 @@ static void underflow_callback(struct SoundIoOutStream *outstream) {
 }
 
 struct SoundIoDevice *get_input_device(struct SoundIo *soundio,
-                                       char *in_device_id) {
+                                       const char *in_device_id) {
 
   if (preferred_input_device_name) {
 
@@ -310,7 +317,7 @@ struct SoundIoDevice *get_input_device(struct SoundIo *soundio,
 }
 
 struct SoundIoDevice *get_output_device(struct SoundIo *soundio,
-                                        char *out_device_id) {
+                                        const char *out_device_id) {
   bool out_raw = false;
 
   int default_out_device_index = soundio_default_output_device_index(soundio);
@@ -449,8 +456,8 @@ void print_available_devices(struct SoundIo *soundio) {
 int start_audio() {
 
   enum SoundIoBackend backend = SoundIoBackendNone;
-  char *in_device_id = NULL;
-  char *out_device_id = NULL;
+  const char *in_device_id = NULL;
+  const char *out_device_id = NULL;
   bool in_raw = false;
   bool out_raw = false;
 
@@ -587,10 +594,9 @@ void set_input_conf(char *conf) {
   IntLL *l = (IntLL *)conf;
 
   config_size = 0;
-  while (l) {
+  while (l && config_size < (int32_t)(sizeof(__config) / sizeof(__config[0]))) {
     __config[config_size] = l->data;
     config_size++;
-    IntLL *prev = l;
     l = l->next;
   }
 }
@@ -618,7 +624,6 @@ int init_audio() {
   printf("inited audio\n");
 
   scheduler_event_loop();
-  gc_loop(get_audio_ctx());
 
   audio_started = 1;
   // midi_setup();

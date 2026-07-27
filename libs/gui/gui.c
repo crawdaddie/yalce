@@ -1,5 +1,4 @@
 #include "gui.h"
-#include "../../engine/audio_graph.h"
 #include "../../engine/common.h"
 #include "../../engine/node.h"
 #include "../../lang/common.h"
@@ -96,24 +95,19 @@ typedef struct {
   ScopeRing *ring;
 } TapState;
 
-static void *scope_tap_perform(Node *node, void *state_raw, Node *inputs[],
-                               int nframes, double spf) {
-  (void)state_raw;
+static void scope_tap_frame(Node *node, void *state_raw, Node *inputs[],
+                            int frame, double spf) {
   (void)inputs;
   (void)spf;
-  TapState *st = (TapState *)((char *)node + sizeof(Node));
+  TapState *st = (TapState *)state_raw;
   double *in = st->source->output.buf;
   double *out = node->output.buf;
   int wpos = atomic_load_explicit(&st->ring->write_pos, memory_order_acquire);
 
-  for (int i = 0; i < nframes; i++) {
-    st->ring->data[(wpos + i) & (SCOPE_RING_SIZE - 1)] = in[i];
-    out[i] = in[i];
-  }
+  st->ring->data[wpos & (SCOPE_RING_SIZE - 1)] = in[frame];
+  out[frame] = in[frame];
 
-  atomic_store_explicit(&st->ring->write_pos, wpos + nframes,
-                        memory_order_release);
-  return NULL;
+  atomic_store_explicit(&st->ring->write_pos, wpos + 1, memory_order_release);
 }
 
 static Node *make_tap(Node *source, ScopeRing *ring) {
@@ -126,9 +120,10 @@ static Node *make_tap(Node *source, ScopeRing *ring) {
   st->source = source;
   st->ring = ring;
 
-  tap->perform = (perform_func_t)scope_tap_perform;
+  tap->frame_perform = (frame_perform_func_t)scope_tap_frame;
   tap->num_inputs = 0;
   tap->state_size = sizeof(TapState);
+  tap->state_ptr = st;
   tap->meta = (char *)"scope_tap";
   tap->output = (Signal){
       .layout = 1,

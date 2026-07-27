@@ -6,11 +6,11 @@ typedef struct {
   enum {
     NODE_ADD,
     NODE_ADD_BEFORE,
-    GROUP_ADD,
     NODE_SET_SCALAR,
     NODE_SET_TRIG,
     NODE_REMOVE,
     NODE_SET_INPUT,
+    NODE_PIPE_INPUT,
   } type;
   // int frame_offset;
   uint64_t tick;
@@ -26,11 +26,6 @@ typedef struct {
       Node *node;
     } NODE_ADD_BEFORE;
 
-    struct GROUP_ADD {
-      Node *group;
-      Node *tail;
-    } GROUP_ADD;
-
     struct NODE_SET_SCALAR {
       Node *target;
       int input;
@@ -42,6 +37,12 @@ typedef struct {
       int input;
       Node *value;
     } NODE_SET_INPUT;
+
+    struct NODE_PIPE_INPUT {
+      Node *target;
+      int input;
+      Node *value;
+    } NODE_PIPE_INPUT;
 
     struct NODE_SET_TRIG {
       Node *target;

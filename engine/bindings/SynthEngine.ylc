@@ -1,9 +1,6 @@
 let _ = dlopen "../build/libyalce_synth.so";
 type Synth = Ptr;
 
-# ext_lib.h
-let start_blob = extern fn () -> ();
-let end_blob = extern fn () -> Ptr;
 let inlet = extern fn Double -> Synth;
 let hw_inlet = extern fn Int -> Synth;
 let multi_chan_inlet = extern fn Int -> Double -> Synth;
@@ -17,8 +14,6 @@ let set_input_trig = extern fn Synth -> Int -> Synth;
 let set_input_buf = extern fn Int -> Synth -> Synth -> Synth;
 let play_node_offset = extern fn Uint64 -> Synth -> Synth;
 let set_input_buf_immediate = extern fn Int -> Synth -> Synth -> Synth;
-let load_soundfile = extern fn String -> Synth;
-let trigger_gate = extern fn Uint64 -> Double -> Int -> Synth -> Synth;
 let midi_to_freq = extern fn Int -> Double;
 let dmidi_to_freq = extern fn Double -> Double;
 let semi_to_ratio = extern fn Int -> Double;
@@ -32,14 +27,12 @@ let sig_layout = extern fn Ptr -> Int;
 let render_to_buf = extern fn Int -> Synth -> Synth;
 let node_replace = extern fn Synth -> Synth -> ();
 let null_synth_node = extern fn () -> Synth;
-let group_node = extern fn () -> Synth;
-let play_node_dur_in_group = extern fn Uint64 -> Double -> Int -> Synth -> Synth -> Synth;
 let chain = extern fn Synth -> Synth;
-let wrap_opaque_ref_in_node = extern fn Ptr -> Ptr -> Int -> Synth -> Synth;
 
 
 
-# bus.h
+let plug_input_in_graph = extern fn Int -> Synth -> Synth -> ();
+let node_connect_input = extern fn Int -> Synth -> Synth -> ();
 let pipe_into = extern fn Synth -> Int -> Synth -> Synth;
 
 let sum2_node = extern fn Synth -> Synth -> Synth;
@@ -48,6 +41,10 @@ let sub2_node = extern fn Synth -> Synth -> Synth;
 let mod2_node = extern fn Synth -> Synth -> Synth;
 let div2_node = extern fn Synth -> Synth -> Synth;
 let const_sig = extern fn Double -> Synth;
+let sin_node = extern fn Synth -> Synth;
+let sq_node = extern fn Synth -> Synth;
+let saw_node = extern fn Synth -> Synth;
+let pm_node = extern fn Synth -> Synth -> Synth -> Synth;
 
 
 let array_to_buf = extern fn Array of Double -> Synth;
@@ -59,8 +56,9 @@ let play_node_offset_w_kill = extern fn Uint64 -> Double -> Int -> Synth -> Synt
 
 
 let set_main_vol = extern fn Double -> ();
-let play_into = extern fn Ptr -> Ptr -> Ptr;
-let play_into_idx = extern fn Ptr -> Int -> Ptr -> Ptr;
+let play_into = extern fn Synth -> Synth -> Synth;
+let play_into_offset = extern fn Uint64 -> Synth -> Synth -> Synth;
+let play_into_idx = extern fn Synth -> Int -> Synth -> Synth;
 
 # let Synth : Constructor = module () ->
 #   let of_int = fn a: (Int) ->

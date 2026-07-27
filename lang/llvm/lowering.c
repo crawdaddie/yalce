@@ -4204,7 +4204,7 @@ static LLVMValueRef lower_mir_rc_marker(MirFunction *fn, MirInstr *instr,
                                         LLVMBuilderRef builder,
                                         JITLangCtx *ctx) {
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
-  if (!instr) {
+  if (!instr || (fn && fn->skip_rc_markers)) {
     return LLVMGetUndef(LLVMVoidTypeInContext(llvm_ctx));
   }
 

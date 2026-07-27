@@ -1,17 +1,15 @@
 #include "./audio_instructions.h"
-#include "audio_graph.h"
-#include "group.h"
+#include "ctx.h"
 #include <stdio.h>
 #include <stdlib.h>
 
-// plug_input_in_graph stores either a raw Node* (when _graph==NULL) or a
-// node_index integer (when _graph!=NULL). Resolve back to a Node*.
+void node_connect_input(int idx, NodeRef node, NodeRef input);
+
 static Node *jit_inlet_node(Node *node, int input) {
-  uint64_t src = node->connections[input].source_node_index;
-  if (_graph) {
-    return &_graph->nodes[src];
+  if (!node || input < 0 || input >= MAX_INPUTS) {
+    return NULL;
   }
-  return (Node *)src;
+  return (Node *)node->connections[input].source_node_index;
 }
 
 static inline int node_pending_free(Node *node) {
@@ -27,14 +25,7 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
       break;
     }
     payload.target->frame_offset = frame_offset;
-    if (payload.group) {
-      if (node_pending_free(payload.group)) {
-        break;
-      }
-      group_add(payload.target, payload.group);
-    } else {
-      audio_ctx_add(payload.target);
-    }
+    audio_ctx_add(payload.target);
 
     break;
   }
@@ -56,22 +47,10 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
       break;
     }
 
-    if (node->kind == NODE_KIND_AUDIO_GRAPH) {
-      AudioGraph *g = (AudioGraph *)((Node *)node + 1);
-      if (node->state_ptr) {
-        g = node->state_ptr;
-      }
-      Node *inlet_node = g->nodes + g->inlets[payload.input];
-      Signal inlet_data = inlet_node->output;
+    Node *inlet_node = jit_inlet_node(node, payload.input);
+    if (inlet_node && inlet_node->output.buf) {
       for (int i = frame_offset; i < BUF_SIZE; i++) {
-        inlet_data.buf[i] = payload.value;
-      }
-    } else {
-      Node *inlet_node = jit_inlet_node(node, payload.input);
-      if (inlet_node && inlet_node->output.buf) {
-        for (int i = frame_offset; i < BUF_SIZE; i++) {
-          inlet_node->output.buf[i] = payload.value;
-        }
+        inlet_node->output.buf[i] = payload.value;
       }
     }
 
@@ -86,19 +65,27 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
       break;
     }
 
-    if (node->kind == NODE_KIND_AUDIO_GRAPH) {
-      AudioGraph *g = (AudioGraph *)((Node *)node + 1);
-      if (node->state_ptr) {
-        g = node->state_ptr;
-      }
-      Node *inlet_node = g->nodes + g->inlets[payload.input];
-      Signal inlet_data = inlet_node->output;
-      inlet_node->output.layout = buf->output.layout;
-      inlet_node->output.size = buf->output.size;
-      inlet_node->output.buf = buf->output.buf;
-    } else if (payload.input >= 0 && payload.input < MAX_INPUTS) {
-      node->connections[payload.input].input_index = payload.input;
-      node->connections[payload.input].source_node_index = (uint64_t)buf;
+    if (payload.input >= 0 && payload.input < MAX_INPUTS) {
+      node_connect_input(payload.input, node, buf);
+      audio_ctx_mark_dirty();
+    }
+
+    break;
+  }
+
+  case NODE_PIPE_INPUT: {
+    struct NODE_PIPE_INPUT payload = msg.payload.NODE_PIPE_INPUT;
+    Node *node = payload.target;
+    Node *buf = payload.value;
+    if (node_pending_free(node) || node_pending_free(buf)) {
+      break;
+    }
+
+    if (payload.input >= 0 && payload.input < MAX_INPUTS) {
+      buf->frame_offset = frame_offset;
+      buf->write_to_output = false;
+      node_connect_input(payload.input, node, buf);
+      audio_ctx_mark_dirty();
     }
 
     break;
@@ -111,21 +98,19 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
       break;
     }
 
-    if (node->kind == NODE_KIND_AUDIO_GRAPH) {
-      AudioGraph *g = (AudioGraph *)((Node *)node + 1);
-      if (node->state_ptr) {
-        g = node->state_ptr;
-      }
-      Node *inlet_node = g->nodes + g->inlets[payload.input];
-      Signal inlet_data = inlet_node->output;
-      inlet_data.buf[frame_offset] = 1.0;
-    } else {
-      Node *inlet_node = jit_inlet_node(node, payload.input);
-      if (inlet_node && inlet_node->output.buf) {
-        inlet_node->output.buf[frame_offset] = 1.0;
-      }
+    Node *inlet_node = jit_inlet_node(node, payload.input);
+    if (inlet_node && inlet_node->output.buf) {
+      inlet_node->output.buf[frame_offset] = 1.0;
     }
 
+    break;
+  }
+  case NODE_REMOVE: {
+    struct NODE_REMOVE payload = msg.payload.NODE_REMOVE;
+    if (payload.target) {
+      payload.target->trig_end = true;
+      audio_ctx_mark_dirty();
+    }
     break;
   }
   default:
@@ -139,10 +124,6 @@ static void process_msg_post(int frame_offset, audio_instruction msg) {
     break;
   }
 
-  case GROUP_ADD: {
-    break;
-  }
-
   case NODE_SET_SCALAR: {
 
     struct NODE_SET_SCALAR payload = msg.payload.NODE_SET_SCALAR;
@@ -151,22 +132,10 @@ static void process_msg_post(int frame_offset, audio_instruction msg) {
       break;
     }
 
-    if (node->kind == NODE_KIND_AUDIO_GRAPH) {
-      AudioGraph *g = (AudioGraph *)((Node *)node + 1);
-      if (node->state_ptr) {
-        g = node->state_ptr;
-      }
-      Node *inlet_node = g->nodes + g->inlets[payload.input];
-      Signal inlet_data = inlet_node->output;
+    Node *inlet_node = jit_inlet_node(node, payload.input);
+    if (inlet_node) {
       for (int i = 0; i < frame_offset; i++) {
-        inlet_data.buf[i] = payload.value;
-      }
-    } else {
-      Node *inlet_node = jit_inlet_node(node, payload.input);
-      if (inlet_node) {
-        for (int i = 0; i < frame_offset; i++) {
-          inlet_node->output.buf[i] = payload.value;
-        }
+        inlet_node->output.buf[i] = payload.value;
       }
     }
 
@@ -180,20 +149,9 @@ static void process_msg_post(int frame_offset, audio_instruction msg) {
       break;
     }
 
-    if (node->kind == NODE_KIND_AUDIO_GRAPH) {
-      AudioGraph *g = (AudioGraph *)((Node *)node + 1);
-
-      if (node->state_ptr) {
-        g = node->state_ptr;
-      }
-      Node *inlet_node = g->nodes + g->inlets[payload.input];
-      Signal inlet_data = inlet_node->output;
-      inlet_data.buf[frame_offset] = 0.0;
-    } else {
-      Node *inlet_node = jit_inlet_node(node, payload.input);
-      if (inlet_node && inlet_node->output.buf) {
-        inlet_node->output.buf[frame_offset] = 0.0;
-      }
+    Node *inlet_node = jit_inlet_node(node, payload.input);
+    if (inlet_node && inlet_node->output.buf) {
+      inlet_node->output.buf[frame_offset] = 0.0;
     }
     break;
   }
@@ -202,7 +160,7 @@ static void process_msg_post(int frame_offset, audio_instruction msg) {
   }
 }
 void print_msg(audio_instruction *msg) {
-  printf("[%llu]", msg->tick);
+  printf("[%lu]", (unsigned long)msg->tick);
   switch (msg->type) {
   case NODE_ADD: {
     printf(" node_add %p", msg->payload.NODE_ADD.target);
@@ -213,7 +171,6 @@ void print_msg(audio_instruction *msg) {
            msg->payload.NODE_ADD_BEFORE.node);
     break;
   }
-  // case GROUP_ADD,
   case NODE_SET_SCALAR: {
 
     printf(" node_set_scalar %p[%d] %f\n", msg->payload.NODE_SET_SCALAR.target,
@@ -226,6 +183,23 @@ void print_msg(audio_instruction *msg) {
   case NODE_SET_TRIG: {
 
     printf(" node_set_trig ");
+    break;
+  }
+  case NODE_SET_INPUT: {
+    printf(" node_set_input %p[%d] <- %p\n",
+           msg->payload.NODE_SET_INPUT.target, msg->payload.NODE_SET_INPUT.input,
+           msg->payload.NODE_SET_INPUT.value);
+    break;
+  }
+  case NODE_PIPE_INPUT: {
+    printf(" node_pipe_input %p[%d] <- %p\n",
+           msg->payload.NODE_PIPE_INPUT.target,
+           msg->payload.NODE_PIPE_INPUT.input,
+           msg->payload.NODE_PIPE_INPUT.value);
+    break;
+  }
+  case NODE_REMOVE: {
+    printf(" node_remove %p\n", msg->payload.NODE_REMOVE.target);
     break;
   }
   }
