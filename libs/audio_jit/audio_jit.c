@@ -2813,9 +2813,9 @@ static const AudioBuiltin audio_builtins[] = {
      .state_size = sizeof(AdsrState),
      .state_align = __alignof__(AdsrState),
      .state_name = "adsr.state",
-     .lane_expand_mask =
-         AUDIO_ARG_MASK(0) | AUDIO_ARG_MASK(1) | AUDIO_ARG_MASK(2) |
-         AUDIO_ARG_MASK(3) | AUDIO_ARG_MASK(4),
+     .lane_expand_mask = AUDIO_ARG_MASK(0) | AUDIO_ARG_MASK(1) |
+                         AUDIO_ARG_MASK(2) | AUDIO_ARG_MASK(3) |
+                         AUDIO_ARG_MASK(4),
      .arg_order = NULL,
      .kernel_argc = 0},
 
