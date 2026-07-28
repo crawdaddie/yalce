@@ -893,15 +893,21 @@ static LLVMTypeRef lower_mir_function_type(MirFunction *fn, JITLangCtx *ctx,
   return fn_type;
 }
 
-static void lower_mir_name_function_params(MirFunction *fn,
+static bool lower_mir_name_function_params(MirFunction *fn,
                                            LLVMValueRef llvm_fn) {
   if (!fn || !llvm_fn) {
-    return;
+    return false;
   }
 
   unsigned llvm_param = 0;
+  unsigned llvm_param_count = LLVMCountParams(llvm_fn);
   if (is_coroutine_constructor_type(fn->type)) {
     const char *name = "frame_size_out";
+    if (llvm_param >= llvm_param_count) {
+      fprintf(stderr, "MIR function `%s` has fewer LLVM params than expected\n",
+              fn->name ? fn->name : "<anonymous>");
+      return false;
+    }
     LLVMValueRef param = LLVMGetParam(llvm_fn, llvm_param++);
     if (param) {
       LLVMSetValueName2(param, name, strlen(name));
@@ -918,12 +924,19 @@ static void lower_mir_name_function_params(MirFunction *fn,
     size_t abi_count =
         fn->is_extern ? lower_mir_c_abi_param_type_count(param->type) : 1;
     for (size_t abi_index = 0; abi_index < abi_count; abi_index++) {
+      if (llvm_param >= llvm_param_count) {
+        fprintf(stderr,
+                "MIR function `%s` has fewer LLVM params than expected\n",
+                fn->name ? fn->name : "<anonymous>");
+        return false;
+      }
       LLVMValueRef llvm_value = LLVMGetParam(llvm_fn, llvm_param++);
       if (llvm_value && name && name[0] != '\0') {
         LLVMSetValueName2(llvm_value, name, strlen(name));
       }
     }
   }
+  return true;
 }
 
 static LLVMValueRef lower_mir_declare_function(MirLlvmCtx *lctx,
@@ -949,7 +962,9 @@ static LLVMValueRef lower_mir_declare_function(MirLlvmCtx *lctx,
   if (!llvm_fn) {
     return NULL;
   }
-  lower_mir_name_function_params(fn, llvm_fn);
+  if (!lower_mir_name_function_params(fn, llvm_fn)) {
+    return NULL;
+  }
 
   LLVMSetLinkage(llvm_fn, LLVMExternalLinkage);
   if (is_coroutine_constructor_type(fn->type)) {

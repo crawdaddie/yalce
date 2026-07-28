@@ -4254,12 +4254,11 @@ DspValue dsp_fn_application(Ast *ast, DspBuildCtx *dsp_ctx, JITLangCtx *ctx,
         (DelayKernelOp){.fn_name = "comb_sample", .call_name = "comb.sample"});
   }
 
-  // if (is_ident(f, "allpass") || is_ident(f, "allpass1")) {
-  if (is_ident(f, "allpass")) {
+  if (is_ident(f, "dl_allpass") || is_ident(f, "allpass")) {
     return build_delay_kernel_op(
         ast, dsp_ctx, ctx, module, builder,
         (DelayKernelOp){.fn_name = "allpass1_sample",
-                        .call_name = "allpass.sample"});
+                        .call_name = "dl_allpass.sample"});
   }
 
   if (is_ident(f, "tabread")) {

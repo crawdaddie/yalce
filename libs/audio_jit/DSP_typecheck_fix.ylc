@@ -75,9 +75,9 @@ let delay_wo = extern fn Double -> Double -> Double -> Double;
 # Comb filter kernel. Args: delay seconds, max delay, feedback, input.
 # Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
 let comb =    extern fn Double -> Double -> Double -> Double -> Double;
-# Allpass filter kernel. Args: delay seconds, max delay, feedback, input.
+# Delay-line allpass filter kernel. Args: delay seconds, max delay, feedback, input.
 # Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
-let allpass = extern fn Double -> Double -> Double -> Double -> Double;
+let dl_allpass = extern fn Double -> Double -> Double -> Double -> Double;
 
 # Slew / lag processor. Args: lag time in seconds, input.
 let lag = extern fn Double -> Double -> Double;
@@ -110,11 +110,11 @@ let mbufplay = extern fn Int -> Array of Double -> Double -> Double -> Double ->
 
 # Granular playback. Args: max grains, source buffer, rate, position, width, trigger.
 # Compile-time constant: arg 1 (`max grains`) must be a constant integer > 0.
-let grains = extern fn Int ->       Array of Double -> Double -> Double -> Double -> Double;
+let grains = extern fn Int ->       Array of Double -> Double -> Double -> Double -> Double -> Double;
 # Granular playback with a separate envelope buffer.
 # Args: max grains, source buffer, envelope buffer, rate, position, width, trigger.
 # Compile-time constant: arg 1 (`max grains`) must be a constant integer > 0.
-let grains_env = extern fn Int ->       Array of Double -> Array of Double -> Double -> Double -> Double -> Double;
+let grains_env = extern fn Int ->       Array of Double -> Array of Double -> Double -> Double -> Double -> Double -> Double;
 
 
 let fftw_plan_forward_new = extern fn Int -> Ptr;
@@ -412,7 +412,7 @@ let dsp_array = module () ->
 ;
 
 let Reverb = module () ->
-# 1. Schroeder (parallel combs → allpass chain)
+# 1. Schroeder (parallel combs -> allpass chain)
 let schroeder = @Audio fn room damp x ->
   # 4 parallel comb filters for the reverb body
   let body =
@@ -420,9 +420,9 @@ let schroeder = @Audio fn room damp x ->
     |> dsp_list.foldi (fn i acc t -> acc + comb (t * room) 4. damp x) 0.
     |> (*) 0.25
   in
-  # 2 allpass in series for echo density / diffusion
-  body |> allpass 0.005  0.05 0.5
-       |> allpass 0.0017 0.05 0.5
+  # 2 delay-line allpasses in series; delay times are seconds
+  body |> dl_allpass 0.005  0.05 0.5
+       |> dl_allpass 0.0017 0.05 0.5
 ;;
 
 # 2. Early reflections + diffuse tail
@@ -443,18 +443,18 @@ let reverb = @Audio fn room damp x ->
 # Pure allpass chains don't color the spectrum, giving a smoother, plate-like texture:
 let plate = @Audio fn fb x ->
   # Pre-diffusion: smear the input before the tank
-  let pre = x |> allpass 0.0048 0.05 0.75
-              |> allpass 0.0036 0.05 0.625
-              |> allpass 0.0127 0.05 0.7
+  let pre = x |> dl_allpass 0.0048 0.05 0.75
+              |> dl_allpass 0.0036 0.05 0.625
+              |> dl_allpass 0.0127 0.05 0.7
   in
   # Tank: two allpass loops in series approximate a reverb tail
   pre
-  |> allpass 0.0672 0.15 fb
-  |> allpass 0.0100 0.15 fb
-  |> allpass 0.0442 0.15 fb
-  |> allpass 0.0908 0.15 fb
-  |> allpass 0.0100 0.15 fb
-  |> allpass 0.0400 0.15 fb
+  |> dl_allpass 0.0672 0.15 fb
+  |> dl_allpass 0.0100 0.15 fb
+  |> dl_allpass 0.0442 0.15 fb
+  |> dl_allpass 0.0908 0.15 fb
+  |> dl_allpass 0.0100 0.15 fb
+  |> dl_allpass 0.0400 0.15 fb
 ;;
 
 # 4. Adding tone shaping — absorptive reverb by LP-filtering the comb feedback:

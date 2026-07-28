@@ -1,7 +1,9 @@
-#include "engine_core.h"
-#include "audio_loop.h"
-#include "scheduling.h"
+#include "./engine_core.h"
+#include "./audio_loop.h"
+#include "./scheduling.h"
 #include <math.h>
+#include <sndfile.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -158,8 +160,8 @@ static void render_plan_build(Ctx *ctx) {
   plan->built_generation = ctx->graph.generation;
 }
 
-static void render_plan_execute_op(Ctx *ctx, AudioRenderOp *op,
-                                   int frame_count, double spf) {
+static void render_plan_execute_op(Ctx *ctx, AudioRenderOp *op, int frame_count,
+                                   double spf) {
   Node *node = op->node;
   if (!node || node->trig_end) {
     return;
@@ -189,12 +191,11 @@ static void render_plan_execute_op(Ctx *ctx, AudioRenderOp *op,
   }
 
   if (node->write_to_output) {
-    write_to_dac(LAYOUT,
-                 ctx->output_buf + ((size_t)frame_offset * (size_t)LAYOUT),
-                 node->output.layout,
-                 node->output.buf +
-                     ((size_t)frame_offset * node->output.layout),
-                 1, rendered_frames);
+    write_to_dac(
+        LAYOUT, ctx->output_buf + ((size_t)frame_offset * (size_t)LAYOUT),
+        node->output.layout,
+        node->output.buf + ((size_t)frame_offset * node->output.layout), 1,
+        rendered_frames);
   }
 
   node->frame_offset = 0;
@@ -573,11 +574,11 @@ NodeRef play_into_offset(uint64_t tick, NodeRef target, NodeRef node) {
     int input = target->num_inputs > 0 ? target->num_inputs - 1 : 0;
     node->write_to_output = false;
     push_msg(&ctx.msg_queue,
-             (audio_instruction){
-                 NODE_PIPE_INPUT,
-                 tick,
-                 {.NODE_PIPE_INPUT =
-                      {.target = target, .input = input, .value = node}}});
+             (audio_instruction){NODE_PIPE_INPUT,
+                                 tick,
+                                 {.NODE_PIPE_INPUT = {.target = target,
+                                                      .input = input,
+                                                      .value = node}}});
   }
   return node;
 }
@@ -713,3 +714,177 @@ void node_replace(NodeRef a, NodeRef b) {
 NodeRef null_synth_node(void) { return NULL; }
 
 NodeRef chain(NodeRef tail) { return tail; }
+
+int _read_file(const char *filename, Signal *signal, int *sf_sample_rate) {
+
+  SNDFILE *infile;
+  SF_INFO sfinfo;
+  int readcount;
+  memset(&sfinfo, 0, sizeof(sfinfo));
+
+  if (*filename == '~') {
+    char *HOME = getenv("HOME");
+    if (!HOME) {
+      fprintf(stderr, "could not resolve ~");
+      return 1;
+    }
+
+    char *mem = calloc(strlen(HOME) + strlen(filename), sizeof(char));
+    sprintf(mem, "%s%s", HOME, filename + 1);
+    filename = mem;
+  }
+
+  if (!(infile =
+            sf_open(filename, SFM_READ,
+                    &sfinfo))) { /* Open failed so print an error message. */
+    printf("Not able to open input file %s.\n", filename);
+    /* Print the error message from libsndfile. */
+    puts(sf_strerror(NULL));
+    return 1;
+  };
+
+  if (sfinfo.channels > MAX_SF_CHANNELS) {
+    printf("Not able to process more than %d channels\n", MAX_SF_CHANNELS);
+    sf_close(infile);
+    return 1;
+  };
+
+  size_t total_size = sfinfo.channels * sfinfo.frames;
+
+  double *buf = calloc((int)total_size, sizeof(double));
+  // double *buf = signal->buf;
+
+  // reads channels in interleaved
+  int read = sf_read_double(infile, buf, total_size);
+  if (read != total_size) {
+    printf("warning read failure, read %d != total size) %zu", read,
+           total_size);
+  }
+
+  sf_close(infile);
+  signal->size = sfinfo.frames;
+  signal->layout = sfinfo.channels;
+  signal->buf = buf;
+  *sf_sample_rate = sfinfo.samplerate;
+  fprintf(stderr,
+          "read %d frames from '%s' buf %p [channels: %d samplerate: %d]\n",
+          read, filename, buf, sfinfo.channels, sfinfo.samplerate);
+  return 0;
+};
+
+// {	sf_count_t	frames ;
+// 	int			samplerate ;
+// 	int			channels ;
+// 	int			format ;
+// 	int			sections ;
+// 	int			seekable ;
+// } ;
+
+typedef struct _SF_Open_Payload {
+  SNDFILE *fd;
+  uint64_t frames;
+  int32_t samplerate;
+  int32_t channels;
+} _SF_Open_Payload;
+
+typedef struct _SF_Open_Opt {
+  char status;
+  _SF_Open_Payload payload;
+} _SF_Open_Opt;
+
+_Static_assert(sizeof(_SF_Open_Payload) == 24,
+               "SFInfo payload ABI must match YLC tuple payload size");
+_Static_assert(offsetof(_SF_Open_Opt, payload) == 8,
+               "Option payload must be aligned after the tag");
+_Static_assert(
+    sizeof(_SF_Open_Opt) == 32,
+    "Option of SFInfo ABI must match { i8, { ptr, i64, i32, i32 } }");
+
+static _String ylc_string_from_c_abi(uint64_t size_offset, const char *chars) {
+  return (_String){
+      .size = (int32_t)(size_offset & UINT32_C(0xffffffff)),
+      .offset = (int32_t)(size_offset >> 32),
+      .chars = chars,
+  };
+}
+
+static _SF_Open_Opt sf_open_none(void) {
+  return (_SF_Open_Opt){.status = 1, .payload = {0}};
+}
+
+static _SF_Open_Opt sf_open_some(SNDFILE *infile, const SF_INFO *sfinfo) {
+  return (_SF_Open_Opt){
+      .status = 0,
+      .payload =
+          {
+              .fd = infile,
+              .frames = (uint64_t)sfinfo->frames,
+              .samplerate = sfinfo->samplerate,
+              .channels = sfinfo->channels,
+          },
+  };
+}
+
+_SF_Open_Opt sf_open_opt(uint64_t path_size_offset, const char *path_chars) {
+  _String path = ylc_string_from_c_abi(path_size_offset, path_chars);
+  const char *filename = path.chars;
+
+  SF_INFO sfinfo;
+  SNDFILE *infile;
+  char *full_path = NULL;
+
+  if (!filename || path.size <= 0) {
+    fprintf(stderr, "empty soundfile path\n");
+    return sf_open_none();
+  }
+
+  if (*filename == '~') {
+    char *HOME = getenv("HOME");
+    if (!HOME) {
+      fprintf(stderr, "could not resolve ~");
+      return sf_open_none();
+    }
+
+    full_path = calloc(strlen(HOME) + strlen(filename), sizeof(char));
+    if (!full_path) {
+      return sf_open_none();
+    }
+    sprintf(full_path, "%s%s", HOME, filename + 1);
+    filename = full_path;
+  }
+
+  if (!(infile =
+            sf_open(filename, SFM_READ,
+                    &sfinfo))) { /* Open failed so print an error message. */
+    printf("Not able to open input file %s.\n", filename);
+    /* Print the error message from libsndfile. */
+    puts(sf_strerror(NULL));
+    if (full_path) {
+      free(full_path);
+    }
+    return sf_open_none();
+  };
+
+  if (full_path) {
+    free(full_path);
+  }
+  return sf_open_some(infile, &sfinfo);
+}
+//
+// NodeRef load_soundfile(_String path) {
+//   Node *sf = malloc(sizeof(Node) + sizeof(sf_meta));
+//   sf_meta *meta = (sf_meta *)((Node *)sf + 1);
+//   if (_read_file(path.chars, &sf->output, &meta->sample_rate) != 0) {
+//     return NULL;
+//   }
+//   // printf("created sf node %d %d (%d)\n", sf->output.layout,
+//   sf->output.size,
+//   // meta->sample_rate);
+//
+//   return sf;
+// }
+
+NodeRef load_soundfile(_String filename) {
+  printf("load sf %s\n", filename.chars);
+  return NULL;
+}

@@ -587,10 +587,11 @@ bool mir_ctx_lookup_value(MirCtx *ctx, const char *name, MirValueId *out) {
       }
       // A MIR_SYMBOL_GLOBAL may carry a program-local value attached
       // by mir_bind_identifier for same-input use (e.g. a curried
-      // binding referenced later in the same scope). Fall through to
-      // the global name only when no current-program value is attached.
+      // binding referenced later in the same scope). That SSA id is
+      // only valid in the function that defined it; separate generated
+      // functions opt into global_load materialization instead.
       if (symbol->kind == MIR_SYMBOL_GLOBAL &&
-          symbol->global_value != MIR_NO_VALUE) {
+          symbol->global_value != MIR_NO_VALUE && !ctx->prefer_global_loads) {
         if (out) {
           *out = symbol->global_value;
         }

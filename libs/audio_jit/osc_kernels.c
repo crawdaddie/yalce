@@ -256,9 +256,22 @@ ylc_audio_tabread_samp_kernel(void *state, double spf, int32_t size,
 
 __attribute__((always_inline)) double
 ylc_audio_bufplay_kernel(BufplayState *state, double spf, int32_t size,
-                         int32_t offset, double *data, double rate,
+                         int32_t offset, double *buf, double rate,
                          double start_pos, double trig) {
-  return 0.0;
+
+  (void)spf;
+  int rising = audio_jit_rising_edge(trig, state->prev_trig);
+  double phase = rising ? start_pos : state->phase;
+
+  double sample = audio_jit_tabread_core(size, offset, buf, phase, 1);
+  double next_phase = fmod(phase + rate / (double)size, 1.0);
+  if (next_phase < 0.0) {
+    next_phase += 1.0;
+  }
+  state->phase = next_phase;
+  state->prev_trig = trig;
+
+  return sample;
 }
 
 __attribute__((always_inline)) double
@@ -267,6 +280,441 @@ ylc_audio_mbufplay_kernel(BufplayState *state, double spf, int32_t channels,
                           double *data, double rate, double start_pos,
                           double trig) {
   return 0.0;
+}
+
+static inline double audio_jit_clamp_feedback(double value) {
+  if (!isfinite(value)) {
+    return 0.0;
+  }
+  if (value > 0.999) {
+    return 0.999;
+  }
+  if (value < -0.999) {
+    return -0.999;
+  }
+  return value;
+}
+
+static inline int32_t audio_jit_wrap_delay_index(int32_t index, int32_t size) {
+  index %= size;
+  return index < 0 ? index + size : index;
+}
+
+static inline double audio_jit_delay_line_read(DelayLineState *state,
+                                               int32_t max_samples,
+                                               double delay_secs, double spf) {
+  if (!state || max_samples <= 1 || spf <= 0.0 || !isfinite(spf)) {
+    return 0.0;
+  }
+
+  if (state->size != max_samples) {
+    state->size = max_samples;
+    state->write_pos = 0;
+  }
+  if (state->write_pos < 0 || state->write_pos >= state->size) {
+    state->write_pos = 0;
+  }
+
+  double delay_samples = isfinite(delay_secs) ? delay_secs / spf : 1.0;
+  if (delay_samples < 1.0) {
+    delay_samples = 1.0;
+  }
+  if (delay_samples >= (double)state->size) {
+    delay_samples = (double)(state->size - 1);
+  }
+
+  int32_t delay_i = (int32_t)delay_samples;
+  double frac = delay_samples - (double)delay_i;
+  int32_t read0 =
+      audio_jit_wrap_delay_index(state->write_pos - delay_i, state->size);
+  int32_t read1 = audio_jit_wrap_delay_index(read0 - 1, state->size);
+
+  return audio_jit_lerp(state->storage[read0], state->storage[read1], frac);
+}
+
+static inline void audio_jit_delay_line_write(DelayLineState *state,
+                                              double value) {
+  state->storage[state->write_pos] = value;
+  state->write_pos++;
+  if (state->write_pos >= state->size) {
+    state->write_pos = 0;
+  }
+}
+
+__attribute__((always_inline)) double
+ylc_audio_comb_kernel(DelayLineState *state, double spf, int32_t max_samples,
+                      double delay_secs, double feedback, double input) {
+  if (!state || max_samples <= 1) {
+    return input;
+  }
+
+  double delayed =
+      audio_jit_delay_line_read(state, max_samples, delay_secs, spf);
+  double fb = audio_jit_clamp_feedback(feedback);
+  double out = input + (fb * delayed);
+  audio_jit_delay_line_write(state, out);
+  return out;
+}
+
+__attribute__((always_inline)) double
+ylc_audio_dl_allpass_kernel(DelayLineState *state, double spf,
+                            int32_t max_samples, double delay_secs,
+                            double feedback, double input) {
+  if (!state || max_samples <= 1) {
+    return input;
+  }
+
+  double delayed =
+      audio_jit_delay_line_read(state, max_samples, delay_secs, spf);
+  double g = audio_jit_clamp_feedback(feedback);
+  double out = delayed - (g * input);
+  audio_jit_delay_line_write(state, input + (g * delayed));
+  return out;
+}
+
+__attribute__((always_inline)) double ylc_audio_lag_kernel(LagState *state,
+                                                           double spf,
+                                                           double lag_secs,
+                                                           double input) {
+  if (!state || !isfinite(input)) {
+    return 0.0;
+  }
+
+  if (lag_secs < 0.0 || !isfinite(lag_secs)) {
+    lag_secs = 0.0;
+  }
+
+  if (state->initialized == 0.0) {
+    state->initialized = 1.0;
+    state->y1 = input;
+    state->b1 = 0.0;
+    state->lag_secs = -1.0;
+  }
+
+  if (lag_secs != state->lag_secs) {
+    const double log001 = -6.907755278982137;
+    state->b1 = (lag_secs == 0.0 || spf <= 0.0 || !isfinite(spf))
+                    ? 0.0
+                    : exp(log001 * spf / lag_secs);
+    state->lag_secs = lag_secs;
+  }
+
+  double y1 = input + state->b1 * (state->y1 - input);
+  if (!isfinite(y1)) {
+    y1 = input;
+  }
+  state->y1 = y1;
+  return y1;
+}
+
+static inline int32_t audio_jit_array_random_index(int32_t size) {
+  return size > 0 ? rand() % size : 0;
+}
+
+__attribute__((always_inline)) double
+ylc_audio_arr_choose_kernel(ArrayChooseState *state, double spf, int32_t size,
+                            int32_t offset, double *raw_data, double trig) {
+  (void)spf;
+  double *data = audio_jit_array_data(offset, raw_data);
+  if (!state || !data || size <= 0) {
+    return 0.0;
+  }
+
+  if (state->initialized == 0.0) {
+    state->initialized = 1.0;
+    state->value = data[audio_jit_array_random_index(size)];
+    state->prev_trig = trig;
+    return state->value;
+  }
+
+  if (audio_jit_rising_edge(trig, state->prev_trig)) {
+    state->value = data[audio_jit_array_random_index(size)];
+  }
+  state->prev_trig = trig;
+  return state->value;
+}
+
+__attribute__((always_inline)) double
+ylc_audio_arr_seq_kernel(ArraySeqState *state, double spf, int32_t size,
+                         int32_t offset, double *raw_data, double trig) {
+  (void)spf;
+  double *data = audio_jit_array_data(offset, raw_data);
+  if (!state || !data || size <= 0) {
+    return 0.0;
+  }
+
+  if (state->initialized == 0.0) {
+    state->initialized = 1.0;
+    state->value = data[0];
+    state->counter = -1;
+    state->prev_trig = trig;
+    return state->value;
+  }
+
+  if (audio_jit_rising_edge(trig, state->prev_trig)) {
+    int32_t next = state->counter + 1;
+    if (next < 0 || next >= size) {
+      next = 0;
+    }
+    state->counter = next;
+    state->value = data[next];
+  }
+  state->prev_trig = trig;
+  return state->value;
+}
+
+#define GRAIN_WINDOW_TABSIZE (1 << 9)
+
+double grain_win[GRAIN_WINDOW_TABSIZE] = {
+#include "./grain_win.csv"
+};
+
+typedef struct GrainStateArrays {
+  double *rates;
+  double *phases;
+  double *widths;
+  double *remaining_secs;
+  double *starts;
+  int32_t *active;
+} GrainStateArrays;
+
+static inline GrainStateArrays
+audio_jit_grain_state_arrays(GrainOscState *state, int32_t max_grains) {
+  char *mem = (char *)state->storage;
+  GrainStateArrays arrays = {0};
+
+  arrays.rates = (double *)mem;
+  mem += sizeof(double) * (size_t)max_grains;
+  arrays.phases = (double *)mem;
+  mem += sizeof(double) * (size_t)max_grains;
+  arrays.widths = (double *)mem;
+  mem += sizeof(double) * (size_t)max_grains;
+  arrays.remaining_secs = (double *)mem;
+  mem += sizeof(double) * (size_t)max_grains;
+  arrays.starts = (double *)mem;
+  mem += sizeof(double) * (size_t)max_grains;
+  arrays.active = (int32_t *)mem;
+
+  return arrays;
+}
+
+static inline double audio_jit_read_linear(double *data, int32_t size,
+                                           double sample_index) {
+  if (!data || size <= 0 || !isfinite(sample_index)) {
+    return 0.0;
+  }
+
+  double len_f = (double)size;
+  double wrapped = audio_jit_wrap_index(sample_index, len_f);
+  if (wrapped < 0.0) {
+    wrapped += len_f;
+  }
+  if (wrapped >= len_f) {
+    wrapped = 0.0;
+  }
+
+  double i0_f = floor(wrapped);
+  int32_t i0 = (int32_t)i0_f;
+  double frac = wrapped - i0_f;
+  int32_t i1 = i0 + 1;
+  if (i1 >= size) {
+    i1 = 0;
+  }
+
+  return audio_jit_lerp(data[i0], data[i1], frac);
+}
+
+static inline double audio_jit_table_read_clamped(double pos, int32_t tabsize,
+                                                  double *table) {
+  if (!table || tabsize <= 0 || !isfinite(pos)) {
+    return 0.0;
+  }
+  if (tabsize == 1) {
+    return table[0];
+  }
+
+  double clamped = pos;
+  if (clamped < 0.0) {
+    clamped = 0.0;
+  } else if (clamped > 1.0) {
+    clamped = 1.0;
+  }
+
+  double table_pos = clamped * (double)(tabsize - 1);
+  int32_t i0 = (int32_t)table_pos;
+  if (i0 >= tabsize - 1) {
+    return table[tabsize - 1];
+  }
+  double frac = table_pos - (double)i0;
+  return audio_jit_lerp(table[i0], table[i0 + 1], frac);
+}
+
+double pow2table_read(double pos, int tabsize, double *table) {
+  if (!table || tabsize <= 0 || !isfinite(pos)) {
+    return 0.0;
+  }
+  int mask = tabsize - 1;
+
+  double env_pos = pos * (mask);
+  int env_idx = (int)env_pos;
+  double env_frac = env_pos - env_idx;
+
+  // Interpolate between envelope table values
+  double env_val = table[env_idx & mask] * (1.0 - env_frac) +
+                   table[(env_idx + 1) & mask] * env_frac;
+  return env_val;
+}
+__attribute__((always_inline)) double
+ylc_audio_grains_kernel(GrainOscState *state, double spf, int32_t max_grains,
+                        int32_t size, int32_t offset, double *data, double rate,
+                        double position, double width, double trig) {
+  if (!state || max_grains <= 0 || size <= 0 || !data) {
+    return 0.0;
+  }
+
+  double *buf = data;
+  if (!buf) {
+    return 0.0;
+  }
+
+  GrainStateArrays arrays = audio_jit_grain_state_arrays(state, max_grains);
+  double sample = 0.0;
+  int rising = audio_jit_rising_edge(trig, state->prev_trig);
+  int can_spawn = rising && state->active_grains < max_grains && width > 0.0;
+
+  state->max_grains = max_grains;
+
+  if (can_spawn) {
+    for (int32_t i = 0; i < max_grains; i++) {
+      if (arrays.active[i] == 0) {
+        arrays.rates[i] = rate;
+        arrays.phases[i] = 0.0;
+        arrays.starts[i] = position * (double)size;
+        arrays.widths[i] = width;
+        arrays.remaining_secs[i] = width;
+        arrays.active[i] = 1;
+        state->active_grains++;
+        break;
+      }
+    }
+  }
+
+  for (int32_t i = 0; i < max_grains; i++) {
+    if (!arrays.active[i]) {
+      continue;
+    }
+
+    double r = arrays.rates[i];
+    double p = arrays.phases[i];
+    double s = arrays.starts[i];
+    double w = arrays.widths[i];
+    double rem = arrays.remaining_secs[i];
+    if (w <= 0.0 || rem <= 0.0 || !isfinite(w) || !isfinite(rem)) {
+      arrays.active[i] = 0;
+      if (state->active_grains > 0) {
+        state->active_grains--;
+      }
+      continue;
+    }
+
+    double d_index = s + (p * (double)size);
+    double grain_elapsed = 1.0 - (rem / w);
+    double env_val =
+        pow2table_read(grain_elapsed, GRAIN_WINDOW_TABSIZE, grain_win);
+
+    sample += env_val * audio_jit_read_linear(buf, size, d_index);
+    arrays.phases[i] += r / (double)size;
+
+    arrays.remaining_secs[i] -= spf;
+    if (arrays.remaining_secs[i] <= 0.0) {
+      arrays.active[i] = 0;
+      if (state->active_grains > 0) {
+        state->active_grains--;
+      }
+    }
+  }
+
+  state->prev_trig = trig;
+  return sample;
+}
+
+__attribute__((always_inline)) double ylc_audio_grains_env_kernel(
+    void *state_raw, double spf, int32_t max_grains, int32_t source_size,
+    int32_t source_offset, double *source_data, int32_t envelope_size,
+    int32_t envelope_offset, double *envelope_data, double rate,
+    double position, double width, double trig) {
+  GrainOscState *state = (GrainOscState *)state_raw;
+  if (!state || max_grains <= 0 || source_size <= 0 || envelope_size <= 0 ||
+      !source_data || !envelope_data) {
+    return 0.0;
+  }
+
+  double *source = source_data;
+  double *envelope = envelope_data;
+  if (!source || !envelope) {
+    return 0.0;
+  }
+
+  GrainStateArrays arrays = audio_jit_grain_state_arrays(state, max_grains);
+  double sample = 0.0;
+  int rising = audio_jit_rising_edge(trig, state->prev_trig);
+  int can_spawn = rising && state->active_grains < max_grains && width > 0.0 &&
+                  isfinite(width) && isfinite(rate) && isfinite(position);
+
+  state->max_grains = max_grains;
+
+  if (can_spawn) {
+    for (int32_t i = 0; i < max_grains; i++) {
+      if (arrays.active[i] == 0) {
+        arrays.rates[i] = rate;
+        arrays.phases[i] = 0.0;
+        arrays.starts[i] = position * (double)source_size;
+        arrays.widths[i] = width;
+        arrays.remaining_secs[i] = width;
+        arrays.active[i] = 1;
+        state->active_grains++;
+        break;
+      }
+    }
+  }
+
+  for (int32_t i = 0; i < max_grains; i++) {
+    if (!arrays.active[i]) {
+      continue;
+    }
+
+    double r = arrays.rates[i];
+    double p = arrays.phases[i];
+    double s = arrays.starts[i];
+    double w = arrays.widths[i];
+    double rem = arrays.remaining_secs[i];
+    if (w <= 0.0 || rem <= 0.0 || !isfinite(w) || !isfinite(rem)) {
+      arrays.active[i] = 0;
+      if (state->active_grains > 0) {
+        state->active_grains--;
+      }
+      continue;
+    }
+
+    double d_index = s + (p * (double)source_size);
+    double grain_elapsed = 1.0 - (rem / w);
+    double env_val =
+        audio_jit_table_read_clamped(grain_elapsed, envelope_size, envelope);
+
+    sample += env_val * audio_jit_read_linear(source, source_size, d_index);
+    arrays.phases[i] += r / (double)source_size;
+
+    arrays.remaining_secs[i] -= spf;
+    if (arrays.remaining_secs[i] <= 0.0) {
+      arrays.active[i] = 0;
+      if (state->active_grains > 0) {
+        state->active_grains--;
+      }
+    }
+  }
+
+  state->prev_trig = trig;
+  return sample;
 }
 
 __attribute__((always_inline)) double ylc_audio_decay_kernel(DecayState *state,
@@ -284,16 +732,12 @@ __attribute__((always_inline)) double ylc_audio_decay_kernel(DecayState *state,
 __attribute__((always_inline)) double
 ylc_audio_scale_kernel(void *state, double spf, double lo, double hi,
                        double value) {
-  (void)state;
-  (void)spf;
   return lo + value * (hi - lo);
 }
 
 __attribute__((always_inline)) double
 ylc_audio_scale_bp_kernel(void *state, double spf, double lo, double hi,
                           double value) {
-  (void)state;
-  (void)spf;
   return lo + ((value + 1.0) * 0.5) * (hi - lo);
 }
 

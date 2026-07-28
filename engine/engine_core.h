@@ -1,6 +1,7 @@
 #ifndef _ENGINE_CORE_H
 #define _ENGINE_CORE_H
 
+#include "../lang/ylc_datatypes.h"
 #include "ctx.h"
 #include "node.h"
 #include <stdint.h>
@@ -74,4 +75,5 @@ NodeRef play_into_idx(NodeRef target, int idx, NodeRef node);
 
 void set_main_vol(double vol);
 
+NodeRef load_soundfile(_String filename);
 #endif

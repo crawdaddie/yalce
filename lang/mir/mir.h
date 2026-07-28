@@ -121,6 +121,10 @@ struct MirCtx {
   TypeEnv *env;
   MirModuleId current_module;
   bool export_bindings;
+  // When building a function that is separate from the top-level defining
+  // function, durable globals must be read through global_load instead of
+  // reusing their same-input SSA value id.
+  bool prefer_global_loads;
   const char *extension_kind;
   void *extension_data;
 };

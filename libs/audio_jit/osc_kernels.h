@@ -77,4 +77,38 @@ typedef struct BufplayState {
   double prev_trig;
   double active;
 } BufplayState;
+
+typedef struct GrainOscState {
+  int32_t max_grains;
+  int32_t active_grains;
+  double prev_trig;
+  uint8_t storage[];
+} GrainOscState;
+
+typedef struct DelayLineState {
+  int32_t size;
+  int32_t write_pos;
+  double storage[];
+} DelayLineState;
+
+typedef struct LagState {
+  double initialized;
+  double y1;
+  double b1;
+  double lag_secs;
+} LagState;
+
+typedef struct ArrayChooseState {
+  double initialized;
+  double value;
+  double prev_trig;
+} ArrayChooseState;
+
+typedef struct ArraySeqState {
+  double initialized;
+  double value;
+  double prev_trig;
+  int32_t counter;
+} ArraySeqState;
+
 #endif
