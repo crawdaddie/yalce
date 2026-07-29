@@ -1353,6 +1353,7 @@ MirValueId mir_emit_construct(MirBuilder *builder, MirConstructKind kind,
                               Type *type, Ast *origin) {
   MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
   instr.data.construct.kind = kind;
+  instr.data.construct.reuse_token = MIR_NO_VALUE;
   return mir_builder_append_instr(builder, instr);
 }
 
@@ -1362,6 +1363,7 @@ MirValueId mir_emit_construct_items(MirBuilder *builder, MirConstructKind kind,
   MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
   instr.data.construct.kind = kind;
   instr.data.construct.items = items;
+  instr.data.construct.reuse_token = MIR_NO_VALUE;
   return mir_builder_append_instr(builder, instr);
 }
 
@@ -1375,6 +1377,7 @@ MirValueId mir_emit_construct_ops2(MirBuilder *builder, MirConstructKind kind,
   instr.data.construct.kind = kind;
   instr.data.construct.operands[0] = a;
   instr.data.construct.operands[1] = b;
+  instr.data.construct.reuse_token = MIR_NO_VALUE;
   return mir_builder_append_instr(builder, instr);
 }
 
@@ -1635,17 +1638,28 @@ static bool mir_construct_for_each_operand(MirInstr *instr,
       }
     }
     return true;
-  case MIR_CONSTRUCT_LIST_CONS:
-    return mir_visit_operand(instr, visitor,
-                             mir_make_operand(instr->data.construct.operands[0],
-                                              MIR_OPERAND_ROLE_ELEMENT,
-                                              MIR_OPERAND_USE_CONSUME, 0),
-                             ctx) &&
-           mir_visit_operand(instr, visitor,
-                             mir_make_operand(instr->data.construct.operands[1],
-                                              MIR_OPERAND_ROLE_CONTAINER,
-                                              MIR_OPERAND_USE_CONSUME, 1),
+  case MIR_CONSTRUCT_LIST_CONS: {
+    bool ok =
+        mir_visit_operand(instr, visitor,
+                          mir_make_operand(instr->data.construct.operands[0],
+                                           MIR_OPERAND_ROLE_ELEMENT,
+                                           MIR_OPERAND_USE_CONSUME, 0),
+                          ctx) &&
+        mir_visit_operand(instr, visitor,
+                          mir_make_operand(instr->data.construct.operands[1],
+                                           MIR_OPERAND_ROLE_CONTAINER,
+                                           MIR_OPERAND_USE_CONSUME, 1),
+                          ctx);
+    if (ok && instr->data.construct.reuse_token != MIR_NO_VALUE) {
+      ok = mir_visit_operand(instr, visitor,
+                             mir_make_operand(
+                                 instr->data.construct.reuse_token,
+                                 MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW,
+                                 2),
                              ctx);
+    }
+    return ok;
+  }
   case MIR_CONSTRUCT_ARRAY_FILL_CONST:
     return mir_visit_operand(instr, visitor,
                              mir_make_operand(instr->data.construct.operands[0],
@@ -1912,6 +1926,13 @@ static void mir_rewrite_construct_operands(MirInstr *instr,
                                              MIR_OPERAND_ROLE_CONTAINER,
                                              MIR_OPERAND_USE_CONSUME, 1),
                             ctx);
+    if (instr->data.construct.reuse_token != MIR_NO_VALUE) {
+      instr->data.construct.reuse_token = mir_rewrite_operand(
+          instr, rewriter,
+          mir_make_operand(instr->data.construct.reuse_token,
+                           MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW, 2),
+          ctx);
+    }
     break;
   case MIR_CONSTRUCT_ARRAY_FILL_CONST:
     instr->data.construct.operands[0] = mir_rewrite_operand(
@@ -7775,6 +7796,8 @@ static const char *mir_op_kind_name(MirOpKind kind) {
     return "dup";
   case MIR_OP_KIND_DROP:
     return "drop";
+  case MIR_OP_KIND_DROP_REUSE:
+    return "drop-reuse";
   }
   return "op.unknown";
 }
@@ -8140,7 +8163,8 @@ static void dump_instr(FILE *stream, const MirFunction *fn,
                        const MirInstr *instr) {
   bool rc_instr =
       instr->kind == MIR_OP && (instr->data.op.kind == MIR_OP_KIND_DUP ||
-                                instr->data.op.kind == MIR_OP_KIND_DROP);
+                                instr->data.op.kind == MIR_OP_KIND_DROP ||
+                                instr->data.op.kind == MIR_OP_KIND_DROP_REUSE);
   if (rc_instr) {
     fputs(COLOR_MAGENTA, stream);
   }
@@ -8344,6 +8368,11 @@ static void dump_instr(FILE *stream, const MirFunction *fn,
     case MIR_CONSTRUCT_LIST_EMPTY:
       break;
     case MIR_CONSTRUCT_LIST_CONS:
+      if (instr->data.construct.reuse_token != MIR_NO_VALUE) {
+        fprintf(stream, "@ru ");
+        dump_value(stream, instr->data.construct.reuse_token);
+        fputs(", ", stream);
+      }
       dump_value(stream, instr->data.construct.operands[0]);
       fputs(", ", stream);
       dump_value(stream, instr->data.construct.operands[1]);

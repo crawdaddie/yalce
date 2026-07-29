@@ -162,6 +162,7 @@ static bool test_construct_operands(const char *label, MirConstructKind kind,
       .data.construct = {
           .kind = kind,
           .operands = {20, 21, 22},
+          .reuse_token = MIR_NO_VALUE,
       },
   };
   if (!check_operands(label, &instr, expected, expected_len)) {

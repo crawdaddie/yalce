@@ -1386,7 +1386,7 @@ assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive array constructor shoul
   'define %DirectArrayNode @direct_array_pair' \
   'getelementptr \(\{ %YlcRcHeader, \[2 x %DirectArrayNode\] \}, ptr null, i32 1\)' \
   'store i32 1, ptr %rc\.count\.ptr' \
-  'store i32 0, ptr %rc\.tag\.ptr' \
+  'store i32 2, ptr %rc\.tag\.ptr' \
   'store %DirectArrayNode %[A-Za-z0-9_]+, ptr %array\.item\.ptr' \
   'store %DirectArrayNode %[A-Za-z0-9_]+, ptr %array\.item\.ptr' \
   'insertvalue %DirectArrayNode \{ i32 3, \{ i32, i32, ptr \} undef \}, \{ i32, i32, ptr \} %array\.data, 1'

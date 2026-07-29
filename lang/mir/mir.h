@@ -179,6 +179,7 @@ typedef enum {
   MIR_OP_KIND_TYPEOF,
   MIR_OP_KIND_DUP,
   MIR_OP_KIND_DROP,
+  MIR_OP_KIND_DROP_REUSE,
 } MirOpKind;
 
 typedef enum {
@@ -408,6 +409,9 @@ typedef struct {
   const char *constructor_name;
   MirFunctionId impl_fn;
   const char *impl_name;
+  /* For reuse-aware constructors (e.g. list cons): a drop-reuse token value.
+     MIR_NO_VALUE means no reuse; otherwise a ptr (null => fresh malloc). */
+  MirValueId reuse_token;
 } MirConstruct;
 
 typedef struct {

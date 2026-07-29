@@ -11,14 +11,30 @@ https://www.microsoft.com/en-us/research/wp-content/uploads/2020/11/perceus-tr-v
 
 - `--perceus-rc` enables an experimental MIR pass.
 - MIR has explicit `dup` and `drop` markers represented as `MIR_OP` opcodes.
-- The pass currently emits `dup` for repeated consuming uses.
+- The pass emits `dup` for repeated consuming uses, and inserts `drop` after
+  last borrowed uses, dead owned definitions, and unused owned entry params,
+  with edge splitting for path-local drops. A `moved` set prevents double-drops
+  of consumed (ownership-transferring) call args and post-released values.
 - Single ownership transfer is implicit; there is no `move` instruction.
-- `drop` exists but automatic drop insertion is intentionally deferred.
-- LLVM lowering maps the `dup` / `drop` opcodes to `__ylc_dup` /
-  `__ylc_drop`.
-- Runtime hooks are no-ops until heap allocation layouts carry RC headers.
+- LLVM lowering maps `dup` / `drop` opcodes to real runtime hooks. `dup` is a
+  single uniform `__ylc_dup` that increments the rc at `payload - 8`. `drop` is
+  type-specialized: a per-concrete-type `__ylc_drop_<TypeMangle>(ptr)` LLVM
+  function that decrements the rc at `payload - 8`, recurses into owned
+  children at rc == 0, and frees. Stack-allocated managed values carry an
+  `rc == 0` sentinel header so `dup`/`drop` no-op on them safely.
+- Escape analysis marks consumed call args (and their alloc-site fields) as
+  escaping so locally-constructed values passed to a callee that drops them are
+  heap-allocated with a real RC header.
 - Range `AST_LOOP` now lowers through MIR as cyclic CFG blocks with `MIR_PHI`
   induction variables.
+- `tag_or_size_class` is the second 32-bit slot of `YlcRcHeader`. It was
+  historically reserved (always written `0`, never read). It is per-allocation
+  runtime metadata for the type-specialized drop and reuse: for arrays it holds
+  the element count (so a payload-only drop fn can iterate elements), for list
+  cons it is unused (fixed two-field node), for closure env it holds the field
+  count. It is distinct from the compile-time type/shape descriptor used for
+  reuse compatibility, which is determined post-specialization and does not
+  need a runtime slot.
 
 ## Stage 1: Operand Ownership Modes
 
@@ -185,6 +201,8 @@ Update allocation lowering for:
 
 ## Stage 5: Type-Specialized Dup/Drop Lowering
 
+Status: implemented for list cons, arrays, and closure envs.
+
 `dup(x)` increments the object count for heap-managed values.
 
 `drop(x)` decrements, tests for zero, and when zero recursively drops owned
@@ -192,14 +210,25 @@ fields before freeing storage.
 
 This needs concrete type information:
 
-- list node: drop head and tail if managed
-- array: drop each element if the element type is managed
-- closure env: drop captured fields
-- tuple/variant: drop contained managed fields
-- string/bytes: drop backing storage according to ownership policy
+- list node: drop head and tail if managed — implemented via `llnode_type`
+  element/tail GEPs and recursive child drop.
+- array: drop each element if the element type is managed — **deferred**; the
+  `__ylc_drop_Array_<T>` body currently frees without iterating elements. Needs
+  `tag_or_size_class` to hold the element count (see Stage 6 step 1).
+- closure env: drop captured fields — implemented by recursing over
+  `closure_meta` env field types.
+- tuple/variant: drop contained managed fields — not yet exercised (boxed/sum
+  payloads do not allocate independently).
+- string/bytes: drop backing storage according to ownership policy —
+  `is_string_type` values use a string layout; backing-storage drop is not yet
+  wired through the MIR path.
 
-Generic functions should preferably be instrumented/lowered after
-specialization unless all managed values share enough uniform metadata.
+Generic functions are instrumented after specialization, so concrete types are
+available at lowering time; a per-type drop function is feasible and
+implemented. Mangled drop names are sanitized to valid LLVM identifiers
+(`__ylc_drop_<sanitized>`). Coroutines are excluded from RC management
+(deferred; coroutine frames use a distinct allocation path without an RC
+header).
 
 ## Stage 6: Reuse Analysis
 
@@ -221,6 +250,142 @@ Requirements:
 - fallback allocation path when the value is not unique
 
 Start with list cons and simple same-shaped variants before arrays.
+
+### Step 1: Header shape/size metadata + array recursive drop
+
+Status: implemented.
+
+Populate `tag_or_size_class` at allocation time so a drop/reuse knows the
+allocation shape, and close the deferred array element-drop so array-of-list
+reuse does not leak old elements.
+
+Decision: the array element count is stored in `tag_or_size_class` (the
+allocation capacity), not passed alongside the payload. The drop fn is called
+on the allocation base (`data - offset`); a slice shares the backing store with
+a smaller `len`, so the slice `len` would under-count. `len + offset` would be
+correct but is avoided to keep the uniform `drop(ptr)` ABI. The header
+capacity is the authoritative count for freeing; the array struct's `len` is
+the user-visible (slice) length and duplicates the count for the offset-0
+owner, which is the accepted cost of the uniform payload-pointer drop ABI.
+
+- list cons: `tag_or_size_class = 0` (fixed two-field node; no count needed).
+- arrays: `tag_or_size_class = element_count` at `lower_mir_heap_alloc_payload`
+  / `lower_mir_stack_alloc_payload`, read from `construct.array_literal` items
+  length (and `array_fill` size). The count lives in the header (not the array
+  struct's user-visible `len`), because the type-specialized drop fn receives
+  only the payload pointer. This also unblocks the Stage 5 array element-drop
+  TODO.
+- closure env: `tag_or_size_class = field_count` (for shape checks; env drop
+  already recurses via `closure_meta`).
+- Implement the array element-drop loop in `lower_mir_build_drop_fn_body` for
+  `is_array_type`: load `tag_or_size_class` from the header, iterate
+  `[0, count)`, derive each element's managed payload pointer (bare `ptr` for
+  list/closure element types via the same derivation as
+  `lower_mir_drop_load_child_ptr`), and call the element type's drop fn.
+  Verify: `std/HashSet` (array of lists) under ASAN, `13_array_sum`.
+
+### Step 2: `MIR_OP_KIND_DROP_REUSE` opcode + lowering
+
+Status: implemented (opcode + lowering; emission deferred to step 4).
+
+Add a reuse drop opcode whose lowering yields a reuse token when the value is
+uniquely owned, and falls back to a normal drop otherwise.
+
+- `mir.h`: add `MIR_OP_KIND_DROP_REUSE` to the `MirOpKind` enum near
+  `MIR_OP_KIND_DROP`. It carries one operand (the dropped value) and its
+  result is the reuse token (a payload pointer, or null).
+- `mir.c`: dump it as `drop-reuse %v`.
+- `lowering.c`: lower `MIR_OP_KIND_DROP_REUSE` to a small inline sequence:
+  compute `header = ptr - 8`; `load rc`; if `rc == 1`, store `rc = 1` (reset
+  for reuse), yield `ptr` as the reuse token (the constructor will overwrite
+  the payload in place); else call the type-specialized drop (as `DROP` does
+  today) and yield null. The token type is the generic pointer.
+- Keep `MIR_OP_KIND_DROP` lowering unchanged; `DROP_REUSE` is a superset used
+  only where the reuse analysis (step 4) rewrites a paired drop.
+
+### Step 3: Reuse-aware constructors
+
+Status: implemented for list cons.
+
+Make `construct.list_cons` (and later `array_literal`/`closure_env`) accept an
+optional reuse token.
+
+- `MirConstruct` gained a `reuse_token` field (`MirValueId`, default
+  `MIR_NO_VALUE`). All construct emit helpers initialize it to `MIR_NO_VALUE`.
+  The operand visitor and operand rewriter for `MIR_CONSTRUCT_LIST_CONS`
+  include the token (borrowed) when present, and MIR dumps it as
+  `construct.list_cons@ru %tok, %head, %tail`.
+- `lower_mir_list_cons`: if a token is present, load it; if non-null, use it as
+  the payload slot (overwrite in place, rc already 1); if null or absent,
+  `lower_mir_heap_alloc_payload` a fresh node. Same-shape check is static
+  post-specialization (the reused node's element type equals the cons element
+  type by construction).
+- The runtime representation is unchanged: reuse is instrumentation around the
+  site, replacing a `free` + `malloc` pair with an in-place overwrite gated by
+  a null check on the token.
+
+### Step 4: Perceus reuse pairing analysis
+
+Status: implemented for list cons.
+
+In `mir_perceus.c`, pair a `drop %old` with a same-block `construct.list_cons`
+of a new same-shape value, rewriting the `drop` into `drop-reuse` feeding the
+constructor.
+
+- `mir_perceus_pair_reuse` runs per-block after liveness/drop instrumentation.
+  For each `construct.list_cons` it scans the whole block for a same-shape
+  `drop` of a list value of the same element type (post-specialization, so
+  element-type pointer equality is the shape check). If the dropped value is
+  not used between the drop and the cons, it removes the plain `drop`, emits a
+  `drop-reuse` (yielding a `t_ptr` token) just before the cons, and sets the
+  cons's `reuse_token`. The cons's lowering then overwrites the recycled slot
+  in place when the token is non-null, falling back to a fresh `malloc` when
+  the value was not unique (rc != 1).
+- Verified on `scratch/reuse_demo.ylc` (list reversal): MIR emits
+  `drop-reuse %0` + `construct.list_cons@ru %tok, %head, %acc`, the LLVM IR
+  shows the `rc == 1` uniqueness check + `select` reuse path, and the program
+  passes under ASAN. All existing tests (289/289 MIR, test_scripts, std
+  HashSet/Lists) remain green.
+
+### Reuse scope: exact shape & size only
+
+Reuse is restricted to **exact-shape** recycling for now: the reused allocation
+must hold the same element type and the same (or smaller, same-type) count as the
+new value. This keeps the shape check a simple equality (lists: element-type
+pointer equality post-specialization; arrays: element type + `tag_or_size_class`
+count) and the token a plain `null`/`non-null` payload pointer.
+
+Deferred (not in scope now):
+- **Cross-type size-class reuse** (e.g. `Array of Int` (4B×10) → `Array of
+  Double` (8B×5), same total bytes). Valid when `sizeof(new) * count(new) ≤
+  sizeof(old) * count(old)` and alignment holds, but requires a runtime
+  size+alignment check carried in the token and, critically, an explicit drop
+  of the old managed elements before overwrite (else they leak). Keep as a
+  follow-up.
+- **Smaller-count same-type reuse** of *managed-element* arrays: needs the
+  reuse path to drop the excess old elements (indices `new_count..old_count`)
+  before overwriting, since the type-specialized drop only iterates the new
+  count. Same-type smaller-count for *primitive-element* arrays is safe without
+  that guard and could land first.
+
+Arrays (planned): `MIR_CONSTRUCT_ARRAY_LITERAL` gains a `reuse_token`; the
+constructor overwrites the recycled backing store element-by-element when the
+token is non-null, and the pairing analysis extends to array constructs with a
+runtime count check (`old.tag_or_size_class == new_count`). Reuse fires when a
+consuming operation (e.g. an in-place-style `map` of the same element type and
+length) drops the input array and builds a same-shape output — a type-changing
+map (`Int -> Double`) or different-length result falls back to fresh `malloc`.
+
+Closure envs (planned, lowest priority): `MIR_CONSTRUCT_CLOSURE_ENV` gains a
+`reuse_token`; shape check is env field count + field types. Applies when a
+closure is rebuilt with the same env shape.
+
+### Step 5: Tests
+
+Add `scratch/` reuse fixtures (see Stage 7) asserting `drop-reuse` + `@ru`
+constructs appear in MIR, and that reuse programs run under ASAN without
+leaks/double-frees. The existing `list_rev`/`list_map` programs are the first
+reuse targets; compare their MIR before/after.
 
 ## Stage 7: Tests And Galleries
 

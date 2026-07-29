@@ -650,6 +650,12 @@ static void mir_perceus_process_use(MirFunction *fn, MirInstrVec *out,
       mir_perceus_value_may_own_with_borrow_parent(fn, value, value_limit,
                                                    borrow_parent)) {
     mir_value_id_vec_push(fn->arena, post_releases, value);
+    /* A post-release drop owns this value's last reference; mark it moved so
+       the later dead-definition and unused-entry-param drops do not drop it
+       again (which would be a double-free under real RC). */
+    if (moved) {
+      moved[value] = true;
+    }
   }
 }
 
@@ -980,6 +986,9 @@ static bool mir_perceus_function_has_markers(MirFunction *fn) {
   return false;
 }
 
+static void mir_perceus_instrument_function(MirFunction *fn);
+static void mir_perceus_pair_reuse(MirFunction *fn);
+
 static void mir_perceus_instrument_function(MirFunction *fn) {
   if (!fn || fn->is_extern || fn->blocks.len == 0 || fn->values.len == 0 ||
       mir_perceus_function_has_markers(fn)) {
@@ -1061,6 +1070,134 @@ static void mir_perceus_instrument_function(MirFunction *fn) {
   }
 
   mir_perceus_liveness_destroy(&liveness);
+  mir_perceus_pair_reuse(fn);
+}
+
+static bool mir_perceus_reuse_compatible(MirFunction *fn, MirValueId dropped,
+                                         MirInstr *cons) {
+  if (!fn || dropped == MIR_NO_VALUE || !cons ||
+      cons->kind != MIR_CONSTRUCT ||
+      cons->data.construct.kind != MIR_CONSTRUCT_LIST_CONS) {
+    return false;
+  }
+  Type *dropped_type = mir_function_value_type(fn, dropped);
+  if (!dropped_type || !is_list_type(dropped_type)) {
+    return false;
+  }
+  /* Same shape: both are lists of the same element type. Post-specialization
+     types are concrete, so pointer equality of the element type is a valid
+     same-shape check. */
+  Type *dropped_elt = type_of_list(dropped_type);
+  Type *cons_elt = type_of_list(cons->type);
+  return dropped_elt && cons_elt && dropped_elt == cons_elt;
+}
+
+static bool mir_perceus_collect_value(MirInstr *instr, MirOperand operand,
+                                       void *ctx) {
+  (void)instr;
+  MirValueId target = *(MirValueId *)ctx;
+  return operand.value != target;
+}
+
+static bool mir_perceus_value_used_between(MirFunction *fn, MirInstrVec *instrs,
+                                            size_t drop_idx, size_t cons_idx,
+                                            MirValueId value) {
+  /* Check whether `value` is used by any instruction strictly between the
+     drop and the cons. If it is, we cannot reorder the drop-reuse before the
+     cons. */
+  for (size_t k = drop_idx + 1; k < cons_idx; k++) {
+    MirInstr *between = &instrs->items[k];
+    MirValueId target = value;
+    if (!mir_instr_for_each_operand(between, mir_perceus_collect_value,
+                                    &target)) {
+      return true;
+    }
+  }
+  (void)fn;
+  return false;
+}
+
+static void mir_perceus_pair_reuse(MirFunction *fn) {
+  if (!fn || fn->is_extern || fn->blocks.len == 0) {
+    return;
+  }
+
+  for (size_t i = 0; i < fn->blocks.len; i++) {
+    MirBlock *block = fn->blocks.items[i];
+    if (!block) {
+      continue;
+    }
+
+    /* For each construct.list_cons, search backward for a same-shape drop of a
+       value that is not used between the drop and the cons. Rewrite the drop
+       into a drop-reuse (yielding a token), move it to just before the cons, and
+       set the cons's reuse_token. */
+    MirInstrVec *instrs = &block->instrs;
+    for (size_t j = 0; j < instrs->len; j++) {
+      MirInstr *cons = &instrs->items[j];
+      if (cons->kind != MIR_CONSTRUCT ||
+          cons->data.construct.kind != MIR_CONSTRUCT_LIST_CONS ||
+          cons->data.construct.reuse_token != MIR_NO_VALUE) {
+        continue;
+      }
+
+      /* Find a same-shape drop anywhere in the block. The value must not be
+         used between the drop and the cons (in either direction). */
+      ssize_t drop_idx = -1;
+      for (ssize_t k = 0; k < (ssize_t)instrs->len; k++) {
+        if (k == (ssize_t)j) {
+          continue;
+        }
+        MirInstr *cand = &instrs->items[k];
+        if (cand->kind != MIR_OP ||
+            cand->data.op.kind != MIR_OP_KIND_DROP) {
+          continue;
+        }
+        if (!mir_perceus_reuse_compatible(fn, cand->data.op.operands[0], cons)) {
+          continue;
+        }
+        MirValueId dropped_val = cand->data.op.operands[0];
+        size_t lo = k < (ssize_t)j ? (size_t)k : j;
+        size_t hi = k < (ssize_t)j ? j : (size_t)k;
+        if (mir_perceus_value_used_between(fn, instrs, lo, hi, dropped_val)) {
+          continue;
+        }
+        drop_idx = k;
+        break;
+      }
+      if (drop_idx < 0) {
+        continue;
+      }
+
+      MirValueId dropped = instrs->items[drop_idx].data.op.operands[0];
+      Ast *origin = instrs->items[drop_idx].origin;
+
+      /* Build the drop-reuse instruction (yields a ptr token). */
+      MirInstr drop_reuse = mir_make_instr(MIR_OP, &t_ptr, origin);
+      drop_reuse.data.op.kind = MIR_OP_KIND_DROP_REUSE;
+      drop_reuse.data.op.argc = 1;
+      drop_reuse.data.op.operands[0] = dropped;
+      drop_reuse.result = mir_function_add_value(fn, &t_ptr, origin);
+
+      /* Remove the old drop, insert the drop-reuse just before the cons, and
+         set the cons's reuse token. */
+      MirInstrVec new_instrs = {0};
+      for (size_t k = 0; k < instrs->len; k++) {
+        if (k == (size_t)drop_idx) {
+          continue; /* remove old drop */
+        }
+        if (k == j) {
+          mir_instr_vec_push(fn->arena, &new_instrs, drop_reuse);
+          cons->data.construct.reuse_token = drop_reuse.result;
+        }
+        mir_instr_vec_push(fn->arena, &new_instrs, instrs->items[k]);
+      }
+      block->instrs = new_instrs;
+      instrs = &block->instrs;
+      /* Re-scan from the beginning since indices shifted. */
+      j = 0;
+    }
+  }
 }
 
 void mir_perceus_instrumentation(MirProgram *program) {
