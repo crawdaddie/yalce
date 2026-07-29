@@ -11,9 +11,10 @@ Neovim plugin for running `ylc <current-file> -i` in a side terminal and sending
 - `:YlcReload` restarts the plugin-managed YLC job if one is open, otherwise starts one
 - `<C-CR>` / `<D-CR>` in normal mode sends the current notebook cell, or expands to the attached LSP `selectionRange`
 - `<C-CR>` / `<D-CR>` in visual mode sends the current selection
+- `gd` runs deduped YLC go-to-definition
 - `<leader>yo` runs `:YlcReload`
 - blank lines are ignored in normal mode
-- `:YlcRestart`, `:YlcStop`, `:YlcSelectNode`, `:YlcSendNode`, `:YlcSendParagraph`, `:YlcSendLine`, and `:YlcSendBuffer`
+- `:YlcRestart`, `:YlcStop`, `:YlcDefinition`, `:YlcSelectNode`, `:YlcSendNode`, `:YlcSendParagraph`, `:YlcSendLine`, and `:YlcSendBuffer`
 
 ## Install
 

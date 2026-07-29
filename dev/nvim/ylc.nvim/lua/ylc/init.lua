@@ -261,6 +261,156 @@ local function lsp_root_dir(bufnr)
 	return vim.fs.dirname(path)
 end
 
+local function lsp_cmd_executable(cmd)
+	if type(cmd) == "string" then
+		return cmd
+	end
+	if type(cmd) == "table" then
+		return cmd[1]
+	end
+	return nil
+end
+
+local function path_basename(path)
+	if not path or path == "" then
+		return nil
+	end
+	if vim.fs.basename then
+		return vim.fs.basename(path)
+	end
+	return path:match("([^/\\]+)$") or path
+end
+
+local function normalize_lsp_root(root)
+	if type(root) ~= "string" or root == "" then
+		return nil
+	end
+	return vim.fs.normalize(root)
+end
+
+local function lsp_roots_match(a, b)
+	local left = normalize_lsp_root(a)
+	local right = normalize_lsp_root(b)
+	return left ~= nil and right ~= nil and left == right
+end
+
+local function lsp_cmds_match(a, b)
+	local left = lsp_cmd_executable(a)
+	local right = lsp_cmd_executable(b)
+	if not left or not right then
+		return false
+	end
+
+	if vim.fn.exepath(left) ~= "" then
+		left = vim.fn.exepath(left)
+	end
+	if vim.fn.exepath(right) ~= "" then
+		right = vim.fn.exepath(right)
+	end
+
+	left = vim.fs.normalize(left)
+	right = vim.fs.normalize(right)
+	return left == right or path_basename(left) == path_basename(right)
+end
+
+local function is_ylc_lsp_client(client, conf)
+	if not client then
+		return false
+	end
+
+	if client.name == conf.name then
+		return true
+	end
+
+	local client_cmd = client.config and client.config.cmd
+	return lsp_cmds_match(client_cmd, conf.cmd) or path_basename(lsp_cmd_executable(client_cmd)) == "ylc_lsp_server"
+end
+
+local function ylc_lsp_client_reusable(client, conf)
+	if not is_ylc_lsp_client(client, conf) then
+		return false
+	end
+
+	local client_root = client.config and client.config.root_dir
+	return lsp_roots_match(client_root, conf.root_dir)
+end
+
+local function ylc_lsp_clients_for_root(conf)
+	local clients = {}
+	for _, client in ipairs(vim.lsp.get_clients()) do
+		if ylc_lsp_client_reusable(client, conf) then
+			clients[#clients + 1] = client
+		end
+	end
+
+	table.sort(clients, function(a, b)
+		return (a.id or 0) < (b.id or 0)
+	end)
+	return clients
+end
+
+local function attach_lsp_client(bufnr, client)
+	if not (client and client.id and vim.api.nvim_buf_is_valid(bufnr)) then
+		return
+	end
+	if not vim.lsp.buf_is_attached(bufnr, client.id) then
+		pcall(vim.lsp.buf_attach_client, bufnr, client.id)
+	end
+end
+
+local function detach_lsp_client(bufnr, client)
+	if not (client and client.id and vim.api.nvim_buf_is_valid(bufnr)) then
+		return
+	end
+	if vim.lsp.buf_is_attached(bufnr, client.id) then
+		pcall(vim.lsp.buf_detach_client, bufnr, client.id)
+	end
+end
+
+local function lsp_client_buffers(client)
+	if not (client and client.id) then
+		return {}
+	end
+
+	local buffers = {}
+	for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_is_valid(bufnr) and vim.lsp.buf_is_attached(bufnr, client.id) then
+			buffers[#buffers + 1] = bufnr
+		end
+	end
+	return buffers
+end
+
+local function stop_lsp_client(client)
+	if client and client.stop then
+		pcall(function()
+			client:stop()
+		end)
+	end
+end
+
+local function consolidate_ylc_lsp_clients(bufnr, conf)
+	local clients = ylc_lsp_clients_for_root(conf)
+	local primary = clients[1]
+
+	if not primary then
+		return nil
+	end
+
+	attach_lsp_client(bufnr, primary)
+
+	for i = 2, #clients do
+		local duplicate = clients[i]
+		for _, duplicate_bufnr in ipairs(lsp_client_buffers(duplicate)) do
+			attach_lsp_client(duplicate_bufnr, primary)
+			detach_lsp_client(duplicate_bufnr, duplicate)
+		end
+		stop_lsp_client(duplicate)
+	end
+
+	return primary
+end
+
 local function ensure_lsp(bufnr)
 	if not config.lsp.enabled or vim.bo[bufnr].filetype ~= "ylc" then
 		return
@@ -271,16 +421,81 @@ local function ensure_lsp(bufnr)
 		cmd = { cmd }
 	end
 
-	vim.lsp.start({
+	local lsp_config = {
 		name = config.lsp.name,
 		cmd = cmd,
 		root_dir = lsp_root_dir(bufnr),
-	}, {
+	}
+
+	if consolidate_ylc_lsp_clients(bufnr, lsp_config) then
+		return
+	end
+
+	vim.lsp.start(lsp_config, {
 		bufnr = bufnr,
 		reuse_client = function(client, conf)
-			return client.name == conf.name and client.config.root_dir == conf.root_dir
+			return ylc_lsp_client_reusable(client, conf)
 		end,
 	})
+
+	vim.schedule(function()
+		if vim.api.nvim_buf_is_valid(bufnr) then
+			consolidate_ylc_lsp_clients(bufnr, lsp_config)
+		end
+	end)
+end
+
+local function definition_location_range(location)
+	if not location then
+		return nil
+	end
+	return location.range or location.targetSelectionRange or location.targetRange
+end
+
+local function definition_location_uri(location)
+	if not location then
+		return nil
+	end
+	return location.uri or location.targetUri
+end
+
+local function definition_location_key(location)
+	local uri = definition_location_uri(location)
+	local range = definition_location_range(location)
+	if not (uri and range and range.start and range["end"]) then
+		return nil
+	end
+
+	return table.concat({
+		uri,
+		range.start.line,
+		range.start.character,
+		range["end"].line,
+		range["end"].character,
+	}, ":")
+end
+
+local function add_definition_location(locations, seen, location)
+	local key = definition_location_key(location)
+	if key and not seen[key] then
+		seen[key] = true
+		locations[#locations + 1] = location
+	end
+end
+
+local function add_definition_result(locations, seen, result)
+	if not result then
+		return
+	end
+
+	if definition_location_uri(result) then
+		add_definition_location(locations, seen, result)
+		return
+	end
+
+	for _, location in ipairs(result) do
+		add_definition_location(locations, seen, location)
+	end
 end
 
 local function current_buffer_text(bufnr)
@@ -864,6 +1079,38 @@ function M.send(text)
 	send_to_job(text)
 end
 
+function M.definition()
+	local bufnr = vim.api.nvim_get_current_buf()
+	ensure_lsp(bufnr)
+
+	local params = vim.lsp.util.make_position_params(0, "utf-16")
+	vim.lsp.buf_request_all(bufnr, "textDocument/definition", params, function(responses)
+		local locations = {}
+		local seen = {}
+
+		for _, response in pairs(responses or {}) do
+			add_definition_result(locations, seen, response.result)
+		end
+
+		if #locations == 0 then
+			notify("No definition found", vim.log.levels.INFO)
+			return
+		end
+
+		if #locations == 1 then
+			vim.lsp.util.jump_to_location(locations[1], "utf-16", true)
+			return
+		end
+
+		local items = vim.lsp.util.locations_to_items(locations, "utf-16")
+		vim.fn.setqflist({}, " ", {
+			title = "YLC definitions",
+			items = items,
+		})
+		vim.cmd("copen")
+	end)
+end
+
 function M.send_buffer()
 	M.send(table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"))
 end
@@ -1043,6 +1290,20 @@ function M.setup(opts)
 		pattern = "ylc",
 		callback = function(args)
 			ensure_lsp(args.buf)
+		end,
+	})
+
+	vim.api.nvim_create_autocmd({ "LspAttach" }, {
+		group = autocmd_group,
+		callback = function(args)
+			if vim.bo[args.buf].filetype ~= "ylc" then
+				return
+			end
+			vim.schedule(function()
+				if vim.api.nvim_buf_is_valid(args.buf) then
+					ensure_lsp(args.buf)
+				end
+			end)
 		end,
 	})
 

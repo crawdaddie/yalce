@@ -92,14 +92,14 @@ typedef struct DelayLineState {
 } DelayLineState;
 
 typedef struct LagState {
-  double initialized;
+  int initialized;
   double y1;
   double b1;
   double lag_secs;
 } LagState;
 
 typedef struct ArrayChooseState {
-  double initialized;
+  int initialized;
   double value;
   double prev_trig;
 } ArrayChooseState;

@@ -421,7 +421,7 @@ ylc_audio_arr_choose_kernel(ArrayChooseState *state, double spf, int32_t size,
   }
 
   if (state->initialized == 0.0) {
-    state->initialized = 1.0;
+    state->initialized = 1;
     state->value = data[audio_jit_array_random_index(size)];
     state->prev_trig = trig;
     return state->value;
@@ -444,7 +444,7 @@ ylc_audio_arr_seq_kernel(ArraySeqState *state, double spf, int32_t size,
   }
 
   if (state->initialized == 0.0) {
-    state->initialized = 1.0;
+    state->initialized = 1;
     state->value = data[0];
     state->counter = -1;
     state->prev_trig = trig;

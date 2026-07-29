@@ -3288,6 +3288,19 @@ bool test_type_exprs() {
         plist_payload && is_list_type(plist_payload) &&
             type_is_named_recursive_ref(type_of_list(plist_payload), "Pat"));
   });
+  ({
+    Ast *ast =
+        _T("type SFInfo = (fd: Ptr, frames: Uint64, samplerate: Int, "
+           "channels: Int);\n"
+           "let sf_open_opt = extern fn String -> Option of SFInfo;\n"
+           "match sf_open_opt \"~/Sounds/rns_samples/Kicks/"
+           "dh_kick_mid_onetwo.flac\" with\n"
+           "| Some _ -> ()\n"
+           "| None -> ()\n"
+           ";\n");
+    status &= TASSERT("extern Option of record result can be matched",
+                      ast && ast->type && test_types_equal(ast->type, &t_void));
+  });
   return status;
 }
 

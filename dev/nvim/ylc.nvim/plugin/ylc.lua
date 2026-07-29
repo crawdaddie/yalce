@@ -53,3 +53,7 @@ end, {})
 vim.api.nvim_create_user_command("YlcSendBuffer", function()
 	ylc.send_buffer()
 end, {})
+
+vim.api.nvim_create_user_command("YlcDefinition", function()
+	ylc.definition()
+end, {})
