@@ -645,7 +645,7 @@ assert_order "$LIST_PATTERN_FAILURE_BODY" "one-cons fallback list pattern should
   'ops \[%[0-9]+:container/borrow#0\]' \
   '^  bb13 match\.list_tail\.bb5:' \
   'list_is_empty %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
-  'cond %[0-9]+, bb10, bb11'
+  'cond %[0-9]+, bb[0-9]+, bb[0-9]+'
 assert_order "$HEAP_ARRAY_PATTERN_FAILURE_BODY" "heap array pattern failure should drop the owned scrutinee on the no-match retry edge" \
   "$ARRAY_SIZE_MIR" \
   'const\.int 2' \
@@ -833,22 +833,22 @@ assert_contains "$OPEN_IMPORT_NESTED_MIR" 'fn_ref \$open_import_nested_dep\.Inne
 
 section "MIR escape analysis"
 assert_contains "$RETURNED_BODY" 'construct\.array_literal \{ %[0-9]+, %[0-9]+ \}.*ea heap#[0-9]+' "returned arrays should be marked heap allocated"
-assert_contains "$MOVED_BODY" 'construct\.array_literal \{ %[0-9]+, %[0-9]+ \}.*ea stack#[0-9]+' "non-escaping call arguments should remain stack allocated"
+assert_contains "$MOVED_BODY" 'construct\.array_literal \{ %[0-9]+, %[0-9]+ \}.*ea heap#[0-9]+' "consuming call arguments should be heap allocated so the callee can drop them"
 assert_contains "$EXTRACTED_BODY" 'construct\.list_cons %[0-9]+, %[0-9]+' "extracted list nodes should be present in MIR"
 assert_contains "$EXTRACTED_BODY" 'construct\.array_literal \{ %[0-9]+ \}' "extracted array container should be present in MIR"
-assert_contains "$EXTRACTED_BODY" 'ea stack#[0-9]+' "extracted stack-owned aggregate allocations should stay stack allocated"
+assert_contains "$EXTRACTED_BODY" 'ea heap#[0-9]+' "extracted aggregate whose contents are consumed by a call should be heap allocated"
 assert_contains "$RANGE_REPLACE_BODY" 'construct\.array_literal \{ %[0-9]+ \}.*ea heap#[0-9]+ mutable' "mutated arrays that escape should be heap mutable"
 assert_contains "$LOCAL_PARTIAL_BODY" 'construct\.closure_env \{ %[0-9]+ \}.*ea stack#[0-9]+' "locally invoked partial closure env should stay stack allocated"
 assert_contains "$MAKE_ADDER_BODY" 'construct\.closure_env \{ %[0-9]+ \}.*ea heap#[0-9]+' "returned partial closure env should be heap allocated"
 assert_contains "$TUPLE_LOCAL_BODY" 'construct\.array_literal \{ %[0-9]+, %[0-9]+ \}.*ea stack#[0-9]+' "array stored only in a dead tuple should stay stack allocated"
 assert_contains "$TUPLE_RETURN_BODY" 'construct\.array_literal \{ %[0-9]+, %[0-9]+ \}.*ea heap#[0-9]+' "array stored in a returned tuple should be heap allocated"
-assert_contains "$TUPLE_PASSED_BODY" 'construct\.array_literal \{ %[0-9]+, %[0-9]+ \}.*ea stack#[0-9]+' "array stored in a tuple passed to an owning call should stay stack allocated"
+assert_contains "$TUPLE_PASSED_BODY" 'construct\.array_literal \{ %[0-9]+, %[0-9]+ \}.*ea heap#[0-9]+' "array stored in a tuple passed to an owning call should be heap allocated so the callee can drop it"
 assert_contains "$TUPLE_PASSED_BODY" 'construct\.tuple \{ %[0-9]+, %[0-9]+ \}.*ops \[%[0-9]+:field/consume#0, %[0-9]+:field/consume#1\]' "tuple passed to owning call should consume its fields"
 assert_contains "$TUPLE_PASSED_BODY" 'call %[0-9]+\(%[0-9]+\).*value/consume#0' "tuple passed to owning call should be consumed by the call"
 assert_contains "$TUPLE_STORED_BODY" 'construct\.array_literal \{ %[0-9]+ \}.*ea stack#[0-9]+' "tuple stored in a dead aggregate should keep aggregate allocation stack local"
 assert_contains "$VARIANT_LOCAL_BODY" 'construct\.array_literal \{ %[0-9]+, %[0-9]+ \}.*ea stack#[0-9]+' "array stored in a dead variant should stay stack allocated"
 assert_contains "$VARIANT_RETURNED_BODY" 'construct\.array_literal \{ %[0-9]+, %[0-9]+ \}.*ea heap#[0-9]+' "array stored in a returned variant should be heap allocated"
-assert_contains "$VARIANT_PASSED_BODY" 'construct\.array_literal \{ %[0-9]+, %[0-9]+ \}.*ea stack#[0-9]+' "array stored in a variant passed to an owning call should stay stack allocated"
+assert_contains "$VARIANT_PASSED_BODY" 'construct\.array_literal \{ %[0-9]+, %[0-9]+ \}.*ea heap#[0-9]+' "array stored in a variant passed to an owning call should be heap allocated so the callee can drop it"
 assert_contains "$VARIANT_PASSED_BODY" 'call %[0-9]+\(%[0-9]+\).*value/consume#0' "variant passed to owning call should be consumed by the call"
 assert_contains "$VARIANT_STORED_BODY" 'construct\.array_literal \{ %[0-9]+, %[0-9]+ \}.*ea heap#[0-9]+' "array stored in a returned aggregate variant should be heap allocated"
 assert_order "$LIST_LOCAL_BODY" "dead list cons should stay stack allocated" \
@@ -857,14 +857,14 @@ assert_order "$LIST_LOCAL_BODY" "dead list cons should stay stack allocated" \
 assert_order "$LIST_RETURNED_BODY" "returned list cons should be heap allocated" \
   'construct\.list_cons %[0-9]+, %[0-9]+' \
   'ea heap#[0-9]+'
-assert_order "$LIST_PASSED_BODY" "list cons passed to owning call should stay stack allocated" \
+assert_order "$LIST_PASSED_BODY" "list cons passed to owning call should be heap allocated so the callee can drop it" \
   'construct\.list_cons %[0-9]+, %[0-9]+' \
-  'ea stack#[0-9]+'
+  'ea heap#[0-9]+'
 assert_contains "$LIST_PASSED_BODY" 'call %[0-9]+\(%[0-9]+\).*value/consume#0' "list passed to owning call should be consumed by the call"
 assert_order "$LIST_STORED_BODY" "list cons stored in returned aggregate should be heap allocated" \
   'construct\.list_cons %[0-9]+, %[0-9]+' \
   'ea heap#[0-9]+'
-assert_contains "$NESTED_EXTRACT_BODY" 'construct\.array_literal \{ %[0-9]+ \}.*ea stack#[0-9]+' "nested extraction from stack wrapper should keep wrapper allocation stack local"
+assert_contains "$NESTED_EXTRACT_BODY" 'construct\.array_literal \{ %[0-9]+ \}.*ea heap#[0-9]+' "nested extraction whose contents are consumed by a call should heap allocate the wrapper"
 assert_contains "$ARRAY_FILL_CONST_BODY" 'construct\.array_fill_const %[0-9]+, %[0-9]+.*ea heap#[0-9]+' "returned array_fill_const result should be heap allocated"
 assert_contains "$ARRAY_FILL_BODY" 'construct\.array_fill %[0-9]+, %[0-9]+.*ea heap#[0-9]+' "returned array_fill result should be heap allocated"
 assert_order "$DIRECT_PAIR_BODY" "returned recursive list cons fields should be heap allocated" \
@@ -1009,8 +1009,8 @@ assert_order "$RANGE_REPLACE_BODY" "returning a borrowed array cell should dup t
   ' = dup %[0-9]+' \
   ' = drop %[0-9]+' \
   'return %[0-9]+'
-assert_not_contains "$EXTRACTED_BODY" ' = dup ' "stack-rooted extractions should not receive heap dup markers"
-assert_not_contains "$EXTRACTED_BODY" ' = drop ' "stack-rooted extractions should not receive heap drop markers"
+assert_contains "$EXTRACTED_BODY" ' = dup ' "consumed extracted managed values should receive a dup marker before the consuming call"
+assert_contains "$EXTRACTED_BODY" ' = drop ' "owned extracted containers should receive a drop marker after their contents are consumed"
 assert_not_contains "$TAIL_RETURN_BODY" ' = drop ' "tail-recursive managed transfer should not drop the transferred owner"
 assert_not_contains "$TAIL_RETURN_BODY" ' = dup ' "tail-recursive managed transfer should not duplicate the transferred owner"
 assert_contains "$TAIL_RETURN_BODY" 'call %[0-9]+\(%[0-9]+, %[0-9]+, %[0-9]+\).*value/consume#2' "tail-recursive call should consume the transferred owner"
@@ -1096,11 +1096,9 @@ assert_order "$DIRECT_RECURSIVE_ARRAY_BODY" "recursive array field match should 
   ' = dup %[0-9]+' \
   'perceus\.edge\.drop:' \
   ' = drop %[0-9]+'
-assert_order "$TENSOR_ADD_BODY" "TensorRef sum constructor should release consumed input arrays after storing them in the op payload" \
+assert_order "$TENSOR_ADD_BODY" "TensorRef sum constructor should move consumed input arrays into the op payload without dropping them" \
   'construct\.variant TensOpAdd#1\(%[0-9]+\)' \
   'construct\.array_literal \{ %[0-9]+ \}' \
-  ' = drop %0' \
-  ' = drop %1' \
   'return %[0-9]+'
 assert_order "$TENSOR_OP_ADD_MATCH_BODY" "recursive sum match should dup both borrowed TensorRef payloads before body use" \
   'extract\.variant_payload %[0-9]+, TensOpAdd#1' \
@@ -1156,12 +1154,12 @@ assert_contains "$LLVM_IR" 'define .*@range_loop_replace_array_cell\.Int\.Array_
 assert_contains "$LLVM_IR" 'loop\.cond:.*preds = %loop\.inc, %entry' "MIR loop CFG should lower to LLVM loop blocks"
 assert_contains "$LLVM_IR" '%[A-Za-z0-9_.]+ = phi i32 \[ 0, %entry \], \[ %[A-Za-z0-9_.]+, %loop\.inc \]' "MIR_PHI should lower to LLVM phi"
 assert_contains "$LLVM_IR" 'call void @__ylc_dup\(ptr' "MIR dup markers should lower to __ylc_dup calls"
-assert_contains "$LLVM_IR" 'call void @__ylc_drop\(ptr' "MIR drop markers should lower to __ylc_drop calls"
+assert_contains "$LLVM_IR" 'call void @__ylc_drop[_A-Za-z0-9]*\(ptr' "MIR drop markers should lower to __ylc_drop calls"
 assert_contains "$LLVM_IR" 'declare void @__ylc_dup\(ptr' "__ylc_dup hook should be declared"
-assert_contains "$LLVM_IR" 'declare void @__ylc_drop\(ptr' "__ylc_drop hook should be declared"
+assert_contains "$LLVM_IR" 'define void @__ylc_drop[_A-Za-z0-9]*\(ptr' "type-specialized __ylc_drop functions should be defined"
 assert_contains "$COROUTINE_LLVM_IR" 'define .*@coroutine_returned' "coroutine escape fixture should lower to LLVM"
 assert_contains "$COROUTINE_LLVM_IR" 'call void @__ylc_dup\(ptr' "coroutine Perceus dup markers should lower to __ylc_dup calls"
-assert_contains "$COROUTINE_LLVM_IR" 'call void @__ylc_drop\(ptr' "coroutine Perceus drop markers should lower to __ylc_drop calls"
+assert_contains "$COROUTINE_LLVM_IR" 'call void @__ylc_drop[_A-Za-z0-9]*\(ptr' "coroutine Perceus drop markers should lower to __ylc_drop calls"
 assert_contains "$LLVM_IR" '^%YlcRcHeader = type \{ i32, i32 \}' "MIR heap-managed payloads should declare an RC header layout"
 assert_order "$LLVM_IR" "heap array literal should allocate header plus payload and initialize RC header" \
   'define \{ i32, i32, ptr \} @returned_array' \
@@ -1185,14 +1183,14 @@ assert_order "$LLVM_IR" "managed array_set lowering should load old slot, store 
   'getelementptr \{ i32, i32, ptr \}, ptr %extract\.field, i32 0' \
   'load \{ i32, i32, ptr \}, ptr %ptr\.offset' \
   'store \{ i32, i32, ptr \} %[A-Za-z0-9_.]+, ptr %ptr\.offset' \
-  'call void @__ylc_drop\(ptr'
+  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr'
 assert_order "$LLVM_IR" "returned extraction lowering should dup before dropping its source container" \
   'loop\.after:' \
   'extractvalue \{ i32, i32, ptr \} %array\.data, 2' \
   'getelementptr \{ i32, i32, ptr \}, ptr %extract\.field[0-9]*, i32 0' \
   'load \{ i32, i32, ptr \}, ptr %ptr\.offset[0-9]*' \
   'call void @__ylc_dup\(ptr' \
-  'call void @__ylc_drop\(ptr' \
+  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr' \
   'ret \{ i32, i32, ptr \}'
 assert_order "$LLVM_IR" "preexisting managed phi consume should lower selected phi into consume call" \
   'define i32 @phi_select_preexisting_array_consume' \
@@ -1202,9 +1200,9 @@ assert_order "$LLVM_IR" "preexisting managed phi consume should lower selected p
 assert_order "$LLVM_IR" "preexisting managed phi consume should lower unselected owner edge drops" \
   'define i32 @phi_select_preexisting_array_consume' \
   '^perceus\.edge\.drop:' \
-  'call void @__ylc_drop\(ptr' \
+  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr' \
   '^perceus\.edge\.drop1:' \
-  'call void @__ylc_drop\(ptr'
+  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr'
 assert_order "$LLVM_IR" "duplicated managed phi should lower RC dup before tuple insertvalues" \
   'define \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} @phi_select_preexisting_array_duplicate' \
   '^match\.cont:' \
@@ -1233,7 +1231,7 @@ assert_order "$LLVM_SHAPE_IR" "variant construct/tag/payload should lower to tag
   'extractvalue \{ i8, i32 \} %phi, 1' \
   'insertvalue \{ i32 \} undef'
 assert_order "$LLVM_SHAPE_IR" "list empty/cons/head/tail should lower to node allocation and field loads" \
-  'alloca \{ i32, ptr \}' \
+  'alloca \{ %YlcRcHeader, \{ i32, ptr \} \}' \
   'store ptr null' \
   'getelementptr inbounds nuw \{ i32, ptr \}.*i32 0, i32 0' \
   'load i32' \
@@ -1255,21 +1253,21 @@ assert_contains "$FIRST_CLASS_TEST_LLVM_IR" 'call double @proc\.Fn_Double_Double
 assert_contains "$FIRST_CLASS_TEST_LLVM_IR" 'call i32 @proc\.Fn_Int_Int_Int\.Int\.Int\.Int\(ptr @builtin_op_add\.Int\.Int\.Int' "first-class builtin int ref should lower as a function pointer"
 assert_not_contains "$FIRST_CLASS_TEST_LLVM_IR" 'ptr null' "first-class function refs should not lower to null pointers"
 assert_order "$LLVM_SHAPE_IR" "closure construct/env/fn/field should lower to closure pair and env field load" \
-  'insertvalue %Closure undef, ptr %closure\.env\.stack, 1' \
+  'insertvalue %Closure undef, ptr %rc\.payload\.ptr, 1' \
   'insertvalue %Closure .* ptr @closure_curried_add_[0-9]+\.Tuple_Int\.Int\.Int' \
   'extractvalue %Closure .* 1' \
   'extractvalue %Closure .* 0' \
-  'getelementptr inbounds nuw \{ i32 \}, ptr %0, i32 0, i32 0' \
+  'getelementptr inbounds nuw \{ i32 \}, ptr %[A-Za-z0-9_$"]+, i32 0, i32 0' \
   'load i32'
 assert_order "$LLVM_SHAPE_IR" "array literal/at/set should lower to data insert, store, and load" \
-  'insertvalue \{ i32, i32, ptr \} \{ i32 2, i32 0, ptr undef \}, ptr %array\.data\.stack, 2' \
+  'insertvalue \{ i32, i32, ptr \} \{ i32 2, i32 0, ptr undef \}, ptr %rc\.payload\.ptr, 2' \
   'extractvalue \{ i32, i32, ptr \} %array\.data, 2' \
   'getelementptr i32, ptr %extract\.field, i32 0' \
   'store i32 .* ptr %ptr\.offset' \
   'extractvalue \{ i32, i32, ptr \} %array\.data, 2' \
   'getelementptr i32, ptr %extract\.field[0-9]*, i32 0' \
   'load i32, ptr %ptr\.offset[0-9]*'
-assert_contains "$MATCH_DESTRUCTURE_LLVM_IR" 'define i32 @tuple_let_record_destructure\(i32 %0, i32 %1\)' "destructure LLVM fixture should lower tuple let-binding function"
+assert_contains "$MATCH_DESTRUCTURE_LLVM_IR" 'define i32 @tuple_let_record_destructure\(i32 %[A-Za-z0-9_]+, i32 %[A-Za-z0-9_]+\)' "destructure LLVM fixture should lower tuple let-binding function"
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "tuple let destructure should lower nested records to insertvalue/extractvalue" \
   'define i32 @tuple_let_record_destructure' \
   'insertvalue \{ \{ i32 \}, \{ i32 \} \} undef' \
@@ -1315,7 +1313,7 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "literal-pattern failure should lower 
   'icmp eq i32 %[A-Za-z0-9_.]+, 2' \
   'br i1 %[A-Za-z0-9_.]+, label %match\.arm\.0\.body, label %perceus\.edge\.drop' \
   '^perceus\.edge\.drop:' \
-  'call void @__ylc_drop\(ptr' \
+  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr' \
   'br label %match\.arm\.1\.test'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "array-pattern fallback should lower second length test before one-element payload consume" \
   'define i32 @array_pattern_failure_then_payload_match' \
@@ -1366,14 +1364,14 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "heap array pattern failure should low
   'icmp eq i32 %extract\.field[0-9]+, 1' \
   'br i1 %eq[0-9]*, label %match\.array\.bb5, label %perceus\.edge\.drop' \
   '^perceus\.edge\.drop:' \
-  'call void @__ylc_drop\(ptr'
+  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "heap list pattern failure should lower tail dup and retry-edge drop" \
   'define i32 @heap_list_pattern_failure_then_payload_match' \
   'load ptr, ptr %list\.tail\.ptr[0-9]*' \
   'call void @__ylc_dup\(ptr %list\.tail[0-9]*\)' \
   'icmp eq ptr %list\.tail[0-9]*, null' \
   '^perceus\.edge\.drop[0-9]*:' \
-  'call void @__ylc_drop\(ptr %list\.tail[0-9]*\)'
+  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr %list\.tail[0-9]*\)'
 assert_contains "$RECURSIVE_DESTRUCTURE_LLVM_IR" '^%DirectNode = type \{ i32, ptr \}' "recursive list record should lower to named LLVM struct"
 assert_contains "$RECURSIVE_DESTRUCTURE_LLVM_IR" '^%DirectArrayNode = type \{ i32, \{ i32, i32, ptr \} \}' "recursive array record should lower to named LLVM struct"
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive list constructor should lower to list node stores and record insertvalue" \
@@ -1381,16 +1379,16 @@ assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive list constructor should
   'getelementptr \(\{ %YlcRcHeader, \{ %DirectNode, ptr \} \}, ptr null, i32 1\)' \
   'store i32 1, ptr %rc\.count\.ptr' \
   'store i32 0, ptr %rc\.tag\.ptr' \
-  'store %DirectNode %1, ptr %list\.head\.ptr' \
-  'store %DirectNode %0, ptr %list\.head\.ptr' \
+  'store %DirectNode %[A-Za-z0-9_]+, ptr %list\.head\.ptr' \
+  'store %DirectNode %[A-Za-z0-9_]+, ptr %list\.head\.ptr' \
   'insertvalue %DirectNode \{ i32 3, ptr undef \}, ptr %rc\.payload\.ptr[0-9]*, 1'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive array constructor should lower to array storage of DirectArrayNode" \
   'define %DirectArrayNode @direct_array_pair' \
   'getelementptr \(\{ %YlcRcHeader, \[2 x %DirectArrayNode\] \}, ptr null, i32 1\)' \
   'store i32 1, ptr %rc\.count\.ptr' \
   'store i32 0, ptr %rc\.tag\.ptr' \
-  'store %DirectArrayNode %0, ptr %array\.item\.ptr' \
-  'store %DirectArrayNode %1, ptr %array\.item\.ptr' \
+  'store %DirectArrayNode %[A-Za-z0-9_]+, ptr %array\.item\.ptr' \
+  'store %DirectArrayNode %[A-Za-z0-9_]+, ptr %array\.item\.ptr' \
   'insertvalue %DirectArrayNode \{ i32 3, \{ i32, i32, ptr \} undef \}, \{ i32, i32, ptr \} %array\.data, 1'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive list match should lower list head loads and RC edge drops" \
   'define i32 @direct_recursive_record_list_match' \
@@ -1398,14 +1396,14 @@ assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive list match should lower
   'load %DirectNode, ptr %list\.head\.ptr' \
   'call void @__ylc_dup\(ptr %list\.tail' \
   'perceus\.edge\.drop:' \
-  'call void @__ylc_drop\(ptr'
+  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive array match should lower element loads and RC edge drop" \
   'define i32 @direct_recursive_record_array_match' \
   'extractvalue %DirectArrayNode %[A-Za-z0-9_.]+, 1' \
   'extractvalue \{ i32, i32, ptr \} %extract\.field, 2' \
   'load %DirectArrayNode, ptr %ptr\.offset' \
   'perceus\.edge\.drop:' \
-  'call void @__ylc_drop\(ptr'
+  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum constructor should lower payload tuple and tagged storage" \
   'define \{ i32, i32, ptr \} @tensor_add' \
   'insertvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} undef' \
@@ -1422,8 +1420,8 @@ assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum match should lower 
   'extractvalue \{ i32, i32, ptr \} %extract\.field[0-9]+, 0' \
   'extractvalue \{ i32, i32, ptr \} %extract\.field[0-9]+, 0' \
   'add i32' \
-  'call void @__ylc_drop\(ptr' \
-  'call void @__ylc_drop\(ptr' \
+  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr' \
+  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr' \
   'br label %match\.cont'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum match should lower payload unpack and RC dup" \
   'define i32 @tensor_op_add_payload_match' \

@@ -23,8 +23,34 @@ void str_copy(char *dest, char *src, int len) {
 void print(_String str) { printf("%s", str.chars); }
 void printc(char c) { printf("%c", c); }
 
-void __ylc_dup(void *ptr) { (void)ptr; }
-void __ylc_drop(void *ptr) { (void)ptr; }
+static YlcRcHeader *__ylc_header(void *payload) {
+  return (YlcRcHeader *)((char *)payload - sizeof(YlcRcHeader));
+}
+
+void __ylc_dup(void *ptr) {
+  if (!ptr) {
+    return;
+  }
+  YlcRcHeader *header = __ylc_header(ptr);
+  if (header->rc == 0) {
+    return;
+  }
+  header->rc += 1;
+}
+
+void __ylc_drop(void *ptr) {
+  if (!ptr) {
+    return;
+  }
+  YlcRcHeader *header = __ylc_header(ptr);
+  if (header->rc == 0) {
+    return;
+  }
+  header->rc -= 1;
+  if (header->rc == 0) {
+    free(header);
+  }
+}
 
 void fprint(FILE *f, _String str) { fprintf(f, "%s", str.chars); }
 struct char_matrix {

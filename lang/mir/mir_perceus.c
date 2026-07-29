@@ -617,7 +617,7 @@ static MirValueId mir_perceus_emit_store_old_slot_load(MirFunction *fn,
 static void mir_perceus_process_use(MirFunction *fn, MirInstrVec *out,
                                     uint32_t *remaining, size_t value_limit,
                                     const MirValueId *borrow_parent,
-                                    const bool *live_out,
+                                    const bool *live_out, bool *moved,
                                     MirValueIdVec *post_releases,
                                     MirValueId value, bool consumes,
                                     Ast *origin) {
@@ -636,6 +636,14 @@ static void mir_perceus_process_use(MirFunction *fn, MirInstrVec *out,
 
   if (remaining[value] > 0) {
     remaining[value]--;
+  }
+
+  /* A consumed operand whose last use is this consume transfers ownership to
+     the callee (the call drops it on its side). The caller must not also drop
+     it; mark it moved so dead-definition and entry-param drops skip it. A
+     dup'd consume keeps the original ref, so it is not moved. */
+  if (managed && consumes && !has_future_use && moved) {
+    moved[value] = true;
   }
 
   if (managed && !consumes && remaining[value] == 0 && !live_after_block &&
@@ -671,6 +679,7 @@ typedef struct {
   size_t value_limit;
   const bool *live_out;
   const MirValueId *borrow_parent;
+  bool *moved;
   MirValueIdVec *post_releases;
 } MirPerceusProcessCtx;
 
@@ -684,7 +693,7 @@ static bool mir_perceus_process_operand(MirInstr *instr, MirOperand operand,
   mir_perceus_process_use(
       process_ctx->fn, process_ctx->out, process_ctx->remaining,
       process_ctx->value_limit, process_ctx->borrow_parent,
-      process_ctx->live_out,
+      process_ctx->live_out, process_ctx->moved,
       process_ctx->post_releases, operand.value,
       operand.use == MIR_OPERAND_USE_CONSUME, instr ? instr->origin : NULL);
 
@@ -701,8 +710,8 @@ static bool mir_perceus_process_operand(MirInstr *instr, MirOperand operand,
     mir_perceus_process_use(process_ctx->fn, process_ctx->out,
                             process_ctx->remaining, process_ctx->value_limit,
                             process_ctx->borrow_parent, process_ctx->live_out,
-                            process_ctx->post_releases, parent, false,
-                            instr ? instr->origin : NULL);
+                            process_ctx->moved, process_ctx->post_releases,
+                            parent, false, instr ? instr->origin : NULL);
     value = parent;
   }
   return true;
@@ -713,6 +722,7 @@ static void mir_perceus_process_instr_uses(MirFunction *fn, MirInstrVec *out,
                                            size_t value_limit,
                                            const bool *live_out,
                                            const MirValueId *borrow_parent,
+                                           bool *moved,
                                            MirValueIdVec *post_releases,
                                            MirInstr *instr) {
   if (!fn || !out || !remaining || !instr) {
@@ -729,6 +739,7 @@ static void mir_perceus_process_instr_uses(MirFunction *fn, MirInstrVec *out,
       .value_limit = value_limit,
       .live_out = live_out,
       .borrow_parent = borrow_parent,
+      .moved = moved,
       .post_releases = post_releases,
   };
   mir_instr_for_each_operand(instr, mir_perceus_process_operand, &ctx);
@@ -770,12 +781,14 @@ static void mir_perceus_drop_dead_definition(MirFunction *fn, MirInstrVec *out,
                                              uint32_t *remaining,
                                              size_t value_limit,
                                              const MirValueId *borrow_parent,
-                                             const bool *live_out) {
+                                             const bool *live_out,
+                                             const bool *moved) {
   if (!instr ||
       mir_perceus_extraction_borrows_result(instr) ||
       !mir_perceus_value_in_range(fn, instr->result, value_limit) ||
       !remaining || remaining[instr->result] > 0 ||
       mir_perceus_set_contains(live_out, value_limit, instr->result) ||
+      (moved && moved[instr->result]) ||
       !mir_perceus_value_may_own_with_borrow_parent(
           fn, instr->result, value_limit, borrow_parent)) {
     return;
@@ -791,7 +804,8 @@ static void mir_perceus_drop_unused_entry_params(MirFunction *fn,
                                                  uint32_t *remaining,
                                                  size_t value_limit,
                                                  const MirValueId *borrow_parent,
-                                                 const bool *live_out) {
+                                                 const bool *live_out,
+                                                 const bool *moved) {
   if (!fn || !block || block->id != 0 || !out || !remaining) {
     return;
   }
@@ -801,6 +815,7 @@ static void mir_perceus_drop_unused_entry_params(MirFunction *fn,
     if (!mir_perceus_value_in_range(fn, param->value, value_limit) ||
         remaining[param->value] > 0 ||
         mir_perceus_set_contains(live_out, value_limit, param->value) ||
+        (moved && moved[param->value]) ||
         !mir_perceus_value_may_own_with_borrow_parent(
             fn, param->value, value_limit, borrow_parent)) {
       continue;
@@ -924,7 +939,7 @@ static void mir_perceus_process_term_uses(MirFunction *fn, MirInstrVec *out,
                                           size_t value_limit,
                                           const bool *live_out,
                                           const MirValueId *borrow_parent,
-                                          MirTerminator *term) {
+                                          bool *moved, MirTerminator *term) {
   MirValueIdVec post_releases = {0};
   MirPerceusProcessCtx ctx = {
       .fn = fn,
@@ -933,6 +948,7 @@ static void mir_perceus_process_term_uses(MirFunction *fn, MirInstrVec *out,
       .value_limit = value_limit,
       .live_out = live_out,
       .borrow_parent = borrow_parent,
+      .moved = moved,
       .post_releases = &post_releases,
   };
   mir_term_for_each_operand(term, mir_perceus_process_operand, &ctx);
@@ -984,7 +1000,10 @@ static void mir_perceus_instrument_function(MirFunction *fn) {
     }
 
     uint32_t *remaining = calloc(original_values_len, sizeof(uint32_t));
-    if (!remaining) {
+    bool *moved = calloc(original_values_len, sizeof(bool));
+    if (!remaining || !moved) {
+      free(remaining);
+      free(moved);
       continue;
     }
     for (size_t j = 0; j < block->instrs.len; j++) {
@@ -1008,8 +1027,8 @@ static void mir_perceus_instrument_function(MirFunction *fn) {
       MirValueIdVec post_releases = {0};
       mir_perceus_process_instr_uses(fn, &block->instrs, remaining,
                                      original_values_len, live_out,
-                                     liveness.borrow_parent, &post_releases,
-                                     instr);
+                                     liveness.borrow_parent, moved,
+                                     &post_releases, instr);
       MirValueId old_array_slot =
           mir_perceus_emit_array_set_old_slot_load(fn, &block->instrs, instr);
       MirValueId old_store_slot =
@@ -1020,7 +1039,7 @@ static void mir_perceus_instrument_function(MirFunction *fn) {
                                        liveness.borrow_parent, live_out);
       mir_perceus_drop_dead_definition(fn, &block->instrs, instr, remaining,
                                        original_values_len,
-                                       liveness.borrow_parent, live_out);
+                                       liveness.borrow_parent, live_out, moved);
       mir_perceus_emit_marker(fn, &block->instrs, MIR_OP_KIND_DROP,
                               old_array_slot, instr->origin);
       mir_perceus_emit_marker(fn, &block->instrs, MIR_OP_KIND_DROP,
@@ -1031,12 +1050,14 @@ static void mir_perceus_instrument_function(MirFunction *fn) {
 
     mir_perceus_drop_unused_entry_params(fn, block, &block->instrs, remaining,
                                          original_values_len,
-                                         liveness.borrow_parent, live_out);
+                                         liveness.borrow_parent, live_out,
+                                         moved);
     mir_perceus_process_term_uses(fn, &block->instrs, remaining,
                                   original_values_len, live_out,
-                                  liveness.borrow_parent, &block->term);
+                                  liveness.borrow_parent, moved, &block->term);
     mir_perceus_insert_edge_drops(fn, &liveness, block);
     free(remaining);
+    free(moved);
   }
 
   mir_perceus_liveness_destroy(&liveness);

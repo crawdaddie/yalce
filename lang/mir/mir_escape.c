@@ -169,41 +169,6 @@ static MirOperandUse mir_escape_call_operand_use(MirInstr *call, size_t index) {
   return call->data.call.operand_uses.items[index];
 }
 
-static MirFunction *mir_escape_call_callee(MirEscapeProgramCtx *program_ctx,
-                                           MirFunction *fn, MirInstr *call) {
-  if (!program_ctx || !program_ctx->program || !fn || !call ||
-      call->kind != MIR_CALL || call->data.call.builtin) {
-    return NULL;
-  }
-
-  if (call->data.call.specialized_fn) {
-    return call->data.call.specialized_fn;
-  }
-
-  MirInstr *callee =
-      mir_function_find_def_instr(fn, call->data.call.callee);
-  if (!callee || callee->kind != MIR_FN_REF || !callee->data.fn_ref.fn) {
-    return NULL;
-  }
-
-  return callee->data.fn_ref.fn;
-}
-
-static bool mir_escape_callee_param_escapes(MirEscapeProgramCtx *program_ctx,
-                                            MirFunction *callee,
-                                            size_t index) {
-  if (!program_ctx || !callee || callee->id >= program_ctx->functions_len ||
-      index >= callee->params.len) {
-    return true;
-  }
-
-  MirEscapeFnSummary *summary = &program_ctx->functions[callee->id];
-  if (!summary->params || index >= summary->len) {
-    return true;
-  }
-  return summary->params[index];
-}
-
 static bool mir_escape_seed_call(MirFunction *fn, MirInstr *call,
                                  MirEscapeState *state,
                                  MirEscapeProgramCtx *program_ctx) {
@@ -211,17 +176,19 @@ static bool mir_escape_seed_call(MirFunction *fn, MirInstr *call,
     return false;
   }
 
-  MirFunction *callee = mir_escape_call_callee(program_ctx, fn, call);
+  (void)program_ctx;
   bool changed = false;
   for (size_t i = 0; i < call->data.call.operands.len; i++) {
     if (mir_escape_call_operand_use(call, i) != MIR_OPERAND_USE_CONSUME) {
       continue;
     }
 
-    if (callee &&
-        !mir_escape_callee_param_escapes(program_ctx, callee, i)) {
-      continue;
-    }
+    /* A consumed call argument transfers ownership to the callee, which the
+       Perceus pass will later drop. Mark it escaping so any alloc-site fields
+       it contains are promoted to heap (with an RC header) and the callee's
+       drop is safe. Stack-allocated managed values still flow through safely
+       because the lowering gives them an rc=0 sentinel header that dup/drop
+       no-op on. */
     changed |=
         mir_escape_mark(state->escaped, fn, call->data.call.operands.items[i]);
   }

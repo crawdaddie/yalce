@@ -93,6 +93,21 @@ TypeEnv *lookup_builtin_env(const char *name) {
                      hash_string(name, strlen(name)));
 }
 
+void builtin_env_foreach(void (*callback)(const char *name, TypeEnv *entry,
+                                          void *ctx),
+                         void *ctx) {
+  hti it;
+
+  if (!callback) {
+    return;
+  }
+
+  it = ht_iterator(&builtin_env_ht);
+  while (ht_next(&it)) {
+    callback(it.key, (TypeEnv *)it.value, ctx);
+  }
+}
+
 // Backward-compatible: callers that need a Type* get it from the env's type
 Type *lookup_builtin_type(const char *name) {
   if (strcmp(name, TYPE_NAME_INT) == 0) {

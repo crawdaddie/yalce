@@ -77,6 +77,9 @@ Type *lookup_builtin_type(const char *name);
 
 // New API: builtins stored as TypeEnv entries with predicates.
 TypeEnv *lookup_builtin_env(const char *name);
+void builtin_env_foreach(void (*callback)(const char *name, TypeEnv *entry,
+                                          void *ctx),
+                         void *ctx);
 
 // Convenience: expose the generic typeclasses for external use.
 extern TypeClass *GenericArithmetic;

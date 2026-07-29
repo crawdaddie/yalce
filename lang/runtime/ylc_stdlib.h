@@ -9,6 +9,12 @@ void str_copy(char *dest, char *src, int len);
 
 void print(_String str);
 void printc(char c);
+
+typedef struct YlcRcHeader {
+  uint32_t rc;
+  uint32_t tag_or_size_class;
+} YlcRcHeader;
+
 void __ylc_dup(void *ptr);
 void __ylc_drop(void *ptr);
 
