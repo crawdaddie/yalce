@@ -185,11 +185,6 @@ typedef struct AudioFnRefCache {
 typedef struct AudioLocalBinding {
   const char *name;
   AudioValue value;
-  /* The AST expression a `let name = expr` bound, if available, so that
-     static (compile-time-constant) analysis can resolve a reference to the
-     name back to its definition (e.g. a `let y = [|...|]` referenced as `y`).
-   */
-  Ast *expr;
   /* If the bound value is an array with a compile-time-known size (array
      literal, array_fill_const, etc.), the number of elements. Zero means the
      size is unknown or the binding is not a fixed-size array. */
@@ -838,45 +833,6 @@ static bool audio_mir_bind_kernel_lambda_params(MirAudioSynthBuildCtx *ctx,
     }
   }
   return true;
-}
-
-static MirValueId audio_mir_kernel_body_value(MirAudioSynthBuildCtx *ctx) {
-  if (!ctx || !ctx->kernel_fn || !ctx->lambda ||
-      ctx->lambda->tag != AST_LAMBDA || !ctx->lambda->data.AST_LAMBDA.body) {
-    return MIR_NO_VALUE;
-  }
-
-  MirCtx frame_ctx = {
-      .env = ctx->parent_ctx && ctx->parent_ctx->env ? ctx->parent_ctx->env
-                                                     : ctx->program->type_env,
-      .frame = NULL,
-      .current_module = ctx->parent_ctx ? ctx->parent_ctx->current_module
-                                        : ctx->program->root_module,
-      .export_bindings = false,
-      .prefer_global_loads = true,
-      .extension_kind = MIR_AUDIO_CONTEXT_KIND,
-      .extension_data = ctx,
-  };
-  ht frame_table;
-  MirStackFrame frame;
-  /* See audio_mir_emit_kernel: do not chain to the parent frame, whose
-     MIR_SYMBOL_VALUE entries carry stale (program-relative) value IDs that
-     would mis-resolve enclosing identifiers to unrelated kernel locals. */
-  mir_stack_frame_init(ctx->kernel_fn->arena, &frame_table, &frame, NULL);
-  frame_ctx.frame = &frame;
-
-  for (size_t i = 0; i < ctx->kernel_fn->params.len; i++) {
-    MirParam *param = &ctx->kernel_fn->params.items[i];
-    if (!audio_mir_bind_value_name(&frame_ctx, param->name, param->value)) {
-      return MIR_NO_VALUE;
-    }
-  }
-  if (!audio_mir_bind_kernel_lambda_params(ctx, &frame_ctx)) {
-    return MIR_NO_VALUE;
-  }
-
-  return mir_expr(&ctx->kernel_builder, ctx->lambda->data.AST_LAMBDA.body,
-                  &frame_ctx);
 }
 
 /* Count the number of kernel params a lambda declares. A tuple-pattern param
@@ -1578,7 +1534,7 @@ static MirValueId audio_mir_array_view(AudioCompileCtx *audio, Ast *origin,
 }
 
 static AudioValue audio_mir_array_literal(AudioCompileCtx *audio, Ast *ast) {
-  if (!audio || !ast || ast->tag != AST_ARRAY || !is_array_type(ast->type)) {
+  if (ast->tag != AST_ARRAY || !is_array_type(ast->type)) {
     return AUDIO_VALUE_NULL;
   }
 
@@ -1670,8 +1626,8 @@ static bool audio_mir_static_array_fill_len(Ast *size_ast, int *out_len) {
 }
 
 static AudioValue audio_mir_array_fill_const(AudioCompileCtx *audio, Ast *app) {
-  if (!audio || !app || app->tag != AST_APPLICATION ||
-      app->data.AST_APPLICATION.len != 2 || !is_array_type(app->type)) {
+  if (app->tag != AST_APPLICATION || app->data.AST_APPLICATION.len != 2 ||
+      !is_array_type(app->type)) {
     return AUDIO_VALUE_NULL;
   }
 
@@ -1717,8 +1673,8 @@ static AudioValue audio_mir_array_fill_const(AudioCompileCtx *audio, Ast *app) {
 }
 
 static AudioValue audio_mir_delay_line(AudioCompileCtx *audio, Ast *app) {
-  if (!audio || !app || app->tag != AST_APPLICATION ||
-      app->data.AST_APPLICATION.len != 1 || !is_array_type(app->type)) {
+  if (app->tag != AST_APPLICATION || app->data.AST_APPLICATION.len != 1 ||
+      !is_array_type(app->type)) {
     return AUDIO_VALUE_NULL;
   }
 
@@ -1937,7 +1893,7 @@ static AudioValue audio_mir_multi_value(AudioCompileCtx *audio, Ast *origin,
 
 static AudioValue *audio_mir_lookup_local(AudioCompileCtx *audio,
                                           const char *name) {
-  if (!audio || !name) {
+  if (!name) {
     return NULL;
   }
   for (AudioLocalBinding *binding = audio->locals; binding;
@@ -1951,7 +1907,7 @@ static AudioValue *audio_mir_lookup_local(AudioCompileCtx *audio,
 
 static AudioLocalBinding *audio_mir_lookup_local_binding(AudioCompileCtx *audio,
                                                          const char *name) {
-  if (!audio || !name) {
+  if (!name) {
     return NULL;
   }
   for (AudioLocalBinding *binding = audio->locals; binding;
@@ -2024,7 +1980,6 @@ static bool audio_mir_bind_local_value(AudioCompileCtx *audio, Ast *binding,
   local->name =
       mir_arena_strdup(audio->arena, binding->data.AST_IDENTIFIER.value);
   local->value = value;
-  local->expr = expr;
   local->array_size = audio_mir_expr_array_size(audio, expr);
   local->next = audio->locals;
   audio->locals = local;
@@ -2146,6 +2101,28 @@ static size_t audio_mir_application_value_arg_count(Ast *app) {
   return audio_mir_application_has_unit_arg(app)
              ? 0
              : (app ? (size_t)app->data.AST_APPLICATION.len : 0);
+}
+
+/* Lower all arguments of an application AST into a heap-allocated AudioValue
+   array, validating each. Returns NULL on failure. */
+static AudioValue *audio_mir_lower_app_args(AudioCompileCtx *audio, Ast *app,
+                                            size_t *out_argc) {
+  size_t argc = audio_mir_application_value_arg_count(app);
+  *out_argc = argc;
+  AudioValue *args =
+      argc ? mir_arena_alloc(audio->arena, sizeof(AudioValue) * argc,
+                             __alignof__(AudioValue))
+           : NULL;
+  if (argc && !args) {
+    return NULL;
+  }
+  for (size_t i = 0; i < argc; i++) {
+    args[i] = audio_mir_expr(audio, app->data.AST_APPLICATION.args + i);
+    if (!audio_mir_value_is_valid(args[i])) {
+      return NULL;
+    }
+  }
+  return args;
 }
 
 static MirAudioSynthSymbol *audio_mir_ast_audio_symbol(AudioCompileCtx *audio,
@@ -2531,8 +2508,8 @@ static bool audio_mir_value_const_double(AudioCompileCtx *audio,
 static AudioValue audio_mir_binary_signal_op(AudioCompileCtx *audio, Ast *app,
                                              MirPrimitiveOp op,
                                              Type *result_type) {
-  if (!audio || !app || app->tag != AST_APPLICATION ||
-      app->data.AST_APPLICATION.len != 2 || !result_type) {
+  if (app->tag != AST_APPLICATION || app->data.AST_APPLICATION.len != 2 ||
+      !result_type) {
     return AUDIO_VALUE_NULL;
   }
 
@@ -2642,8 +2619,7 @@ static MirValueId audio_mir_lane_as_formal(AudioCompileCtx *audio, Ast *origin,
 }
 
 static AudioValue audio_mir_call_application(AudioCompileCtx *audio, Ast *app) {
-  if (!audio || !app || app->tag != AST_APPLICATION ||
-      !app->data.AST_APPLICATION.function ||
+  if (app->tag != AST_APPLICATION || !app->data.AST_APPLICATION.function ||
       !app->data.AST_APPLICATION.function->type) {
     return AUDIO_VALUE_NULL;
   }
@@ -2720,75 +2696,8 @@ static AudioValue audio_mir_call_application(AudioCompileCtx *audio, Ast *app) {
   return audio_mir_multi_value(audio, app, app->type, results, lanes);
 }
 
-static AudioValue audio_mir_emit_kernel_call_lanes(
-    AudioCompileCtx *audio, Ast *origin, const char *kernel_symbol,
-    const char *state_name, size_t state_size, size_t state_align, int lanes,
-    const AudioMirKernelArgLanes *args, size_t argc) {
-  if (!audio || !origin || !kernel_symbol || !state_name || lanes <= 0 ||
-      (argc && !args)) {
-    return AUDIO_VALUE_NULL;
-  }
-
-  MirBuilder *b = audio->kernel_builder;
-  MirValueId *samples =
-      lanes > 1 ? audio_mir_alloc_lane_values(audio, lanes) : NULL;
-  if (lanes > 1 && !samples) {
-    return AUDIO_VALUE_NULL;
-  }
-
-  size_t params_len = argc + 2;
-  Type **params = mir_arena_alloc(audio->arena, sizeof(Type *) * params_len,
-                                  __alignof__(Type *));
-  if (!params) {
-    return AUDIO_VALUE_NULL;
-  }
-  params[0] = audio->ptr_double_type;
-  params[1] = &t_num;
-  for (size_t i = 0; i < argc; i++) {
-    params[i + 2] = args[i].type ? args[i].type : &t_num;
-  }
-
-  Type *kernel_type =
-      audio_mir_fn_type(audio->arena, params, params_len, &t_num);
-  MirValueId kernel_fn =
-      audio_mir_extern_ref(b, kernel_symbol, kernel_type, origin);
-
-  for (int lane = 0; lane < lanes; lane++) {
-    const char *slot_name =
-        lanes > 1 ? mir_arena_printf(audio->arena, "%s.%d", state_name, lane)
-                  : state_name;
-    AudioStateSlot *slot = audio_mir_reserve_state_slot(
-        audio, &t_num, state_size, state_align, slot_name);
-    MirValueId state_ptr = audio_mir_state_slot_ptr(
-        audio, b, origin, audio->state_param, slot->offset, &t_num);
-
-    MirValueId *call_args = mir_arena_alloc(
-        audio->arena, sizeof(MirValueId) * params_len, __alignof__(MirValueId));
-    if (!call_args) {
-      return AUDIO_VALUE_NULL;
-    }
-    call_args[0] = state_ptr;
-    call_args[1] = audio->spf_param;
-    for (size_t i = 0; i < argc; i++) {
-      call_args[i + 2] = args[i].values[lane];
-    }
-
-    MirValueId sample = mir_call_value(b, &t_num, origin, kernel_fn,
-                                       kernel_type, call_args, params_len);
-    if (lanes == 1) {
-      return audio_mir_value(&t_num, sample, 1);
-    }
-    samples[lane] = sample;
-  }
-
-  return audio_mir_multi_value(audio, origin, origin->type, samples, lanes);
-}
-
 static MirValueId audio_mir_state_base_arg(AudioCompileCtx *audio,
                                            Ast *origin) {
-  if (!audio || !audio->kernel_builder || !audio->ptr_double_type) {
-    return MIR_NO_VALUE;
-  }
   if (audio->state_param == MIR_NO_VALUE) {
     return mir_const_undef(audio->kernel_builder, audio->ptr_double_type,
                            origin);
@@ -2797,13 +2706,10 @@ static MirValueId audio_mir_state_base_arg(AudioCompileCtx *audio,
                             audio->ptr_double_type, origin, audio->state_param);
 }
 
-static AudioValue audio_mir_emit_stateless_kernel_call_lanes(
-    AudioCompileCtx *audio, Ast *origin, const char *kernel_symbol, int lanes,
+static AudioValue audio_mir_emit_kernel_call_lanes(
+    AudioCompileCtx *audio, Ast *origin, const char *kernel_symbol,
+    const char *state_name, size_t state_size, size_t state_align, int lanes,
     const AudioMirKernelArgLanes *args, size_t argc) {
-  if (!audio || !origin || !kernel_symbol || lanes <= 0 || (argc && !args)) {
-    return AUDIO_VALUE_NULL;
-  }
-
   MirBuilder *b = audio->kernel_builder;
   MirValueId *samples =
       lanes > 1 ? audio_mir_alloc_lane_values(audio, lanes) : NULL;
@@ -2827,15 +2733,34 @@ static AudioValue audio_mir_emit_stateless_kernel_call_lanes(
       audio_mir_fn_type(audio->arena, params, params_len, &t_num);
   MirValueId kernel_fn =
       audio_mir_extern_ref(b, kernel_symbol, kernel_type, origin);
-  MirValueId state_arg = audio_mir_state_base_arg(audio, origin);
+
+  /* Stateless builtins (state_name == NULL) share one base state pointer;
+     stateful ones reserve a fresh slot per lane. */
+  MirValueId shared_state = MIR_NO_VALUE;
+  if (!state_name) {
+    shared_state = audio_mir_state_base_arg(audio, origin);
+  }
 
   for (int lane = 0; lane < lanes; lane++) {
+    MirValueId state_ptr;
+    if (state_name) {
+      const char *slot_name =
+          lanes > 1 ? mir_arena_printf(audio->arena, "%s.%d", state_name, lane)
+                    : state_name;
+      AudioStateSlot *slot = audio_mir_reserve_state_slot(
+          audio, &t_num, state_size, state_align, slot_name);
+      state_ptr = audio_mir_state_slot_ptr(audio, b, origin, audio->state_param,
+                                           slot->offset, &t_num);
+    } else {
+      state_ptr = shared_state;
+    }
+
     MirValueId *call_args = mir_arena_alloc(
         audio->arena, sizeof(MirValueId) * params_len, __alignof__(MirValueId));
     if (!call_args) {
       return AUDIO_VALUE_NULL;
     }
-    call_args[0] = state_arg;
+    call_args[0] = state_ptr;
     call_args[1] = audio->spf_param;
     for (size_t i = 0; i < argc; i++) {
       call_args[i + 2] = args[i].values[lane];
@@ -2855,6 +2780,13 @@ static AudioValue audio_mir_emit_stateless_kernel_call_lanes(
   return audio_mir_multi_value(audio, origin, origin->type, samples, lanes);
 }
 
+static AudioValue audio_mir_emit_stateless_kernel_call_lanes(
+    AudioCompileCtx *audio, Ast *origin, const char *kernel_symbol, int lanes,
+    const AudioMirKernelArgLanes *args, size_t argc) {
+  return audio_mir_emit_kernel_call_lanes(audio, origin, kernel_symbol, NULL, 0,
+                                          0, lanes, args, argc);
+}
+
 static AudioValue audio_mir_emit_num_state_kernel_masked(
     AudioCompileCtx *audio, Ast *origin, const char *kernel_symbol,
     const char *state_name, size_t state_size, size_t state_align,
@@ -2863,15 +2795,6 @@ static AudioValue audio_mir_emit_num_state_kernel_masked(
 static AudioValue audio_mir_emit_num_stateless_kernel_masked(
     AudioCompileCtx *audio, Ast *origin, const char *kernel_symbol,
     const AudioValue *values, size_t argc, uint64_t lane_expand_mask);
-
-static AudioValue audio_mir_emit_num_state_kernel(
-    AudioCompileCtx *audio, Ast *origin, const char *kernel_symbol,
-    const char *state_name, size_t state_size, size_t state_align,
-    const AudioValue *values, size_t argc) {
-  return audio_mir_emit_num_state_kernel_masked(
-      audio, origin, kernel_symbol, state_name, state_size, state_align, values,
-      argc, AUDIO_ARG_MASK_ALL(argc));
-}
 
 static AudioValue audio_mir_emit_num_state_kernel_masked(
     AudioCompileCtx *audio, Ast *origin, const char *kernel_symbol,
@@ -2890,15 +2813,6 @@ static AudioValue audio_mir_emit_num_state_kernel_masked(
   return audio_mir_emit_kernel_call_lanes(audio, origin, kernel_symbol,
                                           state_name, state_size, state_align,
                                           lanes, args, argc);
-}
-
-static AudioValue audio_mir_emit_num_stateless_kernel(AudioCompileCtx *audio,
-                                                      Ast *origin,
-                                                      const char *kernel_symbol,
-                                                      const AudioValue *values,
-                                                      size_t argc) {
-  return audio_mir_emit_num_stateless_kernel_masked(
-      audio, origin, kernel_symbol, values, argc, AUDIO_ARG_MASK_ALL(argc));
 }
 
 static AudioValue audio_mir_emit_num_stateless_kernel_masked(
@@ -2982,11 +2896,6 @@ static AudioValue audio_builtin_emit_delay_line(const AudioBuiltin *builtin,
                                                 AudioCompileCtx *audio,
                                                 Ast *origin, AudioValue *args,
                                                 size_t argc);
-static AudioValue audio_builtin_emit_delay_line_buf(const AudioBuiltin *builtin,
-                                                    AudioCompileCtx *audio,
-                                                    Ast *origin,
-                                                    AudioValue *args,
-                                                    size_t argc);
 static AudioValue audio_builtin_emit_array_trigger(const AudioBuiltin *builtin,
                                                    AudioCompileCtx *audio,
                                                    Ast *origin,
@@ -3354,17 +3263,6 @@ static const AudioBuiltin audio_builtins[] = {
      .lane_expand_mask = 0,
      .arg_order = NULL,
      .kernel_argc = 0},
-
-    // {.name = "delay_line",
-    //  .source_argc = 1,
-    //  .kernel_symbol = NULL,
-    // .emit = audio_builtin_emit_delay_line_buf,
-    //  .state_size = 0,
-    //  .state_align = 8,
-    //  .state_name = "delay_line.buf",
-    //  .lane_expand_mask = 0,
-    //  .arg_order = NULL,
-    //  .kernel_argc = 0},
 };
 
 static const AudioBuiltin *audio_mir_find_builtin(const char *name) {
@@ -3399,7 +3297,7 @@ static int audio_mir_fn_type_arity(Type *type) {
 
 static int audio_mir_builtin_arity(AudioCompileCtx *audio, const char *name) {
   const AudioBuiltin *builtin = audio_mir_find_builtin(name);
-  if (!audio || !builtin) {
+  if (!builtin) {
     return 0;
   }
 
@@ -3410,82 +3308,6 @@ static int audio_mir_builtin_arity(AudioCompileCtx *audio, const char *name) {
     return audio_mir_fn_type_arity(symbol->type);
   }
   return builtin->source_argc > (size_t)INT_MAX ? 0 : (int)builtin->source_argc;
-}
-
-static AudioValue audio_mir_emit_sin_osc_value(AudioCompileCtx *audio,
-                                               Ast *origin, AudioValue freq) {
-  AudioValue values[] = {freq};
-  AudioMirKernelArgLanes args[1];
-  int lanes = 0;
-  if (!audio_mir_normalize_num_kernel_args(audio, origin, values, args, 1,
-                                           &lanes)) {
-    return AUDIO_VALUE_NULL;
-  }
-
-  return audio_mir_emit_kernel_call_lanes(
-      audio, origin, "ylc_audio_sin_osc_kernel", "sin_osc.state",
-      sizeof(SinOscState), __alignof__(SinOscState), lanes, args, 1);
-}
-
-static AudioValue audio_mir_emit_sq_osc_value(AudioCompileCtx *audio,
-                                              Ast *origin, AudioValue freq) {
-  AudioValue values[] = {freq};
-  AudioMirKernelArgLanes args[1];
-  int lanes = 0;
-  if (!audio_mir_normalize_num_kernel_args(audio, origin, values, args, 1,
-                                           &lanes)) {
-    return AUDIO_VALUE_NULL;
-  }
-
-  return audio_mir_emit_kernel_call_lanes(
-      audio, origin, "ylc_audio_sq_osc_kernel", "sq_osc.state",
-      sizeof(SqOscState), __alignof__(SqOscState), lanes, args, 1);
-}
-
-static AudioValue audio_mir_emit_saw_osc_value(AudioCompileCtx *audio,
-                                               Ast *origin, AudioValue freq) {
-  AudioValue values[] = {freq};
-  AudioMirKernelArgLanes args[1];
-  int lanes = 0;
-  if (!audio_mir_normalize_num_kernel_args(audio, origin, values, args, 1,
-                                           &lanes)) {
-    return AUDIO_VALUE_NULL;
-  }
-
-  return audio_mir_emit_kernel_call_lanes(
-      audio, origin, "ylc_audio_saw_osc_kernel", "saw_osc.state",
-      sizeof(SawOscState), __alignof__(SawOscState), lanes, args, 1);
-}
-
-static AudioValue audio_mir_emit_phasor_value(AudioCompileCtx *audio,
-                                              Ast *origin, AudioValue freq) {
-  AudioValue values[] = {freq};
-  AudioMirKernelArgLanes args[1];
-  int lanes = 0;
-  if (!audio_mir_normalize_num_kernel_args(audio, origin, values, args, 1,
-                                           &lanes)) {
-    return AUDIO_VALUE_NULL;
-  }
-
-  return audio_mir_emit_kernel_call_lanes(
-      audio, origin, "ylc_audio_phasor_kernel", "phasor.state",
-      sizeof(PhasorState), __alignof__(PhasorState), lanes, args, 1);
-}
-
-static AudioValue audio_mir_emit_phasor_sinc_value(AudioCompileCtx *audio,
-                                                   Ast *origin, AudioValue freq,
-                                                   AudioValue trig) {
-  AudioValue values[] = {freq};
-  AudioMirKernelArgLanes args[1];
-  int lanes = 0;
-  if (!audio_mir_normalize_num_kernel_args(audio, origin, values, args, 1,
-                                           &lanes)) {
-    return AUDIO_VALUE_NULL;
-  }
-
-  return audio_mir_emit_kernel_call_lanes(
-      audio, origin, "ylc_audio_phasor_kernel", "phasor.state",
-      sizeof(PhasorState), __alignof__(PhasorState), lanes, args, 1);
 }
 
 static AudioValue audio_mir_emit_trig_value(AudioCompileCtx *audio, Ast *origin,
@@ -3547,95 +3369,6 @@ static AudioValue audio_mir_emit_trig_value(AudioCompileCtx *audio, Ast *origin,
   return audio_mir_multi_value(audio, origin, origin->type, samples, lanes);
 }
 
-static AudioValue audio_mir_emit_pm_osc_values(AudioCompileCtx *audio,
-                                               Ast *origin,
-                                               AudioValue mod_ratio,
-                                               AudioValue mod_index,
-                                               AudioValue freq) {
-  AudioValue values[] = {mod_index, mod_ratio, freq};
-  AudioMirKernelArgLanes args[3];
-  int lanes = 0;
-  if (!audio_mir_normalize_num_kernel_args(audio, origin, values, args, 3,
-                                           &lanes)) {
-    return AUDIO_VALUE_NULL;
-  }
-
-  return audio_mir_emit_kernel_call_lanes(
-      audio, origin, "ylc_audio_pm_osc_kernel", "pm_osc.state",
-      sizeof(PmOscState), __alignof__(PmOscState), lanes, args, 3);
-}
-
-static AudioValue audio_mir_emit_changed_value(AudioCompileCtx *audio,
-                                               Ast *origin, AudioValue input) {
-  AudioValue values[] = {input};
-  return audio_mir_emit_num_state_kernel(
-      audio, origin, "ylc_audio_changed_kernel", "changed.state",
-      sizeof(ChangedState), __alignof__(ChangedState), values, 1);
-}
-
-static AudioValue audio_mir_emit_decay_values(AudioCompileCtx *audio,
-                                              Ast *origin,
-                                              AudioValue decay_time,
-                                              AudioValue trig) {
-  AudioValue values[] = {decay_time, trig};
-  return audio_mir_emit_num_state_kernel(
-      audio, origin, "ylc_audio_decay_kernel", "decay.state",
-      sizeof(DecayState), __alignof__(DecayState), values, 2);
-}
-
-static AudioValue audio_mir_emit_scale_values(AudioCompileCtx *audio,
-                                              Ast *origin, AudioValue lo,
-                                              AudioValue hi, AudioValue value) {
-  AudioValue values[] = {lo, hi, value};
-  return audio_mir_emit_num_stateless_kernel(
-      audio, origin, "ylc_audio_scale_kernel", values, 3);
-}
-
-static AudioValue audio_mir_emit_scale_bp_values(AudioCompileCtx *audio,
-                                                 Ast *origin, AudioValue lo,
-                                                 AudioValue hi,
-                                                 AudioValue value) {
-  AudioValue values[] = {lo, hi, value};
-  return audio_mir_emit_num_stateless_kernel(
-      audio, origin, "ylc_audio_scale_bp_kernel", values, 3);
-}
-
-static AudioValue audio_mir_emit_lfnoise_values(AudioCompileCtx *audio,
-                                                Ast *origin, AudioValue freq,
-                                                AudioValue lo, AudioValue hi) {
-  AudioValue values[] = {freq, lo, hi};
-  return audio_mir_emit_num_state_kernel(
-      audio, origin, "ylc_audio_lfnoise_kernel", "lfnoise.state",
-      sizeof(LfNoiseState), __alignof__(LfNoiseState), values, 3);
-}
-
-static AudioValue audio_mir_emit_lfnoise0_values(AudioCompileCtx *audio,
-                                                 Ast *origin, AudioValue freq,
-                                                 AudioValue lo, AudioValue hi) {
-  AudioValue values[] = {freq, lo, hi};
-  return audio_mir_emit_num_state_kernel(
-      audio, origin, "ylc_audio_lfnoise0_kernel", "lfnoise0.state",
-      sizeof(LfNoise0State), __alignof__(LfNoise0State), values, 3);
-}
-
-static AudioValue audio_mir_emit_adsr_values(
-    AudioCompileCtx *audio, Ast *origin, AudioValue attack, AudioValue decay,
-    AudioValue sustain, AudioValue release, AudioValue trig) {
-  AudioValue values[] = {attack, decay, sustain, release, trig};
-  return audio_mir_emit_num_state_kernel(audio, origin, "ylc_audio_adsr_kernel",
-                                         "adsr.state", sizeof(AdsrState),
-                                         __alignof__(AdsrState), values, 5);
-}
-
-static AudioValue audio_mir_emit_rect_values(AudioCompileCtx *audio,
-                                             Ast *origin, AudioValue duration,
-                                             AudioValue trig) {
-  AudioValue values[] = {duration, trig};
-  return audio_mir_emit_num_state_kernel(audio, origin, "ylc_audio_rect_kernel",
-                                         "rect.state", sizeof(RectState),
-                                         __alignof__(RectState), values, 2);
-}
-
 static bool audio_mir_delay_state_size(AudioCompileCtx *audio,
                                        AudioValue max_delay_value,
                                        const char *name, size_t *out_state_size,
@@ -3690,12 +3423,22 @@ static bool audio_mir_delay_state_size(AudioCompileCtx *audio,
   return true;
 }
 
+typedef struct AudioMirArrayParts {
+  MirValueId size;
+  MirValueId offset;
+  MirValueId data;
+} AudioMirArrayParts;
+
+static bool audio_mir_extract_array_parts(AudioCompileCtx *audio, Ast *origin,
+                                          AudioValue array_value,
+                                          AudioMirArrayParts *out);
+
 static AudioValue audio_mir_emit_delay_line_values(
     AudioCompileCtx *audio, Ast *origin, AudioValue delay_secs,
     AudioValue max_delay_secs, AudioValue feedback, AudioValue input,
     const char *kernel_symbol, const char *state_name,
     uint64_t control_expand_mask) {
-  if (!audio || !origin || !kernel_symbol || !state_name) {
+  if (!kernel_symbol || !state_name) {
     return AUDIO_VALUE_NULL;
   }
 
@@ -3806,10 +3549,6 @@ static AudioValue audio_mir_emit_tabread_values(AudioCompileCtx *audio,
                                                 Ast *origin, AudioValue table,
                                                 AudioValue phase,
                                                 const char *kernel_symbol) {
-  if (!audio || !kernel_symbol || table.value == MIR_NO_VALUE) {
-    return AUDIO_VALUE_NULL;
-  }
-
   AudioValue phase_values[] = {phase};
   AudioMirKernelArgLanes phase_arg[1];
   int lanes = 0;
@@ -3818,14 +3557,12 @@ static AudioValue audio_mir_emit_tabread_values(AudioCompileCtx *audio,
     return AUDIO_VALUE_NULL;
   }
 
-  MirBuilder *b = audio->kernel_builder;
-  MirValueId size = mir_tuple_get(b, &t_int, origin, table.value, 0);
-  MirValueId offset = mir_tuple_get(b, &t_int, origin, table.value, 1);
-  MirValueId data =
-      mir_tuple_get(b, audio->ptr_double_type, origin, table.value, 2);
-  if (size == MIR_NO_VALUE || offset == MIR_NO_VALUE || data == MIR_NO_VALUE) {
+  AudioMirArrayParts parts;
+  if (!audio_mir_extract_array_parts(audio, origin, table, &parts)) {
     return AUDIO_VALUE_NULL;
   }
+
+  MirBuilder *b = audio->kernel_builder;
 
   Type *params[] = {audio->ptr_double_type, &t_num, &t_int, &t_int,
                     audio->ptr_double_type, &t_num};
@@ -3842,8 +3579,9 @@ static AudioValue audio_mir_emit_tabread_values(AudioCompileCtx *audio,
   }
 
   for (int lane = 0; lane < lanes; lane++) {
-    MirValueId args[] = {state_arg, audio->spf_param,         size, offset,
-                         data,      phase_arg[0].values[lane]};
+    MirValueId args[] = {state_arg,  audio->spf_param,
+                         parts.size, parts.offset,
+                         parts.data, phase_arg[0].values[lane]};
     MirValueId sample =
         mir_call_value(b, &t_num, origin, kernel_fn, kernel_type, args,
                        sizeof(args) / sizeof(args[0]));
@@ -3863,7 +3601,7 @@ static AudioValue audio_mir_emit_bufplay_values(
     AudioCompileCtx *audio, Ast *origin, AudioValue buffer, AudioValue rate,
     AudioValue start_pos, AudioValue trig, const char *kernel_symbol,
     uint64_t control_expand_mask) {
-  if (!audio || !origin || !kernel_symbol || buffer.value == MIR_NO_VALUE) {
+  if (!kernel_symbol || buffer.value == MIR_NO_VALUE) {
     return AUDIO_VALUE_NULL;
   }
 
@@ -3903,16 +3641,8 @@ static AudioValue audio_mir_emit_bufplay_values(
   }
 
   for (int lane = 0; lane < lanes; lane++) {
-    MirValueId buffer_value = audio_mir_value_lane(buffer, 0);
-    if (buffer_value == MIR_NO_VALUE) {
-      return AUDIO_VALUE_NULL;
-    }
-    MirValueId size = mir_tuple_get(b, &t_int, origin, buffer_value, 0);
-    MirValueId offset = mir_tuple_get(b, &t_int, origin, buffer_value, 1);
-    MirValueId data =
-        mir_tuple_get(b, audio->ptr_double_type, origin, buffer_value, 2);
-    if (size == MIR_NO_VALUE || offset == MIR_NO_VALUE ||
-        data == MIR_NO_VALUE) {
+    AudioMirArrayParts parts;
+    if (!audio_mir_extract_array_parts(audio, origin, buffer, &parts)) {
       return AUDIO_VALUE_NULL;
     }
 
@@ -3933,9 +3663,9 @@ static AudioValue audio_mir_emit_bufplay_values(
 
     MirValueId call_args[] = {state_ptr,
                               audio->spf_param,
-                              size,
-                              offset,
-                              data,
+                              parts.size,
+                              parts.offset,
+                              parts.data,
                               control_args[0].values[lane],
                               control_args[1].values[lane],
                               control_args[2].values[lane]};
@@ -4008,15 +3738,8 @@ static AudioValue audio_mir_emit_mbufplay_values(
     return AUDIO_VALUE_NULL;
   }
 
-  MirValueId buffer_value = audio_mir_value_lane(buffer, 0);
-  if (buffer_value == MIR_NO_VALUE) {
-    return AUDIO_VALUE_NULL;
-  }
-  MirValueId size = mir_tuple_get(b, &t_int, origin, buffer_value, 0);
-  MirValueId offset = mir_tuple_get(b, &t_int, origin, buffer_value, 1);
-  MirValueId data =
-      mir_tuple_get(b, audio->ptr_double_type, origin, buffer_value, 2);
-  if (size == MIR_NO_VALUE || offset == MIR_NO_VALUE || data == MIR_NO_VALUE) {
+  AudioMirArrayParts parts;
+  if (!audio_mir_extract_array_parts(audio, origin, buffer, &parts)) {
     return AUDIO_VALUE_NULL;
   }
 
@@ -4046,9 +3769,9 @@ static AudioValue audio_mir_emit_mbufplay_values(
         audio->spf_param,
         mir_const_int(b, &t_int, origin, channels),
         mir_const_int(b, &t_int, origin, lane),
-        size,
-        offset,
-        data,
+        parts.size,
+        parts.offset,
+        parts.data,
         control_args[0].values[lane],
         control_args[1].values[lane],
         control_args[2].values[lane],
@@ -4067,12 +3790,6 @@ static AudioValue audio_mir_emit_mbufplay_values(
 
   return audio_mir_multi_value(audio, origin, origin->type, samples, channels);
 }
-
-typedef struct AudioMirArrayParts {
-  MirValueId size;
-  MirValueId offset;
-  MirValueId data;
-} AudioMirArrayParts;
 
 static bool audio_mir_extract_array_parts(AudioCompileCtx *audio, Ast *origin,
                                           AudioValue array_value,
@@ -4107,7 +3824,7 @@ static AudioValue audio_mir_emit_array_trigger_values(
     AudioCompileCtx *audio, Ast *origin, AudioValue array, AudioValue trig,
     const char *kernel_symbol, const char *state_name, size_t state_size,
     size_t state_align, uint64_t trig_expand_mask) {
-  if (!audio || !origin || !kernel_symbol || !state_name) {
+  if (!kernel_symbol || !state_name) {
     return AUDIO_VALUE_NULL;
   }
 
@@ -4224,7 +3941,7 @@ static AudioValue audio_mir_emit_grains_values(
     AudioCompileCtx *audio, Ast *origin, AudioValue max_grains_value,
     AudioValue buffer, AudioValue rate, AudioValue position, AudioValue width,
     AudioValue trig, const char *kernel_symbol, uint64_t control_expand_mask) {
-  if (!audio || !origin || !kernel_symbol) {
+  if (!kernel_symbol) {
     return AUDIO_VALUE_NULL;
   }
 
@@ -4320,7 +4037,7 @@ static AudioValue audio_mir_emit_grains_env_values(
     AudioValue buffer, AudioValue env_buffer, AudioValue rate,
     AudioValue position, AudioValue width, AudioValue trig,
     const char *kernel_symbol, uint64_t control_expand_mask) {
-  if (!audio || !origin || !kernel_symbol) {
+  if (!kernel_symbol) {
     return AUDIO_VALUE_NULL;
   }
 
@@ -4685,80 +4402,6 @@ static AudioValue audio_builtin_emit_delay_line(const AudioBuiltin *builtin,
       builtin->state_name, control_mask);
 }
 
-static AudioValue audio_builtin_emit_delay_line_buf(const AudioBuiltin *builtin,
-                                                    AudioCompileCtx *audio,
-                                                    Ast *origin,
-                                                    AudioValue *args,
-                                                    size_t argc) {
-  // print_ast(origin);
-  if (!audio || !origin || !builtin || argc != 1) {
-    return AUDIO_VALUE_NULL;
-  }
-  fprintf(stderr, "DEBUG delay_line_buf emit argc=%zu\n", argc);
-
-  AudioValue secs_value = args[0];
-  if (audio_mir_value_lane_count(secs_value) != 1) {
-    fprintf(stderr,
-            "Error: delay_line expects a constant scalar size in seconds\n");
-    return AUDIO_VALUE_NULL;
-  }
-
-  double max_delay_secs = 0.0;
-  if (!audio_mir_value_const_double(audio, secs_value.value, &max_delay_secs) ||
-      !isfinite(max_delay_secs) || max_delay_secs <= 0.0) {
-    fprintf(stderr, "Error: delay_line size must be a constant > 0 seconds\n");
-    return AUDIO_VALUE_NULL;
-  }
-
-  int sample_rate = ctx_sample_rate();
-  if (sample_rate <= 0) {
-    sample_rate = 48000;
-  }
-  double samples_f = ceil(max_delay_secs * (double)sample_rate);
-  if (!isfinite(samples_f) || samples_f > (double)INT_MAX) {
-    fprintf(stderr, "Error: delay_line size is too large\n");
-    return AUDIO_VALUE_NULL;
-  }
-
-  int32_t max_samples = (int32_t)samples_f;
-  if (max_samples < 2) {
-    max_samples = 2;
-  }
-
-  size_t state_size = (size_t)max_samples * sizeof(double);
-  if (state_size > (size_t)INT_MAX) {
-    fprintf(stderr, "Error: delay_line state is too large\n");
-    return AUDIO_VALUE_NULL;
-  }
-  size_t state_align = 8;
-
-  const char *slot_name =
-      builtin->state_name ? builtin->state_name : "delay_line.buf";
-  AudioStateSlot *slot =
-      audio_mir_reserve_state_block(audio, state_size, state_align, slot_name);
-  if (!slot) {
-    return AUDIO_VALUE_NULL;
-  }
-
-  MirBuilder *b = audio->kernel_builder;
-  MirValueId data_ptr = audio_mir_state_slot_ptr(
-      audio, b, origin, audio->state_param, slot->offset, &t_num);
-  if (data_ptr == MIR_NO_VALUE) {
-    return AUDIO_VALUE_NULL;
-  }
-
-  Type *array_type =
-      origin->type && is_array_type(origin->type)
-          ? origin->type
-          : create_cons_type(TYPE_NAME_ARRAY, 1, (Type *[]){(Type *)&t_num});
-  MirValueId array = audio_mir_array_view(audio, origin, array_type,
-                                          (int)max_samples, data_ptr);
-  if (array == MIR_NO_VALUE) {
-    return AUDIO_VALUE_NULL;
-  }
-  return audio_mir_value(array_type, array, 1);
-}
-
 static AudioValue audio_builtin_emit_array_trigger(const AudioBuiltin *builtin,
                                                    AudioCompileCtx *audio,
                                                    Ast *origin,
@@ -4836,7 +4479,7 @@ static AudioValue audio_builtin_emit_bufsize(const AudioBuiltin *builtin,
 static AudioValue audio_mir_emit_builtin_values(AudioCompileCtx *audio,
                                                 Ast *origin, const char *name,
                                                 AudioValue *args, size_t argc) {
-  if (!audio || !name || (argc && !args)) {
+  if (!name || (argc && !args)) {
     return AUDIO_VALUE_NULL;
   }
 
@@ -4861,17 +4504,9 @@ static AudioValue audio_mir_make_partial_builtin(AudioCompileCtx *audio,
     return AUDIO_VALUE_NULL;
   }
 
-  AudioValue *args = mir_arena_alloc(audio->arena, sizeof(AudioValue) * argc,
-                                     __alignof__(AudioValue));
+  AudioValue *args = audio_mir_lower_app_args(audio, app, &argc);
   if (argc && !args) {
     return AUDIO_VALUE_NULL;
-  }
-
-  for (size_t i = 0; i < argc; i++) {
-    args[i] = audio_mir_expr(audio, app->data.AST_APPLICATION.args + i);
-    if (!audio_mir_value_is_valid(args[i])) {
-      return AUDIO_VALUE_NULL;
-    }
   }
 
   AudioPartialBuiltin *partial =
@@ -4960,7 +4595,7 @@ audio_mir_apply_partial_builtin(AudioCompileCtx *audio, Ast *app,
 
 static AudioValue audio_mir_make_partial_synth(AudioCompileCtx *audio, Ast *app,
                                                MirAudioSynthSymbol *synth) {
-  if (!audio || !app || !synth) {
+  if (!synth) {
     return AUDIO_VALUE_NULL;
   }
 
@@ -4969,19 +4604,9 @@ static AudioValue audio_mir_make_partial_synth(AudioCompileCtx *audio, Ast *app,
     return AUDIO_VALUE_NULL;
   }
 
-  AudioValue *args =
-      argc ? mir_arena_alloc(audio->arena, sizeof(AudioValue) * argc,
-                             __alignof__(AudioValue))
-           : NULL;
+  AudioValue *args = audio_mir_lower_app_args(audio, app, &argc);
   if (argc && !args) {
     return AUDIO_VALUE_NULL;
-  }
-
-  for (size_t i = 0; i < argc; i++) {
-    args[i] = audio_mir_expr(audio, app->data.AST_APPLICATION.args + i);
-    if (!audio_mir_value_is_valid(args[i])) {
-      return AUDIO_VALUE_NULL;
-    }
   }
 
   AudioPartialSynth *partial = mir_arena_alloc(
@@ -5677,7 +5302,6 @@ static AudioValue audio_mir_emit_audio_hof(AudioCompileCtx *audio, Ast *app,
           audio, collection.items[i].ast, callback, cb_args, 2, prefix);
 
       if (!audio_mir_value_is_valid(mapped) || mapped.value == MIR_NO_VALUE) {
-        printf("not valid???\n");
         return AUDIO_VALUE_NULL;
       }
 
@@ -5742,7 +5366,7 @@ static AudioValue audio_mir_emit_audio_hof(AudioCompileCtx *audio, Ast *app,
 }
 
 static AudioValue audio_mir_let(AudioCompileCtx *audio, Ast *ast) {
-  if (!audio || !ast || ast->tag != AST_LET || !ast->data.AST_LET.expr) {
+  if (ast->tag != AST_LET || !ast->data.AST_LET.expr) {
     return AUDIO_VALUE_NULL;
   }
 
@@ -5868,14 +5492,12 @@ static AudioValue audio_mir_expr(AudioCompileCtx *audio, Ast *ast) {
       return audio_mir_apply_partial_builtin(audio, ast, local->partial);
     }
 
-    Ast *synth_app = audio_mir_application_flatten_any(audio, ast);
-    MirAudioSynthSymbol *synth =
-        audio_mir_application_audio_symbol(audio, synth_app);
+    MirAudioSynthSymbol *synth = audio_mir_application_audio_symbol(audio, ast);
     if (synth) {
-      if (audio_mir_application_is_partial(synth_app)) {
-        return audio_mir_make_partial_synth(audio, synth_app, synth);
+      if (audio_mir_application_is_partial(ast)) {
+        return audio_mir_make_partial_synth(audio, ast, synth);
       }
-      return audio_mir_emit_synth_in_audio_context(audio, synth_app, synth);
+      return audio_mir_emit_synth_in_audio_context(audio, ast, synth);
     }
 
     if (audio_mir_application_is_partial(ast)) {
@@ -5890,19 +5512,10 @@ static AudioValue audio_mir_expr(AudioCompileCtx *audio, Ast *ast) {
         return audio_mir_apply_partial_builtin(audio, ast, callee.partial);
       }
       if (callee.kind == AUDIO_VALUE_PARTIAL_SYNTH) {
-        size_t argc = audio_mir_application_value_arg_count(ast);
-        AudioValue *args =
-            argc ? mir_arena_alloc(audio->arena, sizeof(AudioValue) * argc,
-                                   __alignof__(AudioValue))
-                 : NULL;
+        size_t argc;
+        AudioValue *args = audio_mir_lower_app_args(audio, ast, &argc);
         if (argc && !args) {
           return AUDIO_VALUE_NULL;
-        }
-        for (size_t i = 0; i < argc; i++) {
-          args[i] = audio_mir_expr(audio, ast->data.AST_APPLICATION.args + i);
-          if (!audio_mir_value_is_valid(args[i])) {
-            return AUDIO_VALUE_NULL;
-          }
         }
         return audio_mir_apply_audio_value(audio, ast, callee, args, argc,
                                            NULL);
@@ -5910,81 +5523,43 @@ static AudioValue audio_mir_expr(AudioCompileCtx *audio, Ast *ast) {
     }
 
     if (name) {
+      static const struct {
+        const char *name;
+        AudioValue (*fn)(AudioCompileCtx *, Ast *);
+      } operators[] = {
+          {"+", sum_signals}, {"-", sub_signals},
+          {"*", mul_signals}, {"/", div_signals},
+          {"%", mod_signals}, {">=", gte_signals},
+          {">", gt_signals},  {"<=", lte_signals},
+          {"<", lt_signals},  {"~", multichannel_operator},
+      };
+      for (size_t i = 0; i < sizeof(operators) / sizeof(operators[0]); i++) {
+        if (strcmp(name, operators[i].name) == 0) {
+          return operators[i].fn(audio, ast);
+        }
+      }
 
       if (strcmp(name, "array_fill_const") == 0) {
         return audio_mir_array_fill_const(audio, ast);
       }
-
       if (strcmp(name, "delay_line") == 0) {
         return audio_mir_delay_line(audio, ast);
       }
-
       if (strcmp(name, "array_size") == 0) {
         return audio_mir_array_size_value(audio, ast);
       }
-
       if (strcmp(name, "array_at") == 0) {
         return audio_mir_array_at_value(audio, ast);
       }
-
       if (strcmp(name, "array_set") == 0) {
         return audio_mir_array_set_value(audio, ast);
       }
 
-      if (strcmp(name, "+") == 0) {
-        return sum_signals(audio, ast);
-      }
-
-      if (strcmp(name, "-") == 0) {
-        return sub_signals(audio, ast);
-      }
-
-      if (strcmp(name, "*") == 0) {
-        return mul_signals(audio, ast);
-      }
-
-      if (strcmp(name, "/") == 0) {
-        return div_signals(audio, ast);
-      }
-
-      if (strcmp(name, "%") == 0) {
-        return mod_signals(audio, ast);
-      }
-
-      if (strcmp(name, ">=") == 0) {
-        return gte_signals(audio, ast);
-      }
-
-      if (strcmp(name, ">") == 0) {
-        return gt_signals(audio, ast);
-      }
-
-      if (strcmp(name, "<=") == 0) {
-        return lte_signals(audio, ast);
-      }
-
-      if (strcmp(name, "<") == 0) {
-        return lt_signals(audio, ast);
-      }
-
-      if (strcmp(name, "~") == 0) {
-        return multichannel_operator(audio, ast);
-      }
-
       if (audio_mir_builtin_arity(audio, name) > 0) {
-        size_t argc = audio_mir_application_value_arg_count(ast);
-        AudioValue *args =
-            argc ? mir_arena_alloc(audio->arena, sizeof(AudioValue) * argc,
-                                   __alignof__(AudioValue))
-                 : NULL;
+        size_t argc;
+        AudioValue *args = audio_mir_lower_app_args(audio, ast, &argc);
         if (argc && !args) {
           return AUDIO_VALUE_NULL;
-        }
-        for (size_t i = 0; i < argc; i++) {
-          args[i] = audio_mir_expr(audio, ast->data.AST_APPLICATION.args + i);
-          if (!audio_mir_value_is_valid(args[i])) {
-            return AUDIO_VALUE_NULL;
-          }
         }
         return audio_mir_emit_builtin_values(audio, ast, name, args, argc);
       }
@@ -6850,23 +6425,14 @@ static AudioValue audio_mir_apply_audio_value(AudioCompileCtx *audio,
 static AudioValue
 audio_mir_emit_synth_in_audio_context(AudioCompileCtx *audio, Ast *app,
                                       MirAudioSynthSymbol *synth) {
-  if (!audio || !app || !synth) {
+  if (!synth) {
     return AUDIO_VALUE_NULL;
   }
 
-  size_t argc = audio_mir_application_value_arg_count(app);
-  AudioValue *args =
-      argc ? mir_arena_alloc(audio->arena, sizeof(AudioValue) * argc,
-                             __alignof__(AudioValue))
-           : NULL;
+  size_t argc;
+  AudioValue *args = audio_mir_lower_app_args(audio, app, &argc);
   if (argc && !args) {
     return AUDIO_VALUE_NULL;
-  }
-  for (size_t i = 0; i < argc; i++) {
-    args[i] = audio_mir_expr(audio, app->data.AST_APPLICATION.args + i);
-    if (!audio_mir_value_is_valid(args[i])) {
-      return AUDIO_VALUE_NULL;
-    }
   }
 
   AudioValue callable =

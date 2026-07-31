@@ -449,8 +449,8 @@ let fdn4 = @Audio fn d1 d2 d3 d4 rt60 inp ->
     dl[w] := inp * b[i] + (
       mmy[i]
       |> (*) (Math.pow 10.0 ((-3.0 * dt) / rt60)) # per-delay-line gamma output gain
-      |> Filter.lpf1p 8000
-      |> Filter.hpf1p 200
+      # |> Filter.lpf1p 15000
+      # |> Filter.hpf1p 200
     )
   ) dls;
 
@@ -459,6 +459,92 @@ let fdn4 = @Audio fn d1 d2 d3 d4 rt60 inp ->
 
   inp + (vec_dot_double c y)
 
+;;
+
+
+
+# Studio room (~0.5s rt60)
+let room_fdn4 = @Audio fn inp ->
+  fdn4 0.0199 0.0291 0.0440 0.0653 0.5 inp
+;;
+
+# Concert hall (~2s rt60)
+let concert_fdn4 = @Audio fn inp ->
+  fdn4 0.0527 0.0787 0.1171 0.1733 2.0 inp
+;;
+
+# Cathedral (~5s rt60)
+let cathedral_fdn4 = @Audio fn inp ->
+  fdn4 0.1249 0.1873 0.2797 0.4177 5.0 inp
+;;
+let fdn8 = @Audio fn d1 d2 d3 d4 d5 d6 d7 d8 rt60 inp ->
+
+  # 8x8 generalised conference matrix: M = (2/8)*J - I
+  # diagonal = -3/4, off-diagonal = 1/4 — orthogonal, lossless
+  let M = [|
+    -0.75,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25,
+     0.25, -0.75,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25,
+     0.25,  0.25, -0.75,  0.25,  0.25,  0.25,  0.25,  0.25,
+     0.25,  0.25,  0.25, -0.75,  0.25,  0.25,  0.25,  0.25,
+     0.25,  0.25,  0.25,  0.25, -0.75,  0.25,  0.25,  0.25,
+     0.25,  0.25,  0.25,  0.25,  0.25, -0.75,  0.25,  0.25,
+     0.25,  0.25,  0.25,  0.25,  0.25,  0.25, -0.75,  0.25,
+     0.25,  0.25,  0.25,  0.25,  0.25,  0.25,  0.25, -0.75,
+  |];
+  let b = array_fill_const 8 1.;
+  let c = array_fill_const 8 0.125;
+
+  let dls = [|
+    (delay_line 1, d1),
+    (delay_line 1, d2),
+    (delay_line 1, d3),
+    (delay_line 1, d4),
+    (delay_line 1, d5),
+    (delay_line 1, d6),
+    (delay_line 1, d7),
+    (delay_line 1, d8),
+  |];
+
+  let dl0, _ = dls[0];
+  let max_size = array_size dl0;
+
+  let counter = [| 0 |];
+  let w = counter[0];
+
+  let y = dsp_iter.array_map (fn (dl, dt) ->
+    tabread_samp dl (w - dt / spf)
+  ) dls;
+
+  let mmy = array_fill_const 8 0. |> matrix_vec_mul_double 4 4 M y;
+
+
+  dsp_iter.array_mapi (fn i (dl, dt) ->
+    dl[w] := inp * b[i] + (
+      mmy[i]
+      |> (*) (Math.pow 10.0 ((-3.0 * dt) / rt60)) # per-delay-line gamma output gain
+      # |> Filter.lpf1p 15000
+      # |> Filter.hpf1p 200
+    )
+  ) dls;
+
+  counter[0] := (w + 1) % max_size;
+  inp + (vec_dot_double c y)
+;;
+
+let room = @Audio fn inp ->
+  fdn8 0.0150 0.0189 0.0240 0.0307 0.0388 0.0491 0.0625 0.0792 0.5 inp
+;;
+
+let concert = @Audio fn inp ->
+  fdn8 0.0397 0.0500 0.0638 0.0814 0.1027 0.1301 0.1656 0.2100 2.0 inp
+;;
+
+let cathedral = @Audio fn inp ->
+  fdn8 0.0941 0.1188 0.1509 0.1925 0.2435 0.3083 0.3925 0.4975 5.0 inp
+;;
+
+let mega_cathedral = @Audio fn inp ->
+  fdn8 0.0941 0.1188 0.1509 0.1925 0.2435 0.3083 0.3925 0.4975 10.0 inp
 ;;
   # array_fill_const 4 0.
   # |> matrix_vec_mul_double 4 4 M y
@@ -477,10 +563,7 @@ let fdn4 = @Audio fn d1 d2 d3 d4 rt60 inp ->
   # ) dls;
   # let o = array_fill_const 4 0.;
   # let _ = matrix_vec_mul_double 4 4 M y o;
-let cathedral_fdn4 = @Audio fn inp ->
-  # Cathedral (~5s rt60)
-  fdn4 0.1249 0.1873 0.2797 0.4177 5.0 inp
-;;
+
 
   #
   #
@@ -553,6 +636,12 @@ let cathedral_fdn4 = @Audio fn inp ->
 
 let s = @Audio fn () ->
 
+  let t = trig 1.;
+  t |> decay 0.1 |> (*) (t |> arr_choose [|600., 600., 300., 450., 1000., 900.|] |> sin_osc)
+  |> (*) 0.5 |> Reverb.mega_cathedral
+;;
+
+s () |> play_node
   # bufplay sf.data (sf.samplerate * spf) 0. (trig 8)
   # |> Filter.dispersion32 120 1.
   # |> Filter.dispersion32 120 1.
@@ -578,14 +667,8 @@ let s = @Audio fn () ->
   # let b = t2 |> decay 0.1 |> (*) (t2 |> arr_choose [|600., 600., 300., 450., 1000., 900., 1200., 1500.|] |> sin_osc);
   # trig 30 |> grains 30 sf.data (sf.samplerate * spf) (lfnoise 1. 0.005 0.2 |> phasor) 0.08
   # |> Filter.hpf 200 2.
-  let t = trig 1.;
-  t |> decay 0.1 |> (*) (t |> arr_choose [|600., 600., 300., 450., 1000., 900.|] |> sin_osc)
-  |> (*) 0.5 |> Reverb.cathedral_fdn4
 
   # |> Reverb.plate 0.88
-
-;;
-s () |> play_node
 # let load_soundfile = extern fn String -> Ptr;
 
 
