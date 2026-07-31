@@ -834,6 +834,21 @@ let squared_error = fn pred target ->
   tensor_sum (tensor_sq err)
 ;;
 
+let linspace_array = fn start stop n ->
+  if n <= 0 then (
+    [| |]
+  ) else if n == 1 then (
+    [| start |]
+  ) else (
+    let xs = array_fill_const n 0.;
+    let denom = Double (n - 1);
+    for i = 0 .. n in (
+      xs[i] := start + (stop - start) * (Double i) / denom
+    );
+    xs
+  )
+;;
+
 let op_name = fn op ->
   match op with
   | 0 -> "Leaf"
