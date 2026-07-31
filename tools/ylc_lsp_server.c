@@ -39,6 +39,7 @@ typedef struct document {
   TypeEnv *type_env;
   bool typecheck_ok;
   bool analysis_dirty;
+  parse_error_info parse_error;
   struct document *next;
 } document;
 
@@ -80,6 +81,15 @@ typedef struct {
   struct json_object *edits;
   definition_search bindings;
 } rename_collect;
+
+typedef struct {
+  lsp_server *server;
+  document *doc;
+  Ast *target_definition_node;
+  bool include_declaration;
+  struct json_object *locations;
+  definition_search bindings;
+} reference_collect;
 
 static const char *completion_keywords[] = {
     "fn",    "let",  "in",     "and",  "extern", "true", "false",
@@ -1286,8 +1296,7 @@ static Ast *module_body(Ast *module_ast) {
   }
 
   if (module_ast->tag == AST_MODULE || module_ast->tag == AST_LAMBDA) {
-    Ast *body = module_ast->data.AST_LAMBDA.body;
-    return body && body->tag == AST_BODY ? body : NULL;
+    return module_ast->data.AST_LAMBDA.body;
   }
 
   return module_ast->tag == AST_BODY ? module_ast : NULL;
@@ -1295,7 +1304,13 @@ static Ast *module_body(Ast *module_ast) {
 
 static Ast *module_definition_node(Ast *module_ast) {
   Ast *body = module_body(module_ast);
-  if (body && body->data.AST_BODY.stmts && body->data.AST_BODY.stmts->ast) {
+  if (!body) {
+    return module_ast;
+  }
+  if (body->tag != AST_BODY) {
+    return body;
+  }
+  if (body->data.AST_BODY.stmts && body->data.AST_BODY.stmts->ast) {
     return body->data.AST_BODY.stmts->ast;
   }
   return module_ast;
@@ -1392,6 +1407,21 @@ static bool find_module_member_definition(Ast *module_ast, const char *name,
     return false;
   }
 
+  if (body->tag != AST_BODY) {
+    const char *candidate = stmt_binding_name(body);
+    if (!candidate || strcmp(candidate, name) != 0) {
+      return false;
+    }
+
+    if (definition_node_out) {
+      *definition_node_out = stmt_definition_node(body);
+    }
+    if (value_node_out) {
+      *value_node_out = stmt_value_node(body);
+    }
+    return definition_node_out ? *definition_node_out != NULL : true;
+  }
+
   for (AstList *stmt = body->data.AST_BODY.stmts; stmt; stmt = stmt->next) {
     const char *candidate = stmt_binding_name(stmt->ast);
     if (!candidate || strcmp(candidate, name) != 0) {
@@ -1416,6 +1446,16 @@ definition_push_module_exports(definition_search *search,
   Ast *body = module_body(module_ast);
 
   if (!body) {
+    return env;
+  }
+
+  if (body->tag != AST_BODY) {
+    const char *name = stmt_binding_name(body);
+    Ast *def_node = stmt_definition_node(body);
+    Ast *value_node = stmt_value_node(body);
+    if (name && def_node) {
+      env = definition_push_binding(search, env, name, def_node, value_node);
+    }
     return env;
   }
 
@@ -2154,6 +2194,276 @@ static bool rename_collect_expr(rename_collect *collect, definition_binding *env
   }
 }
 
+static void reference_add_location(reference_collect *collect, Ast *node) {
+  if (!collect || !collect->locations || !node) {
+    return;
+  }
+
+  definition_locations_add_unique(collect->server, collect->doc,
+                                  collect->locations, node);
+}
+
+static definition_binding *
+reference_push_pattern_bindings(reference_collect *collect,
+                                definition_binding *env, Ast *pattern,
+                                Ast *value_node) {
+  if (!pattern) {
+    return env;
+  }
+
+  if (pattern->tag == AST_LET) {
+    return reference_push_pattern_bindings(collect, env,
+                                           pattern->data.AST_LET.binding,
+                                           pattern->data.AST_LET.expr);
+  }
+
+  if (pattern->tag == AST_IDENTIFIER) {
+    const char *name = identifier_name(pattern);
+    if (name && strcmp(name, "_") != 0) {
+      if (collect->include_declaration &&
+          rename_definition_matches(pattern, collect->target_definition_node)) {
+        reference_add_location(collect, pattern);
+      }
+      return definition_push_binding(&collect->bindings, env, name, pattern,
+                                     value_node);
+    }
+    return env;
+  }
+
+  if (pattern->tag == AST_TUPLE || pattern->tag == AST_LIST ||
+      pattern->tag == AST_ARRAY) {
+    for (size_t i = 0; i < pattern->data.AST_LIST.len; i++) {
+      env = reference_push_pattern_bindings(
+          collect, env, pattern->data.AST_LIST.items + i, NULL);
+    }
+  }
+
+  if (pattern->tag == AST_BINOP &&
+      pattern->data.AST_BINOP.op == TOKEN_DOUBLE_COLON) {
+    env = reference_push_pattern_bindings(collect, env,
+                                          pattern->data.AST_BINOP.left, NULL);
+    env = reference_push_pattern_bindings(collect, env,
+                                          pattern->data.AST_BINOP.right, NULL);
+  }
+
+  return env;
+}
+
+static bool reference_collect_expr(reference_collect *collect,
+                                   definition_binding *env, Ast *node);
+
+static void reference_collect_lambda(reference_collect *collect,
+                                     definition_binding *env, Ast *lambda) {
+  definition_binding *body_env = env;
+
+  if (!lambda) {
+    return;
+  }
+
+  for (AstList *param = lambda->data.AST_LAMBDA.params; param;
+       param = param->next) {
+    if (param->ast && param->ast->tag == AST_LET) {
+      reference_collect_expr(collect, body_env, param->ast->data.AST_LET.expr);
+    }
+    body_env =
+        reference_push_pattern_bindings(collect, body_env, param->ast, NULL);
+  }
+
+  reference_collect_expr(collect, body_env, lambda->data.AST_LAMBDA.body);
+}
+
+static void reference_collect_record_access(reference_collect *collect,
+                                            definition_binding *env,
+                                            Ast *node) {
+  Ast *record;
+  Ast *member;
+  Ast *module_ast;
+  Ast *member_def = NULL;
+  Ast *member_value = NULL;
+  const char *member_name;
+
+  if (!node || node->tag != AST_RECORD_ACCESS) {
+    return;
+  }
+
+  record = node->data.AST_RECORD_ACCESS.record;
+  member = node->data.AST_RECORD_ACCESS.member;
+
+  reference_collect_expr(collect, env, record);
+
+  member_name = identifier_name(member);
+  module_ast = module_ast_for_expr(env, record);
+  if (find_module_member_definition(module_ast, member_name, &member_def,
+                                    &member_value) &&
+      rename_definition_matches(member_def, collect->target_definition_node)) {
+    (void)member_value;
+    reference_add_location(collect, member);
+  }
+}
+
+static void reference_collect_match(reference_collect *collect,
+                                    definition_binding *env, Ast *node) {
+  if (!node || node->tag != AST_MATCH) {
+    return;
+  }
+
+  reference_collect_expr(collect, env, node->data.AST_MATCH.expr);
+  for (size_t i = 0; i < node->data.AST_MATCH.len; i++) {
+    Ast *pattern = node->data.AST_MATCH.branches + (i * 2);
+    Ast *body = node->data.AST_MATCH.branches + (i * 2) + 1;
+    definition_binding *branch_env =
+        reference_push_pattern_bindings(collect, env, pattern, NULL);
+    reference_collect_expr(collect, branch_env, body);
+  }
+}
+
+static void reference_collect_let(reference_collect *collect,
+                                  definition_binding *env, Ast *node) {
+  Ast *binding;
+  Ast *expr;
+  Ast *body;
+  definition_binding *expr_env = env;
+
+  if (!node) {
+    return;
+  }
+
+  binding = node->data.AST_LET.binding;
+  expr = node->data.AST_LET.expr;
+  body = node->data.AST_LET.in_expr;
+
+  if (collect->include_declaration &&
+      rename_definition_matches(node, collect->target_definition_node)) {
+    reference_add_location(collect, node);
+  }
+
+  if (!body) {
+    (void)reference_push_pattern_bindings(collect, env, binding,
+                                          stmt_value_node(node));
+  }
+
+  if (binding && binding->tag == AST_IDENTIFIER && expr &&
+      expr->tag == AST_LAMBDA) {
+    expr_env = definition_push_binding(&collect->bindings, env,
+                                       identifier_name(binding), node, expr);
+  }
+
+  reference_collect_expr(collect, expr_env, expr);
+
+  if (body) {
+    definition_binding *body_env = reference_push_pattern_bindings(
+        collect, env, binding, stmt_value_node(node));
+    reference_collect_expr(collect, body_env, body);
+  }
+}
+
+static bool reference_collect_expr(reference_collect *collect,
+                                   definition_binding *env, Ast *node) {
+  if (!collect || !node) {
+    return false;
+  }
+
+  switch (node->tag) {
+  case AST_IDENTIFIER: {
+    definition_binding *binding =
+        definition_lookup(env, node->data.AST_IDENTIFIER.value);
+    if (binding &&
+        rename_definition_matches(binding->definition_node,
+                                  collect->target_definition_node)) {
+      reference_add_location(collect, node);
+    }
+    return true;
+  }
+
+  case AST_BODY: {
+    definition_binding *body_env = env;
+    for (AstList *stmt = node->data.AST_BODY.stmts; stmt; stmt = stmt->next) {
+      reference_collect_expr(collect, body_env, stmt->ast);
+      body_env = definition_push_stmt_binding(&collect->bindings, body_env,
+                                              stmt->ast);
+    }
+    return true;
+  }
+
+  case AST_IMPORT:
+    return true;
+
+  case AST_LET:
+  case AST_TYPE_DECL:
+  case AST_LOOP:
+    reference_collect_let(collect, env, node);
+    return true;
+
+  case AST_LAMBDA:
+  case AST_MODULE:
+    reference_collect_lambda(collect, env, node);
+    return true;
+
+  case AST_APPLICATION:
+    reference_collect_expr(collect, env, node->data.AST_APPLICATION.function);
+    for (size_t i = 0; i < node->data.AST_APPLICATION.len; i++) {
+      reference_collect_expr(collect, env, node->data.AST_APPLICATION.args + i);
+    }
+    return true;
+
+  case AST_BINOP:
+  case AST_ASSOC:
+    reference_collect_expr(collect, env, node->data.AST_BINOP.left);
+    reference_collect_expr(collect, env, node->data.AST_BINOP.right);
+    return true;
+
+  case AST_UNOP:
+    reference_collect_expr(collect, env, node->data.AST_UNOP.expr);
+    return true;
+
+  case AST_TUPLE:
+  case AST_LIST:
+  case AST_ARRAY:
+  case AST_FMT_STRING:
+    for (size_t i = 0; i < node->data.AST_LIST.len; i++) {
+      reference_collect_expr(collect, env, node->data.AST_LIST.items + i);
+    }
+    return true;
+
+  case AST_MATCH:
+    reference_collect_match(collect, env, node);
+    return true;
+
+  case AST_RECORD_ACCESS:
+    reference_collect_record_access(collect, env, node);
+    return true;
+
+  case AST_MATCH_GUARD_CLAUSE:
+    reference_collect_expr(collect, env,
+                           node->data.AST_MATCH_GUARD_CLAUSE.test_expr);
+    reference_collect_expr(collect, env,
+                           node->data.AST_MATCH_GUARD_CLAUSE.guard_expr);
+    return true;
+
+  case AST_YIELD:
+  case AST_SPREAD_OP:
+    reference_collect_expr(collect, env, node->data.AST_YIELD.expr);
+    return true;
+
+  case AST_RANGE_EXPRESSION:
+    reference_collect_expr(collect, env, node->data.AST_RANGE_EXPRESSION.from);
+    reference_collect_expr(collect, env, node->data.AST_RANGE_EXPRESSION.to);
+    return true;
+
+  case AST_TRAIT_IMPL:
+    reference_collect_expr(collect, env, node->data.AST_TRAIT_IMPL.impl);
+    return true;
+
+  case AST_EXTERN_FN:
+    reference_collect_expr(collect, env,
+                           node->data.AST_EXTERN_FN.signature_types);
+    return true;
+
+  default:
+    return false;
+  }
+}
+
 static int symbol_kind_for_stmt(Ast *stmt) {
   if (!stmt) {
     return LSP_SYMBOL_KIND_VARIABLE;
@@ -2217,6 +2527,7 @@ static void parse_doc(document *doc) {
   }
 
   doc->root = parse_input_buffer(doc->path, doc->text);
+  doc->parse_error = *parse_last_error();
 }
 
 static void analyze_doc(document *doc) {
@@ -2346,11 +2657,61 @@ static void send_notification(const char *method, struct json_object *params) {
   json_object_put(message);
 }
 
-static void publish_empty_diagnostics(document *doc) {
+static struct json_object *syntax_diagnostic_to_json(document *doc) {
+  struct json_object *diagnostic;
+  source_range range;
+  int line;
+  int col;
+  int token_len;
+
+  if (!doc || !doc->parse_error.has_error) {
+    return NULL;
+  }
+
+  line = doc->parse_error.line > 0 ? doc->parse_error.line : 1;
+  col = doc->parse_error.col > 0 ? doc->parse_error.col : 1;
+  token_len = (int)strlen(doc->parse_error.near_text);
+  if (token_len <= 0) {
+    token_len = 1;
+  }
+
+  range = (source_range){
+      .start_line = line,
+      .start_col = col,
+      .end_line = line,
+      .end_col = col + token_len,
+  };
+
+  diagnostic = json_object_new_object();
+  json_object_object_add(diagnostic, "range", range_to_json(&range));
+  json_object_object_add(diagnostic, "severity", json_object_new_int(1));
+  json_object_object_add(diagnostic, "source", json_object_new_string("ylc"));
+
+  if (doc->parse_error.near_text[0] != '\0') {
+    char message[256];
+    snprintf(message, sizeof(message), "%s near '%s'",
+             doc->parse_error.message, doc->parse_error.near_text);
+    json_object_object_add(diagnostic, "message",
+                           json_object_new_string(message));
+  } else {
+    json_object_object_add(diagnostic, "message",
+                           json_object_new_string(doc->parse_error.message));
+  }
+
+  return diagnostic;
+}
+
+static void publish_diagnostics(document *doc) {
   struct json_object *params = json_object_new_object();
+  struct json_object *diagnostics = json_object_new_array();
+  struct json_object *syntax_diagnostic = syntax_diagnostic_to_json(doc);
+
+  if (syntax_diagnostic) {
+    json_object_array_add(diagnostics, syntax_diagnostic);
+  }
 
   json_object_object_add(params, "uri", json_object_new_string(doc->uri));
-  json_object_object_add(params, "diagnostics", json_object_new_array());
+  json_object_object_add(params, "diagnostics", diagnostics);
   send_notification("textDocument/publishDiagnostics", params);
 }
 
@@ -2376,6 +2737,17 @@ static int json_get_int_default(struct json_object *obj, const char *key,
   return json_object_get_int(field);
 }
 
+static bool json_get_bool_default(struct json_object *obj, const char *key,
+                                  bool default_value) {
+  struct json_object *field = NULL;
+
+  if (!obj || !json_object_object_get_ex(obj, key, &field)) {
+    return default_value;
+  }
+
+  return json_object_get_boolean(field);
+}
+
 static void handle_initialize(lsp_server *server, int id) {
   struct json_object *result = json_object_new_object();
   struct json_object *capabilities = json_object_new_object();
@@ -2396,6 +2768,8 @@ static void handle_initialize(lsp_server *server, int id) {
   json_object_object_add(capabilities, "hoverProvider",
                          json_object_new_boolean(1));
   json_object_object_add(capabilities, "definitionProvider",
+                         json_object_new_boolean(1));
+  json_object_object_add(capabilities, "referencesProvider",
                          json_object_new_boolean(1));
   json_object_object_add(capabilities, "renameProvider",
                          json_object_new_boolean(1));
@@ -2441,7 +2815,7 @@ static void handle_did_open(lsp_server *server, struct json_object *params) {
   free(doc->text);
   doc->text = xstrdup(text);
   analyze_doc(doc);
-  publish_empty_diagnostics(doc);
+  publish_diagnostics(doc);
 }
 
 static void handle_did_change(lsp_server *server, struct json_object *params) {
@@ -2472,8 +2846,8 @@ static void handle_did_change(lsp_server *server, struct json_object *params) {
 
   free(doc->text);
   doc->text = xstrdup(text);
-  doc->analysis_dirty = true;
-  publish_empty_diagnostics(doc);
+  analyze_doc(doc);
+  publish_diagnostics(doc);
 }
 
 static void handle_did_close(lsp_server *server, struct json_object *params) {
@@ -2816,6 +3190,59 @@ static void handle_definition(lsp_server *server, int id,
   free(target_name);
 }
 
+static void handle_references(lsp_server *server, int id,
+                              struct json_object *params) {
+  struct json_object *text_document = NULL;
+  struct json_object *position = NULL;
+  struct json_object *context = NULL;
+  const char *uri;
+  document *doc;
+  int line;
+  int character;
+  bool include_declaration;
+  char *target_name = NULL;
+  Ast *definition_node;
+  struct json_object *locations;
+  reference_collect collect = {0};
+
+  if (!json_object_object_get_ex(params, "textDocument", &text_document) ||
+      !json_object_object_get_ex(params, "position", &position)) {
+    send_error_int(id, -32602, "missing references params");
+    return;
+  }
+
+  json_object_object_get_ex(params, "context", &context);
+  include_declaration =
+      json_get_bool_default(context, "includeDeclaration", true);
+
+  uri = json_get_string(text_document, "uri");
+  doc = uri ? find_doc(server, uri) : NULL;
+  line = json_get_int_default(position, "line", 0);
+  character = json_get_int_default(position, "character", 0);
+  definition_node =
+      resolve_definition_at_position(server, doc, line, character, &target_name);
+
+  locations = json_object_new_array();
+  if (definition_node && doc && doc->root) {
+    if (include_declaration) {
+      definition_locations_add_unique(server, doc, locations, definition_node);
+    }
+
+    collect = (reference_collect){
+        .server = server,
+        .doc = doc,
+        .target_definition_node = definition_node,
+        .include_declaration = include_declaration,
+        .locations = locations,
+    };
+    reference_collect_expr(&collect, NULL, doc->root);
+    definition_search_free_bindings(&collect.bindings);
+  }
+
+  send_response_int(id, locations);
+  free(target_name);
+}
+
 static bool is_valid_rename_name(const char *name) {
   if (!name || name[0] == '\0') {
     return false;
@@ -3046,6 +3473,11 @@ static int handle_request(lsp_server *server, struct json_object *message) {
 
   if (strcmp(method, "textDocument/definition") == 0 && id >= 0) {
     handle_definition(server, id, params);
+    return 0;
+  }
+
+  if (strcmp(method, "textDocument/references") == 0 && id >= 0) {
+    handle_references(server, id, params);
     return 0;
   }
 

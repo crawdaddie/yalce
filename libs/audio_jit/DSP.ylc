@@ -91,8 +91,10 @@ let fftw_plan_free = extern fn Ptr -> ();
 # Allocate a delay buffer sized from a maximum delay time.
 # Compile-time constant: arg 1 (`max delay`) must be a constant > 0.
 let delay_line = extern fn Double -> Array of Double;
+
 # Matrix-vector multiply into a caller-provided output array. Args: matrix, input vector, output vector.
 let dsp_mmul_op = extern fn Array of Double -> Array of Double -> Array of Double -> Array of Double;
+
 # Dot product of two vectors.
 let vec_dot = extern fn Array of Double -> Array of Double -> Double;
 

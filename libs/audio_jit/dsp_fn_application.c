@@ -79,6 +79,7 @@ void dsp_matrix_vec_mul(int rows, int cols, double *matrix_data,
     }
   }
 }
+
 double dsp_vec_dot(int cols, double *a, double *b) {
   double res = 0.;
   for (int i = 0; i < cols; i++) {
@@ -2379,9 +2380,9 @@ LLVMValueRef build_lfnoise_lin(LLVMValueRef freq, LLVMValueRef lo,
     // the first trig in the frame body pick a real target.
     LLVMValueRef init_seed;
     if (LLVMIsConstant(lo) && LLVMIsConstant(hi)) {
-      init_seed = LLVMBuildCall2(dsp_ctx->init_builder, rdr_ty, rdr_fn,
-                                 (LLVMValueRef[]){lo, hi}, 2,
-                                 "lfnoise1.init.new_rand");
+      init_seed =
+          LLVMBuildCall2(dsp_ctx->init_builder, rdr_ty, rdr_fn,
+                         (LLVMValueRef[]){lo, hi}, 2, "lfnoise1.init.new_rand");
     } else {
       init_seed = LLVMConstReal(f64_ty, 0.0);
     }
@@ -2486,21 +2487,20 @@ LLVMValueRef build_lfnoise_step(LLVMValueRef freq, LLVMValueRef lo,
     // and let the first trig in the frame body pick a real value.
     LLVMValueRef init_seed;
     if (LLVMIsConstant(lo) && LLVMIsConstant(hi)) {
-      init_seed = LLVMBuildCall2(dsp_ctx->init_builder, rdr_ty, rdr_fn,
-                                 (LLVMValueRef[]){lo, hi}, 2,
-                                 "lfnoise0.init.new_rand");
+      init_seed =
+          LLVMBuildCall2(dsp_ctx->init_builder, rdr_ty, rdr_fn,
+                         (LLVMValueRef[]){lo, hi}, 2, "lfnoise0.init.new_rand");
     } else {
       init_seed = LLVMConstReal(f64_ty, 0.0);
     }
     LLVMBuildStore(dsp_ctx->init_builder, init_seed, init_val_ptr);
   }
-  BUILD_ON_TRIG(
-      builder, trig, "lfnoise0",
-      LLVMValueRef new_rand =
-          LLVMBuildCall2(builder, rdr_ty, rdr_fn, (LLVMValueRef[]){lo, hi}, 2,
-                         "lfnoise0.new_rand");
-      LLVMBuildStore(builder, new_rand, val_ptr);
-      LLVMBuildStore(builder, LLVMConstInt(i8_ty, 1, 0), first_run_flag_ptr););
+  BUILD_ON_TRIG(builder, trig, "lfnoise0",
+                LLVMValueRef new_rand = LLVMBuildCall2(builder, rdr_ty, rdr_fn,
+                                                       (LLVMValueRef[]){lo, hi},
+                                                       2, "lfnoise0.new_rand");
+                LLVMBuildStore(builder, new_rand, val_ptr); LLVMBuildStore(
+                    builder, LLVMConstInt(i8_ty, 1, 0), first_run_flag_ptr););
 
   return LLVMBuildLoad2(builder, f64_ty, val_ptr, "lfnoise0.next_val");
 }
@@ -2778,8 +2778,7 @@ static LLVMValueRef build_lag(LLVMValueRef input, LLVMValueRef lag_secs,
                    init_lag_ptr);
   }
 
-  LLVMValueRef fn_parent =
-      LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
+  LLVMValueRef fn_parent = LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder));
   LLVMBasicBlockRef snap_bb =
       LLVMAppendBasicBlock(fn_parent, "lag.first_run_snap");
   LLVMBasicBlockRef cont_bb =

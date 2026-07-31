@@ -28,6 +28,16 @@ typedef struct {
 
 extern ParsingContext pctx;
 
+typedef struct parse_error_info {
+  bool has_error;
+  int line;
+  int col;
+  long long absolute_offset;
+  const char *filename;
+  char message[128];
+  char near_text[64];
+} parse_error_info;
+
 void set_base_dir(const char *);
 
 // extern custom_binops_t *__custom_binops;
@@ -47,6 +57,11 @@ int yyparse();
 void yyrestart(FILE *);
 
 void yyerror(const char *s);
+void parse_clear_error(void);
+void parse_record_error(const char *message, int line, int col,
+                        long long absolute_offset, const char *near_text,
+                        const char *filename);
+const parse_error_info *parse_last_error(void);
 
 int yylex(void);
 

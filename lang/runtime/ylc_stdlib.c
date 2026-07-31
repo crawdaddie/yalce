@@ -423,6 +423,40 @@ void _matrix_vec_mul(int rows, int cols, double *matrix_data,
   }
 }
 
+// Correctly defined _matrix_vec_mul implementation
+_DoubleArray matrix_vec_mul_double(int rows, int cols, _DoubleArray matrix,
+                                   _DoubleArray vec, _DoubleArray out) {
+  double *matrix_data = matrix.data;
+  double *vector_data = vec.data;
+  double *temp = out.data;
+  // Create a temporary array to store results
+  for (int i = 0; i < rows; i++) {
+    temp[i] = 0.0;
+    for (int j = 0; j < cols; j++) {
+      temp[i] += matrix_data[i * cols + j] * vector_data[j];
+    }
+  }
+
+  // Copy results back to the vector
+  for (int i = 0; i < rows; i++) {
+    temp[i] = temp[i];
+  }
+
+  return out;
+}
+
+double vec_dot_double(_DoubleArray a, _DoubleArray b) {
+  double *matrix_data = a.data;
+  double *vector_data = b.data;
+  double out;
+  // Create a temporary array to store results
+  for (int i = 0; i < a.size; i++) {
+    out += matrix_data[i] * vector_data[i];
+  }
+
+  return out;
+}
+
 // Define vec_add to properly add vectors
 void _vec_add(int size, double *vec1, double *vec2) {
   for (int i = 0; i < size; i++) {

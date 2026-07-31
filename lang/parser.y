@@ -184,7 +184,12 @@ expr:
 
 atom_expr:
     simple_expr
-  | atom_expr '.' IDENTIFIER          { $$ = ast_record_access($1, ast_identifier($3)); }
+  | atom_expr '.' IDENTIFIER          {
+                                        Ast *member = ast_identifier($3);
+                                        SET_AST_LOC(member, @3);
+                                        $$ = ast_record_access($1, member);
+                                        SET_AST_LOC($$, @$);
+                                      }
   ;
 
 simple_expr:
@@ -288,8 +293,8 @@ let_binding:
   | IMPORT TOK_STRING                       { $$ = ast_import_from_uri($2, false); SET_AST_LOC($$, @$); }
   | OPEN TOK_STRING                          { $$ = ast_import_from_uri($2, true); SET_AST_LOC($$, @$); }
   | LET IDENTIFIER ':' IDENTIFIER '=' lambda_expr { $$ = ast_trait_impl($4, $2, $6); SET_AST_LOC($$, @$); }
-  | LET IDENTIFIER '=' AT IDENTIFIER lambda_expr  { $$ = ast_decorated_lambda($5, $2, $6); }
-  | LET IDENTIFIER '=' AT IDENTIFIER EXTERN FN fn_signature  { $$ = ast_decorated_signature($5, $2, $8); }
+  | LET IDENTIFIER '=' AT IDENTIFIER lambda_expr  { $$ = ast_decorated_lambda($5, $2, $6); SET_AST_LOC($$, @$); }
+  | LET IDENTIFIER '=' AT IDENTIFIER EXTERN FN fn_signature  { $$ = ast_decorated_signature($5, $2, $8); SET_AST_LOC($$, @$); }
   ;
 
 
@@ -443,12 +448,21 @@ type_atom:
   | '(' type_expr_no_tuple ',' ')' { $$ = ast_tuple_type_single($2); }
   | '(' tuple_type ',' ')'    { $$ = $2; }
   | TOK_VOID                  { $$ = ast_void(); }
-  | IDENTIFIER '.' IDENTIFIER { $$ = ast_record_access(ast_identifier($1), ast_identifier($3)); }
+  | IDENTIFIER '.' IDENTIFIER {
+                                Ast *record = ast_identifier($1);
+                                Ast *member = ast_identifier($3);
+                                SET_AST_LOC(record, @1);
+                                SET_AST_LOC(member, @3);
+                                $$ = ast_record_access(record, member);
+                                SET_AST_LOC($$, @$);
+                              }
   ;
 %%
 
 
 void yyerror(const char *s) {
+  parse_record_error(s, yylineno, yycolumn, yyabsoluteoffset, yytext,
+                     pctx.cur_script);
   fprintf(stderr, "Error: %s at %d:%d near '%s' in %s\n", s, yylineno, yycolumn, yytext, pctx.cur_script);
 }
 #endif _LANG_TAB_H

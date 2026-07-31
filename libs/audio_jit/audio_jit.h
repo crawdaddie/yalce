@@ -91,4 +91,5 @@ double dsp_pitchshift_next_sample(void *state_raw, double input,
                                   double pitch_ratio, double pitch_dispersion,
                                   double time_dispersion);
 
+static AudioValue audio_mir_delay_line(AudioCompileCtx *audio, Ast *app) {
 #endif

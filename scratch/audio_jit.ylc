@@ -59,13 +59,47 @@ let fx = @Audio fn dt inp ->
 
 let rfx = fx (0.5 * q) 0. |> play_node;
 let x = acid 50 0. |> play_into rfx;
+
+let matrix_vec_mul_double = extern fn Int -> Int -> Array of Double -> Array of Double -> Array of Double -> Array of Double;
+let array_size = extern fn Array of Double -> Int;
+let fdn_test = @Audio fn d1 d2 d3 d4 rt60 inp ->
+  let M = [|
+    -0.5,  0.5,  0.5,  0.5,
+     0.5, -0.5,  0.5,  0.5,
+     0.5,  0.5, -0.5,  0.5,
+     0.5,  0.5,  0.5, -0.5
+  |];
+  let dls = [|
+    (array_fill_const (Math.round (1. / spf)) 0., d1),
+    (array_fill_const (Math.round (1. / spf)) 0., d2),
+    (array_fill_const (Math.round (1. / spf)) 0., d3),
+    (array_fill_const (Math.round (1. / spf)) 0., d4)
+  |];
+  let dl0, _ = dls[0];
+  let max_size = array_size dl0;
+  let counter = [| 0 |];
+  let w = counter[0];
+  let y = dsp_iter.array_map (fn (dl, dt) ->
+    tabread_samp dl (w - (dt / spf))
+  ) dls;
+  let o = array_fill_const 4 0.;
+  let _ = matrix_vec_mul_double 4 4 M y o;
+  counter[0] := (w + 1) % max_size;
+  0.
+;;
+
+let mapi_test = @Audio fn inp ->
+  let a = [|10., 20., 30., 40.|];
+  let y = dsp_iter.array_mapi (fn i x -> x + (double i)) a;
+  y[0] + y[1] + y[2] + y[3]
+;;
 # let x = acid 50 0. |> play_into rfx;
 import std/Arrays;
 let semi_ratio = fn x -> Math.pow 2. (x / 12.);;
 
 let trigg = fn () -> 
   let fo = get_tl_tick ();
-  set_input_scalar_offset x 0 fo ([|0., 0., 0., 24. + 8., 24. + 7., 12., 12. + 3.|] |> Arrays.map (fn x -> 60. * (semi_ratio x)) |> Math.array_choose);
+  set_input_scalar_offset x 0 fo ([|0., 0., 0., 24. + 8., 24. + 7., 12., 12 + 3.|] |> Arrays.map (fn x -> 60. * (semi_ratio x)) |> Math.array_choose);
   set_input_trig_offset x 1 fo
 ;;
 

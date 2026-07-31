@@ -1,3 +1,22 @@
+/*
+ * MIR construction, lowering helpers, serialization, and textual dumping.
+ *
+ * This file builds the MIR IR from the AST (mir_expr / mir_emit_* / mir_*
+ * wrappers), provides the instruction builders and block/terminator setters,
+ * the operand visitor and rewriter (mir_instr_for_each_operand /
+ * mir_instr_rewrite_operands), the textual dumper (dump_instr), and program
+ * serialization. It is the MIR layer the Perceus pass (mir_perceus.c) and the
+ * escape analysis (mir_escape.c) build on: they consume and rewrite the MIR
+ * produced here, and the lowering turns the result into LLVM IR.
+ *
+ * RC-relevant pieces in this file:
+ *   - mir_op_kind_name / dump_instr: print dup/drop/drop-reuse markers.
+ *   - mir_construct_for_each_operand / mir_rewrite_construct_operands:
+ *     expose the reuse_token of a list cons to liveness/rewrite.
+ *   - mir_emit_construct* reuse_token init (default MIR_NO_VALUE).
+ *   - mir_function_find_def_instr: used by the lowering to skip RC markers on
+ *     constant operands.
+ */
 #include "./mir.h"
 #include "config.h"
 #include "escape_analysis.h"
@@ -373,15 +392,10 @@ static void *mir_ht_alloc(void *ctx, size_t size, size_t align) {
 // scopes keep using the program arena (they're unreachable once their
 // program is destroyed), so only the root path passes NULL here.
 static void *mir_ht_alloc_persistent(void *ctx, size_t size, size_t align) {
-  (void)ctx;
-  (void)align;
   return malloc(size ? size : 1);
 }
 
-static void mir_ht_free_persistent(void *ctx, void *ptr) {
-  (void)ctx;
-  free(ptr);
-}
+static void mir_ht_free_persistent(void *ctx, void *ptr) { free(ptr); }
 
 void mir_stack_frame_init(MirArena *arena, ht *table, MirStackFrame *frame,
                           MirStackFrame *next) {
@@ -764,6 +778,10 @@ static bool mir_populate_function_body(MirProgram *program, MirFunction *fn,
                                        const char *self_name);
 MirSymbol *mir_resolve_ast_symbol(MirBuilder *builder, Ast *ast, MirCtx *ctx);
 
+/* Find the instruction that defines `value` (whose result == value), scanning
+   all blocks. Used by the lowering to inspect an RC marker's operand: e.g. to
+   skip a dup/drop when the operand is a constant (constants have no heap
+   allocation to refcount). */
 MirInstr *mir_function_find_def_instr(MirFunction *fn, MirValueId value) {
   if (!fn || value == MIR_NO_VALUE) {
     return NULL;
@@ -1269,6 +1287,11 @@ MirInstr mir_make_instr(MirInstrKind kind, Type *type, Ast *origin) {
 // appends it to the builder's current block, returning the new value id. The
 // public mir_* wrappers below keep their existing signatures and just forward
 // to these so the per-opcode bodies stay one or two lines.
+//
+// Construct helpers initialize `reuse_token = MIR_NO_VALUE` (no reuse by
+// default); the Perceus pairing pass later sets it to a drop-reuse token for
+// reuse-aware cons. MIR_NO_VALUE is -1, but `mir_make_instr` zero-fills, so
+// the explicit init is required to avoid a spurious token value of 0.
 
 MirValueId mir_emit_const(MirBuilder *builder, MirConst const_value, Type *type,
                           Ast *origin) {
@@ -1604,6 +1627,10 @@ static MirOperandUse mir_construct_item_use(const MirInstr *instr) {
              : MIR_OPERAND_USE_CONSUME;
 }
 
+/* Enumerate the operands of a construct instruction for a visitor (used by
+   liveness counting, escape propagation, and operand rewriting). For a
+   reuse-aware list cons the drop-reuse token is also visited as a borrowed
+   value so liveness keeps the dropped value live up to the cons. */
 static bool mir_construct_for_each_operand(MirInstr *instr,
                                            MirOperandVisitor visitor,
                                            void *ctx) {
@@ -1652,10 +1679,9 @@ static bool mir_construct_for_each_operand(MirInstr *instr,
                           ctx);
     if (ok && instr->data.construct.reuse_token != MIR_NO_VALUE) {
       ok = mir_visit_operand(instr, visitor,
-                             mir_make_operand(
-                                 instr->data.construct.reuse_token,
-                                 MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW,
-                                 2),
+                             mir_make_operand(instr->data.construct.reuse_token,
+                                              MIR_OPERAND_ROLE_VALUE,
+                                              MIR_OPERAND_USE_BORROW, 2),
                              ctx);
     }
     return ok;
@@ -1884,6 +1910,10 @@ static void mir_rewrite_extract_operands(MirInstr *instr,
   }
 }
 
+/* Remap the value ids of a construct's operands through a rewriter (used
+   during specialization to rewrite operands to the specialized function's
+   value ids). The reuse token of a list cons is also remapped so it survives
+   specialization. */
 static void mir_rewrite_construct_operands(MirInstr *instr,
                                            MirOperandRewriter rewriter,
                                            void *ctx) {
@@ -6077,7 +6107,8 @@ static MirValueId mir_symbol_to_value(MirBuilder *builder, Ast *origin,
     // its signature contains ABI-sensitive view types (Array/String), create
     // an internal-ABI wrapper here. Direct calls can lower to the C ABI at the
     // call site, but callbacks passed to map/fold/etc. must be called with the
-    // normal MIR function ABI; the wrapper should pack/unpack at the C boundary.
+    // normal MIR function ABI; the wrapper should pack/unpack at the C
+    // boundary.
     Type *ref_type = expected_type ? expected_type : symbol->type;
     return mir_fn_ref(builder, ref_type, origin, fn);
   }
@@ -7746,6 +7777,8 @@ static const char *mir_const_kind_name(MirConstKind kind) {
   return "const.unknown";
 }
 
+/* Textual name of a MIR op kind for the MIR dumper. The RC markers
+   (dup/drop/drop-reuse) are the ones inserted by the Perceus pass. */
 static const char *mir_op_kind_name(MirOpKind kind) {
   switch (kind) {
   case MIR_OP_KIND_PRIMITIVE:
@@ -7828,6 +7861,7 @@ static const char *mir_extract_kind_name(MirExtractKind kind) {
   return "extract.unknown";
 }
 
+/* Textual name of a construct kind for the MIR dumper. */
 static const char *mir_construct_kind_name(MirConstructKind kind) {
   switch (kind) {
   case MIR_CONSTRUCT_TUPLE:
@@ -8159,8 +8193,11 @@ static void dump_result_summary(FILE *stream, const MirFunction *fn) {
           mir_result_ownership_name(mir_function_result_ownership(fn)));
 }
 
+/* Dump one MIR instruction in the textual MIR format. RC markers (dup/drop/
+   drop-reuse) are colored to distinguish them from ordinary instructions. */
 static void dump_instr(FILE *stream, const MirFunction *fn,
                        const MirInstr *instr) {
+  /* dup/drop/drop-reuse are Perceus-inserted markers, shown in magenta. */
   bool rc_instr =
       instr->kind == MIR_OP && (instr->data.op.kind == MIR_OP_KIND_DUP ||
                                 instr->data.op.kind == MIR_OP_KIND_DROP ||
@@ -8368,6 +8405,10 @@ static void dump_instr(FILE *stream, const MirFunction *fn,
     case MIR_CONSTRUCT_LIST_EMPTY:
       break;
     case MIR_CONSTRUCT_LIST_CONS:
+      /* A reuse-aware cons prints `@ru %token, %head, %tail` when a
+         drop-reuse token is attached (the Perceus pairing rewrote the
+         preceding drop into a drop-reuse feeding this cons). Without a token
+         it prints `%head, %tail` and the lowering mallocs a fresh node. */
       if (instr->data.construct.reuse_token != MIR_NO_VALUE) {
         fprintf(stream, "@ru ");
         dump_value(stream, instr->data.construct.reuse_token);

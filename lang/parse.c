@@ -10,9 +10,32 @@
 #include <unistd.h>
 
 ParsingContext pctx = {.custom_binops = NULL};
+static parse_error_info last_parse_error = {0};
 
 const char *__base_dir = NULL;
 void set_base_dir(const char *dir) { __base_dir = dir; }
+
+void parse_clear_error(void) { memset(&last_parse_error, 0, sizeof(last_parse_error)); }
+
+void parse_record_error(const char *message, int line, int col,
+                        long long absolute_offset, const char *near_text,
+                        const char *filename) {
+  if (last_parse_error.has_error) {
+    return;
+  }
+
+  last_parse_error.has_error = true;
+  last_parse_error.line = line > 0 ? line : 1;
+  last_parse_error.col = col > 0 ? col : 1;
+  last_parse_error.absolute_offset = absolute_offset >= 0 ? absolute_offset : 0;
+  last_parse_error.filename = filename;
+  snprintf(last_parse_error.message, sizeof(last_parse_error.message), "%s",
+           message ? message : "syntax error");
+  snprintf(last_parse_error.near_text, sizeof(last_parse_error.near_text), "%s",
+           near_text ? near_text : "");
+}
+
+const parse_error_info *parse_last_error(void) { return &last_parse_error; }
 
 static void *__palloc(size_t size) {
   void *mem = malloc(size);
@@ -382,6 +405,7 @@ Ast *parse_input(char *input, const char *dirname) {
   // _cur_script = "tmp.ylc";
   // _cur_script_content = input;
   yy_scan_string(input); // Set the input for the lexer
+  parse_clear_error();
   yyparse();             // Parse the input
 
   Ast *res = pctx.ast_root;
@@ -419,6 +443,7 @@ Ast *parse_input_buffer(const char *filename, const char *input) {
 
   YY_BUFFER_STATE new_buffer = yy_scan_string((char *)input);
   reset_parser_position();
+  parse_clear_error();
   yyparse();
   yy_delete_buffer(new_buffer);
   return pctx.ast_root;
@@ -1363,6 +1388,7 @@ Ast *parse_input_script(const char *filename) {
 
   // Parse the input
   reset_parser_position();
+  parse_clear_error();
   yyparse();
 
   // Save the result

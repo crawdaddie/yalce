@@ -1,0 +1,40 @@
+let matrix_vec_mul_double = extern fn Int -> Int -> Array of Double -> Array of Double -> Array of Double -> Array of Double;
+let array_fill_const = extern fn Int -> Double -> Array of Double;
+let array_size = extern fn Array of Double -> Int;
+let tabread_samp = extern fn Array of Double -> Int -> Double;
+let spf = extern fn -> Double;
+
+let fdn4 = @Audio fn d1 d2 d3 d4 rt60 inp ->
+
+  let M = [|
+    -0.5,  0.5,  0.5,  0.5,
+     0.5, -0.5,  0.5,  0.5,
+     0.5,  0.5, -0.5,  0.5,
+     0.5,  0.5,  0.5, -0.5
+  |];
+
+  let b = array_fill_const 4 1.;
+  let c = array_fill_const 4 0.25;
+
+  let dls = [|
+    (array_fill_const (Math.round (1. / spf)) 0., d1),
+    (array_fill_const (Math.round (1. / spf)) 0., d2),
+    (array_fill_const (Math.round (1. / spf)) 0., d3),
+    (array_fill_const (Math.round (1. / spf)) 0., d4)
+  |];
+  let dl0, _ = dls[0];
+  let max_size = array_size dl0;
+  let counter = [| 0 |];
+  let w = counter[0];
+
+  let y = dsp_iter.array_map (fn (dl, dt) ->
+    tabread_samp dl (w - (dt / spf))
+  ) dls;
+
+  let o = array_fill_const 4 0.;
+
+  let _ = matrix_vec_mul_double 4 4 M y o;
+
+  counter[0] := (w + 1) % max_size;
+  0.
+;

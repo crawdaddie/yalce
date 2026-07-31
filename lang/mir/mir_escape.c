@@ -4,16 +4,46 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+/*
+ * Escape analysis pass.
+ *
+ * Determines, for every allocation site in a function, whether the allocation
+ * escapes its function (must be heap-allocated with an RC header) or stays
+ * local (can be stack-allocated with an rc=0 sentinel header). The result is
+ * attached to each value as an `EscapeMeta` that the Perceus pass and the
+ * LLVM lowering consult to choose heap vs stack allocation and to suppress
+ * RC markers on stack values.
+ *
+ * The pass runs in two granularities:
+ *
+ *   1. Program-level interprocedural summary (`mir_escape_analysis`): computes
+ *      per-function summaries of which parameters escape, iterated to a
+ *      fixpoint across the call graph so a callee's escape behavior is known
+ *      at its callers. (mir_escape_program_ctx_*, mir_escape_compute_program_summaries)
+ *
+ *   2. Function-level intraprocedural analysis (`mir_escape_analysis_function`):
+ *      seeds escape from return/terminator/call/store/array_set, then
+ *      propagates escape backward through phi/construct/extract/store until a
+ *      fixpoint, finally attaching EA_HEAP_ALLOC (escaped) or EA_STACK_ALLOC
+ *      (local) metadata to each allocation site. (mir_escape_analyze_function,
+ *      mir_escape_attach_metadata)
+ *
+ * `mutable` tracks allocations that are mutated in place (array_set / store),
+ * which the lowering marks heap-mutable so the container survives mutation.
+ */
+
 #define MIR_ESCAPE_ALIGNOF(T) __alignof__(T)
 
 typedef struct {
-  bool *alloc_site;
-  bool *escaped;
-  bool *mutable;
-  uint32_t *alloc_id;
+  bool *alloc_site;       /* value is an allocation site (construct/coro/...) */
+  bool *escaped;          /* value escapes -> heap-allocated */
+  bool *mutable;          /* value is mutated in place -> heap-mutable */
+  uint32_t *alloc_id;     /* stable id assigned per allocation site */
   uint32_t next_alloc_id;
 } MirEscapeState;
 
+/* Interprocedural summary of one function: which of its parameters escape
+   (are returned, stored globally, or passed to a consuming call). */
 typedef struct {
   bool *params;
   size_t len;
@@ -25,6 +55,8 @@ typedef struct {
   size_t functions_len;
 } MirEscapeProgramCtx;
 
+/* The escape metadata attached to a value, looked up by the Perceus pass and
+   the lowering. NULL means no metadata (value is not an allocation site). */
 EscapeMeta *mir_value_escape_meta(MirFunction *fn, MirValueId value) {
   if (!fn || value == MIR_NO_VALUE || value >= fn->values.len) {
     return NULL;
@@ -44,12 +76,19 @@ static bool mir_escape_mark(bool *set, MirFunction *fn, MirValueId value) {
   return true;
 }
 
+/* A type is tracked if it is a heap-allocatable container (array, list,
+   string, closure, coroutine). Only allocations of tracked types are
+   classified stack vs heap; primitive allocations are irrelevant. */
 static bool mir_escape_is_tracked_type(Type *type) {
   return type && (is_array_type(type) || is_list_type(type) ||
-                  is_string_type(type) || is_closure(type) ||
-                  is_coroutine_type(type));
+                   is_string_type(type) || is_closure(type) ||
+                   is_coroutine_type(type));
 }
 
+/* A type may be tracked if it is a tracked container, or it is a
+   tuple/variant/record whose fields could themselves be tracked. Primitives
+   (Int/Double/Char/Bool/Void/Uint64) are never tracked. Used to decide
+   whether a stored/extracted value could carry tracked data. */
 static bool mir_escape_may_be_tracked_type(Type *type) {
   if (mir_escape_is_tracked_type(type)) {
     return true;
@@ -90,6 +129,10 @@ static bool mir_escape_op_is_alloc_site(MirInstr *instr) {
   }
 }
 
+/* Is this instruction an allocation site? A construct of a tracked type
+   (array literal/fill/list cons/closure env), a coroutine new, or a few
+   op-coded allocations (as_bytes/str/typeof). Each allocation site gets an
+   `alloc_id` and is later classified heap or stack. */
 static bool mir_escape_is_alloc_site(MirInstr *instr) {
   if (!instr) {
     return false;
@@ -160,6 +203,8 @@ static bool mir_escape_mark_operands(MirFunction *fn, MirInstr *instr,
   return ctx.changed;
 }
 
+/* Look up the consume/borrow use mode of a call argument; defaults to consume
+   (ownership transferred) when the callee summary is unavailable. */
 static MirOperandUse mir_escape_call_operand_use(MirInstr *call, size_t index) {
   if (!call || call->kind != MIR_CALL ||
       index >= call->data.call.operand_uses.len ||
@@ -169,6 +214,10 @@ static MirOperandUse mir_escape_call_operand_use(MirInstr *call, size_t index) {
   return call->data.call.operand_uses.items[index];
 }
 
+/* Seed escape from a call: a consumed (ownership-transferring) argument
+   escapes, because the callee will drop (free) it. Marking it escaped
+   promotes any alloc-site fields it contains to heap with an RC header so the
+   callee's drop is safe. Borrowed arguments do not escape here. */
 static bool mir_escape_seed_call(MirFunction *fn, MirInstr *call,
                                  MirEscapeState *state,
                                  MirEscapeProgramCtx *program_ctx) {
@@ -195,6 +244,8 @@ static bool mir_escape_seed_call(MirFunction *fn, MirInstr *call,
   return changed;
 }
 
+/* Seed escape from the terminator: consumed operands of return/yield escape
+   (the value leaves the function). */
 static bool mir_escape_seed_terminator(MirFunction *fn, MirTerminator *term,
                                        MirEscapeState *state) {
   if (!term || !state) {
@@ -211,6 +262,10 @@ static bool mir_escape_seed_terminator(MirFunction *fn, MirTerminator *term,
   return ctx.changed;
 }
 
+/* Seed escape from an instruction: record allocation sites, and mark values
+   that escape via array_set (the container becomes mutable), store/global
+   store (the stored tracked value escapes). Calls and terminators are
+   handled by their dedicated seeders. */
 static bool mir_escape_seed_instruction(MirFunction *fn, MirInstr *instr,
                                         MirEscapeState *state,
                                         MirEscapeProgramCtx *program_ctx) {
@@ -253,6 +308,12 @@ static bool mir_escape_seed_instruction(MirFunction *fn, MirInstr *instr,
   return changed;
 }
 
+/* Backward propagation: if an instruction's result has escaped, mark its
+   consumed operands (or borrowed source for extractions) as escaped too, so
+   the escape reaches the allocation sites that produced them. For
+   constructs, only consumed fields propagate (a stored aggregate escapes =>
+   its owned fields escape). For extracts, the source container escapes if the
+   extracted tracked value escapes. */
 static bool mir_escape_propagate_from_result(MirFunction *fn, MirInstr *instr,
                                              MirEscapeState *state) {
   if (!instr || !state || !mir_escape_value_in_range(fn, instr->result) ||
@@ -340,6 +401,9 @@ static bool mir_escape_propagate_from_result(MirFunction *fn, MirInstr *instr,
   return changed;
 }
 
+/* Propagate mutability backward: if an array_set/ptr_offset/array-range/tuple
+   result is mutable, its source array/pointer is mutable too. Mutability
+   forces heap allocation so the container survives in-place mutation. */
 static bool mir_escape_propagate_mutability(MirFunction *fn, MirInstr *instr,
                                             MirEscapeState *state) {
   if (!instr || !state || !mir_escape_value_in_range(fn, instr->result) ||
@@ -380,6 +444,9 @@ static bool mir_escape_propagate_mutability(MirFunction *fn, MirInstr *instr,
   }
 }
 
+/* If an array_set/store's array or its result has escaped, then both the
+   array and the stored value escape (a mutation through an escaped alias
+   means the stored value is observable outside the function). */
 static bool mir_escape_propagate_array_store(MirFunction *fn, MirInstr *instr,
                                              MirEscapeState *state) {
   if ((!mir_escape_instr_is_op(instr, MIR_OP_KIND_ARRAY_SET) &&
@@ -406,6 +473,8 @@ static bool mir_escape_propagate_array_store(MirFunction *fn, MirInstr *instr,
   return changed;
 }
 
+/* One propagation step: from-result escape, mutability, and array-store
+   escape. Applied to every instruction iterated to a fixpoint. */
 static bool mir_escape_propagate_instruction(MirFunction *fn, MirInstr *instr,
                                              MirEscapeState *state) {
   bool changed = false;
@@ -415,6 +484,9 @@ static bool mir_escape_propagate_instruction(MirFunction *fn, MirInstr *instr,
   return changed;
 }
 
+/* Attach the computed classification to each allocation site: EA_HEAP_ALLOC
+   if it escaped, EA_STACK_ALLOC if it stayed local, with EA_ATTR_MUTABLE set
+   for mutated allocations. Non-allocation-site values get NULL metadata. */
 static void mir_escape_attach_metadata(MirFunction *fn, MirEscapeState *state) {
   if (!fn || !fn->arena || !state) {
     return;
@@ -479,6 +551,8 @@ static void mir_escape_state_destroy(MirEscapeState *state) {
   *state = (MirEscapeState){0};
 }
 
+/* Run the intraprocedural analysis: seed escapes, then propagate to a
+   fixpoint. Returns true (state filled) so the caller can attach metadata. */
 static bool mir_escape_analyze_function(MirFunction *fn,
                                         MirEscapeProgramCtx *program_ctx,
                                         MirEscapeState *state) {
@@ -520,6 +594,9 @@ static bool mir_escape_analyze_function(MirFunction *fn,
   return true;
 }
 
+/* Standalone single-function escape analysis (no interprocedural summaries):
+   used as a fallback when the program-wide summary computation is
+   unavailable, and for isolated testing. */
 void mir_escape_analysis_function(MirFunction *fn) {
   if (!fn || fn->is_extern || fn->blocks.len == 0) {
     return;
@@ -587,6 +664,9 @@ static bool mir_escape_program_ctx_init(MirProgram *program,
   return true;
 }
 
+/* Update a function's parameter-escape summary from its analyzed state.
+   Returns true if any parameter's escape status changed (drives the
+   interprocedural fixpoint). */
 static bool mir_escape_update_fn_summary(MirFunction *fn,
                                          MirEscapeFnSummary *summary,
                                          MirEscapeState *state) {
@@ -607,6 +687,9 @@ static bool mir_escape_update_fn_summary(MirFunction *fn,
   return changed;
 }
 
+/* Interprocedural fixpoint: repeatedly analyze every function and update its
+   parameter summaries until none change. This makes a caller's escape
+   decisions account for what its callees do with passed values. */
 static bool mir_escape_compute_program_summaries(MirProgram *program,
                                                  MirEscapeProgramCtx *ctx) {
   if (!program || !ctx) {
@@ -638,6 +721,13 @@ static bool mir_escape_compute_program_summaries(MirProgram *program,
   return true;
 }
 
+/*
+ * Program-wide escape analysis entry point. Computes interprocedural
+ * parameter-escape summaries, then runs the intraprocedural analysis for each
+ * function with those summaries available and attaches the resulting
+ * metadata. Falls back to per-function standalone analysis if summary
+ * computation fails.
+ */
 void mir_escape_analysis(MirProgram *program) {
   if (!program) {
     return;
