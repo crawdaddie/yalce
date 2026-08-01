@@ -461,6 +461,9 @@ NodeRef play_node_offset(uint64_t tick, NodeRef node) {
   if (!node) {
     return NULL;
   }
+  if (init_audio() != 0) {
+    return NULL;
+  }
   push_msg(&ctx.msg_queue,
            (audio_instruction){NODE_ADD, tick, {.NODE_ADD = {.target = node}}});
   return node;
@@ -471,6 +474,9 @@ NodeRef play_node(NodeRef node) {
 }
 
 NodeRef play_node_before(NodeRef target, NodeRef node) {
+  if (init_audio() != 0) {
+    return NULL;
+  }
   push_msg(&ctx.msg_queue,
            (audio_instruction){
                NODE_ADD_BEFORE,

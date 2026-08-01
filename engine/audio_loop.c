@@ -611,6 +611,8 @@ int init_audio() {
     return 0;
   }
 
+  ylc_config.interactive_mode = true;
+
   // maketable_sq();
   // maketable_sin();
   // maketable_saw();
@@ -632,6 +634,10 @@ int init_audio() {
 }
 
 __attribute__((constructor)) static void ylc_engine_init(void) {
+  if (ylc_mir_program || ylc_mir_ctx || ylc_jit_ctx || ylc_jit_module ||
+      ylc_jit_builder) {
+    return;
+  }
   ylc_runtime_load_fn = (YlcRuntimeLoadFn)init_audio;
   ylc_config.interactive_mode = true;
 }

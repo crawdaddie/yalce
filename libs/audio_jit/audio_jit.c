@@ -3263,6 +3263,17 @@ static const AudioBuiltin audio_builtins[] = {
      .lane_expand_mask = 0,
      .arg_order = NULL,
      .kernel_argc = 0},
+
+    // {.name = "sah",
+    //  .source_argc = 2,
+    //  .kernel_symbol = "ylc_audio_sah",
+    //  .emit = audio_builtin_emit_sah,
+    //  .state_size = ,
+    //  .state_align = 0,
+    //  .state_name = NULL,
+    //  .lane_expand_mask = 0,
+    //  .arg_order = NULL,
+    //  .kernel_argc = 0},
 };
 
 static const AudioBuiltin *audio_mir_find_builtin(const char *name) {

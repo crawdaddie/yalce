@@ -4794,6 +4794,7 @@ static MirValueId mir_partial_application(MirBuilder *builder, Type *type,
 
     fprintf(stderr,
             "MIR lowering expected partial application to produce a closure\n");
+    print_ast_err(app);
     return MIR_NO_VALUE;
   }
 

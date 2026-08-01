@@ -1043,6 +1043,172 @@ static MirFunction *lower_mir_find_function_by_name(MirProgram *program,
   return NULL;
 }
 
+static MirInstr *lower_mir_find_callable_def(MirFunction *fn,
+                                             MirValueId value) {
+  for (size_t depth = 0; depth < 16 && fn && value != MIR_NO_VALUE; depth++) {
+    MirInstr *def = mir_function_find_def_instr(fn, value);
+    if (!def) {
+      return NULL;
+    }
+
+    if (def->kind == MIR_OP && def->data.op.argc > 0) {
+      switch (def->data.op.kind) {
+      case MIR_OP_KIND_CAST:
+      case MIR_OP_KIND_DUP:
+      case MIR_OP_KIND_DROP:
+      case MIR_OP_KIND_DROP_REUSE:
+        value = def->data.op.operands[0];
+        continue;
+      default:
+        break;
+      }
+    }
+
+    return def;
+  }
+
+  return NULL;
+}
+
+static MirFunction *lower_mir_resolve_fn_ref_target(MirLlvmCtx *lctx,
+                                                    MirInstr *fn_ref) {
+  if (!lctx || !fn_ref || fn_ref->kind != MIR_FN_REF) {
+    return NULL;
+  }
+
+  MirFunction *target = fn_ref->data.fn_ref.fn;
+  if ((!target || target->id >= lctx->functions_len) &&
+      fn_ref->data.fn_ref.name) {
+    MirFunction *named = lower_mir_find_function_by_name(
+        lctx->program, fn_ref->data.fn_ref.name);
+    if (named) {
+      target = named;
+    }
+  }
+
+  return target;
+}
+
+static LLVMValueRef lower_mir_get_function_value(MirLlvmCtx *lctx,
+                                                 MirFunction *target,
+                                                 LLVMModuleRef module,
+                                                 LLVMTypeRef *out_type) {
+  if (!lctx || !target) {
+    return NULL;
+  }
+
+  LLVMValueRef fn = NULL;
+  LLVMTypeRef fn_type = NULL;
+  if (target->id < lctx->functions_len) {
+    fn = lctx->functions[target->id];
+    fn_type = lctx->function_types[target->id];
+  }
+
+  if (!fn) {
+    const char *name = lower_mir_function_symbol_name(lctx, target);
+    fn = LLVMGetNamedFunction(module, name);
+  }
+  if (!fn && target->id < lctx->functions_len) {
+    fn = lower_mir_declare_function(lctx, target, module);
+  }
+  if (!fn_type) {
+    fn_type = lower_mir_function_type(target, &lctx->jit_ctx, module);
+  }
+  if (!fn && fn_type) {
+    const char *name = lower_mir_function_symbol_name(lctx, target);
+    fn = LLVMAddFunction(module, name, fn_type);
+    if (fn) {
+      LLVMSetLinkage(fn, LLVMExternalLinkage);
+      if (lower_mir_function_uses_c_abi(lctx, target)) {
+        LLVMSetFunctionCallConv(fn, LLVMCCallConv);
+      }
+    }
+  }
+
+  if (out_type) {
+    *out_type = fn_type;
+  }
+  return fn;
+}
+
+static const char *lower_mir_raw_function_symbol_name(const char *name) {
+  if (!name) {
+    return NULL;
+  }
+  return strcmp(name, "$top") == 0 ? "top" : name;
+}
+
+static LLVMValueRef
+lower_mir_get_named_function_value(const char *name, LLVMTypeRef fn_type,
+                                   LLVMModuleRef module) {
+  const char *symbol = lower_mir_raw_function_symbol_name(name);
+  if (!symbol || !fn_type) {
+    return NULL;
+  }
+
+  LLVMValueRef fn = LLVMGetNamedFunction(module, symbol);
+  if (!fn) {
+    fn = LLVMAddFunction(module, symbol, fn_type);
+    if (fn) {
+      LLVMSetLinkage(fn, LLVMExternalLinkage);
+    }
+  }
+  return fn;
+}
+
+static LLVMTypeRef lower_mir_function_type_from_value_type(Type *fn_type,
+                                                           JITLangCtx *ctx,
+                                                           LLVMModuleRef module) {
+  if (!fn_type || fn_type->kind != T_FN ||
+      lower_mir_type_has_unresolved_vars(fn_type)) {
+    return NULL;
+  }
+
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  size_t param_capacity = 0;
+  for (Type *cursor = fn_type; cursor && cursor->kind == T_FN;
+       cursor = cursor->data.T_FN.to) {
+    Type *param_type = cursor->data.T_FN.from;
+    if (param_type && param_type->kind != T_VOID) {
+      param_capacity++;
+    }
+  }
+
+  LLVMTypeRef *param_types =
+      param_capacity ? calloc(param_capacity, sizeof(LLVMTypeRef)) : NULL;
+  if (param_capacity && !param_types) {
+    return NULL;
+  }
+
+  size_t param_count = 0;
+  Type *cursor = fn_type;
+  while (cursor && cursor->kind == T_FN) {
+    Type *param_type = cursor->data.T_FN.from;
+    if (param_type && param_type->kind != T_VOID) {
+      param_types[param_count] =
+          lower_mir_abi_value_type(param_type, ctx, module, NULL);
+      if (!param_types[param_count]) {
+        free(param_types);
+        return NULL;
+      }
+      param_count++;
+    }
+    cursor = cursor->data.T_FN.to;
+  }
+
+  LLVMTypeRef ret_type = lower_mir_abi_value_type(
+      cursor, ctx, module, LLVMVoidTypeInContext(llvm_ctx));
+  if (!ret_type) {
+    free(param_types);
+    return NULL;
+  }
+
+  LLVMTypeRef llvm_fn_type =
+      LLVMFunctionType(ret_type, param_types, (unsigned)param_count, 0);
+  free(param_types);
+  return llvm_fn_type;
+}
+
 typedef struct {
   MirValueId value;
   bool allowed;
@@ -1118,16 +1284,19 @@ static bool lower_mir_value_allocates_on_stack(MirFunction *fn,
 static LLVMValueRef lower_mir_fn_ref(MirInstr *instr, MirLlvmCtx *lctx,
                                      LLVMModuleRef module,
                                      LLVMBuilderRef builder) {
-  if (!instr || !lctx || !instr->data.fn_ref.fn) {
+  if (!instr || !lctx) {
     return NULL;
   }
 
-  MirFunction *target = instr->data.fn_ref.fn;
-  if (target->id >= lctx->functions_len) {
-    return NULL;
-  }
+  MirFunction *target = lower_mir_resolve_fn_ref_target(lctx, instr);
 
-  LLVMValueRef fn = lctx->functions[target->id];
+  LLVMValueRef fn = lower_mir_get_function_value(lctx, target, module, NULL);
+  if (!fn && instr->data.fn_ref.name) {
+    LLVMTypeRef fn_type = lower_mir_function_type_from_value_type(
+        instr->type, &lctx->jit_ctx, module);
+    fn = lower_mir_get_named_function_value(instr->data.fn_ref.name, fn_type,
+                                            module);
+  }
   if (!fn) {
     if (!target || !lower_mir_type_has_unresolved_vars(target->type)) {
       return NULL;
@@ -3433,7 +3602,8 @@ static MirFunction *lower_mir_call_fn_ref_target(MirLlvmCtx *lctx,
   }
 
   if (instr->data.call.specialized_fn &&
-      instr->data.call.specialized_fn->id < lctx->functions_len) {
+      !lower_mir_type_has_unresolved_vars(
+          instr->data.call.specialized_fn->type)) {
     return instr->data.call.specialized_fn;
   }
 
@@ -3442,14 +3612,17 @@ static MirFunction *lower_mir_call_fn_ref_target(MirLlvmCtx *lctx,
   }
 
   MirInstr *callee_def =
-      mir_function_find_def_instr(fn, instr->data.call.callee);
-  if (!callee_def || callee_def->kind != MIR_FN_REF ||
-      !callee_def->data.fn_ref.fn ||
-      callee_def->data.fn_ref.fn->id >= lctx->functions_len) {
+      lower_mir_find_callable_def(fn, instr->data.call.callee);
+  if (!callee_def || callee_def->kind != MIR_FN_REF) {
     return NULL;
   }
 
-  return callee_def->data.fn_ref.fn;
+  MirFunction *target = lower_mir_resolve_fn_ref_target(lctx, callee_def);
+  if (!target || lower_mir_type_has_unresolved_vars(target->type)) {
+    return NULL;
+  }
+
+  return target;
 }
 
 static LLVMValueRef lower_mir_emit_coro_reset_handle(Type *yield_type,
@@ -3634,9 +3807,8 @@ static LLVMValueRef lower_mir_coro_new(MirFunction *fn, MirInstr *instr,
   MirFunction *target = lower_mir_call_fn_ref_target(lctx, fn, instr);
   LLVMValueRef callee = NULL;
   LLVMTypeRef callee_type = NULL;
-  if (target && target->id < lctx->functions_len) {
-    callee = lctx->functions[target->id];
-    callee_type = lctx->function_types[target->id];
+  if (target) {
+    callee = lower_mir_get_function_value(lctx, target, module, &callee_type);
   }
 
   if (!callee && instr->data.call.callee != MIR_NO_VALUE) {
@@ -3840,46 +4012,69 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
   MirFunction *callee_target = NULL;
 
   if (instr->data.call.specialized_fn &&
-      instr->data.call.specialized_fn->id < lctx->functions_len) {
+      !lower_mir_type_has_unresolved_vars(
+          instr->data.call.specialized_fn->type)) {
     callee_target = instr->data.call.specialized_fn;
-    callee = lctx->functions[instr->data.call.specialized_fn->id];
-    callee_type = lctx->function_types[instr->data.call.specialized_fn->id];
+    callee = lower_mir_get_function_value(lctx, callee_target, module,
+                                          &callee_type);
   }
 
   if (!callee && instr->data.call.specialized_name) {
     MirFunction *specialized = lower_mir_find_function_by_name(
         lctx->program, instr->data.call.specialized_name);
-    if (specialized && specialized->id < lctx->functions_len) {
+    if (specialized &&
+        !lower_mir_type_has_unresolved_vars(specialized->type)) {
       callee_target = specialized;
-      callee = lctx->functions[specialized->id];
-      callee_type = lctx->function_types[specialized->id];
+      callee =
+          lower_mir_get_function_value(lctx, specialized, module, &callee_type);
+    }
+    if (!callee) {
+      callee_type =
+          lower_mir_indirect_call_type(fn, instr, instr->data.call.callee_type,
+                                       instr->type, &lctx->jit_ctx, module);
+      callee = lower_mir_get_named_function_value(
+          instr->data.call.specialized_name, callee_type, module);
     }
   }
 
   if (!callee && instr->data.call.callee != MIR_NO_VALUE) {
     MirInstr *callee_def =
-        mir_function_find_def_instr(fn, instr->data.call.callee);
-    if (callee_def && callee_def->kind == MIR_FN_REF &&
-        callee_def->data.fn_ref.fn &&
-        callee_def->data.fn_ref.fn->id < lctx->functions_len) {
-      MirFunction *target = callee_def->data.fn_ref.fn;
-      if (lower_mir_type_has_unresolved_vars(target->type)) {
+        lower_mir_find_callable_def(fn, instr->data.call.callee);
+    if (callee_def && callee_def->kind == MIR_FN_REF) {
+      MirFunction *target = lower_mir_resolve_fn_ref_target(lctx, callee_def);
+      if (!target) {
+        callee_type = lower_mir_indirect_call_type(
+            fn, instr, instr->data.call.callee_type, instr->type,
+            &lctx->jit_ctx, module);
+        callee = lower_mir_get_named_function_value(
+            callee_def->data.fn_ref.name, callee_type, module);
+      } else if (lower_mir_type_has_unresolved_vars(target->type)) {
         fprintf(stderr,
                 "MIR to LLVM lowering cannot lower unspecialized generic call "
                 "$%s in %s\n",
                 target->name ? target->name : "<anonymous>",
                 fn && fn->name ? fn->name : "<anonymous>");
         return NULL;
+      } else {
+        callee_target = target;
+        callee =
+            lower_mir_get_function_value(lctx, target, module, &callee_type);
       }
-      callee_target = target;
-      callee = lctx->functions[target->id];
-      callee_type = lctx->function_types[target->id];
-      if (!callee) {
-        callee = LLVMGetNamedFunction(
-            module, lower_mir_function_symbol_name(lctx, target));
-      }
-      if (!callee_type) {
-        callee_type = lower_mir_function_type(target, &lctx->jit_ctx, module);
+    } else if (callee_def && callee_def->kind == MIR_EXTRACT &&
+               callee_def->data.extract.kind == MIR_EXTRACT_CLOSURE_FN) {
+      MirInstr *closure_def =
+          lower_mir_find_callable_def(fn, callee_def->data.extract.value);
+      if (closure_def && closure_def->kind == MIR_CONSTRUCT &&
+          closure_def->data.construct.kind == MIR_CONSTRUCT_CLOSURE &&
+          closure_def->data.construct.impl_fn < lctx->functions_len &&
+          lctx->program && lctx->program->functions.items) {
+        MirFunction *target =
+            lctx->program->functions.items[closure_def->data.construct.impl_fn];
+        if (target) {
+          callee_target = target;
+          callee =
+              lower_mir_get_function_value(lctx, target, module, &callee_type);
+        }
       }
     }
   }
