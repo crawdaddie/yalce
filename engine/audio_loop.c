@@ -39,9 +39,9 @@ void set_block_time(struct timespec *to_set) {
 }
 
 uint64_t us_offset(struct timespec start, struct timespec end) {
-  int64_t delta_ns = ((int64_t)end.tv_sec - (int64_t)start.tv_sec) *
-                         1000000000LL +
-                     ((int64_t)end.tv_nsec - (int64_t)start.tv_nsec);
+  int64_t delta_ns =
+      ((int64_t)end.tv_sec - (int64_t)start.tv_sec) * 1000000000LL +
+      ((int64_t)end.tv_nsec - (int64_t)start.tv_nsec);
   if (delta_ns <= 0) {
     return 0;
   }
@@ -613,17 +613,11 @@ int init_audio() {
 
   ylc_config.interactive_mode = true;
 
-  // maketable_sq();
-  // maketable_sin();
-  // maketable_saw();
-  // maketable_saw();
-  // maketable_grain_window();
-
   if (config_size) {
     parse_input_config(__config, config_size);
   }
   start_audio();
-  printf("inited audio\n");
+  // printf("inited audio\n");
 
   scheduler_event_loop();
 
@@ -633,11 +627,11 @@ int init_audio() {
   return 0;
 }
 
-__attribute__((constructor)) static void ylc_engine_init(void) {
-  if (ylc_mir_program || ylc_mir_ctx || ylc_jit_ctx || ylc_jit_module ||
-      ylc_jit_builder) {
-    return;
-  }
-  ylc_runtime_load_fn = (YlcRuntimeLoadFn)init_audio;
-  ylc_config.interactive_mode = true;
-}
+// __attribute__((constructor)) static void ylc_engine_init(void) {
+//   if (ylc_mir_program || ylc_mir_ctx || ylc_jit_ctx || ylc_jit_module ||
+//       ylc_jit_builder) {
+//     return;
+//   }
+//   ylc_runtime_load_fn = (YlcRuntimeLoadFn)init_audio;
+//   ylc_config.interactive_mode = true;
+// }

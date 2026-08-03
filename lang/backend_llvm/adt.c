@@ -195,7 +195,10 @@ LLVMTypeRef get_largest_type(LLVMContextRef context, LLVMTypeRef *types,
 
   LLVMTypeRef largest_type = types[0];
   unsigned largest_size = LLVMStoreSizeOfType(target_data, largest_type);
-  unsigned largest_align = 256;
+  unsigned largest_align = LLVMABIAlignmentOfType(target_data, largest_type);
+  if (largest_size_bits) {
+    *largest_size_bits = largest_size;
+  }
 
   for (size_t i = 1; i < count; i++) {
     unsigned current_size = LLVMStoreSizeOfType(target_data, types[i]);
@@ -206,7 +209,9 @@ LLVMTypeRef get_largest_type(LLVMContextRef context, LLVMTypeRef *types,
       largest_type = types[i];
       largest_size = current_size;
       largest_align = current_align;
-      *largest_size_bits = largest_size;
+      if (largest_size_bits) {
+        *largest_size_bits = largest_size;
+      }
     }
   }
 
@@ -222,7 +227,7 @@ unsigned long long get_largest_type_size(LLVMContextRef context,
 
   LLVMTypeRef largest_type = types[0];
   unsigned largest_size = LLVMStoreSizeOfType(target_data, largest_type);
-  unsigned largest_align = 256;
+  unsigned largest_align = LLVMABIAlignmentOfType(target_data, largest_type);
 
   for (size_t i = 1; i < count; i++) {
     unsigned current_size = LLVMStoreSizeOfType(target_data, types[i]);
@@ -275,11 +280,17 @@ LLVMTypeRef codegen_adt_type(Type *type, JITLangCtx *ctx,
   unsigned long long union_size_bytes =
       get_largest_type_size(LLVMGetModuleContext(module), contained_types, len,
                             LLVMGetModuleDataLayout(module));
+  unsigned long long union_words = (union_size_bytes + 7) / 8;
+  if (union_words == 0) {
+    union_words = 1;
+  }
 
-  // Use byte array instead of integer for union storage
+  // Use word-aligned opaque storage so pointer-bearing payloads keep their ABI
+  // alignment when packed into tagged unions and arrays of tagged unions.
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
   LLVMTypeRef fields[] = {tag_type(llvm_ctx),
-                          LLVMArrayType(tag_type(llvm_ctx), union_size_bytes)};
+                          LLVMArrayType(LLVMInt64TypeInContext(llvm_ctx),
+                                        (unsigned)union_words)};
   return LLVMStructTypeInContext(llvm_ctx, fields, 2, 0);
 }
 
@@ -552,11 +563,16 @@ LLVMTypeRef codegen_recursive_datatype(Type *type, Ast *ast, JITLangCtx *ctx,
   unsigned long long union_size_bytes =
 
       get_largest_type_size(llvm_ctx, member_types, len, target_data);
+  unsigned long long union_words = (union_size_bytes + 7) / 8;
+  if (union_words == 0) {
+    union_words = 1;
+  }
 
-  // Use byte array instead of integer for union storage
+  // Use word-aligned opaque storage so pointer-bearing payloads keep their ABI
+  // alignment when packed into tagged unions and arrays of tagged unions.
   LLVMTypeRef body_fields[] = {tag_type(llvm_ctx),
-                               LLVMArrayType(tag_type(llvm_ctx),
-                                             union_size_bytes)};
+                               LLVMArrayType(LLVMInt64TypeInContext(llvm_ctx),
+                                             (unsigned)union_words)};
   LLVMStructSetBody(variant_struct, body_fields, 2, 0);
 
   destroy_ctx(&_ctx);

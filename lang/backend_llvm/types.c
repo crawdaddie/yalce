@@ -229,7 +229,7 @@ static LLVMTypeRef recursive_ref_aggregate_type(Type *type, JITLangCtx *ctx,
   }
 
   LLVMTypeRef llvm_struct = get_or_create_named_struct(name, module);
-  if (!decl_type || decl_type->kind != T_CONS ||
+  if (!decl_type || (decl_type->kind != T_CONS && decl_type->kind != T_SUM) ||
       !LLVMIsOpaqueStruct(llvm_struct)) {
     return llvm_struct;
   }
@@ -244,6 +244,23 @@ static LLVMTypeRef recursive_ref_aggregate_type(Type *type, JITLangCtx *ctx,
       .next = recursive_struct_build_stack,
   };
   recursive_struct_build_stack = &build_frame;
+
+  /* Sum types reached through a recursive back-edge (e.g. a mutually-recursive
+     variant used as a record field) still need a sized tagged-union body, not
+     an opaque stub, otherwise GEPs into the enclosing struct are unsized and
+     LLVM IR verification fails. Build the tagged-union body from the sum's
+     variants and set it on the named struct. */
+  if (decl_type->kind == T_SUM) {
+    LLVMTypeRef adt_body = codegen_adt_type(decl_type, ctx, module);
+    recursive_struct_build_stack = build_frame.next;
+    if (adt_body && LLVMGetTypeKind(adt_body) == LLVMStructTypeKind &&
+        LLVMCountStructElementTypes(adt_body) == 2) {
+      LLVMTypeRef body_fields[2];
+      LLVMGetStructElementTypes(adt_body, body_fields);
+      LLVMStructSetBody(llvm_struct, body_fields, 2, 0);
+    }
+    return llvm_struct;
+  }
 
   int len = decl_type->data.T_CONS.num_args;
   LLVMTypeRef element_types[len];

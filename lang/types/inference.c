@@ -1405,10 +1405,41 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
   }
 
   case AST_LOOP: {
-    Ast let = *ast;
-    let.tag = AST_LET;
-    type = infer_expr(&let, ctx);
-    ast->type = let.type;
+    Ast *binding = ast->data.AST_LET.binding;
+    Ast *range = ast->data.AST_LET.expr;
+    Ast *body = ast->data.AST_LET.in_expr;
+    TypeEnv *outer_env = ctx->env;
+
+    if (!binding || !range || range->tag != AST_RANGE_EXPRESSION || !body) {
+      type = type_error(ast, "Unsupported loop shape");
+      break;
+    }
+
+    Type *from = infer_expr(range->data.AST_RANGE_EXPRESSION.from, ctx);
+    Type *to = infer_expr(range->data.AST_RANGE_EXPRESSION.to, ctx);
+    if (!from || !to) {
+      ctx->env = outer_env;
+      return NULL;
+    }
+    unify(from, &t_int, ctx);
+    unify(to, &t_int, ctx);
+
+    if (bind_pattern(binding, &t_int, ctx) != 0) {
+      ctx->env = outer_env;
+      return type_error(ast, "Unsupported loop binding shape");
+    }
+    set_env_slice_scope(ctx->env, outer_env, ctx->scope);
+    if (ctx->current_fn_ast) {
+      set_env_slice_yield_boundary(
+          ctx->env, outer_env, ctx->current_fn_ast->data.AST_LAMBDA.num_yields);
+    }
+
+    Type *body_type = infer_expr(body, ctx);
+    ctx->env = outer_env;
+    if (!body_type) {
+      return NULL;
+    }
+    type = &t_void;
     break;
   }
   case AST_RANGE_EXPRESSION: {

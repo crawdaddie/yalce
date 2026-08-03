@@ -15,11 +15,13 @@ EXTERN_SRC="$SCRIPT_DIR/mir_scripts/extern_pipeline.ylc"
 LLVM_SHAPE_SRC="$SCRIPT_DIR/mir_scripts/llvm_shape_pipeline.ylc"
 MATCH_DESTRUCTURE_SRC="$SCRIPT_DIR/mir_scripts/match_destructure_pipeline.ylc"
 RECURSIVE_DESTRUCTURE_SRC="$SCRIPT_DIR/mir_scripts/recursive_destructure_pipeline.ylc"
+PERCEUS_RECURSIVE_TENSOR_SRC="$SCRIPT_DIR/mir_scripts/perceus_recursive_tensor_linear_pipeline.ylc"
 OPEN_IMPORT_NESTED_SRC="$SCRIPT_DIR/mir_scripts/open_import_nested_pipeline.ylc"
 IMPORTED_HELPER_SRC="$SCRIPT_DIR/mir_scripts/imported_helper_pipeline.ylc"
 FIB_TEST_SRC="$SCRIPT_DIR/test_scripts/01_fib.ylc"
 LIST_MAP_TEST_SRC="$SCRIPT_DIR/test_scripts/04_list_map.ylc"
 FIRST_CLASS_TEST_SRC="$SCRIPT_DIR/test_scripts/05_1st_class_fns.ylc"
+RBTREE_TEST_SRC="$SCRIPT_DIR/test_scripts/15_rbtree_perceus.ylc"
 STD_LISTS_TEST_SRC="$ROOT_DIR/std/Lists.ylc"
 
 if [ ! -x "$YLC" ]; then
@@ -100,7 +102,7 @@ assert_order() {
   local pattern
   for pattern in "$@"; do
     local line
-    line="$({ grep -nE "$pattern" "$file" || true; } |
+    line="$({ grep -nE "$pattern" "$file" 2>/dev/null || true; } |
       awk -F: -v last="$last" '$1 > last { print $1; exit }')"
     if [ -z "$line" ]; then
       fail "$label: missing ordered pattern '$pattern'"
@@ -165,6 +167,18 @@ run_ylc_test() {
   return 1
 }
 
+run_ylc() {
+  local source="$1"
+  local output="$2"
+  if "$YLC" "$source" >"$output" 2>&1; then
+    return 0
+  fi
+
+  strip_ansi <"$output" >"$output.stripped"
+  mv "$output.stripped" "$output"
+  return 1
+}
+
 run_dump_llvm_pre() {
   local source="$1"
   local output="$2"
@@ -193,6 +207,8 @@ MATCH_DESTRUCTURE_MIR="$ARTIFACT_DIR/match_destructure_pipeline.mir"
 MATCH_DESTRUCTURE_LLVM_IR="$ARTIFACT_DIR/match_destructure_pipeline.ll"
 RECURSIVE_DESTRUCTURE_MIR="$ARTIFACT_DIR/recursive_destructure_pipeline.mir"
 RECURSIVE_DESTRUCTURE_LLVM_IR="$ARTIFACT_DIR/recursive_destructure_pipeline.ll"
+PERCEUS_RECURSIVE_TENSOR_LLVM_IR="$ARTIFACT_DIR/perceus_recursive_tensor_linear_pipeline.ll"
+PERCEUS_RECURSIVE_TENSOR_OUT="$ARTIFACT_DIR/perceus_recursive_tensor_linear_pipeline.out"
 OPEN_IMPORT_NESTED_MIR="$ARTIFACT_DIR/open_import_nested_pipeline.mir"
 IMPORTED_HELPER_LLVM_IR="$ARTIFACT_DIR/imported_helper_pipeline.ll"
 FIB_TEST_MIR="$ARTIFACT_DIR/01_fib.test.mir"
@@ -202,6 +218,9 @@ LIST_MAP_TEST_OUT="$ARTIFACT_DIR/04_list_map.test.out"
 FIRST_CLASS_TEST_MIR="$ARTIFACT_DIR/05_1st_class_fns.test.mir"
 FIRST_CLASS_TEST_LLVM_IR="$ARTIFACT_DIR/05_1st_class_fns.test.ll"
 FIRST_CLASS_TEST_OUT="$ARTIFACT_DIR/05_1st_class_fns.test.out"
+RBTREE_TEST_MIR="$ARTIFACT_DIR/15_rbtree_perceus.test.mir"
+RBTREE_TEST_LLVM_IR="$ARTIFACT_DIR/15_rbtree_perceus.test.ll"
+RBTREE_TEST_OUT="$ARTIFACT_DIR/15_rbtree_perceus.test.out"
 STD_LISTS_TEST_MIR="$ARTIFACT_DIR/std_Lists.test.mir"
 STD_LISTS_TEST_LLVM_IR="$ARTIFACT_DIR/std_Lists.test.ll"
 STD_LISTS_TEST_OUT="$ARTIFACT_DIR/std_Lists.test.out"
@@ -223,12 +242,15 @@ run_dump_llvm_pre "$EXTERN_SRC" "$EXTERN_LLVM_IR"
 run_dump_llvm_pre "$LLVM_SHAPE_SRC" "$LLVM_SHAPE_IR"
 run_dump_llvm_pre "$MATCH_DESTRUCTURE_SRC" "$MATCH_DESTRUCTURE_LLVM_IR"
 run_dump_llvm_pre "$RECURSIVE_DESTRUCTURE_SRC" "$RECURSIVE_DESTRUCTURE_LLVM_IR"
+run_dump_llvm_pre "$PERCEUS_RECURSIVE_TENSOR_SRC" "$PERCEUS_RECURSIVE_TENSOR_LLVM_IR"
 run_dump_llvm_pre "$IMPORTED_HELPER_SRC" "$IMPORTED_HELPER_LLVM_IR"
 run_dump_mir_test "$FIB_TEST_SRC" "$FIB_TEST_MIR"
 run_dump_mir_test "$FIRST_CLASS_TEST_SRC" "$FIRST_CLASS_TEST_MIR"
+run_dump_mir_test "$RBTREE_TEST_SRC" "$RBTREE_TEST_MIR"
 run_dump_mir_test "$STD_LISTS_TEST_SRC" "$STD_LISTS_TEST_MIR"
 run_dump_llvm_pre_test "$LIST_MAP_TEST_SRC" "$LIST_MAP_TEST_LLVM_IR"
 run_dump_llvm_pre_test "$FIRST_CLASS_TEST_SRC" "$FIRST_CLASS_TEST_LLVM_IR"
+run_dump_llvm_pre_test "$RBTREE_TEST_SRC" "$RBTREE_TEST_LLVM_IR"
 run_dump_llvm_pre_test "$STD_LISTS_TEST_SRC" "$STD_LISTS_TEST_LLVM_IR"
 
 FIB_TEST_STATUS=0
@@ -237,8 +259,12 @@ LIST_MAP_TEST_STATUS=0
 run_ylc_test "$LIST_MAP_TEST_SRC" "$LIST_MAP_TEST_OUT" || LIST_MAP_TEST_STATUS=$?
 FIRST_CLASS_TEST_STATUS=0
 run_ylc_test "$FIRST_CLASS_TEST_SRC" "$FIRST_CLASS_TEST_OUT" || FIRST_CLASS_TEST_STATUS=$?
+RBTREE_TEST_STATUS=0
+run_ylc_test "$RBTREE_TEST_SRC" "$RBTREE_TEST_OUT" || RBTREE_TEST_STATUS=$?
 STD_LISTS_TEST_STATUS=0
 run_ylc_test "$STD_LISTS_TEST_SRC" "$STD_LISTS_TEST_OUT" || STD_LISTS_TEST_STATUS=$?
+PERCEUS_RECURSIVE_TENSOR_STATUS=0
+run_ylc "$PERCEUS_RECURSIVE_TENSOR_SRC" "$PERCEUS_RECURSIVE_TENSOR_OUT" || PERCEUS_RECURSIVE_TENSOR_STATUS=$?
 
 DUP_BODY="$ARTIFACT_DIR/duplicated_array.mir"
 MOVED_BODY="$ARTIFACT_DIR/moved_call_arg.mir"
@@ -451,7 +477,6 @@ assert_order "$TUPLE_OPTION_PAYLOAD_BODY" "option tuple payload match should ext
   'extract\.variant_payload %[0-9]+, Some#0' \
   'extract\.field %[0-9]+, 0' \
   'extract\.field %[0-9]+, 0' \
-  ' = dup %[0-9]+' \
   'extract\.field %[0-9]+, 1'
 assert_contains "$TUPLE_OPTION_PAYLOAD_BODY" 'call %[0-9]+\(%[0-9]+\).*: Int.*value/consume#0' "option tuple payload arm should consume the selected managed field"
 assert_order "$TUPLE_OPTION_LITERAL_BODY" "option tuple literal match should compare both tuple fields" \
@@ -594,27 +619,28 @@ assert_order "$VARIANT_RECORD_PAYLOAD_BODY" "variant record payload arm should c
   'extract\.field %[0-9]+, 0' \
   ' = dup %[0-9]+' \
   'call %[0-9]+.*value/consume#0'
-assert_order "$VARIANT_LITERAL_FAILURE_BODY" "failed literal branch should drop the duplicated payload before retrying the next arm" \
+assert_order "$VARIANT_LITERAL_FAILURE_BODY" "failed literal branch should retry before extracting the fallback payload" \
   'extract\.variant_payload %[0-9]+, Some#0' \
   'extract\.field %[0-9]+, 0' \
   'extract\.field %[0-9]+, 0' \
-  ' = dup %[0-9]+' \
+  'extract\.field %[0-9]+, 1' \
   'const\.int 2' \
   'ieq %[0-9]+, %[0-9]+' \
-  'perceus\.edge\.drop:' \
-  ' = drop %[0-9]+' \
-  'br bb[0-9]+'
-assert_order "$VARIANT_FIRST_FIELD_FAILURE_BODY" "variant first-field literal failure should not own the managed payload before the failed compare" \
+  'cond %[0-9]+, bb[0-9]+, bb[0-9]+'
+assert_not_contains "$VARIANT_LITERAL_FAILURE_BODY" 'perceus\.edge\.drop:' "literal-pattern retry should not create owned payload probe drops"
+assert_order "$VARIANT_FIRST_FIELD_FAILURE_BODY" "variant first-field literal failure should retry before extracting the managed payload field" \
   'extract\.variant_payload %[0-9]+, Some#0' \
   'extract\.field %[0-9]+, 0' \
   'extract\.field %[0-9]+, 0' \
   'const\.int 2' \
   'ieq %[0-9]+, %[0-9]+' \
-  'cond %[0-9]+, bb10, bb8' \
+  'cond %[0-9]+, bb[0-9]+, bb8' \
+  '^  bb10 match\.tuple\.[0-9]+\.1:'
+assert_order "$VARIANT_FIRST_FIELD_FAILURE_BODY" "variant first-field literal success should own the managed payload field after the compare" \
   '^  bb10 match\.tuple\.[0-9]+\.1:' \
   'extract\.field %[0-9]+, 1' \
   ' = dup %[0-9]+'
-assert_not_contains "$VARIANT_FIRST_FIELD_FAILURE_BODY" 'perceus\.edge\.drop' "variant first-field failure should not emit an edge drop before payload ownership exists"
+assert_not_contains "$VARIANT_FIRST_FIELD_FAILURE_BODY" 'perceus\.edge\.drop:' "variant first-field retry should not create owned payload probe drops"
 assert_order "$ARRAY_PATTERN_FAILURE_BODY" "failed array length pattern should retry before extracting the one-element payload" \
   "$ARRAY_SIZE_MIR" \
   'const\.int 2' \
@@ -637,7 +663,10 @@ assert_order "$LIST_PATTERN_FAILURE_BODY" "failed two-cons list pattern should r
   'extract\.list_tail %[0-9]+' \
   'ops \[%[0-9]+:container/borrow#0\]' \
   'list_is_empty %[0-9]+.*ops \[%[0-9]+:container/borrow#0\]' \
-  'cond %[0-9]+, bb4, bb5' \
+  'perceus\.edge\.drop:' \
+  ' = drop %[0-9]+' \
+  'br bb11'
+assert_order "$LIST_PATTERN_FAILURE_BODY" "one-cons payload fallback should consume the borrowed head field" \
   '^  bb10 match\.arm\.1\.body:' \
   'extract\.field %[0-9]+, 0' \
   'call %[0-9]+.*consume_array.*value/consume#0'
@@ -659,14 +688,13 @@ assert_order "$HEAP_ARRAY_PATTERN_FAILURE_BODY" "heap array pattern failure shou
   'ieq %[0-9]+, %[0-9]+' \
   'perceus\.edge\.drop:' \
   ' = drop %[0-9]+'
-assert_order "$HEAP_LIST_PATTERN_FAILURE_BODY" "heap list pattern failure should drop duplicated borrowed tails on retry edges" \
+assert_order "$HEAP_LIST_PATTERN_FAILURE_BODY" "heap list pattern failure should drop the owned scrutinee on retry edges" \
   'extract\.list_tail %[0-9]+' \
   'ops \[%[0-9]+:container/borrow#0\]' \
-  ' = dup %[0-9]+' \
   'list_is_empty %[0-9]+' \
   'perceus\.edge\.drop:' \
   ' = drop %[0-9]+' \
-  'br bb5'
+  'br bb11'
 assert_order "$DIRECT_LEAF_BODY" "recursive record list leaf constructor should lower as list_empty plus construct.tuple" \
   'construct\.list_empty' \
   'construct\.tuple \{ value: %[0-9]+, kids: %[0-9]+ \}'
@@ -1036,21 +1064,32 @@ assert_order "$ESCAPED_PARTIAL_BODY" "escaped closure extractions should also dr
   'call %[0-9]+.*callee/borrow#0.*value/borrow#0.*value/consume#1' \
   ' = drop %[0-9]+' \
   'return %[0-9]+'
-assert_order "$VARIANT_RETURN_BODY" "returned variant payload extraction should be owned before entering the match continuation" \
+assert_order "$VARIANT_RETURN_BODY" "returned variant payload should flow to the match continuation without probe duplication" \
   'extract\.variant_payload %[0-9]+, Some#0' \
   'extract\.field %[0-9]+, 0' \
-  ' = dup %[0-9]+' \
   'br bb4'
-assert_not_contains "$VARIANT_DISCARD_BODY" ' = dup ' "discarded variant payload extraction should not be duplicated"
-assert_order "$VARIANT_CONSUME_BODY" "consumed variant payload extraction should be duplicated before branch to consuming arm" \
+assert_not_contains "$VARIANT_RETURN_BODY" ' = dup ' "returned variant payload borrow should not be duplicated before return"
+assert_order "$VARIANT_DISCARD_BODY" "discarded variant payload extraction should release the owning scrutinee" \
   'extract\.variant_payload %[0-9]+, Some#0' \
   'extract\.field %[0-9]+, 0' \
-  ' = dup %[0-9]+'
+  ' = drop %[0-9]+'
+assert_order "$VARIANT_CONSUME_BODY" "consumed variant payload extraction should branch to the consuming arm" \
+  'extract\.variant_payload %[0-9]+, Some#0' \
+  'extract\.field %[0-9]+, 0' \
+  'br bb4'
+assert_order "$VARIANT_CONSUME_BODY" "consumed variant payload should be duplicated at the consuming arm" \
+  '^  bb4 match\.arm\.0\.body:' \
+  ' = dup %[0-9]+' \
+  'call %[0-9]+\(%[0-9]+\).*value/consume#0' \
+  ' = drop %[0-9]+'
 assert_contains "$VARIANT_CONSUME_BODY" 'call %[0-9]+\(%[0-9]+\).*value/consume#0' "variant payload consuming arm should pass extracted payload as an owned call operand"
-assert_order "$VARIANT_LIST_HEAD_BODY" "variant list payload borrow chain should own borrows before leaving payload block" \
+assert_order "$VARIANT_LIST_HEAD_BODY" "variant list payload borrow chain should branch to the consuming arm" \
   'extract\.variant_payload %[0-9]+, Some#0' \
   'extract\.field %[0-9]+, 0' \
   'extract\.list_head %[0-9]+' \
+  'br bb8'
+assert_order "$VARIANT_LIST_HEAD_BODY" "variant list payload head should be duplicated at the consuming arm" \
+  '^  bb4 match\.arm\.0\.body:' \
   ' = dup %[0-9]+' \
   ' = drop %[0-9]+'
 assert_contains "$VARIANT_LIST_HEAD_BODY" 'call %[0-9]+\(%[0-9]+\).*value/consume#0' "variant list payload consuming arm should consume the extracted head"
@@ -1063,12 +1102,14 @@ assert_order "$VARIANT_RECORD_PAYLOAD_BODY" "managed variant record payload shou
   'extract\.field %[0-9]+, 0' \
   ' = dup %[0-9]+' \
   'call %[0-9]+.*value/consume#0'
-assert_order "$VARIANT_LITERAL_FAILURE_BODY" "literal-pattern failure should release the duplicated owned payload on the retry edge" \
+assert_not_contains "$VARIANT_LITERAL_FAILURE_BODY" 'perceus\.edge\.drop:' "literal-pattern failure should keep failed probes borrowed"
+assert_order "$VARIANT_LITERAL_FAILURE_BODY" "literal-pattern consuming arms should dup selected payloads before consume" \
+  '^  bb7 match\.arm\.0\.body:' \
   ' = dup %[0-9]+' \
-  'const\.int 2' \
-  'ieq %[0-9]+, %[0-9]+' \
-  'perceus\.edge\.drop:' \
-  ' = drop %[0-9]+'
+  'call %[0-9]+.*consume_array.*value/consume#0' \
+  '^  bb11 match\.arm\.1\.body:' \
+  ' = dup %[0-9]+' \
+  'call %[0-9]+.*consume_array.*value/consume#0'
 assert_order "$LIST_RECORD_ARRAY_PAYLOAD_BODY" "managed array inside list-bound record should be consumed by the arm" \
   '^  bb4 match\.arm\.0\.body:' \
   'extract\.field %[0-9]+, 0' \
@@ -1089,40 +1130,41 @@ assert_order "$HEAP_LIST_PATTERN_FAILURE_BODY" "heap list fallback should dup th
   ' = dup %[0-9]+' \
   'call %[0-9]+.*consume_array.*value/consume#0' \
   ' = drop %[0-9]+'
-assert_order "$DIRECT_RECURSIVE_LIST_BODY" "recursive list field match should dup borrowed tail and drop it on failure edges" \
+assert_order "$DIRECT_RECURSIVE_LIST_BODY" "recursive list field match should drop the owning record on failure edges" \
   'extract\.field %[0-9]+, 1' \
-  ' = dup %[0-9]+' \
   'perceus\.edge\.drop:' \
   ' = drop %[0-9]+'
-assert_order "$DIRECT_RECURSIVE_ARRAY_BODY" "recursive array field match should dup borrowed array and drop it on failure edge" \
+assert_not_contains "$DIRECT_RECURSIVE_LIST_BODY" ' = dup ' "recursive list borrow probes should not be duplicated"
+assert_order "$DIRECT_RECURSIVE_ARRAY_BODY" "recursive array field match should drop the owning record on failure edge" \
   'extract\.field %[0-9]+, 1' \
-  ' = dup %[0-9]+' \
   'perceus\.edge\.drop:' \
   ' = drop %[0-9]+'
+assert_not_contains "$DIRECT_RECURSIVE_ARRAY_BODY" ' = dup ' "recursive array borrow probes should not be duplicated"
 assert_order "$TENSOR_ADD_BODY" "TensorRef sum constructor should move consumed input arrays into the op payload without dropping them" \
   'construct\.variant TensOpAdd#1\(%[0-9]+\)' \
   'construct\.array_literal \{ %[0-9]+ \}' \
   'return %[0-9]+'
-assert_order "$TENSOR_OP_ADD_MATCH_BODY" "recursive sum match should dup both borrowed TensorRef payloads before body use" \
+assert_order "$TENSOR_OP_ADD_MATCH_BODY" "recursive sum match should borrow TensorRef payloads before body use" \
   'extract\.variant_payload %[0-9]+, TensOpAdd#1' \
   'extract\.field %[0-9]+, 0' \
   'extract\.field %[0-9]+, 0' \
-  ' = dup %[0-9]+' \
   'extract\.field %[0-9]+, 1' \
-  ' = dup %[0-9]+'
+  'br bb4'
 assert_order "$TENSOR_OP_ADD_MATCH_BODY" "recursive sum match body should drop duplicated TensorRef borrows after array_size" \
   '^  bb4 match\.arm\.0\.body:' \
   "$ARRAY_SIZE_MIR" \
   "$ARRAY_SIZE_MIR" \
   'iadd %[0-9]+, %[0-9]+' \
-  ' = drop %[0-9]+' \
   ' = drop %[0-9]+'
-assert_order "$TENSOR_OP_ADD_CONSUME_BODY" "recursive sum consuming arm should dup selected TensorRef payload before consume" \
+assert_order "$TENSOR_OP_ADD_CONSUME_BODY" "recursive sum consuming arm should extract selected TensorRef payload" \
   'extract\.variant_payload %[0-9]+, TensOpAdd#1' \
   'extract\.field %[0-9]+, 0' \
   'extract\.field %[0-9]+, 0' \
-  ' = dup %[0-9]+' \
   'br bb[0-9]+'
+assert_order "$TENSOR_OP_ADD_CONSUME_BODY" "recursive sum consuming arm should dup selected TensorRef payload before consume" \
+  '^  bb4 match\.arm\.0\.body:' \
+  ' = dup %[0-9]+' \
+  'call %[0-9]+.*consume_tensor.*value/consume#0'
 assert_order "$TENSOR_OP_ADD_CONSUME_BODY" "recursive sum consuming arm should pass selected TensorRef as owned call operand" \
   '^  bb4 match\.arm\.0\.body:' \
   'call %[0-9]+.*consume_tensor.*value/consume#0'
@@ -1133,13 +1175,13 @@ assert_order "$NESTED_EXTRACT_BODY" "nested borrowed extraction should keep the 
   "$ARRAY_LOAD_MIR" \
   'call %[0-9]+.*value/consume#0' \
   ' = drop %[0-9]+'
-assert_order "$CLOSURE_USE_CELL_BODY" "closure env nested array extraction should keep captured array live through element use" \
+assert_order "$CLOSURE_USE_CELL_BODY" "closure env nested array extraction should dup the loaded cell for consuming use" \
   'extract\.field %[0-9]+, 0' \
   "$ARRAY_DATA_MIR" \
   "$ARRAY_PTR_OFFSET_MIR" \
   "$ARRAY_LOAD_MIR" \
-  'call %[0-9]+.*value/consume#0' \
-  ' = drop %[0-9]+'
+  ' = dup %[0-9]+' \
+  'call %[0-9]+.*value/consume#0'
 assert_order "$ARRAY_OFFSET_BODY" "returned array_offset borrow should dup before dropping the source array" \
   "$ARRAY_VIEW_MIR" \
   ' = dup %[0-9]+' \
@@ -1163,7 +1205,7 @@ assert_contains "$LLVM_IR" 'call void @__ylc_drop[_A-Za-z0-9]*\(ptr' "MIR drop m
 assert_contains "$LLVM_IR" 'declare void @__ylc_dup\(ptr' "__ylc_dup hook should be declared"
 assert_contains "$LLVM_IR" 'define void @__ylc_drop[_A-Za-z0-9]*\(ptr' "type-specialized __ylc_drop functions should be defined"
 assert_contains "$COROUTINE_LLVM_IR" 'define .*@coroutine_returned' "coroutine escape fixture should lower to LLVM"
-assert_contains "$COROUTINE_LLVM_IR" 'call void @__ylc_dup\(ptr' "coroutine Perceus dup markers should lower to __ylc_dup calls"
+assert_contains "$COROUTINE_LLVM_IR" '^declare void @__ylc_dup\(ptr' "coroutine LLVM should keep the shared __ylc_dup declaration available"
 assert_contains "$COROUTINE_LLVM_IR" 'call void @__ylc_drop[_A-Za-z0-9]*\(ptr' "coroutine Perceus drop markers should lower to __ylc_drop calls"
 assert_contains "$LLVM_IR" '^%YlcRcHeader = type \{ i32, i32 \}' "MIR heap-managed payloads should declare an RC header layout"
 assert_order "$LLVM_IR" "heap array literal should allocate header plus payload and initialize RC header" \
@@ -1312,14 +1354,11 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "variant record payload arm should low
   'define i32 @variant_record_payload_match' \
   'call void @__ylc_dup\(ptr' \
   'call i32 @consume_array\.Array_Int\.Int'
-assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "literal-pattern failure should lower retry-edge drop after the failed compare" \
+assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "literal-pattern failure should retry without lowering a payload probe drop" \
   'define i32 @variant_tuple_literal_failure_match' \
-  'call void @__ylc_dup\(ptr' \
   'icmp eq i32 %[A-Za-z0-9_.]+, 2' \
-  'br i1 %[A-Za-z0-9_.]+, label %match\.arm\.0\.body, label %perceus\.edge\.drop' \
-  '^perceus\.edge\.drop:' \
-  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr' \
-  'br label %match\.arm\.1\.test'
+  'br i1 %[A-Za-z0-9_.]+, label %match\.arm\.0\.body, label %match\.arm\.1\.test' \
+  '^match\.arm\.1\.test:'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "array-pattern fallback should lower second length test before one-element payload consume" \
   'define i32 @array_pattern_failure_then_payload_match' \
   'extractvalue \{ i32, i32, ptr \} %array\.data, 0' \
@@ -1359,6 +1398,10 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "variant first-field failure should co
   'extractvalue \{ i32, \{ i32, i32, ptr \} \} %extract\.field, 0' \
   'icmp eq i32 %extract\.field[0-9]+, 2' \
   'br i1 %eq, label %match\.tuple\.[0-9]+\.1, label %match\.arm\.1\.test' \
+  '^match\.tuple\.[0-9]+\.1:'
+assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "variant first-field success should extract and retain the managed payload field" \
+  'define i32 @variant_first_field_failure_payload_match' \
+  '^match\.tuple\.[0-9]+\.1:' \
   'extractvalue \{ i32, \{ i32, i32, ptr \} \} %extract\.field, 1' \
   'call void @__ylc_dup\(ptr'
 assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "heap array pattern failure should lower retry-edge drop after failed length tests" \
@@ -1370,13 +1413,12 @@ assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "heap array pattern failure should low
   'br i1 %eq[0-9]*, label %match\.array\.bb5, label %perceus\.edge\.drop' \
   '^perceus\.edge\.drop:' \
   'call void @__ylc_drop[_A-Za-z0-9]*\(ptr'
-assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "heap list pattern failure should lower tail dup and retry-edge drop" \
+assert_order "$MATCH_DESTRUCTURE_LLVM_IR" "heap list pattern failure should lower retry-edge scrutinee drops" \
   'define i32 @heap_list_pattern_failure_then_payload_match' \
   'load ptr, ptr %list\.tail\.ptr[0-9]*' \
-  'call void @__ylc_dup\(ptr %list\.tail[0-9]*\)' \
   'icmp eq ptr %list\.tail[0-9]*, null' \
   '^perceus\.edge\.drop[0-9]*:' \
-  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr %list\.tail[0-9]*\)'
+  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr %call\)'
 assert_contains "$RECURSIVE_DESTRUCTURE_LLVM_IR" '^%DirectNode = type \{ i32, ptr \}' "recursive list record should lower to named LLVM struct"
 assert_contains "$RECURSIVE_DESTRUCTURE_LLVM_IR" '^%DirectArrayNode = type \{ i32, \{ i32, i32, ptr \} \}' "recursive array record should lower to named LLVM struct"
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive list constructor should lower to list node stores and record insertvalue" \
@@ -1395,11 +1437,10 @@ assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive array constructor shoul
   'store %DirectArrayNode %[A-Za-z0-9_]+, ptr %array\.item\.ptr' \
   'store %DirectArrayNode %[A-Za-z0-9_]+, ptr %array\.item\.ptr' \
   'insertvalue %DirectArrayNode \{ i32 3, \{ i32, i32, ptr \} undef \}, \{ i32, i32, ptr \} %array\.data, 1'
-assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive list match should lower list head loads and RC edge drops" \
+assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive list match should lower list head loads and owning-record edge drops" \
   'define i32 @direct_recursive_record_list_match' \
   'extractvalue %DirectNode %[A-Za-z0-9_.]+, 1' \
   'load %DirectNode, ptr %list\.head\.ptr' \
-  'call void @__ylc_dup\(ptr %list\.tail' \
   'perceus\.edge\.drop:' \
   'call void @__ylc_drop[_A-Za-z0-9]*\(ptr'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "recursive array match should lower element loads and RC edge drop" \
@@ -1413,37 +1454,99 @@ assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum constructor should 
   'define \{ i32, i32, ptr \} @tensor_add' \
   'insertvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} undef' \
   'insertvalue \{ \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} \} undef' \
-  'insertvalue \{ i8, \[32 x i8\] \} \{ i8 1, \[32 x i8\] undef \}' \
-  'store \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i8, \[32 x i8\] \} \}'
+  'store \[4 x i64\] zeroinitializer' \
+  'insertvalue \{ i8, \[4 x i64\] \} \{ i8 1, \[4 x i64\] undef \}' \
+  'store \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i8, \[4 x i64\] \} \}'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef op projection should lower array load and op extractvalue" \
-  'define \{ i8, \[32 x i8\] \} @tensor_op' \
-  'load \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i8, \[32 x i8\] \} \}' \
-  'extractvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i8, \[32 x i8\] \} \} %ptr\.load, 3'
-assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum match should lower array_size uses and drop duplicated payloads" \
+  'define \{ i8, \[4 x i64\] \} @tensor_op' \
+  'load \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i8, \[4 x i64\] \} \}' \
+  'extractvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i8, \[4 x i64\] \} \} %ptr\.load, 3'
+assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum match should lower array_size uses and drop duplicated payload aggregate" \
   'define i32 @tensor_op_add_payload_match' \
   '^match\.arm\.0\.body:' \
   'extractvalue \{ i32, i32, ptr \} %extract\.field[0-9]+, 0' \
   'extractvalue \{ i32, i32, ptr \} %extract\.field[0-9]+, 0' \
   'add i32' \
   'call void @__ylc_drop[_A-Za-z0-9]*\(ptr' \
-  'call void @__ylc_drop[_A-Za-z0-9]*\(ptr' \
   'br label %match\.cont'
-assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum match should lower payload unpack and RC dup" \
+assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum match should lower payload unpack with aligned storage" \
   'define i32 @tensor_op_add_payload_match' \
-  'extractvalue \{ i8, \[32 x i8\] \} %call[0-9]*, 1' \
+  'extractvalue \{ i8, \[4 x i64\] \} %call[0-9]*, 1' \
+  'alloca \[4 x i64\], align 8' \
   'load \{ \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} \}, ptr %union_cast_temp' \
   'extractvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} %extract\.field, 0' \
-  'call void @__ylc_dup\(ptr' \
-  'extractvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} %extract\.field, 1' \
-  'call void @__ylc_dup\(ptr'
+  'extractvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} %extract\.field, 1'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum consuming arm should lower owned consume call" \
   'define i32 @tensor_op_add_payload_consume' \
   '^match\.arm\.0\.body:' \
   'call i32 @consume_tensor.*\(\{ i32, i32, ptr \} %extract\.field[0-9]+\)'
 assert_order "$RECURSIVE_DESTRUCTURE_LLVM_IR" "TensorRef sum consuming arm should lower RC dup for selected payload" \
   'define i32 @tensor_op_add_payload_consume' \
-  'extractvalue \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \} \} %extract\.field, 0' \
+  '^match\.arm\.0\.body:' \
   'call void @__ylc_dup\(ptr'
+
+section "Perceus recursive aggregate regression"
+if [ "$PERCEUS_RECURSIVE_TENSOR_STATUS" -eq 0 ]; then
+  pass "autograd3 linear recursive TensorNode repro should execute without allocator corruption"
+else
+  fail "autograd3 linear recursive TensorNode repro should execute without allocator corruption"
+fi
+assert_contains "$PERCEUS_RECURSIVE_TENSOR_LLVM_IR" '^%TensorNode = type \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, ptr, ptr, \{ i32, i32, ptr \}, i32, i32 \}' "autograd3 TensorNode should lower as a recursive aggregate with managed fields"
+assert_order "$PERCEUS_RECURSIVE_TENSOR_LLVM_IR" "autograd3 TensorAdd should dup recursive aggregate fields before building the result node" \
+  'define %TensorNode @autograd3\.TensorAdd\.tensor_add\(%TensorNode %a, %TensorNode %b\)' \
+  'call void @__ylc_dup\(ptr' \
+  'call void @__ylc_dup\(ptr' \
+  'call \{ i32, i32, ptr \} @autograd3\.TensorAdd\.tensor_add_data\(%TensorNode %a, %TensorNode %b\)' \
+  'call void @__ylc_dup\(ptr' \
+  'call void @__ylc_dup\(ptr'
+assert_order "$PERCEUS_RECURSIVE_TENSOR_LLVM_IR" "Array TensorNode drop should deep-drop each TensorNode element" \
+  '^define void @__ylc_drop_Array_TensorNode\(ptr %0\)' \
+  'getelementptr %TensorNode, ptr %0' \
+  'load %TensorNode, ptr %drop\.arr\.elem\.ptr' \
+  'call void @__ylc_drop_Array_Int\(ptr' \
+  'call void @__ylc_drop_Array_Double\(ptr' \
+  'call void @__ylc_drop_Array_Double\(ptr' \
+  'getelementptr %TensorNode, ptr %rc\.array\.data[0-9]*, i32 %rc\.array\.base\.offset[0-9]*' \
+  'call void @__ylc_drop_Array_TensorNode\(ptr %rc\.array\.base[0-9]*\)'
+
+section "Perceus red-black tree regression"
+if [ "$RBTREE_TEST_STATUS" -eq 0 ]; then
+  pass "red-black tree script should pass in MIR --test mode"
+else
+  fail "red-black tree script should pass in MIR --test mode"
+fi
+assert_contains "$RBTREE_TEST_OUT" 'test_left_left_rebalance' "red-black test mode should report left-left rebalance"
+assert_contains "$RBTREE_TEST_OUT" 'test_lookup_after_insert_and_update' "red-black test mode should report lookup/update"
+assert_contains "$RBTREE_TEST_OUT" 'test_right_left_rebalance' "red-black test mode should report right-left rebalance"
+assert_contains "$RBTREE_TEST_OUT" 'test_many_inserts_keep_size_and_black_root' "red-black test mode should report many-insert regression"
+assert_contains "$RBTREE_TEST_OUT" '4 / 4 passed' "red-black test mode should pass all tests"
+assert_order "$RBTREE_TEST_MIR" "red-black balance should dispatch both black and red nodes" \
+  '^fn rb_balance\(' \
+  'tag_eq %[0-9]+, RBBlack#1' \
+  'tag_eq %[0-9]+, RBRed#0' \
+  'fn_ref \$rb_node'
+assert_order "$RBTREE_TEST_MIR" "red-black left fallback should retain children before dropping old parent" \
+  '^fn rb_balance_left\(' \
+  'fn_ref \$rb_balance_left_inner' \
+  ' = dup %[0-9]+' \
+  ' = dup %[0-9]+' \
+  'call %[0-9]+\(.*\).*Array of RBTreeNode' \
+  ' = drop %0'
+assert_order "$RBTREE_TEST_MIR" "red-black insert should retain reused subtrees before dropping old tree" \
+  '^fn rb_ins\(' \
+  ' = dup %[0-9]+' \
+  ' = dup %[0-9]+' \
+  ' = drop %0'
+assert_contains "$RBTREE_TEST_LLVM_IR" '\{ i8, \[6 x i64\] \}' "RBTreeNode should use word-aligned union storage"
+assert_not_contains "$RBTREE_TEST_LLVM_IR" '\{ i8, \[48 x i8\] \}' "RBTreeNode should not use byte-strided union storage"
+assert_order "$RBTREE_TEST_LLVM_IR" "RBTree drop should walk aligned RBTreeNode elements and deep-drop subtrees" \
+  '^define void @__ylc_drop_RBTree\(ptr %0\)' \
+  'getelementptr \{ i8, \[6 x i64\] \}, ptr %0' \
+  'load \{ i8, \[6 x i64\] \}, ptr %drop\.arr\.elem\.ptr' \
+  'extractvalue \{ i8, \[6 x i64\] \} %drop\.arr\.elem, 1' \
+  'call void @__ylc_drop_RBTree'
+assert_contains "$RBTREE_TEST_LLVM_IR" '^define void @__ylc_drop_RBTree\(ptr %0\)' "RBTree alias should get the canonical recursive drop helper"
+assert_not_contains "$RBTREE_TEST_LLVM_IR" '__ylc_drop_Array_RBTreeNode' "RBTree recursive drops should not be lowered through stale expanded aliases"
 
 section "MIR test mode"
 if [ "$FIB_TEST_STATUS" -eq 0 ]; then

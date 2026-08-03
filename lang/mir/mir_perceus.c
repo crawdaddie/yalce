@@ -1,6 +1,7 @@
 #include "./mir.h"
 #include "escape_analysis.h"
 #include "types/builtins.h"
+#include "types/inference.h"
 #include "types/type.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -51,6 +52,8 @@ typedef struct {
   bool *edge_use_out; /* per-block: values used by a phi in a successor */
   MirValueId *borrow_parent; /* value -> the container it borrows from */
 } MirPerceusLiveness;
+
+static TypeEnv *mir_perceus_type_env = NULL;
 
 static bool mir_perceus_value_in_range(MirFunction *fn, MirValueId value,
                                        size_t limit) {
@@ -120,13 +123,50 @@ static size_t mir_perceus_term_successors(MirTerminator *term,
   }
 }
 
-/* A type is RC-managed if it is a heap-allocated container (array, list,
-   string, closure, coroutine). The lowering gives these an RC header and
-   type-specialized drop functions. */
+static Type *mir_perceus_resolve_type(Type *type) {
+  if (!type || !mir_perceus_type_env) {
+    return type;
+  }
+  return resolve_type_in_env(deep_copy_type(type), mir_perceus_type_env);
+}
+
+/* A type needs ownership tracking if it is an RC container itself, or if it is
+   an aggregate value containing RC-managed fields. Aggregates do not have their
+   own RC header, but copying/dropping them must recursively dup/drop fields. */
+static bool mir_perceus_is_managed_type_depth(Type *type, int depth) {
+  if (!type || depth > 16) {
+    return false;
+  }
+
+  if (is_array_type(type) || is_list_type(type) || is_string_type(type) ||
+      is_closure(type) || is_coroutine_type(type)) {
+    return true;
+  }
+
+  if (type->kind == T_CONS && is_pointer_type(type)) {
+    return false;
+  }
+
+  if (type->kind == T_RECURSIVE_REF && type->data.T_RECURSIVE_REF.decl &&
+      type->data.T_RECURSIVE_REF.decl->type) {
+    return mir_perceus_is_managed_type_depth(
+        type->data.T_RECURSIVE_REF.decl->type, depth + 1);
+  }
+
+  if ((type->kind == T_CONS || type->kind == T_SUM) && type->data.T_CONS.args) {
+    for (int i = 0; i < type->data.T_CONS.num_args; i++) {
+      if (mir_perceus_is_managed_type_depth(type->data.T_CONS.args[i],
+                                            depth + 1)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 static bool mir_perceus_is_managed_type(Type *type) {
-  return type &&
-         (is_array_type(type) || is_list_type(type) || is_string_type(type) ||
-          is_closure(type) || is_coroutine_type(type));
+  return mir_perceus_is_managed_type_depth(mir_perceus_resolve_type(type), 0);
 }
 
 /* Escape-analysis classification: a value allocated on the stack has an rc=0
@@ -141,13 +181,32 @@ static bool mir_perceus_is_heap_alloc(MirFunction *fn, MirValueId value) {
   return meta && meta->status == EA_HEAP_ALLOC;
 }
 
+static bool mir_perceus_is_const_value(MirFunction *fn, MirValueId value) {
+  MirInstr *def = mir_function_find_def_instr(fn, value);
+  return def && def->kind == MIR_CONST;
+}
+
+static bool mir_perceus_is_load_value(MirFunction *fn, MirValueId value) {
+  MirInstr *def = mir_function_find_def_instr(fn, value);
+  return def && def->kind == MIR_OP && def->data.op.kind == MIR_OP_KIND_LOAD;
+}
+
+static bool mir_perceus_value_type_is_managed(MirFunction *fn,
+                                              MirValueId value,
+                                              size_t value_limit) {
+  return mir_perceus_value_in_range(fn, value, value_limit) &&
+         !mir_perceus_is_const_value(fn, value) &&
+         mir_perceus_is_managed_type(mir_function_value_type(fn, value));
+}
+
 /* Does this value need RC instrumentation? Stack-allocated values are
    excluded. Heap-allocated values are included. Values with no escape metadata
    are included iff their type is managed (the conservative default). */
 static bool mir_perceus_manages_value(MirFunction *fn, MirValueId value,
                                       size_t value_limit) {
   if (!mir_perceus_value_in_range(fn, value, value_limit) ||
-      mir_perceus_is_stack_alloc(fn, value)) {
+      mir_perceus_is_stack_alloc(fn, value) ||
+      mir_perceus_is_const_value(fn, value)) {
     return false;
   }
 
@@ -181,6 +240,15 @@ mir_perceus_has_stack_borrow_parent(MirFunction *fn, MirValueId value,
   return false;
 }
 
+static bool mir_perceus_has_borrow_parent(MirValueId value, size_t value_limit,
+                                          const MirValueId *borrow_parent) {
+  if (!borrow_parent || value == MIR_NO_VALUE || value >= value_limit) {
+    return false;
+  }
+  MirValueId parent = borrow_parent[value];
+  return parent != MIR_NO_VALUE && parent < value_limit;
+}
+
 /* Like manages_value, but also rejects values that borrow from a stack
    container (the whole borrow chain shares the stack container's lifetime). */
 static bool
@@ -200,7 +268,17 @@ mir_perceus_manages_value_with_borrow_parent(MirFunction *fn, MirValueId value,
 static bool
 mir_perceus_value_may_own_with_borrow_parent(MirFunction *fn, MirValueId value,
                                              size_t value_limit,
-                                             const MirValueId *borrow_parent) {
+                                             const MirValueId *borrow_parent,
+                                             const bool *owned_copy) {
+  bool explicit_owned_copy =
+      owned_copy && value != MIR_NO_VALUE && value < value_limit &&
+      owned_copy[value];
+
+  if (!explicit_owned_copy &&
+      mir_perceus_has_borrow_parent(value, value_limit, borrow_parent)) {
+    return false;
+  }
+
   if (!mir_perceus_manages_value_with_borrow_parent(fn, value, value_limit,
                                                     borrow_parent)) {
     return false;
@@ -218,9 +296,10 @@ mir_perceus_value_may_own_with_borrow_parent(MirFunction *fn, MirValueId value,
 
 /* Maps an instruction's result to the container it borrows from. An extraction
    (field/array_at/list_head/list_tail) borrows from its source; a load, an
-   array_set, and a ptr_offset borrow from their base pointer; a multi-element
-   array-tuple construct borrows from its last item. This chain keeps borrowed
-   containers alive across the borrowed result's uses. */
+   array_set, and a ptr_offset borrow from their base pointer; a global_load
+   borrows from durable global storage; a multi-element array-tuple construct
+   borrows from its last item. This chain keeps borrowed containers alive
+   across the borrowed result's uses. */
 static MirValueId mir_perceus_borrow_parent_for_instr(MirInstr *instr) {
   if (!instr) {
     return MIR_NO_VALUE;
@@ -244,6 +323,8 @@ static MirValueId mir_perceus_borrow_parent_for_instr(MirInstr *instr) {
     case MIR_OP_KIND_PTR_OFFSET:
     case MIR_OP_KIND_LOAD:
       return instr->data.op.operands[0];
+    case MIR_OP_KIND_GLOBAL_LOAD:
+      return MIR_NO_VALUE;
     default:
       return MIR_NO_VALUE;
     }
@@ -708,6 +789,7 @@ static MirValueId mir_perceus_emit_store_old_slot_load(MirFunction *fn,
 static void mir_perceus_process_use(MirFunction *fn, MirInstrVec *out,
                                     uint32_t *remaining, size_t value_limit,
                                     const MirValueId *borrow_parent,
+                                    const bool *owned_copy,
                                     const bool *live_out, bool *moved,
                                     MirValueIdVec *post_releases,
                                     MirValueId value, bool consumes,
@@ -716,12 +798,22 @@ static void mir_perceus_process_use(MirFunction *fn, MirInstrVec *out,
     return;
   }
 
+  bool type_managed =
+      mir_perceus_value_type_is_managed(fn, value, value_limit);
   bool managed = mir_perceus_manages_value_with_borrow_parent(
       fn, value, value_limit, borrow_parent);
+  bool borrowed =
+      mir_perceus_has_borrow_parent(value, value_limit, borrow_parent);
+  bool loaded_borrow = mir_perceus_is_load_value(fn, value);
+  bool explicit_owned_copy =
+      owned_copy && value != MIR_NO_VALUE && value < value_limit &&
+      owned_copy[value];
   bool live_after_block =
       mir_perceus_set_contains(live_out, value_limit, value);
   bool has_future_use = remaining[value] > 1 || live_after_block;
-  if (managed && consumes && has_future_use) {
+  if ((managed && consumes && has_future_use) ||
+      (type_managed && consumes && borrowed && !explicit_owned_copy) ||
+      (consumes && loaded_borrow && !explicit_owned_copy)) {
     mir_perceus_emit_marker(fn, out, MIR_OP_KIND_DUP, value, origin);
   }
 
@@ -733,13 +825,15 @@ static void mir_perceus_process_use(MirFunction *fn, MirInstrVec *out,
      the callee (the call drops it on its side). The caller must not also drop
      it; mark it moved so dead-definition and entry-param drops skip it. A
      dup'd consume keeps the original ref, so it is not moved. */
-  if (managed && consumes && !has_future_use && moved) {
+  if (managed && consumes && !has_future_use &&
+      ((!borrowed && !loaded_borrow) || explicit_owned_copy) && moved) {
     moved[value] = true;
   }
 
   if (managed && !consumes && remaining[value] == 0 && !live_after_block &&
       mir_perceus_value_may_own_with_borrow_parent(fn, value, value_limit,
-                                                   borrow_parent)) {
+                                                   borrow_parent,
+                                                   owned_copy)) {
     mir_value_id_vec_push(fn->arena, post_releases, value);
     /* A post-release drop owns this value's last reference; mark it moved so
        the later dead-definition and unused-entry-param drops do not drop it
@@ -763,7 +857,8 @@ static bool mir_perceus_extraction_borrows_result(MirInstr *instr) {
     return instr->data.extract.kind != MIR_EXTRACT_VARIANT_TAG;
   case MIR_OP:
     return instr->data.op.kind == MIR_OP_KIND_ARRAY_SET ||
-           instr->data.op.kind == MIR_OP_KIND_LOAD;
+           instr->data.op.kind == MIR_OP_KIND_LOAD ||
+           instr->data.op.kind == MIR_OP_KIND_GLOBAL_LOAD;
   default:
     return false;
   }
@@ -776,6 +871,7 @@ typedef struct {
   size_t value_limit;
   const bool *live_out;
   const MirValueId *borrow_parent;
+  const bool *owned_copy;
   bool *moved;
   MirValueIdVec *post_releases;
 } MirPerceusProcessCtx;
@@ -793,9 +889,10 @@ static bool mir_perceus_process_operand(MirInstr *instr, MirOperand operand,
 
   mir_perceus_process_use(process_ctx->fn, process_ctx->out,
                           process_ctx->remaining, process_ctx->value_limit,
-                          process_ctx->borrow_parent, process_ctx->live_out,
-                          process_ctx->moved, process_ctx->post_releases,
-                          operand.value, operand.use == MIR_OPERAND_USE_CONSUME,
+                          process_ctx->borrow_parent, process_ctx->owned_copy,
+                          process_ctx->live_out, process_ctx->moved,
+                          process_ctx->post_releases, operand.value,
+                          operand.use == MIR_OPERAND_USE_CONSUME,
                           instr ? instr->origin : NULL);
 
   MirValueId value = operand.value;
@@ -809,9 +906,10 @@ static bool mir_perceus_process_operand(MirInstr *instr, MirOperand operand,
     }
     mir_perceus_process_use(process_ctx->fn, process_ctx->out,
                             process_ctx->remaining, process_ctx->value_limit,
-                            process_ctx->borrow_parent, process_ctx->live_out,
-                            process_ctx->moved, process_ctx->post_releases,
-                            parent, false, instr ? instr->origin : NULL);
+                            process_ctx->borrow_parent, process_ctx->owned_copy,
+                            process_ctx->live_out, process_ctx->moved,
+                            process_ctx->post_releases, parent, false,
+                            instr ? instr->origin : NULL);
     value = parent;
   }
   return true;
@@ -820,7 +918,7 @@ static bool mir_perceus_process_operand(MirInstr *instr, MirOperand operand,
 static void mir_perceus_process_instr_uses(
     MirFunction *fn, MirInstrVec *out, uint32_t *remaining, size_t value_limit,
     const bool *live_out, const MirValueId *borrow_parent, bool *moved,
-    MirValueIdVec *post_releases, MirInstr *instr) {
+    const bool *owned_copy, MirValueIdVec *post_releases, MirInstr *instr) {
   if (!fn || !out || !remaining || !instr) {
     return;
   }
@@ -835,6 +933,7 @@ static void mir_perceus_process_instr_uses(
       .value_limit = value_limit,
       .live_out = live_out,
       .borrow_parent = borrow_parent,
+      .owned_copy = owned_copy,
       .moved = moved,
       .post_releases = post_releases,
   };
@@ -862,13 +961,21 @@ static void mir_perceus_emit_post_releases(MirFunction *fn, MirInstrVec *out,
    while the borrowed copy stays alive. */
 static void mir_perceus_own_extracted_result(
     MirFunction *fn, MirInstrVec *out, MirInstr *instr, uint32_t *remaining,
-    size_t value_limit, const MirValueId *borrow_parent, const bool *live_out) {
+    size_t value_limit, const MirValueId *borrow_parent,
+    const bool *live_out, bool *owned_copy) {
   if (!instr || !mir_perceus_extraction_borrows_result(instr) ||
-      !mir_perceus_manages_value_with_borrow_parent(
-          fn, instr->result, value_limit, borrow_parent)) {
+      !mir_perceus_value_type_is_managed(fn, instr->result, value_limit)) {
     return;
   }
 
+  if (mir_perceus_has_stack_borrow_parent(fn, instr->result, value_limit,
+                                          borrow_parent)) {
+    return;
+  }
+  if (mir_perceus_has_borrow_parent(instr->result, value_limit,
+                                    borrow_parent)) {
+    return;
+  }
   if ((!remaining || remaining[instr->result] == 0) &&
       !mir_perceus_set_contains(live_out, value_limit, instr->result)) {
     return;
@@ -876,6 +983,10 @@ static void mir_perceus_own_extracted_result(
 
   mir_perceus_emit_marker(fn, out, MIR_OP_KIND_DUP, instr->result,
                           instr->origin);
+  if (owned_copy && instr->result != MIR_NO_VALUE &&
+      instr->result < value_limit) {
+    owned_copy[instr->result] = true;
+  }
 }
 
 /* Drop an owned definition whose result is dead (no remaining uses and not
@@ -886,14 +997,18 @@ static void mir_perceus_own_extracted_result(
 static void mir_perceus_drop_dead_definition(
     MirFunction *fn, MirInstrVec *out, MirInstr *instr, uint32_t *remaining,
     size_t value_limit, const MirValueId *borrow_parent, const bool *live_out,
-    const bool *moved) {
-  if (!instr || mir_perceus_extraction_borrows_result(instr) ||
+    const bool *moved, const bool *owned_copy) {
+  bool explicit_owned_copy =
+      instr && owned_copy && instr->result != MIR_NO_VALUE &&
+      instr->result < value_limit && owned_copy[instr->result];
+  if (!instr ||
+      (mir_perceus_extraction_borrows_result(instr) && !explicit_owned_copy) ||
       !mir_perceus_value_in_range(fn, instr->result, value_limit) ||
       !remaining || remaining[instr->result] > 0 ||
       mir_perceus_set_contains(live_out, value_limit, instr->result) ||
       (moved && moved[instr->result]) ||
       !mir_perceus_value_may_own_with_borrow_parent(
-          fn, instr->result, value_limit, borrow_parent)) {
+          fn, instr->result, value_limit, borrow_parent, owned_copy)) {
     return;
   }
 
@@ -908,7 +1023,7 @@ static void mir_perceus_drop_dead_definition(
 static void mir_perceus_drop_unused_entry_params(
     MirFunction *fn, MirBlock *block, MirInstrVec *out, uint32_t *remaining,
     size_t value_limit, const MirValueId *borrow_parent, const bool *live_out,
-    const bool *moved) {
+    const bool *moved, const bool *owned_copy) {
   if (!fn || !block || block->id != 0 || !out || !remaining) {
     return;
   }
@@ -920,7 +1035,7 @@ static void mir_perceus_drop_unused_entry_params(
         mir_perceus_set_contains(live_out, value_limit, param->value) ||
         (moved && moved[param->value]) ||
         !mir_perceus_value_may_own_with_borrow_parent(
-            fn, param->value, value_limit, borrow_parent)) {
+            fn, param->value, value_limit, borrow_parent, owned_copy)) {
       continue;
     }
     mir_perceus_emit_marker(fn, out, MIR_OP_KIND_DROP, param->value,
@@ -977,9 +1092,15 @@ static bool mir_perceus_edge_value_used_by_phi(
    Returns the new block id (or succ unchanged if nothing to drop). */
 static MirBlockId
 mir_perceus_split_edge_with_drops(MirFunction *fn, MirPerceusLiveness *liveness,
-                                  MirBlockId pred, MirBlockId succ) {
+                                  const bool *owned_copy, MirBlockId pred,
+                                  MirBlockId succ) {
   if (!fn || !liveness || pred == MIR_NO_BLOCK || succ == MIR_NO_BLOCK ||
       pred >= liveness->block_count || succ >= liveness->block_count) {
+    return succ;
+  }
+
+  MirBlock *succ_block = fn->blocks.items ? fn->blocks.items[succ] : NULL;
+  if (succ_block && succ_block->term.kind == MIR_TERM_UNREACHABLE) {
     return succ;
   }
 
@@ -998,7 +1119,8 @@ mir_perceus_split_edge_with_drops(MirFunction *fn, MirPerceusLiveness *liveness,
                                            liveness->value_count,
                                            liveness->borrow_parent) ||
         !mir_perceus_value_may_own_with_borrow_parent(
-            fn, value, liveness->value_count, liveness->borrow_parent)) {
+            fn, value, liveness->value_count, liveness->borrow_parent,
+            owned_copy)) {
       continue;
     }
     mir_value_id_vec_push(fn->arena, &drops, value);
@@ -1034,6 +1156,7 @@ mir_perceus_split_edge_with_drops(MirFunction *fn, MirPerceusLiveness *liveness,
    (a path-insensitive drop, incorrect for one arm). */
 static void mir_perceus_insert_edge_drops(MirFunction *fn,
                                           MirPerceusLiveness *liveness,
+                                          const bool *owned_copy,
                                           MirBlock *block) {
   if (!fn || !liveness || !block || block->id >= liveness->block_count ||
       block->term.kind != MIR_TERM_COND) {
@@ -1041,9 +1164,9 @@ static void mir_perceus_insert_edge_drops(MirFunction *fn,
   }
 
   block->term.then_block = mir_perceus_split_edge_with_drops(
-      fn, liveness, block->id, block->term.then_block);
+      fn, liveness, owned_copy, block->id, block->term.then_block);
   block->term.else_block = mir_perceus_split_edge_with_drops(
-      fn, liveness, block->id, block->term.else_block);
+      fn, liveness, owned_copy, block->id, block->term.else_block);
 }
 
 static void mir_perceus_process_term_uses(MirFunction *fn, MirInstrVec *out,
@@ -1051,6 +1174,7 @@ static void mir_perceus_process_term_uses(MirFunction *fn, MirInstrVec *out,
                                           size_t value_limit,
                                           const bool *live_out,
                                           const MirValueId *borrow_parent,
+                                          const bool *owned_copy,
                                           bool *moved, MirTerminator *term) {
   MirValueIdVec post_releases = {0};
   MirPerceusProcessCtx ctx = {
@@ -1060,6 +1184,7 @@ static void mir_perceus_process_term_uses(MirFunction *fn, MirInstrVec *out,
       .value_limit = value_limit,
       .live_out = live_out,
       .borrow_parent = borrow_parent,
+      .owned_copy = owned_copy,
       .moved = moved,
       .post_releases = &post_releases,
   };
@@ -1107,6 +1232,11 @@ static void mir_perceus_instrument_function(MirFunction *fn) {
   if (!mir_perceus_liveness_init(fn, &liveness, original_values_len)) {
     return;
   }
+  bool *owned_copy = calloc(original_values_len, sizeof(bool));
+  if (!owned_copy) {
+    mir_perceus_liveness_destroy(&liveness);
+    return;
+  }
 
   for (size_t i = 0; i < original_blocks_len; i++) {
     MirBlock *block = fn->blocks.items[i];
@@ -1147,7 +1277,7 @@ static void mir_perceus_instrument_function(MirFunction *fn) {
       MirValueIdVec post_releases = {0};
       mir_perceus_process_instr_uses(
           fn, &block->instrs, remaining, original_values_len, live_out,
-          liveness.borrow_parent, moved, &post_releases, instr);
+          liveness.borrow_parent, moved, owned_copy, &post_releases, instr);
       MirValueId old_array_slot =
           mir_perceus_emit_array_set_old_slot_load(fn, &block->instrs, instr);
       MirValueId old_store_slot =
@@ -1155,10 +1285,12 @@ static void mir_perceus_instrument_function(MirFunction *fn) {
       mir_instr_vec_push(fn->arena, &block->instrs, *instr);
       mir_perceus_own_extracted_result(fn, &block->instrs, instr, remaining,
                                        original_values_len,
-                                       liveness.borrow_parent, live_out);
+                                       liveness.borrow_parent, live_out,
+                                       owned_copy);
       mir_perceus_drop_dead_definition(fn, &block->instrs, instr, remaining,
                                        original_values_len,
-                                       liveness.borrow_parent, live_out, moved);
+                                       liveness.borrow_parent, live_out, moved,
+                                       owned_copy);
       mir_perceus_emit_marker(fn, &block->instrs, MIR_OP_KIND_DROP,
                               old_array_slot, instr->origin);
       mir_perceus_emit_marker(fn, &block->instrs, MIR_OP_KIND_DROP,
@@ -1169,15 +1301,17 @@ static void mir_perceus_instrument_function(MirFunction *fn) {
 
     mir_perceus_drop_unused_entry_params(
         fn, block, &block->instrs, remaining, original_values_len,
-        liveness.borrow_parent, live_out, moved);
+        liveness.borrow_parent, live_out, moved, owned_copy);
     mir_perceus_process_term_uses(fn, &block->instrs, remaining,
                                   original_values_len, live_out,
-                                  liveness.borrow_parent, moved, &block->term);
-    mir_perceus_insert_edge_drops(fn, &liveness, block);
+                                  liveness.borrow_parent, owned_copy, moved,
+                                  &block->term);
+    mir_perceus_insert_edge_drops(fn, &liveness, owned_copy, block);
     free(remaining);
     free(moved);
   }
 
+  free(owned_copy);
   mir_perceus_liveness_destroy(&liveness);
   mir_perceus_pair_reuse(fn);
 }
@@ -1335,7 +1469,9 @@ void mir_perceus_instrumentation(MirProgram *program) {
     return;
   }
 
+  mir_perceus_type_env = program->type_env;
   for (size_t i = 0; i < program->functions.len; i++) {
     mir_perceus_instrument_function(program->functions.items[i]);
   }
+  mir_perceus_type_env = NULL;
 }

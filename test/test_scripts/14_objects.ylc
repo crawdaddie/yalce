@@ -19,6 +19,28 @@ type DirectArrayNode = (
   kids: Array of DirectArrayNode
 );
 
+type ManagedArrayNode = (
+  value: Int,
+  weights: Array of Double,
+  kids: Array of ManagedArrayNode
+);
+
+type ManagedArrayNodeRef = Array of ManagedArrayNode;
+
+type ManagedTreeRef = Array of ManagedTreeNode;
+
+type ManagedTreeOp =
+  | ManagedTreeLeaf
+  | ManagedTreeJoin of (ManagedTreeRef, ManagedTreeRef)
+;
+
+type ManagedTreeNode = (
+  value: Int,
+  weights: Array of Double,
+  kids: ManagedTreeRef,
+  op: ManagedTreeOp
+);
+
 type TensOp =
   | TensOpLeaf
   | TensOpAdd of (TensorRef, TensorRef)
@@ -51,6 +73,22 @@ let direct_array_leaf = fn value ->
 
 let direct_array_pair = fn a b ->
   DirectArrayNode 3 [| a, b |]
+;;
+
+let managed_array_leaf = fn value ->
+  ManagedArrayNode value [| 1., 2. |] [| |]
+;;
+
+let managed_array_pair = fn a b ->
+  ManagedArrayNode 3 [| 3., 4. |] [| a, b |]
+;;
+
+let managed_tree_leaf = fn value ->
+  ManagedTreeNode value [| 1. |] [| |] ManagedTreeLeaf
+;;
+
+let managed_tree_join = fn left right ->
+  ManagedTreeNode 9 [| 9. |] [| left, right |] (ManagedTreeJoin ([| left |], [| right |]))
 ;;
 
 let test = module () ->
@@ -96,6 +134,37 @@ let test = module () ->
     let p = direct_array_pair a b;
     match p.kids with
     | [| x, y |] -> x.value == 1 && y.value == 2
+    | _ -> false
+  ;;
+
+  let test_recursive_managed_array_aggregate_pattern = fn () ->
+    let a = managed_array_leaf 1;
+    let b = managed_array_leaf 2;
+    let p = managed_array_pair a b;
+    match p.kids with
+    | [| x, y |] ->
+      x.value == 1 &&
+      y.value == 2 &&
+      array_size x.weights == 2 &&
+      array_size y.weights == 2
+    | _ -> false
+  ;;
+
+  let test_recursive_managed_array_aggregate_drop = fn () ->
+    let a = managed_array_leaf 1;
+    let b = managed_array_leaf 2;
+    let roots = [| managed_array_pair a b, managed_array_pair b a |];
+    array_size roots == 2
+  ;;
+
+  let test_recursive_sum_aggregate_payload = fn () ->
+    let left = managed_tree_leaf 1;
+    let right = managed_tree_leaf 2;
+    let joined = managed_tree_join left right;
+    match joined.op with
+    | ManagedTreeJoin (ls, rs) ->
+      array_size ls == 1 &&
+      array_size rs == 1
     | _ -> false
   ;;
 

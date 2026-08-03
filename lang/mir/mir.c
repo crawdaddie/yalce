@@ -1126,9 +1126,22 @@ static bool mir_function_add_extern_params(MirFunction *fn, Type *type,
   return true;
 }
 
+MirFunction *mir_program_add_extern_function_arena(MirProgram *program,
+                                                  const char *name, Type *type,
+                                                  Ast *origin,
+                                                  MirArena *alloc_arena);
+
 MirFunction *mir_program_add_extern_function(MirProgram *program,
-                                             const char *name, Type *type,
-                                             Ast *origin) {
+                                              const char *name, Type *type,
+                                              Ast *origin) {
+  return mir_program_add_extern_function_arena(program, name, type, origin,
+                                               NULL);
+}
+
+MirFunction *mir_program_add_extern_function_arena(MirProgram *program,
+                                                  const char *name, Type *type,
+                                                  Ast *origin,
+                                                  MirArena *alloc_arena) {
   if (!program || !name || !type) {
     return NULL;
   }
@@ -1139,7 +1152,8 @@ MirFunction *mir_program_add_extern_function(MirProgram *program,
     return existing;
   }
 
-  MirFunction *fn = mir_program_add_function(program, name, type, origin);
+  MirFunction *fn = mir_program_add_function_arena(program, name, type, origin,
+                                                   alloc_arena);
   if (!fn) {
     return NULL;
   }
@@ -1557,7 +1571,8 @@ static MirOperandUse mir_op_operand_use(const MirInstr *instr, size_t index) {
   }
 
   return ((instr->data.op.kind == MIR_OP_KIND_ARRAY_SET && index == 2) ||
-          (instr->data.op.kind == MIR_OP_KIND_STORE && index == 1))
+          (instr->data.op.kind == MIR_OP_KIND_STORE && index == 1) ||
+          (instr->data.op.kind == MIR_OP_KIND_GLOBAL_STORE && index == 0))
              ? MIR_OPERAND_USE_CONSUME
              : MIR_OPERAND_USE_BORROW;
 }
@@ -5356,7 +5371,7 @@ static bool mir_export_fn_ref_binding(MirBuilder *builder, MirCtx *ctx,
   }
 
   MirSymbol *symbol = mir_symbol_new(
-      builder->program->arena,
+      mir_scope_arena(ctx),
       is_extern ? MIR_SYMBOL_EXTERN_FUNCTION : MIR_SYMBOL_FUNCTION,
       target->type, binding, ctx->current_module);
   if (!symbol) {
@@ -5523,7 +5538,7 @@ static MirValueId mir_lambda_value(MirBuilder *builder, Ast *expr, MirCtx *ctx,
 }
 
 static MirValueId mir_extern_fn_value(MirBuilder *builder, Ast *expr,
-                                      const char *fn_name) {
+                                      const char *fn_name, MirCtx *ctx) {
   if (!builder || !builder->program || !expr || expr->tag != AST_EXTERN_FN) {
     return MIR_NO_VALUE;
   }
@@ -5533,8 +5548,15 @@ static MirValueId mir_extern_fn_value(MirBuilder *builder, Ast *expr,
                            expr->data.AST_EXTERN_FN.fn_name, "<extern>");
   }
 
-  MirFunction *fn = mir_program_add_extern_function(builder->program, fn_name,
-                                                    expr->type, expr);
+  /* Top-level extern bindings must outlive the defining MirProgram so the
+     durable MIR_SYMBOL_EXTERN_FUNCTION (MirFunction *) stays valid across
+     REPL inputs (mir_register_durable_functions re-uses it). Allocate the
+     extern MirFunction from the persistent durable arena when present, like
+     top-level non-capturing lambdas (see mir_lambda_value). */
+  MirArena *durable = ctx ? mir_durable_arena(ctx) : NULL;
+  MirArena *alloc_arena = durable ? durable : builder->program->arena;
+  MirFunction *fn = mir_program_add_extern_function_arena(
+      builder->program, fn_name, expr->type, expr, alloc_arena);
   // TODO: When an inline extern function expression is used as a first-class
   // value and its signature contains ABI-sensitive view types (Array/String),
   // return an internal-ABI adapter wrapper instead of the raw extern fn_ref.
@@ -5959,7 +5981,7 @@ static MirValueId mir_let_value(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
     if (get_let_binding_name(ast, &name) == 0) {
       fn_name = mir_obj_name(builder->program->arena, name, "<extern>");
     }
-    return mir_extern_fn_value(builder, expr, fn_name);
+    return mir_extern_fn_value(builder, expr, fn_name, ctx);
   } else if (expr) {
     return mir_expr(builder, expr, ctx);
   }
@@ -7455,11 +7477,7 @@ static MirValueId mir_loop_range_expr(MirBuilder *builder, Ast *ast,
   mir_builder_set_br(builder, cond_block->id);
 
   mir_builder_position_at_end(builder, after_block);
-  Type *loop_type = ast->type ? ast->type : &t_int;
-  if (loop_type->kind == T_VOID) {
-    return mir_const_void(builder, loop_type, ast);
-  }
-  return mir_const_undef(builder, loop_type, ast);
+  return mir_const_void(builder, &t_void, ast);
 }
 
 static MirValueId mir_loop_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
@@ -7532,7 +7550,7 @@ MirValueId mir_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
   case AST_MODULE:
     return mir_const_void(builder, &t_void, ast);
   case AST_EXTERN_FN:
-    return mir_extern_fn_value(builder, ast, NULL);
+    return mir_extern_fn_value(builder, ast, NULL, ctx);
   case AST_YIELD: {
     return mir_yield_expr(builder, ast, ctx);
   }

@@ -1,5 +1,10 @@
 let Audio = extern fn (T: (Double ... -> Double)) -> T;
+
 let _ = dlopen "libs/audio_jit/libaudio_jit.so";
+
+let init_audio = extern fn () -> () in
+init_audio ();
+
 
 # Table-lookup sine oscillator. Arg: frequency in Hz.
 

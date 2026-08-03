@@ -888,3 +888,20 @@ __attribute__((always_inline)) double ylc_audio_rect_kernel(RectState *state,
   state->prev_trig = trig;
   return out;
 }
+
+__attribute__((always_inline)) double
+ylc_audio_sah_kernel(SahState *state, double spf, double sig, double trig) {
+  (void)spf;
+
+  if (audio_jit_rising_edge(trig, state->prev_trig)) {
+    state->value = sig;
+  }
+
+  if (!state->initialized) {
+    state->value = sig;
+  }
+
+  state->prev_trig = trig;
+  state->initialized = 1;
+  return state->value;
+}

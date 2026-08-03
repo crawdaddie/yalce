@@ -1,0 +1,166 @@
+type RBColor =
+  | RBRed
+  | RBBlack
+;
+
+type RBTree = Array of RBTreeNode;
+
+type RBTreeNode =
+  | RBLeaf
+  | RBNode of (RBColor, RBTree, Int, Bool, RBTree)
+;
+
+let rb_leaf = fn () ->
+  [| RBLeaf |]
+;;
+
+let rb_node = fn color: (RBColor) left: (RBTree) key: (Int) value: (Bool) right: (RBTree) ->
+  [| RBNode (color, left, key, value, right) |]
+;;
+
+let rb_is_red = fn t: (RBTree) ->
+  match t with
+  | [| RBNode (RBRed, _, _, _, _) |] -> true
+  | _ -> false
+;;
+
+let rb_balance_left_inner = fn left_left: (RBTree) yk: (Int) yv: (Bool) c: (RBTree) key: (Int) value: (Bool) right: (RBTree) ->
+  match c with
+  | [| RBNode (RBRed, b, yk2, yv2, c2) |] ->
+    rb_node RBRed (rb_node RBBlack left_left yk yv b) yk2 yv2 (rb_node RBBlack c2 key value right)
+  | _ -> rb_node RBBlack (rb_node RBRed left_left yk yv c) key value right
+;;
+
+let rb_balance_left = fn left: (RBTree) key: (Int) value: (Bool) right: (RBTree) ->
+  match left with
+  | [| RBNode (RBRed, left_left, yk, yv, c) |] ->
+    match left_left with
+    | [| RBNode (RBRed, a, xk, xv, b) |] ->
+      rb_node RBRed (rb_node RBBlack a xk xv b) yk yv (rb_node RBBlack c key value right)
+    | _ -> rb_balance_left_inner left_left yk yv c key value right
+  | _ -> rb_node RBBlack left key value right
+;;
+
+let rb_balance_right_inner = fn left: (RBTree) key: (Int) value: (Bool) b: (RBTree) yk: (Int) yv: (Bool) right_right: (RBTree) ->
+  match right_right with
+  | [| RBNode (RBRed, c, zk, zv, d) |] ->
+    rb_node RBRed (rb_node RBBlack left key value b) yk yv (rb_node RBBlack c zk zv d)
+  | _ -> rb_node RBBlack left key value (rb_node RBRed b yk yv right_right)
+;;
+
+let rb_balance_right = fn left: (RBTree) key: (Int) value: (Bool) right: (RBTree) ->
+  match right with
+  | [| RBNode (RBRed, b, yk, yv, right_right) |] ->
+    match b with
+    | [| RBNode (RBRed, b2, yk2, yv2, c) |] ->
+      rb_node RBRed (rb_node RBBlack left key value b2) yk2 yv2 (rb_node RBBlack c yk yv right_right)
+    | _ -> rb_balance_right_inner left key value b yk yv right_right
+  | _ -> rb_node RBBlack left key value right
+;;
+
+let rb_balance_black = fn left: (RBTree) key: (Int) value: (Bool) right: (RBTree) ->
+  match left with
+  | [| RBNode (RBRed, _, _, _, _) |] -> rb_balance_left left key value right
+  | _ -> rb_balance_right left key value right
+;;
+
+let rb_balance = fn color: (RBColor) left: (RBTree) key: (Int) value: (Bool) right: (RBTree) ->
+  match color with
+  | RBBlack -> rb_balance_black left key value right
+  | RBRed -> rb_node RBRed left key value right
+;;
+
+let rb_ins = fn t: (RBTree) key: (Int) value: (Bool) ->
+  match t with
+  | [| RBLeaf |] -> rb_node RBRed (rb_leaf ()) key value (rb_leaf ())
+  | [| RBNode (color, left, node_key, node_value, right) |] ->
+    if key < node_key then
+      rb_balance color (rb_ins left key value) node_key node_value right
+    else
+      if key == node_key then
+        rb_node color left key value right
+      else
+        rb_balance color left node_key node_value (rb_ins right key value)
+  | _ -> t
+;;
+
+let rb_set_black = fn t: (RBTree) ->
+  match t with
+  | [| RBNode (_, left, key, value, right) |] -> rb_node RBBlack left key value right
+  | _ -> t
+;;
+
+let rb_insert = fn t: (RBTree) key: (Int) value: (Bool) ->
+  rb_set_black (rb_ins t key value)
+;;
+
+let rb_size = fn t: (RBTree) ->
+  match t with
+  | [| RBLeaf |] -> 0
+  | [| RBNode (_, left, _, _, right) |] -> 1 + rb_size left + rb_size right
+  | _ -> 0
+;;
+
+let rb_get = fn t: (RBTree) key: (Int) ->
+  match t with
+  | [| RBLeaf |] -> None
+  | [| RBNode (_, left, node_key, node_value, right) |] ->
+    if key < node_key then
+      rb_get left key
+    else
+      if key == node_key then
+        Some node_value
+      else
+        rb_get right key
+  | _ -> None
+;;
+
+let test = module () ->
+  let test_left_left_rebalance = fn () ->
+    let t0 = rb_insert (rb_leaf ()) 3 true;
+    let t1 = rb_insert t0 2 false;
+    let t2 = rb_insert t1 1 true;
+    rb_size t2 == 3 &&
+    rb_is_red t2 == false &&
+    rb_get t2 1 == Some true &&
+    rb_get t2 2 == Some false &&
+    rb_get t2 3 == Some true
+  ;;
+
+  let test_lookup_after_insert_and_update = fn () ->
+    let t0 = rb_insert (rb_leaf ()) 2 true;
+    let t1 = rb_insert t0 1 false;
+    let t2 = rb_insert t1 3 true;
+    let t3 = rb_insert t2 2 false;
+    rb_get t3 1 == Some false &&
+    rb_get t3 2 == Some false &&
+    rb_get t3 3 == Some true &&
+    rb_get t3 4 == None
+  ;;
+
+  let test_right_left_rebalance = fn () ->
+    let t0 = rb_insert (rb_leaf ()) 1 false;
+    let t1 = rb_insert t0 3 true;
+    let t2 = rb_insert t1 2 false;
+    rb_size t2 == 3 &&
+    rb_is_red t2 == false &&
+    rb_get t2 1 == Some false &&
+    rb_get t2 2 == Some false &&
+    rb_get t2 3 == Some true
+  ;;
+
+  let test_many_inserts_keep_size_and_black_root = fn () ->
+    let t0 = rb_insert (rb_leaf ()) 4 true;
+    let t1 = rb_insert t0 2 true;
+    let t2 = rb_insert t1 6 false;
+    let t3 = rb_insert t2 1 false;
+    let t4 = rb_insert t3 3 true;
+    rb_size t4 == 5 &&
+    rb_is_red t4 == false &&
+    rb_get t4 1 == Some false &&
+    rb_get t4 2 == Some true &&
+    rb_get t4 3 == Some true &&
+    rb_get t4 4 == Some true &&
+    rb_get t4 6 == Some false
+  ;;
+;

@@ -111,4 +111,10 @@ typedef struct ArraySeqState {
   int32_t counter;
 } ArraySeqState;
 
+typedef struct SahState {
+  int initialized;
+  double prev_trig;
+  double value;
+} SahState;
+
 #endif

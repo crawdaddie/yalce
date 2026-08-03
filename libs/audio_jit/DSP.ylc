@@ -66,6 +66,8 @@ let kill_on_end = extern fn Double -> Double;
 let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
 # Rectangular gate envelope. Args: duration, trigger.
 let rect = extern fn Double -> Double -> Double;
+# Sample-and-hold. Args: signal, trigger.
+let sah = extern fn Double -> Double -> Double;
 
 # Delay line read/write kernel. Args: delay seconds, max delay, feedback, input.
 # Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
