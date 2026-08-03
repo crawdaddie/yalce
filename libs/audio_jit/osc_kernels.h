@@ -117,4 +117,9 @@ typedef struct SahState {
   double value;
 } SahState;
 
+/* pan: distribute a mono signal across N output channels (equal-power).
+   `out` is a buffer of `n` doubles written by the kernel. See
+   ylc_audio_pan_kernel in osc_kernels.c. */
+void ylc_audio_pan_kernel(double *out, int n, double pos, double signal);
+
 #endif

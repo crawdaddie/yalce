@@ -19,6 +19,82 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* ============================================================================
+ * Audio JIT lowering pipeline
+ * ----------------------------------------------------------------------------
+ * A user `@Audio fn` (e.g. `s = @Audio fn () -> sin_osc 440.`) is compiled into
+ * a self-contained "synth bundle": a set of MIR functions that the main
+ * `lower_mir` lowers to LLVM together with the rest of the program. At runtime
+ * the engine audio thread drives one `Node` per synth, calling its
+ * `frame_perform` (= the lowered `frame_fn`) once per audio sample.
+ *
+ * The pipeline, source-to-sound:
+ *
+ *   1. Library load (`ylc_audio_jit_init`, file-scope constructor):
+ *      - Registers the precompiled kernel bitcode `osc_kernels.bc` with the MIR
+ *        program and JIT module so C kernel symbols like
+ *        `ylc_audio_sin_osc_kernel` are available for linking.
+ *      - Registers the `Audio` builtin handler (`MirCompileAudioHandler`) and
+ *        per-osc node builtins. Audio builtins are described in the
+ *        `audio_builtins[]` table below.
+ *
+ *   2. Synth construction (`audio_mir_build_synth_functions`): for each
+ *      `@Audio fn` it builds four MIR functions in the shared program:
+ *        cons (ctor)   - allocates the engine Node + state, wires child inputs
+ *        init          - zeroes/initialises per-node state
+ *        kernel        - the per-sample computation (where builtin kernels are
+ *                        called); built with `audio->kernel_builder`
+ *        frame_fn      - the engine `frame_perform` entry: reads inputs for
+ *                        the frame, calls `kernel_fn`, writes the sample(s) to
+ *                        the output buffer.
+ *
+ *   3. Builtin call lowering (e.g. `sin_osc freq`): the builtin's `emit` hook
+ *      (`audio_builtin_emit_num_state` for oscillators) normalises the args
+ *      (lane expansion, see below) and calls the central builder
+ *      `audio_mir_emit_kernel_call_lanes`. That builder:
+ *        - Creates an extern ref to the C kernel symbol
+ *          (`audio_mir_extern_ref` -> `mir_program_add_extern_function`),
+ *          which links against the `osc_kernels.bc` bitcode at JIT time. The
+ *          kernel itself is a single precompiled, `always_inline` C function
+ *          (`ylc_audio_sin_osc_kernel` in osc_kernels.c); its DSP is NOT
+ *          recompiled per use -- only the glue is generated here.
+ *        - Reserves a slice of the synth's state block
+ *          (`audio_mir_reserve_state_slot` + `audio_mir_state_slot_ptr`) sized
+ *          by the builtin's `state_size`/`state_align` (e.g.
+ * `sizeof(SinOscState)` = the oscillator phase). All per-instance oscillator
+ * state lives in one contiguous block per Node, addressed by offset.
+ *        - Emits a `mir_call_value` to the kernel extern with
+ *          `[state_ptr, spf, freq]`, producing a `double` sample.
+ *
+ *   4. Ctor -> engine wiring (`audio_mir_emit_constructor`): the ctor function
+ *      calls the runtime `ylc_create_audio_frame_node(frame_fn, num_inputs,
+ *      output_lanes, state_bytes, name)` to allocate the engine `Node` (setting
+ *      `node->frame_perform = frame_fn` and reserving `state_bytes`), then
+ *      `ylc_audio_node_inline_state(node)` to get the state buffer, calls the
+ *      synth `init_fn(state)`, and `node_connect_input(i, node, child)` for
+ *      each input node to wire the graph.
+ *
+ *   5. Lowering + linking: all four synth MIR functions live in the same
+ *      `mir_program` as the user code, so `lower_mir` lowers them together. The
+ *      extern kernel symbols are resolved at JIT link time from
+ * `osc_kernels.bc`. The kernel's `always_inline` attribute lets LLVM inline the
+ * DSP body straight into `kernel_fn`/`frame_fn`, so per-frame `sin_osc` becomes
+ *      straight-line table-lookup code with no call overhead.
+ *
+ *   6. Runtime: the engine audio thread (`audio_loop.c` -> `user_ctx_callback`
+ *      -> `node->frame_perform`) calls `frame_fn` once per audio sample, which
+ *      reads inputs, runs the (inlined) kernel on `node->state_ptr`, and writes
+ *      the sample to `node->output.buf`.
+ *
+ * Note on vectorisation: the engine drives kernels per-sample (scalar), and
+ * multi-lane synths emit N independent scalar kernel calls per frame (each
+ * lane has its own state, e.g. oscillator phase). Block-level SIMD would
+ * require changing the engine->kernel boundary to pass a buffer + length
+ * (block API) so LLVM's loop vectoriser can vectorise the per-block loop; that
+ * is a future optimisation, not part of the current per-sample design.
+ * ============================================================================
+ */
+
 void *ylc_get_output_buf(void *node_raw) {
   return ((Node *)node_raw)->output.buf;
 }
@@ -264,19 +340,41 @@ typedef AudioValue (*AudioBuiltinEmitFn)(const AudioBuiltin *builtin,
                                          AudioCompileCtx *audio, Ast *origin,
                                          AudioValue *args, size_t argc);
 
+/* Describes one audio builtin (e.g. sin_osc). The compiler dispatches a call to
+   `name` to `emit`, which builds the MIR glue that calls the precompiled C
+   `kernel_symbol`. `state_size`/`state_align` reserve a slice of the synth's
+   per-node state block (e.g. the oscillator phase); `state_name` labels it for
+   debugging. See the file header for the full lowering pipeline. */
 struct AudioBuiltin {
   const char *name;
+  /* Number of source-level arguments the builtin expects (its arity). Fewer
+     applied args => partial application / currying (see audio_mir_*_partial_*),
+     more than this is an error. */
   size_t source_argc;
   const char *kernel_symbol;
   AudioBuiltinEmitFn emit;
   size_t state_size;
   size_t state_align;
   const char *state_name;
+  /* Lane expansion mask: bits set for arguments that drive multi-channel
+     expansion. If an argument in the mask has more lanes (channels) than the
+     current lane count, the call expands to that many lanes, broadcasting the
+     non-masked (scalar) arguments across all lanes. See
+     audio_mir_normalize_num_kernel_args_masked. */
   uint64_t lane_expand_mask;
+  /* Optional argument reordering: maps kernel-arg index -> source-arg index.
+     Used by builtins whose call-site argument order differs from the C kernel
+     signature (e.g. pm_osc). NULL means identity order. */
   const size_t *arg_order;
+  /* Number of arguments actually passed to the C kernel. When 0, defaults to
+     the call's argc; otherwise lets the kernel take fewer args than the call
+     (the rest are handled by the synth glue, e.g. state/spf injected by the
+     emitter). */
   size_t kernel_argc;
 };
 
+/* Bit i of a lane-expand mask selects argument i for multi-channel expansion.
+ */
 #define AUDIO_ARG_MASK(index) (UINT64_C(1) << (index))
 #define AUDIO_ARG_MASK_ALL(argc)                                               \
   ((argc) >= 64 ? UINT64_MAX : ((UINT64_C(1) << (argc)) - UINT64_C(1)))
@@ -985,6 +1083,16 @@ static const char *audio_mir_capture_param_name(MirArena *arena, Ast *capture,
   return mir_arena_printf(arena, "capture%zu", index);
 }
 
+/* Builds the four MIR functions that make up a synth bundle for one `@Audio
+   fn`: cons (ctor)  - `audio_mir_build_bundle_fn` ...
+   `audio_mir_emit_constructor` init         - `audio_mir_build_bundle_fn`
+   (zeroes per-node state) kernel       - `audio_mir_build_kernel_fn` (the
+   per-sample body; builtin kernels like sin_osc are emitted into this via
+                    `audio->kernel_builder`)
+     frame_fn     - `audio_mir_build_frame_fn` + `audio_mir_emit_frame_adapter`
+                    (engine entry: reads inputs, calls kernel, writes output)
+   All are added to the shared `mir_program` so `lower_mir` lowers them with the
+   rest of the program. See the file header for the full pipeline. */
 static bool audio_mir_build_synth_functions(MirAudioSynthBuildCtx *ctx) {
   if (!ctx || !ctx->program || !ctx->program->arena) {
     return false;
@@ -1672,6 +1780,100 @@ static AudioValue audio_mir_array_fill_const(AudioCompileCtx *audio, Ast *app) {
   return audio_mir_value(app->type, array, 1);
 }
 
+/* array_fill N (fn i -> expr): build a compile-time-sized array whose elements
+   are generated by applying `fn i -> expr` for i = 0..N-1. Unlike
+   array_fill_const (one constant value), each element is a distinct computed
+   expression with the index substituted as a compile-time constant.
+
+   The array lives in the synth's per-node state block (reserved once, like an
+   array literal): each element is evaluated in the kernel builder with `i`
+   bound to a const int and stored into its slot offset, then the array is
+   returned as an array-view value `{size, offset, data_ptr}` (single lane).
+   This keeps array_fill returning an *array*, not a multi-channel signal;
+   `~` turns an array into a multi-channel value (see multichannel_operator). */
+static bool audio_mir_bind_local_value(AudioCompileCtx *audio, Ast *binding,
+                                       AudioValue value, Ast *expr);
+static AudioValue audio_mir_array_fill(AudioCompileCtx *audio, Ast *app) {
+  if (!audio || app->tag != AST_APPLICATION ||
+      app->data.AST_APPLICATION.len != 2 || !is_array_type(app->type)) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  Ast *args = app->data.AST_APPLICATION.args;
+  int len = 0;
+  if (!audio_mir_static_array_fill_len(args, &len) || len <= 0) {
+    fprintf(stderr,
+            "audio_jit: array_fill size must be a static integer\n");
+    return AUDIO_VALUE_NULL;
+  }
+
+  Ast *gen_ast = args + 1;
+  if (!gen_ast || gen_ast->tag != AST_LAMBDA || !gen_ast->data.AST_LAMBDA.body ||
+      !gen_ast->data.AST_LAMBDA.params ||
+      !gen_ast->data.AST_LAMBDA.params->ast) {
+    fprintf(stderr,
+            "audio_jit: array_fill generator must be a single-arg lambda\n");
+    return AUDIO_VALUE_NULL;
+  }
+
+  Type *element_type = audio_mir_array_element_type(app->type);
+  if (!element_type) {
+    return AUDIO_VALUE_NULL;
+  }
+  int element_size = audio_mir_sizeof_type(element_type);
+  size_t state_size = (size_t)(len > 0 ? len : 1) * (size_t)element_size;
+  if (state_size > (size_t)INT_MAX) {
+    fprintf(stderr, "audio_jit: array_fill state is too large\n");
+    return AUDIO_VALUE_NULL;
+  }
+  int element_align = audio_mir_alignof_type(element_type);
+  size_t state_align = element_align >= 8 ? 8 : (size_t)element_align;
+  AudioStateSlot *slot = audio_mir_reserve_state_slot(
+      audio, element_type, state_size, state_align, "array.fill");
+  if (!slot) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  Ast *binding = gen_ast->data.AST_LAMBDA.params->ast;
+  Ast *body = gen_ast->data.AST_LAMBDA.body;
+
+  AudioLocalBinding *outer_locals = audio->locals;
+  for (int i = 0; i < len; i++) {
+    /* Bind `i` to a compile-time const int for this iteration, evaluate the
+       generator body, and store the resulting value into its slot offset. */
+    MirValueId idx_value =
+        mir_const_int(audio->kernel_builder, &t_int, body, i);
+    AudioValue idx_audio = audio_mir_value(&t_int, idx_value, 1);
+    if (!audio_mir_bind_local_value(audio, binding, idx_audio, gen_ast)) {
+      audio->locals = outer_locals;
+      return AUDIO_VALUE_NULL;
+    }
+
+    AudioValue elem = audio_mir_expr(audio, body);
+    if (!audio_mir_value_is_valid(elem) || elem.value == MIR_NO_VALUE ||
+        audio_mir_value_lane_count(elem) != 1) {
+      audio->locals = outer_locals;
+      return AUDIO_VALUE_NULL;
+    }
+    MirValueId element_ptr = audio_mir_state_slot_ptr(
+        audio, audio->kernel_builder, app, audio->state_param,
+        slot->offset + (size_t)i * (size_t)element_size, element_type);
+    if (element_ptr == MIR_NO_VALUE ||
+        mir_ptr_store(audio->kernel_builder, app, element_ptr, elem.value) ==
+            MIR_NO_VALUE) {
+      audio->locals = outer_locals;
+      return AUDIO_VALUE_NULL;
+    }
+  }
+  audio->locals = outer_locals;
+
+  MirValueId data_ptr =
+      audio_mir_state_slot_ptr(audio, audio->kernel_builder, app,
+                               audio->state_param, slot->offset, element_type);
+  MirValueId array = audio_mir_array_view(audio, app, app->type, len, data_ptr);
+  return audio_mir_value(app->type, array, 1);
+}
+
 static AudioValue audio_mir_delay_line(AudioCompileCtx *audio, Ast *app) {
   if (app->tag != AST_APPLICATION || app->data.AST_APPLICATION.len != 1 ||
       !is_array_type(app->type)) {
@@ -1920,8 +2122,8 @@ static AudioLocalBinding *audio_mir_lookup_local_binding(AudioCompileCtx *audio,
 }
 
 /* Compute the compile-time element count for an expression that creates a
-   fixed-size array (array literal or array_fill_const with a static size).
-   Returns 0 if the size is not statically known. */
+   fixed-size array (array literal, array_fill_const, or array_fill with a
+   static size). Returns 0 if the size is not statically known. */
 static int audio_mir_expr_array_size(AudioCompileCtx *audio, Ast *expr) {
   if (!expr) {
     return 0;
@@ -1934,12 +2136,15 @@ static int audio_mir_expr_array_size(AudioCompileCtx *audio, Ast *expr) {
   if (expr->tag == AST_APPLICATION) {
     Ast *fn = expr->data.AST_APPLICATION.function;
     if (fn && fn->tag == AST_IDENTIFIER && fn->data.AST_IDENTIFIER.value &&
-        strcmp(fn->data.AST_IDENTIFIER.value, "array_fill_const") == 0 &&
         expr->data.AST_APPLICATION.len == 2) {
-      int len = 0;
-      if (audio_mir_static_array_fill_len(expr->data.AST_APPLICATION.args,
-                                          &len)) {
-        return len;
+      const char *name = fn->data.AST_IDENTIFIER.value;
+      if (strcmp(name, "array_fill_const") == 0 ||
+          strcmp(name, "array_fill") == 0) {
+        int len = 0;
+        if (audio_mir_static_array_fill_len(expr->data.AST_APPLICATION.args,
+                                            &len)) {
+          return len;
+        }
       }
     }
   }
@@ -2319,6 +2524,27 @@ static int audio_mir_max_lanes(const AudioValue *values, size_t len) {
   return lanes;
 }
 
+/* Lane-aware argument normalisation for numeric audio builtins.
+
+   An audio value can be scalar (1 lane) or multi-channel (`lanes` channels,
+   represented as a tuple/vec of per-lane MIR values). When a builtin is called
+   with a mix (e.g. a stereo signal and a scalar frequency), the call must
+   expand to one kernel invocation per output lane.
+
+   `lane_expand_mask` selects which arguments drive expansion: if argument i is
+   in the mask and has more lanes than the current lane count, the lane count
+   grows to that argument's lanes. Arguments NOT in the mask are broadcast:
+   every lane reuses lane 0 of that argument (e.g. a scalar `freq` is shared by
+   all channels of a stereo `sin_osc`). Arguments IN the mask use their own
+   per-lane value (`source_lane = lane`); non-masked use `source_lane = 0`.
+
+   `forced_lanes` (>0) pins the lane count (used by callers that already know
+   the channel count); otherwise it is derived from the expandable arguments.
+
+   The result, per argument, is `AudioMirKernelArgLanes` -- an array of
+   `lanes` MIR values, one per output lane. The emitter then loops over lanes,
+   calling the kernel once per lane (each with its own state slot for stateful
+   builtins). See `audio_mir_emit_kernel_call_lanes`. */
 static bool audio_mir_normalize_num_kernel_args_masked(
     AudioCompileCtx *audio, Ast *origin, const AudioValue *values,
     AudioMirKernelArgLanes *args, size_t argc, uint64_t lane_expand_mask,
@@ -2706,6 +2932,26 @@ static MirValueId audio_mir_state_base_arg(AudioCompileCtx *audio,
                             audio->ptr_double_type, origin, audio->state_param);
 }
 
+/* Central builder for a builtin kernel call, expanded across lanes.
+
+   For each output lane this emits:
+     1. A state pointer -- for stateful builtins (`state_name != NULL`) a fresh
+        state slot is reserved per lane (`audio_mir_reserve_state_slot` records
+        an offset into the synth's per-node state block, sized by
+        `state_size`/`state_align`); stateless builtins share one base ptr.
+     2. A `mir_call_value` to the extern C kernel (`kernel_symbol`) with args
+        `[state_ptr, spf, <per-lane user args>]`, producing one `double` sample.
+
+   The kernel extern is added to the shared MIR program
+   (`audio_mir_extern_ref` -> `mir_program_add_extern_function`) and linked at
+   JIT time from `osc_kernels.bc`; its `always_inline` body is inlined into the
+   synth's kernel/frame functions by the LLVM optimiser, so there is no
+   per-frame call overhead. The DSP itself is never recompiled per use -- only
+   this glue (state slot + extern call) is generated.
+
+   Multi-lane results are assembled into a tuple (`audio_mir_multi_value`) so a
+   stereo synth returns `(sample_l, sample_r)`; the frame adapter then scatters
+   the lanes into the interleaved/plane output buffer. */
 static AudioValue audio_mir_emit_kernel_call_lanes(
     AudioCompileCtx *audio, Ast *origin, const char *kernel_symbol,
     const char *state_name, size_t state_size, size_t state_align, int lanes,
@@ -2833,13 +3079,71 @@ static AudioValue audio_mir_emit_num_stateless_kernel_masked(
 }
 
 static AudioValue multichannel_operator(AudioCompileCtx *audio, Ast *app) {
-  Ast *list = app ? app->data.AST_APPLICATION.args : NULL;
-
-  if (!audio || !list || (list->tag != AST_LIST && list->tag != AST_ARRAY)) {
+  if (!audio || !app || app->tag != AST_APPLICATION) {
     return AUDIO_VALUE_NULL;
   }
 
-  int len = list->data.AST_LIST.len;
+  Ast *arg = app->data.AST_APPLICATION.args;
+
+  /* `~ array_expr`: turn a compile-time-sized array into a multi-channel value
+     (one lane per element). The array is an array-view value `{size, offset,
+     data_ptr}`; load each element `data_ptr[offset + i]` into a lane so the
+     result can be passed to scalar synth params (e.g. `saw_osc` freq) and
+      expand them to N channels. */
+  if (arg && arg->tag != AST_LIST && arg->tag != AST_ARRAY) {
+    /* The lane count must be known at lowering time. Derive it from the AST
+       (array literal / array_fill / array_fill_const carry a static size) rather
+       than extracting the runtime tuple field, which the const-int resolver
+       can't see through an MIR_EXTRACT. */
+    int len = audio_mir_expr_array_size(audio, arg);
+    if (len <= 0) {
+      return AUDIO_VALUE_NULL;
+    }
+
+    AudioValue array = audio_mir_expr(audio, arg);
+    if (!audio_mir_value_is_valid(array) || array.value == MIR_NO_VALUE ||
+        !is_array_type(array.type ? array.type : arg->type)) {
+      return AUDIO_VALUE_NULL;
+    }
+
+    Type *element_type = audio_mir_array_element_type(
+        array.type ? array.type : arg->type);
+    if (!element_type) {
+      return AUDIO_VALUE_NULL;
+    }
+    Type *ptr_type = audio_mir_ptr_to(audio->arena, element_type);
+
+    MirValueId *elements = audio_mir_alloc_lane_values(audio, len);
+    if (!elements) {
+      return AUDIO_VALUE_NULL;
+    }
+    MirValueId base_offset =
+        mir_tuple_get(audio->kernel_builder, &t_int, arg, array.value, 1);
+    MirValueId data_ptr =
+        mir_tuple_get(audio->kernel_builder, ptr_type, arg, array.value, 2);
+    for (int i = 0; i < len; i++) {
+      MirValueId idx = mir_const_int(audio->kernel_builder, &t_int, arg, i);
+      MirValueId elem_index =
+          mir_iadd(audio->kernel_builder, &t_int, arg, base_offset, idx);
+      MirValueId elem_ptr =
+          mir_ptr_offset(audio->kernel_builder, ptr_type, arg, data_ptr,
+                         elem_index);
+      elements[i] =
+          mir_ptr_load(audio->kernel_builder, element_type, arg, elem_ptr);
+      if (elements[i] == MIR_NO_VALUE) {
+        return AUDIO_VALUE_NULL;
+      }
+    }
+    return audio_mir_multi_value(audio, app, app->type, elements, len);
+  }
+
+  /* `~ [e0, e1, ...]` / `~ (e0; e1; ...)`: list/array of expressions, one lane
+     per element. */
+  if (!arg || (arg->tag != AST_LIST && arg->tag != AST_ARRAY)) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  int len = arg->data.AST_LIST.len;
   if (len <= 0) {
     return AUDIO_VALUE_NULL;
   }
@@ -2850,7 +3154,7 @@ static AudioValue multichannel_operator(AudioCompileCtx *audio, Ast *app) {
   }
 
   for (int i = 0; i < len; i++) {
-    AudioValue expr = audio_mir_expr(audio, list->data.AST_LIST.items + i);
+    AudioValue expr = audio_mir_expr(audio, arg->data.AST_LIST.items + i);
     if (audio_mir_value_lane_count(expr) != 1 || expr.value == MIR_NO_VALUE) {
       return AUDIO_VALUE_NULL;
     }
@@ -2916,9 +3220,20 @@ static AudioValue audio_builtin_emit_bufsize(const AudioBuiltin *builtin,
                                              AudioCompileCtx *audio,
                                              Ast *origin, AudioValue *args,
                                              size_t argc);
+static AudioValue audio_builtin_emit_mix(const AudioBuiltin *builtin,
+                                         AudioCompileCtx *audio, Ast *origin,
+                                         AudioValue *args, size_t argc);
+static AudioValue audio_builtin_emit_pan(const AudioBuiltin *builtin,
+                                        AudioCompileCtx *audio, Ast *origin,
+                                        AudioValue *args, size_t argc);
 
 static const size_t audio_builtin_pm_osc_arg_order[] = {1, 0, 2};
 
+/* Registry of all audio builtins. Each entry maps a source-level name to its
+   C kernel symbol, emit hook, and state layout. The compiler resolves a call
+   to `name` by looking it up here and dispatching to `emit`. See the
+   `AudioBuiltin` struct above for field semantics and the file header for the
+   full pipeline. */
 static const AudioBuiltin audio_builtins[] = {
     {.name = "sin_osc",
      .source_argc = 1,
@@ -3272,6 +3587,40 @@ static const AudioBuiltin audio_builtins[] = {
      .state_align = __alignof__(SahState),
      .state_name = "sah.state",
      .lane_expand_mask = AUDIO_ARG_MASK_ALL(2),
+     .arg_order = NULL,
+     .kernel_argc = 0},
+
+    /* mix: down/up-mix a multi-lane signal into N output channels.
+       mix N signal  -- N is a compile-time Int (output channel count); signal
+       has some lane count L. The input lanes are summed into N outputs by
+       grouping (L/N lanes per output, remainder spread), so e.g. a 3-lane
+       signal mixed to 2 channels. No C kernel / no state -- the mixing is
+       pure MIR glue (sums of the input lanes). Output lane count = N. */
+    {.name = "mix",
+     .source_argc = 2,
+     .kernel_symbol = NULL,
+     .emit = audio_builtin_emit_mix,
+     .state_size = 0,
+     .state_align = 0,
+     .state_name = NULL,
+     .lane_expand_mask = 0,
+     .arg_order = NULL,
+     .kernel_argc = 0},
+
+    /* pan: distribute a mono (1-lane) signal across N output channels using a
+       pan position. pan N pos signal  -- N is a compile-time Int (output
+       channel count, e.g. 2 for stereo); pos in [0,1] (0 = hard first channel,
+       1 = hard last channel); signal is 1-lane. Equal-power panning computes a
+       per-channel gain and scales the mono signal. No C kernel / no state --
+       pure MIR glue. Output lane count = N. */
+    {.name = "pan",
+     .source_argc = 3,
+     .kernel_symbol = NULL,
+     .emit = audio_builtin_emit_pan,
+     .state_size = 0,
+     .state_align = 0,
+     .state_name = NULL,
+     .lane_expand_mask = 0,
      .arg_order = NULL,
      .kernel_argc = 0},
 };
@@ -4487,6 +4836,153 @@ static AudioValue audio_builtin_emit_bufsize(const AudioBuiltin *builtin,
                    : AUDIO_VALUE_NULL;
 }
 
+/* mix N signal  -- down/up-mix a multi-lane signal into N output channels.
+
+   `N` (args[0]) is a compile-time Int giving the output channel count. `signal`
+   (args[1]) has L lanes (L >= 1). The L input lanes are grouped into N output
+   channels and summed: output channel o gets the sum of input lanes in the
+   range [o*L/N, (o+1)*L/N) (chunked distribution), so a 3-lane signal mixed to
+   2 channels maps lanes {0} -> ch0, {1,2} -> ch1.
+
+   This is pure MIR glue (no C kernel, no state): each output lane is a running
+   FADD over its assigned input lanes. Output lane count = N. */
+static AudioValue audio_builtin_emit_mix(const AudioBuiltin *builtin,
+                                         AudioCompileCtx *audio, Ast *origin,
+                                         AudioValue *args, size_t argc) {
+  (void)builtin;
+  if (!audio || !origin || argc != 2 || !args) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  int n = 0;
+  if (!audio_mir_value_const_int(audio, args[0].value, &n) || n <= 0) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  int in_lanes = audio_mir_value_lane_count(args[1]);
+  if (in_lanes <= 0) {
+    in_lanes = 1;
+  }
+
+  MirBuilder *b = audio->kernel_builder;
+  MirValueId *out = audio_mir_alloc_lane_values(audio, n);
+  if (!out) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  for (int o = 0; o < n; o++) {
+    int start = (int)(((int64_t)o * in_lanes) / n);
+    int end = (int)(((int64_t)(o + 1) * in_lanes) / n);
+    if (end <= start) {
+      end = start + 1;
+    }
+    if (end > in_lanes) {
+      end = in_lanes;
+    }
+
+    MirValueId acc =
+        audio_mir_num_lane(audio, origin, args[1], start % in_lanes);
+    for (int li = start + 1; li < end; li++) {
+      MirValueId v = audio_mir_num_lane(audio, origin, args[1], li % in_lanes);
+      MirValueId operands[] = {acc, v};
+      acc = mir_primitive_instr(b, MIR_OP_FADD, &t_num, origin, operands, 2);
+      if (acc == MIR_NO_VALUE) {
+        return AUDIO_VALUE_NULL;
+      }
+    }
+    out[o] = acc;
+  }
+
+  return audio_mir_multi_value_typed(audio, origin, origin->type, &t_num, out,
+                                     n);
+}
+
+/* pan N pos signal  -- distribute a mono signal across N channels.
+
+   `N` (args[0]) is a compile-time Int (output channel count, e.g. 2 for
+   stereo). `pos` (args[1]) is a Double in [0,1]: 0 = hard first channel, 1 =
+   hard last channel. `signal` (args[2]) is a 1-lane mono signal.
+
+   This lowers to a single call to the C kernel `ylc_audio_pan_kernel`, which
+   does equal-power panning (cos/sin crossfade between the two channels
+   bracketing pos*(N-1)) and writes all N output lanes into a buffer. The emit
+   hook:
+     1. reserves an N-double scratch buffer in the synth's per-node state block
+        (no per-frame heap alloc; the buffer is reused every frame),
+     2. emits one extern call `ylc_audio_pan_kernel(out_buf, N, pos, signal)`,
+     3. loads each of the N output lanes from the buffer and assembles them
+        into an N-lane tuple (the synth's multi-channel result).
+
+   Output lane count = N. The DSP (equal-power gains, channel selection) lives
+   in the precompiled `always_inline` C kernel (osc_kernels.c), inlined into
+   the synth's kernel/frame functions by the LLVM optimiser. */
+static AudioValue audio_builtin_emit_pan(const AudioBuiltin *builtin,
+                                        AudioCompileCtx *audio, Ast *origin,
+                                        AudioValue *args, size_t argc) {
+  (void)builtin;
+  if (!audio || !origin || argc != 3 || !args) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  int n = 0;
+  if (!audio_mir_value_const_int(audio, args[0].value, &n) || n <= 0) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  MirBuilder *b = audio->kernel_builder;
+  MirValueId pos = audio_mir_num_lane(audio, origin, args[1], 0);
+  MirValueId signal = audio_mir_num_lane(audio, origin, args[2], 0);
+  if (pos == MIR_NO_VALUE || signal == MIR_NO_VALUE) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  /* Reserve an N-double scratch buffer in the synth state block (reused each
+     frame; zeroed at init via the state-block zero flag). */
+  AudioStateSlot *slot = audio_mir_reserve_state_block(
+      audio, (size_t)n * sizeof(double), __alignof__(double), "pan.out");
+  if (!slot) {
+    return AUDIO_VALUE_NULL;
+  }
+  MirValueId out_buf = audio_mir_state_slot_ptr(audio, b, origin,
+                                                audio->state_param, slot->offset,
+                                                &t_num);
+
+  /* extern void ylc_audio_pan_kernel(double* out, int n, double pos, double sig) */
+  Type *params[] = {audio->ptr_double_type, &t_int, &t_num, &t_num};
+  Type *kernel_type =
+      audio_mir_fn_type(audio->arena, params, 4, &t_void);
+  MirValueId kernel_fn =
+      audio_mir_extern_ref(b, "ylc_audio_pan_kernel", kernel_type, origin);
+  if (kernel_fn == MIR_NO_VALUE) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  MirValueId n_val = mir_const_int(b, &t_int, origin, n);
+  MirValueId call_args[] = {out_buf, n_val, pos, signal};
+  if (mir_call_value(b, &t_void, origin, kernel_fn, kernel_type, call_args, 4) ==
+      MIR_NO_VALUE) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  /* Load each output lane from the scratch buffer and build the N-lane tuple. */
+  MirValueId *out = audio_mir_alloc_lane_values(audio, n);
+  if (!out) {
+    return AUDIO_VALUE_NULL;
+  }
+  for (int i = 0; i < n; i++) {
+    MirValueId idx = mir_const_int(b, &t_int, origin, i);
+    MirValueId lane_ptr =
+        mir_ptr_offset(b, audio->ptr_double_type, origin, out_buf, idx);
+    out[i] = mir_ptr_load(b, &t_num, origin, lane_ptr);
+    if (out[i] == MIR_NO_VALUE) {
+      return AUDIO_VALUE_NULL;
+    }
+  }
+
+  return audio_mir_multi_value_typed(audio, origin, origin->type, &t_num, out,
+                                      n);
+}
+
 static AudioValue audio_mir_emit_builtin_values(AudioCompileCtx *audio,
                                                 Ast *origin, const char *name,
                                                 AudioValue *args, size_t argc) {
@@ -4507,6 +5003,22 @@ static AudioValue audio_mir_emit_builtin_values(AudioCompileCtx *audio,
   return builtin->emit(builtin, audio, origin, args, argc);
 }
 
+/* Partial application / currying of an audio builtin.
+
+   When a builtin is called with fewer args than its arity (e.g.
+   `sin_osc` alone, or `delay 0.1` awaiting a signal), the call is under-
+   applied: it cannot emit a kernel yet (the kernel needs all its args). Instead
+   this captures the lowered args into an `AudioPartialBuiltin` value
+   (`AUDIO_VALUE_PARTIAL_BUILTIN`) carrying `{name, args, argc}` -- a deferred
+   builtin application. No kernel/state is allocated; nothing is emitted.
+
+   Each subsequent application (`audio_mir_apply_partial_builtin`) appends the
+   new args to the captured ones; if still under-saturated it returns a further
+   extended partial, otherwise it finally calls `audio_mir_emit_builtin_values`
+   to lower the full, saturated kernel call. This gives normal currying
+   semantics to audio builtins while keeping the emit path only ever runs on a
+   fully-applied builtin. The same pattern handles `@Audio fn` synths via
+   `AudioPartialSynth` (see audio_mir_make_partial_synth). */
 static AudioValue audio_mir_make_partial_builtin(AudioCompileCtx *audio,
                                                  Ast *app, const char *name) {
   int arity = audio_mir_builtin_arity(audio, name);
@@ -4604,6 +5116,15 @@ audio_mir_apply_partial_builtin(AudioCompileCtx *audio, Ast *app,
                                        total_argc);
 }
 
+/* Partial application / currying of a user `@Audio fn` synth.
+
+   Mirrors audio_mir_make_partial_builtin for synth symbols. A synth is built
+   from its fully-applied inputs (its child nodes); if applied to fewer inputs
+   than `num_inputs`, capture the lowered args into an `AudioPartialSynth`
+   (`AUDIO_VALUE_PARTIAL_SYNTH`) and defer construction. `audio_mir_apply_*
+   extend/replay until saturated, at which point the synth bundle (ctor/init/
+   kernel/frame) is actually emitted. This lets `@Audio fn`s be composed as
+   first-class, curryable functions. */
 static AudioValue audio_mir_make_partial_synth(AudioCompileCtx *audio, Ast *app,
                                                MirAudioSynthSymbol *synth) {
   if (!synth) {
@@ -5553,6 +6074,9 @@ static AudioValue audio_mir_expr(AudioCompileCtx *audio, Ast *ast) {
       if (strcmp(name, "array_fill_const") == 0) {
         return audio_mir_array_fill_const(audio, ast);
       }
+      if (strcmp(name, "array_fill") == 0) {
+        return audio_mir_array_fill(audio, ast);
+      }
       if (strcmp(name, "delay_line") == 0) {
         return audio_mir_delay_line(audio, ast);
       }
@@ -5706,6 +6230,16 @@ static MirValueId audio_mir_read_frame_input(AudioCompileCtx *audio,
                         sizeof(read_args) / sizeof(read_args[0]));
 }
 
+/* Emits the body of the synth's `frame_fn` -- the engine `frame_perform`
+   entry, called once per audio sample. It:
+     - reads each input child node's current sample (`ylc_read_inlet_node_i32`)
+       for this frame,
+     - calls the synth `kernel_fn` with `[node, state, frame, spf, <inputs>]`,
+     - writes the resulting sample(s) to the node's output buffer
+       (`ylc_get_output_buf`), scattering multi-lane (tuple) results to
+       `output[frame*lanes + lane]`.
+   This is the per-sample, scalar boundary the engine drives; block-level SIMD
+   would require changing this to a buffer+length API (see file header note). */
 static void audio_mir_emit_frame_adapter(AudioCompileCtx *audio) {
   MirBuilder *b = audio->frame_builder;
   audio->node_param = audio->frame_fn->params.items[0].value;
@@ -6569,6 +7103,17 @@ static void audio_mir_register_node_builtin(TypeEnv *tenv) {
                        MIR_RESULT_OWNED);
 }
 
+/* Library-load constructor: runs when `libaudio_jit.so` is loaded (the engine
+   dependency). This wires the audio JIT into the MIR/JIT before any user code
+   is compiled:
+     1. Register the precompiled kernel bitcode (`osc_kernels.bc`) so C kernel
+        symbols (e.g. `ylc_audio_sin_osc_kernel`) can be linked by the JIT.
+     2. Register per-environment "node" builtins (the `@Audio`-typed node
+        constructor builtins) and the top-level `Audio` builtin handler
+        (`MirCompileAudioHandler`) that drives `@Audio fn` synth construction.
+   The audio thread is already running by this point (the engine stream starts
+   on engine init); user `@Audio fn`s compile later into synth bundles that the
+   engine then drives per sample. */
 __attribute__((constructor)) static void ylc_audio_jit_init(void) {
   // audio_jit_init_wavetables();
   audio_jit_register_osc_kernel_bitcode();

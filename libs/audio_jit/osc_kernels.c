@@ -905,3 +905,55 @@ ylc_audio_sah_kernel(SahState *state, double spf, double sig, double trig) {
   state->initialized = 1;
   return state->value;
 }
+
+/* pan: distribute a mono signal across N output channels with equal-power
+   panning.
+
+   out   - output buffer of N doubles (one per output channel, written here)
+   n     - output channel count (compile-time constant at the call site)
+   pos   - pan position in [0,1]: 0 = hard first channel, 1 = hard last channel
+   signal - the mono (1-lane) input sample
+
+   The position maps to a continuous channel index p = pos*(n-1). The two
+   channels bracketing p receive equal-power gains derived from an angle
+   theta = p * (pi/2): the lower channel gets cos(theta_local), the upper gets
+   sin(theta_local), where theta_local is the fractional part of p scaled to
+   [0, pi/2]. All other channels are silent. This generalises stereo
+   equal-power panning to any N. */
+__attribute__((always_inline)) void
+ylc_audio_pan_kernel(double *out, int n, double pos, double signal) {
+  if (!out || n <= 0) {
+    return;
+  }
+  if (n == 1) {
+    out[0] = signal;
+    return;
+  }
+
+  double p = pos * (double)(n - 1);
+  if (p < 0.0) {
+    p = 0.0;
+  } else if (p > (double)(n - 1)) {
+    p = (double)(n - 1);
+  }
+
+  int lo = (int)p;
+  if (lo < 0) {
+    lo = 0;
+  }
+  if (lo > n - 2) {
+    lo = n - 2;
+  }
+  double frac = p - (double)lo;
+
+  /* equal-power crossfade between the two bracketing channels */
+  double theta = frac * (M_PI / 2.0);
+  double gain_lo = cos(theta);
+  double gain_hi = sin(theta);
+
+  for (int c = 0; c < n; c++) {
+    out[c] = 0.0;
+  }
+  out[lo] = signal * gain_lo;
+  out[lo + 1] = signal * gain_hi;
+}
