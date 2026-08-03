@@ -1802,14 +1802,13 @@ static AudioValue audio_mir_array_fill(AudioCompileCtx *audio, Ast *app) {
   Ast *args = app->data.AST_APPLICATION.args;
   int len = 0;
   if (!audio_mir_static_array_fill_len(args, &len) || len <= 0) {
-    fprintf(stderr,
-            "audio_jit: array_fill size must be a static integer\n");
+    fprintf(stderr, "audio_jit: array_fill size must be a static integer\n");
     return AUDIO_VALUE_NULL;
   }
 
   Ast *gen_ast = args + 1;
-  if (!gen_ast || gen_ast->tag != AST_LAMBDA || !gen_ast->data.AST_LAMBDA.body ||
-      !gen_ast->data.AST_LAMBDA.params ||
+  if (!gen_ast || gen_ast->tag != AST_LAMBDA ||
+      !gen_ast->data.AST_LAMBDA.body || !gen_ast->data.AST_LAMBDA.params ||
       !gen_ast->data.AST_LAMBDA.params->ast) {
     fprintf(stderr,
             "audio_jit: array_fill generator must be a single-arg lambda\n");
@@ -2339,6 +2338,7 @@ static MirAudioSynthSymbol *audio_mir_ast_audio_symbol(AudioCompileCtx *audio,
 
   MirSymbol *symbol =
       mir_resolve_ast_symbol(audio->kernel_builder, fn, audio->mir_ctx);
+
   if (!symbol && audio->parent_ctx && audio->parent_ctx != audio->mir_ctx) {
     symbol =
         mir_resolve_ast_symbol(audio->kernel_builder, fn, audio->parent_ctx);
@@ -3092,9 +3092,9 @@ static AudioValue multichannel_operator(AudioCompileCtx *audio, Ast *app) {
       expand them to N channels. */
   if (arg && arg->tag != AST_LIST && arg->tag != AST_ARRAY) {
     /* The lane count must be known at lowering time. Derive it from the AST
-       (array literal / array_fill / array_fill_const carry a static size) rather
-       than extracting the runtime tuple field, which the const-int resolver
-       can't see through an MIR_EXTRACT. */
+       (array literal / array_fill / array_fill_const carry a static size)
+       rather than extracting the runtime tuple field, which the const-int
+       resolver can't see through an MIR_EXTRACT. */
     int len = audio_mir_expr_array_size(audio, arg);
     if (len <= 0) {
       return AUDIO_VALUE_NULL;
@@ -3106,8 +3106,8 @@ static AudioValue multichannel_operator(AudioCompileCtx *audio, Ast *app) {
       return AUDIO_VALUE_NULL;
     }
 
-    Type *element_type = audio_mir_array_element_type(
-        array.type ? array.type : arg->type);
+    Type *element_type =
+        audio_mir_array_element_type(array.type ? array.type : arg->type);
     if (!element_type) {
       return AUDIO_VALUE_NULL;
     }
@@ -3125,9 +3125,8 @@ static AudioValue multichannel_operator(AudioCompileCtx *audio, Ast *app) {
       MirValueId idx = mir_const_int(audio->kernel_builder, &t_int, arg, i);
       MirValueId elem_index =
           mir_iadd(audio->kernel_builder, &t_int, arg, base_offset, idx);
-      MirValueId elem_ptr =
-          mir_ptr_offset(audio->kernel_builder, ptr_type, arg, data_ptr,
-                         elem_index);
+      MirValueId elem_ptr = mir_ptr_offset(audio->kernel_builder, ptr_type, arg,
+                                           data_ptr, elem_index);
       elements[i] =
           mir_ptr_load(audio->kernel_builder, element_type, arg, elem_ptr);
       if (elements[i] == MIR_NO_VALUE) {
@@ -3224,8 +3223,8 @@ static AudioValue audio_builtin_emit_mix(const AudioBuiltin *builtin,
                                          AudioCompileCtx *audio, Ast *origin,
                                          AudioValue *args, size_t argc);
 static AudioValue audio_builtin_emit_pan(const AudioBuiltin *builtin,
-                                        AudioCompileCtx *audio, Ast *origin,
-                                        AudioValue *args, size_t argc);
+                                         AudioCompileCtx *audio, Ast *origin,
+                                         AudioValue *args, size_t argc);
 
 static const size_t audio_builtin_pm_osc_arg_order[] = {1, 0, 2};
 
@@ -4917,8 +4916,8 @@ static AudioValue audio_builtin_emit_mix(const AudioBuiltin *builtin,
    in the precompiled `always_inline` C kernel (osc_kernels.c), inlined into
    the synth's kernel/frame functions by the LLVM optimiser. */
 static AudioValue audio_builtin_emit_pan(const AudioBuiltin *builtin,
-                                        AudioCompileCtx *audio, Ast *origin,
-                                        AudioValue *args, size_t argc) {
+                                         AudioCompileCtx *audio, Ast *origin,
+                                         AudioValue *args, size_t argc) {
   (void)builtin;
   if (!audio || !origin || argc != 3 || !args) {
     return AUDIO_VALUE_NULL;
@@ -4943,14 +4942,13 @@ static AudioValue audio_builtin_emit_pan(const AudioBuiltin *builtin,
   if (!slot) {
     return AUDIO_VALUE_NULL;
   }
-  MirValueId out_buf = audio_mir_state_slot_ptr(audio, b, origin,
-                                                audio->state_param, slot->offset,
-                                                &t_num);
+  MirValueId out_buf = audio_mir_state_slot_ptr(
+      audio, b, origin, audio->state_param, slot->offset, &t_num);
 
-  /* extern void ylc_audio_pan_kernel(double* out, int n, double pos, double sig) */
+  /* extern void ylc_audio_pan_kernel(double* out, int n, double pos, double
+   * sig) */
   Type *params[] = {audio->ptr_double_type, &t_int, &t_num, &t_num};
-  Type *kernel_type =
-      audio_mir_fn_type(audio->arena, params, 4, &t_void);
+  Type *kernel_type = audio_mir_fn_type(audio->arena, params, 4, &t_void);
   MirValueId kernel_fn =
       audio_mir_extern_ref(b, "ylc_audio_pan_kernel", kernel_type, origin);
   if (kernel_fn == MIR_NO_VALUE) {
@@ -4959,12 +4957,13 @@ static AudioValue audio_builtin_emit_pan(const AudioBuiltin *builtin,
 
   MirValueId n_val = mir_const_int(b, &t_int, origin, n);
   MirValueId call_args[] = {out_buf, n_val, pos, signal};
-  if (mir_call_value(b, &t_void, origin, kernel_fn, kernel_type, call_args, 4) ==
-      MIR_NO_VALUE) {
+  if (mir_call_value(b, &t_void, origin, kernel_fn, kernel_type, call_args,
+                     4) == MIR_NO_VALUE) {
     return AUDIO_VALUE_NULL;
   }
 
-  /* Load each output lane from the scratch buffer and build the N-lane tuple. */
+  /* Load each output lane from the scratch buffer and build the N-lane tuple.
+   */
   MirValueId *out = audio_mir_alloc_lane_values(audio, n);
   if (!out) {
     return AUDIO_VALUE_NULL;
@@ -4980,7 +4979,7 @@ static AudioValue audio_builtin_emit_pan(const AudioBuiltin *builtin,
   }
 
   return audio_mir_multi_value_typed(audio, origin, origin->type, &t_num, out,
-                                      n);
+                                     n);
 }
 
 static AudioValue audio_mir_emit_builtin_values(AudioCompileCtx *audio,
@@ -7103,6 +7102,86 @@ static void audio_mir_register_node_builtin(TypeEnv *tenv) {
                        MIR_RESULT_OWNED);
 }
 
+/* `play_node`-style builtin (registered as the `Play` handler). When applied
+   to a saturated synth application `s args` (outside the audio context), this
+   builds the synth node (via the synth symbol handler, which calls the synth
+   ctor and returns the engine `Node*`) and then calls the runtime
+   `play_node(Node*)` to schedule it into the audio graph -- the same thing
+   `s args |> play_node` does, but driven by the `Play` builtin so the user can
+   write `s args |> Play`. Returns the play_node result (a NodeRef). */
+// static MirValueId MirPlayHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
+//                                  MirBuiltinSymbol *symbol) {
+//   (void)symbol;
+//   if (!builder || !builder->program || !app || app->tag != AST_APPLICATION) {
+//     return MIR_NO_VALUE;
+//   }
+//
+//   Ast *operand = app->data.AST_APPLICATION.args;
+//
+//   MirSymbol *synth_symbol;
+//   if (operand->tag == AST_APPLICATION &&
+//       operand->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+//       (synth_symbol = mir_resolve_ast_symbol(
+//            builder, operand->data.AST_APPLICATION.function, ctx)) != NULL &&
+//       synth_symbol->as.custom.handler == MirAudioSynthSymbolHandler) {
+//
+//     /* Build the synth node: this calls the synth ctor (which creates the
+//        engine Node, inits state, wires child inputs) and returns the Node*.
+//        */
+//     MirValueId node =
+//         MirAudioSynthSymbolHandler(builder, operand, ctx, synth_symbol);
+//     if (node == MIR_NO_VALUE) {
+//       return MIR_NO_VALUE;
+//     }
+//
+//     /* Schedule the node into the audio graph via the runtime `play_node`. */
+//     Type *play_params[] = {&t_ptr};
+//     Type *play_type =
+//         audio_mir_fn_type(builder->fn->arena, play_params, 1, &t_ptr);
+//     MirValueId play_fn =
+//         audio_mir_extern_ref(builder, "play_node", play_type, app);
+//
+//     if (play_fn == MIR_NO_VALUE) {
+//       return MIR_NO_VALUE;
+//     }
+//
+//     app->type = &t_ptr;
+//     return mir_call_value(builder, &t_ptr, app, play_fn, play_type, &node,
+//     1);
+//   }
+//   return MIR_NO_VALUE;
+// }
+//
+/* `play_pattern` builtin: takes a coroutine yielding values over time and
+   plays them as an audio pattern. Registered as the `play_pattern` builtin
+   handler (the user declares `let play_pattern = extern fn T -> T;`).
+
+   The handler is invoked at MIR-build time for `coro |> play_pattern`. It must
+   return a non-MIR_NO_VALUE so the call does not fall through to the (unlinked)
+   `play_pattern` extern symbol -- returning MIR_NO_VALUE causes a
+   "Symbols not found: [ play_pattern ]" JIT link failure.
+
+   TODO: the real implementation should drive the coroutine's yielded values as
+   scheduled audio events (iterate `coro.next` over time, mapping each yielded
+   value to an audio onset/gate). For now this evaluates the coroutine argument
+   (so it compiles) and returns void, which prevents the link failure and lets
+   `co () |> play_pattern` compile/run without crashing. */
+static MirValueId MirPlayPatternHandler(MirBuilder *builder, Ast *app,
+                                        MirCtx *ctx, MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!builder || !app || app->tag != AST_APPLICATION ||
+      app->data.AST_APPLICATION.len < 1) {
+    return MIR_NO_VALUE;
+  }
+
+  /* Evaluate the coroutine argument so it is compiled (its coro.new + body).
+     The coroutine value itself is consumed here; a future implementation will
+     hand it to a runtime pattern scheduler. */
+  Ast *arg = app->data.AST_APPLICATION.args;
+  MirValueId cor = mir_expr(builder, arg, ctx);
+
+  return mir_const_void(builder, app->type ? app->type : &t_void, app);
+}
 /* Library-load constructor: runs when `libaudio_jit.so` is loaded (the engine
    dependency). This wires the audio JIT into the MIR/JIT before any user code
    is compiled:
@@ -7122,13 +7201,17 @@ __attribute__((constructor)) static void ylc_audio_jit_init(void) {
     return;
   }
 
+  // for (TypeEnv *tenv = ylc_mir_ctx->env; tenv; tenv = tenv->next) {
+  //   audio_mir_register_node_builtin(tenv);
+  // }
+
   TypeEnv audio_tenv = {.name = "Audio"};
-
-  for (TypeEnv *tenv = ylc_mir_ctx->env; tenv; tenv = tenv->next) {
-    audio_mir_register_node_builtin(tenv);
-  }
-
   mir_register_builtin(ylc_mir_program, &audio_tenv, MirCompileAudioHandler,
+                       MIR_BUILTIN_SYMBOL_EXTENSION, (MirOperandUse[]){}, 0,
+                       MIR_RESULT_NONE);
+
+  TypeEnv play_tenv = {.name = "play_pattern"};
+  mir_register_builtin(ylc_mir_program, &play_tenv, MirPlayPatternHandler,
                        MIR_BUILTIN_SYMBOL_EXTENSION, (MirOperandUse[]){}, 0,
                        MIR_RESULT_NONE);
 }
