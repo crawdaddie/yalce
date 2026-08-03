@@ -62,6 +62,68 @@ typedef struct {
 
 static LLVMTypeRef lower_mir_generic_ptr_type(LLVMModuleRef module);
 static Type *lower_mir_resolve_rc_type(Type *type, JITLangCtx *ctx);
+static Type *lower_mir_resolve_rc_type_uncached(Type *type, JITLangCtx *ctx);
+
+/* Per-program memoization cache for lower_mir_resolve_rc_type. The same Type*
+   is shared across all MIR values of a given type, so resolving it once and
+   reusing the result avoids repeatedly running resolve_type_in_env +
+   deep_copy_type + the program-wide equivalent-alias search for the hundreds
+   of RC dup/drop markers that lower the same types. */
+#define LOWER_MIR_RC_CACHE_CAP 1024
+static struct {
+  Type *in;
+  Type *out;
+} lower_mir_rc_cache[LOWER_MIR_RC_CACHE_CAP];
+static bool lower_mir_rc_cache_valid[LOWER_MIR_RC_CACHE_CAP];
+
+static void lower_mir_rc_cache_reset(void) {
+  memset(lower_mir_rc_cache_valid, 0, sizeof(lower_mir_rc_cache_valid));
+}
+
+static Type *lower_mir_rc_cache_get(Type *type) {
+  if (!type) {
+    return NULL;
+  }
+  uintptr_t h = (uintptr_t)type;
+  h ^= h >> 16;
+  h *= 0x9E3779B1u;
+  size_t idx = h & (LOWER_MIR_RC_CACHE_CAP - 1);
+  for (size_t probe = 0; probe < LOWER_MIR_RC_CACHE_CAP; probe++) {
+    size_t i = (idx + probe) & (LOWER_MIR_RC_CACHE_CAP - 1);
+    if (!lower_mir_rc_cache_valid[i]) {
+      return NULL;
+    }
+    if (lower_mir_rc_cache[i].in == type) {
+      return lower_mir_rc_cache[i].out;
+    }
+  }
+  return NULL;
+}
+
+static void lower_mir_rc_cache_put(Type *type, Type *resolved) {
+  if (!type) {
+    return;
+  }
+  uintptr_t h = (uintptr_t)type;
+  h ^= h >> 16;
+  h *= 0x9E3779B1u;
+  size_t idx = h & (LOWER_MIR_RC_CACHE_CAP - 1);
+  for (size_t probe = 0; probe < LOWER_MIR_RC_CACHE_CAP; probe++) {
+    size_t i = (idx + probe) & (LOWER_MIR_RC_CACHE_CAP - 1);
+    if (!lower_mir_rc_cache_valid[i]) {
+      lower_mir_rc_cache[i].in = type;
+      lower_mir_rc_cache[i].out = resolved;
+      lower_mir_rc_cache_valid[i] = true;
+      return;
+    }
+    if (lower_mir_rc_cache[i].in == type) {
+      lower_mir_rc_cache[i].out = resolved;
+      return;
+    }
+  }
+  /* Cache full; drop the new entry (cache is advisory, miss falls back to the
+     slow path). This only happens with >1024 distinct resolved types. */
+}
 
 typedef struct MirDlopenCacheEntry {
   LLVMModuleRef module;
@@ -4942,6 +5004,21 @@ static Type *lower_mir_resolve_rc_type(Type *type, JITLangCtx *ctx) {
     return type;
   }
 
+  Type *cached = lower_mir_rc_cache_get(type);
+  if (cached) {
+    return cached;
+  }
+
+  Type *result = lower_mir_resolve_rc_type_uncached(type, ctx);
+  lower_mir_rc_cache_put(type, result);
+  return result;
+}
+
+static Type *lower_mir_resolve_rc_type_uncached(Type *type, JITLangCtx *ctx) {
+  if (!type || !ctx || !ctx->env) {
+    return type;
+  }
+
   /* An aliased aggregate is already the canonical recursive fixed point (e.g.
      RBTree, TensorRef). Skip the expensive program-wide equivalent-alias search
      and recursive ref expansion, which would otherwise traverse the recursive
@@ -6979,6 +7056,7 @@ LLVMValueRef lower_mir(MirProgram *prog, LLVMModuleRef module,
   }
   MirProgram *saved_current_program = lower_mir_current_program;
   lower_mir_current_program = prog;
+  lower_mir_rc_cache_reset();
 
   MirLlvmCtx lctx = {
       .program = prog,
