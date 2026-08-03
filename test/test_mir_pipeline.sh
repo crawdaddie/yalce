@@ -1492,13 +1492,11 @@ else
   fail "autograd3 linear recursive TensorNode repro should execute without allocator corruption"
 fi
 assert_contains "$PERCEUS_RECURSIVE_TENSOR_LLVM_IR" '^%TensorNode = type \{ \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, \{ i32, i32, ptr \}, ptr, ptr, \{ i32, i32, ptr \}, i32, i32 \}' "autograd3 TensorNode should lower as a recursive aggregate with managed fields"
-assert_order "$PERCEUS_RECURSIVE_TENSOR_LLVM_IR" "autograd3 TensorAdd should dup recursive aggregate fields before building the result node" \
+assert_order "$PERCEUS_RECURSIVE_TENSOR_LLVM_IR" "autograd3 TensorAdd should build the result node from borrowed aggregate inputs" \
   'define %TensorNode @autograd3\.TensorAdd\.tensor_add\(%TensorNode %a, %TensorNode %b\)' \
-  'call void @__ylc_dup\(ptr' \
-  'call void @__ylc_dup\(ptr' \
   'call \{ i32, i32, ptr \} @autograd3\.TensorAdd\.tensor_add_data\(%TensorNode %a, %TensorNode %b\)' \
-  'call void @__ylc_dup\(ptr' \
-  'call void @__ylc_dup\(ptr'
+  'store %TensorNode %a, ptr %array\.item\.ptr' \
+  'store %TensorNode %b, ptr %array\.item\.ptr[0-9]*'
 assert_order "$PERCEUS_RECURSIVE_TENSOR_LLVM_IR" "Array TensorNode drop should deep-drop each TensorNode element" \
   '^define void @__ylc_drop_Array_TensorNode\(ptr %0\)' \
   'getelementptr %TensorNode, ptr %0' \

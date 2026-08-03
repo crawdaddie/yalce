@@ -5625,12 +5625,88 @@ static bool mir_bind_specialized_module_param(MirBuilder *builder,
                                   arg_ast, true);
 }
 
+/* Find a module in `program` whose source `path` matches and which has already
+   been compiled (its init function and members were built). Importing a module
+   that was already compiled (e.g. logistic opens autograd3, then imports
+   graph_compile which also opens autograd3) used to recompile the whole module
+   under a new qualified name, duplicating every function's LLVM lowering.
+   Reusing the already-compiled module's exports avoids that duplication. */
+static MirModule *mir_program_find_compiled_module_by_path(MirProgram *program,
+                                                           const char *path) {
+  if (!program || !path) {
+    return NULL;
+  }
+  for (size_t i = 0; i < program->modules.len; i++) {
+    MirModule *m = program->modules.items ? program->modules.items[i] : NULL;
+    if (!m || !m->path || strcmp(m->path, path) != 0) {
+      continue;
+    }
+    if (m->init == MIR_NO_FUNCTION) {
+      continue;
+    }
+    return m;
+  }
+  return NULL;
+}
+
+/* Copy every export (name -> MirSymbol) from `src` into `dst`, sharing the same
+   underlying function/value so member references resolve to the already-compiled
+   functions instead of newly recompiled copies. */
+static void mir_module_share_exports(MirProgram *program, MirModule *dst,
+                                     MirModule *src) {
+  if (!program || !dst || !src) {
+    return;
+  }
+  hti it = ht_iterator(&src->exports);
+  while (ht_next(&it)) {
+    MirSymbol *exported = it.value;
+    if (!exported) {
+      continue;
+    }
+    ht_set(&dst->exports, it.key, exported);
+  }
+}
+
 static MirFunction *mir_build_module_init_fn(MirBuilder *parent_builder,
                                              MirModule *module, Ast *module_ast,
                                              MirCtx *module_ctx) {
   if (!parent_builder || !parent_builder->program || !module || !module_ast ||
       !module_ctx) {
     return NULL;
+  }
+
+  /* If this module's source path was already compiled in this program (e.g.
+     autograd3 opened directly by the importer and again by an imported module),
+     reuse the already-built functions instead of recompiling a duplicate. */
+  if (module->path) {
+    MirModule *existing =
+        mir_program_find_compiled_module_by_path(parent_builder->program,
+                                                 module->path);
+    if (existing && existing != module) {
+      mir_module_share_exports(parent_builder->program, module, existing);
+      /* A trivial init fn so the module has an entry point without recompiling
+         its body. */
+      const char *init_name = mir_arena_printf(
+          parent_builder->program->arena, "$%s_module_init.reuse",
+          module->name ? module->name : "");
+      Type *init_type = type_fn(&t_void, &t_void);
+      MirFunction *init_fn = mir_program_add_function(
+          parent_builder->program, init_name, init_type, module_ast);
+      if (!init_fn) {
+        return NULL;
+      }
+      module->init = init_fn->id;
+      MirBlock *entry = mir_function_add_block(init_fn, "entry");
+      if (!entry) {
+        return NULL;
+      }
+      MirBuilder init_builder;
+      mir_builder_init(&init_builder, parent_builder->program, init_fn);
+      mir_builder_position_at_end(&init_builder, entry);
+      mir_builder_set_return(&init_builder,
+                             mir_const_void(&init_builder, &t_void, module_ast));
+      return init_fn;
+    }
   }
 
   const char *init_name =
@@ -9049,11 +9125,195 @@ bool mir_program_had_error(MirProgram *program) {
 
 void mir_program_destroy(MirProgram *program) { (void)program; }
 
+/* Returns true if `value` is one of `fn`'s managed entry parameters. Borrowed
+   parameters (MIR_OPERAND_USE_BORROW) are owned by the caller and must never be
+   dropped or moved by the callee; only consumed parameters carry ownership. */
+static bool mir_param_is_consume(const MirFunction *fn, MirValueId value) {
+  if (!fn || value == MIR_NO_VALUE) {
+    return false;
+  }
+  for (size_t i = 0; i < fn->params.len; i++) {
+    if (fn->params.items[i].value == value) {
+      return mir_function_param_use(fn, i) == MIR_OPERAND_USE_CONSUME;
+    }
+  }
+  return false;
+}
+
+/* Visitor state for scanning a function body to decide whether an entry
+   parameter is ever used in a consuming position. If it never is, the
+   parameter only borrows its argument and the caller need not dup it. */
+typedef struct {
+  const MirFunction *fn;
+  MirValueId param_value;
+  bool any_consume;
+  bool any_use;
+  bool any_phi;
+} MirParamConsumeScan;
+
+static bool mir_scan_param_consume_operand(MirInstr *instr, MirOperand operand,
+                                           void *ctx) {
+  MirParamConsumeScan *scan = ctx;
+  if (!scan || operand.value != scan->param_value) {
+    return true;
+  }
+  scan->any_use = true;
+  /* A parameter that flows into a phi may be selected and returned/moved by a
+     branch that doesn't otherwise consume it; the phi's operand is marked
+     borrow, but selecting it for an owning return is a move. Be conservative
+     and keep such parameters owned. */
+  if (instr && instr->kind == MIR_PHI) {
+    scan->any_phi = true;
+  }
+  if (operand.use == MIR_OPERAND_USE_CONSUME) {
+    scan->any_consume = true;
+    return false;
+  }
+  return true;
+}
+
+/* Infer, for one function, the ownership mode of each entry parameter from its
+   body. A parameter can be BORROW if it is never used in a consuming position
+   (move into a consuming call operand, store into an owning slot, returned by
+   ownership, or moved into an owning aggregate). Extern/builtin functions have
+   no in-module body to scan and keep their explicit modes. Returns true if any
+   parameter mode changed. */
+static bool mir_function_returns_capturing(const MirFunction *fn) {
+  if (!fn || !fn->type || fn->type->kind != T_FN) {
+    return false;
+  }
+  /* A coroutine constructor builds a value that resumes across suspension
+     points and retains borrowed parameters for the coroutine's lifetime, so
+     its parameters must stay owned. A closure-returning function likewise
+     hands the caller a value that outlives the call and captures an
+     environment. */
+  if (is_coroutine_constructor_type(fn->type)) {
+    return true;
+  }
+  Type *result = fn->type->data.T_FN.to;
+  if (result && (is_coroutine_type(result) || is_closure(result))) {
+    return true;
+  }
+  return false;
+}
+
+static bool mir_infer_function_param_uses(MirFunction *fn) {
+  if (!fn || fn->is_extern || fn->blocks.len == 0) {
+    return false;
+  }
+
+  /* Coroutines and closure-returning functions retain borrowed values beyond
+     the call, so their parameters keep their construction-time ownership modes. */
+  if (mir_function_returns_capturing(fn)) {
+    return false;
+  }
+
+  bool changed = false;
+  for (size_t pi = 0; pi < fn->params.len; pi++) {
+    MirValueId param_value = fn->params.items[pi].value;
+    if (param_value == MIR_NO_VALUE) {
+      continue;
+    }
+    /* Skip parameters already marked borrow by construction (closure env,
+       void params); they must stay borrowed. */
+    if (mir_function_param_use(fn, pi) == MIR_OPERAND_USE_BORROW) {
+      continue;
+    }
+
+    MirParamConsumeScan scan = {
+        .fn = fn, .param_value = param_value, .any_consume = false,
+        .any_use = false, .any_phi = false};
+    for (size_t bi = 0; bi < fn->blocks.len && !scan.any_consume; bi++) {
+      MirBlock *block = fn->blocks.items ? fn->blocks.items[bi] : NULL;
+      if (!block) {
+        continue;
+      }
+      for (size_t ii = 0; ii < block->instrs.len && !scan.any_consume; ii++) {
+        mir_instr_for_each_operand(&block->instrs.items[ii],
+                                   mir_scan_param_consume_operand, &scan);
+      }
+      if (!scan.any_consume) {
+        mir_term_for_each_operand(&block->term,
+                                  mir_scan_param_consume_operand, &scan);
+      }
+    }
+
+    /* Only promote a parameter to BORROW when it is actually used (a sink that
+       ignores its argument keeps CONSUME so the caller transfers ownership and
+       the callee drops it, matching the documented consuming-call behavior),
+       none of those uses take ownership of it, and it does not flow into a phi
+       (which may select it for an owning return/move). */
+    if (scan.any_use && !scan.any_consume && !scan.any_phi &&
+        mir_function_param_use(fn, pi) != MIR_OPERAND_USE_BORROW) {
+      mir_function_set_param_use(fn, pi, MIR_OPERAND_USE_BORROW);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/* A callee's inferred parameter modes change how every call to it should treat
+   its operands. Re-apply the (possibly updated) callee summary to all calls in
+   the program. */
+static void mir_reapply_call_summaries(MirProgram *program) {
+  if (!program) {
+    return;
+  }
+  for (size_t fi = 0; fi < program->functions.len; fi++) {
+    MirFunction *fn = program->functions.items ? program->functions.items[fi] : NULL;
+    if (!fn) {
+      continue;
+    }
+    for (size_t bi = 0; bi < fn->blocks.len; bi++) {
+      MirBlock *block = fn->blocks.items ? fn->blocks.items[bi] : NULL;
+      if (!block) {
+        continue;
+      }
+      for (size_t ii = 0; ii < block->instrs.len; ii++) {
+        MirInstr *instr = &block->instrs.items[ii];
+        if (instr->kind == MIR_CALL) {
+          MirBuilder builder;
+          mir_builder_init(&builder, program, fn);
+          mir_call_apply_callee_summary(&builder, instr);
+        }
+      }
+    }
+  }
+}
+
+/* Fixed-point inference of parameter ownership modes across the call graph.
+   A function's parameters depend on how it uses them, and a call's consume/
+   borrow operands depend on the callee's parameter modes, so iterate until
+   stable. This turns read-only parameters into borrows, eliminating the
+   caller-side dup and the callee-side entry retain/drop for them. */
+static void mir_infer_param_uses_program(MirProgram *program) {
+  if (!program) {
+    return;
+  }
+  for (int iter = 0; iter < 64; iter++) {
+    bool changed = false;
+    for (size_t fi = 0; fi < program->functions.len; fi++) {
+      MirFunction *fn =
+          program->functions.items ? program->functions.items[fi] : NULL;
+      if (mir_infer_function_param_uses(fn)) {
+        changed = true;
+      }
+    }
+    if (changed) {
+      mir_reapply_call_summaries(program);
+    }
+    if (!changed) {
+      break;
+    }
+  }
+}
+
 void mir_run_passes(MirProgram *program) {
   if (mir_program_had_error(program)) {
     return;
   }
   mir_resolve_named_extract_fields_program(program);
+  mir_infer_param_uses_program(program);
   mir_escape_analysis(program);
   if (ylc_config.perceus_rc) {
     mir_perceus_instrumentation(program);

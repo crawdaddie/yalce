@@ -145,64 +145,64 @@ let accuracy = fn () ->
 ;;
 
 let acc = accuracy ();
-
-let popen = extern fn Ptr -> Ptr -> Ptr;
-let fflush = extern fn Ptr -> Int;
-let pclose = extern fn Ptr -> Int;
-
-let plot_losses = fn losses epochs ->
-  let gp = popen (cstr "gnuplot") (cstr "w");
-  fprintf gp ("set terminal kittycairo size 900,500 scroll\n");
-  fprintf gp ("set title 'Logistic regression training loss (BCE)'\n");
-  fprintf gp ("set xlabel 'epoch'\n");
-  fprintf gp ("set ylabel 'total loss'\n");
-  fprintf gp ("set grid\n");
-  fprintf gp ("plot '-' using 1:2 with lines title 'loss'\n");
-  for epoch = 0 .. (epochs + 1) in (
-    fprintf gp (`{epoch} {losses[epoch]}\n`)
-  );
-  fprintf gp ("e\n");
-  fflush gp;
-  pclose gp
-;;
-
-plot_losses losses TRAIN_EPOCHS;
-
+#
+# let popen = extern fn Ptr -> Ptr -> Ptr;
+# let fflush = extern fn Ptr -> Int;
+# let pclose = extern fn Ptr -> Int;
+#
+# let plot_losses = fn losses epochs ->
+#   let gp = popen (cstr "gnuplot") (cstr "w");
+#   fprintf gp ("set terminal kittycairo size 900,500 scroll\n");
+#   fprintf gp ("set title 'Logistic regression training loss (BCE)'\n");
+#   fprintf gp ("set xlabel 'epoch'\n");
+#   fprintf gp ("set ylabel 'total loss'\n");
+#   fprintf gp ("set grid\n");
+#   fprintf gp ("plot '-' using 1:2 with lines title 'loss'\n");
+#   for epoch = 0 .. (epochs + 1) in (
+#     fprintf gp (`{epoch} {losses[epoch]}\n`)
+#   );
+#   fprintf gp ("e\n");
+#   fflush gp;
+#   pclose gp
+# ;;
+#
+# plot_losses losses TRAIN_EPOCHS;
+#
 let w0 = (tensor_data Model.w)[0];
 let w1 = (tensor_data Model.w)[1];
 let bb = (tensor_data Model.b)[0];
-
-let emit_points = fn gp target_label ->
-  for i = 0 .. Data.n in (
-    let x0 = (tensor_data (Data.x_at i))[0];
-    let x1 = (tensor_data (Data.x_at i))[1];
-    let lab = (tensor_data (Data.y_at i))[0];
-    if lab == target_label then (
-      fprintf gp `{x0} {x1}\n`
-    )
-  );
-  fprintf gp "e\n"
-;;
-
-let plot_decision = fn () ->
-  let gp = popen (cstr "gnuplot") (cstr "w");
-  fprintf gp "set terminal kittycairo size 900,650 scroll\n";
-  fprintf gp "set title 'Logistic regression decision boundary'\n";
-  fprintf gp "set xlabel 'x1'\n";
-  fprintf gp "set ylabel 'x2'\n";
-  fprintf gp "set grid\n";
-  fprintf gp "set xrange [-3:3]\n";
-  fprintf gp "set yrange [-3:3]\n";
-  fprintf gp `f(x) = -({w0}*x + {bb})/{w1}\n`;
-  fprintf gp "plot f(x) with lines linewidth 2 title 'boundary', '-' using 1:2 with points pointtype 7 ps 1.3 title 'class 1', '-' using 1:2 with points pointtype 5 ps 1.3 title 'class 0'\n";
-  emit_points gp 1.;
-  emit_points gp 0.;
-  fflush gp;
-  pclose gp
-;;
-
-plot_decision ();
-
+#
+# let emit_points = fn gp target_label ->
+#   for i = 0 .. Data.n in (
+#     let x0 = (tensor_data (Data.x_at i))[0];
+#     let x1 = (tensor_data (Data.x_at i))[1];
+#     let lab = (tensor_data (Data.y_at i))[0];
+#     if lab == target_label then (
+#       fprintf gp `{x0} {x1}\n`
+#     )
+#   );
+#   fprintf gp "e\n"
+# ;;
+#
+# let plot_decision = fn () ->
+#   let gp = popen (cstr "gnuplot") (cstr "w");
+#   fprintf gp "set terminal kittycairo size 900,650 scroll\n";
+#   fprintf gp "set title 'Logistic regression decision boundary'\n";
+#   fprintf gp "set xlabel 'x1'\n";
+#   fprintf gp "set ylabel 'x2'\n";
+#   fprintf gp "set grid\n";
+#   fprintf gp "set xrange [-3:3]\n";
+#   fprintf gp "set yrange [-3:3]\n";
+#   fprintf gp `f(x) = -({w0}*x + {bb})/{w1}\n`;
+#   fprintf gp "plot f(x) with lines linewidth 2 title 'boundary', '-' using 1:2 with points pointtype 7 ps 1.3 title 'class 1', '-' using 1:2 with points pointtype 5 ps 1.3 title 'class 0'\n";
+#   emit_points gp 1.;
+#   emit_points gp 0.;
+#   fflush gp;
+#   pclose gp
+# ;;
+#
+# plot_decision ();
+#
 print `
 logistic regression (binary classification)
 target: label = 1 if x2 > x1 else 0
