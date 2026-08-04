@@ -1458,6 +1458,18 @@ static MirValueId mir_builtin_unary_value_op(MirBuilder *builder, Ast *app,
 static MirValueId MirStrHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
                                 MirBuiltinSymbol *symbol) {
   (void)symbol;
+  /* `str` of an already-String value is identity. Emitting it as a separate
+     MIR_OP_KIND_STR produces a new SSA value that aliases the operand's
+     buffer; perceus then drops the operand (freeing the buffer) while the
+     alias is still live -> use-after-free. For a String value, just return
+     the operand directly (no new value, no aliasing). */
+  if (mir_builtin_arity(app, 1)) {
+    Ast *arg = app->data.AST_APPLICATION.args;
+    if (arg && arg->type &&
+        (arg->type->kind == T_STRING || is_string_type(arg->type))) {
+      return mir_expr(builder, arg, ctx);
+    }
+  }
   return mir_builtin_unary_value_op(builder, app, ctx, MIR_OP_KIND_STR);
 }
 
