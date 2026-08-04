@@ -7152,35 +7152,198 @@ static void audio_mir_register_node_builtin(TypeEnv *tenv) {
 //   return MIR_NO_VALUE;
 // }
 //
-/* `play_pattern` builtin: takes a coroutine yielding values over time and
-   plays them as an audio pattern. Registered as the `play_pattern` builtin
-   handler (the user declares `let play_pattern = extern fn T -> T;`).
+/* `play_pattern` builtin: `fn Double -> T -> T` -- takes a quant (Double) and a
+   coroutine yielding Double wait-times, and plays them as a scheduled event
+   chain. Registered as the `play_pattern` builtin handler (the user declares
+   `let play_pattern = extern fn Double -> T -> T;`). The pipe form
+   `co () |> play_pattern 0.` desugars to `play_pattern 0. (co ())`.
 
-   The handler is invoked at MIR-build time for `coro |> play_pattern`. It must
-   return a non-MIR_NO_VALUE so the call does not fall through to the (unlinked)
-   `play_pattern` extern symbol -- returning MIR_NO_VALUE causes a
+   The handler is invoked at MIR-build time for `coro |> play_pattern quant`. It
+   must return a non-MIR_NO_VALUE so the call does not fall through to the
+   (unlinked) `play_pattern` extern symbol -- returning MIR_NO_VALUE causes a
    "Symbols not found: [ play_pattern ]" JIT link failure.
 
-   TODO: the real implementation should drive the coroutine's yielded values as
-   scheduled audio events (iterate `coro.next` over time, mapping each yielded
-   value to an audio onset/gate). For now this evaluates the coroutine argument
-   (so it compiles) and returns void, which prevents the link failure and lets
-   `co () |> play_pattern` compile/run without crashing. */
+   Implementation: builds a MIR callback function `__ylc_play_pattern_step`
+   (signature `coro -> u64 -> void`) that the engine scheduler calls once per
+   step. Each step resumes the coroutine via MIR_CORO_NEXT (lowered to
+   llvm.coro.resume); the resulting Option<Double> is inspected -- None means the
+   coroutine is finished (stop scheduling), Some(dur) extracts the inter-event
+   wait-time and re-arms itself via the runtime `schedule_event(tick, dur, self,
+   handle)`. The handler emits the initial kick via the runtime
+   `ylc_play_pattern_start(quant, step, handle)`: quant 0 fires immediately, a
+   positive value x defers to the next multiple of x seconds since the scheduler
+   started (exactly like defer_quant). It returns the coroutine value
+   (non-MIR_NO_VALUE) so the builtin call is satisfied. */
+static MirFunction *
+mir_build_play_pattern_step(MirBuilder *builder, Ast *app, Type *coro_type) {
+  /* Coroutine types are T_CONS whose first arg is the yield type (see
+     PlayRoutineHandler / pattern_coroutine.c which read
+     cor_type->data.T_CONS.args[0]). */
+  if (!is_coroutine_type(coro_type) || !coro_type->data.T_CONS.args ||
+      coro_type->data.T_CONS.num_args < 1) {
+    return NULL;
+  }
+  Type *yield_type = coro_type->data.T_CONS.args[0];
+  Type *next_type = create_option_type(yield_type);
+  Type *some_type = next_type && next_type->data.T_CONS.args
+                        ? next_type->data.T_CONS.args[0]
+                        : NULL;
+  if (!yield_type || !next_type || !some_type) {
+    return NULL;
+  }
+
+  /* The step callback has the C SchedulerCallback ABI: void (*)(void *userdata,
+     uint64_t tick). The userdata slot carries the coroutine handle, which at
+     the LLVM level is an opaque i8* (coroutine handles lower to CORO_GENERIC_PTR,
+     see backend_llvm/coroutine_extensions.c). Typing the first param as the
+     concrete coroutine type keeps MIR_CORO_NEXT's type derivation correct while
+     matching the i8* ABI the scheduler passes through. */
+  Type *step_params[] = {coro_type, &t_uint64};
+  Type *step_type = audio_mir_fn_type(builder->fn->arena, step_params,
+                                      sizeof(step_params) / sizeof(step_params[0]),
+                                      &t_void);
+  if (!step_type) {
+    return NULL;
+  }
+
+  static unsigned play_pattern_step_counter = 0;
+  char step_name[64];
+  snprintf(step_name, sizeof(step_name), "__ylc_play_pattern_step_%u",
+           play_pattern_step_counter++);
+
+  MirFunction *step = mir_program_add_function(builder->program, step_name,
+                                                step_type, app);
+  if (!step) {
+    return NULL;
+  }
+
+  MirValueId handle =
+      mir_function_add_param(step, "handle", coro_type, app);
+  MirValueId tick = mir_function_add_param(step, "tick", &t_uint64, app);
+  if (handle == MIR_NO_VALUE || tick == MIR_NO_VALUE) {
+    return NULL;
+  }
+
+  MirBlock *entry = mir_function_add_block(step, "entry");
+  MirBlock *resume_block = mir_function_add_block(step, "coro.resume");
+  MirBlock *value_block = mir_function_add_block(step, "coro.value");
+  MirBlock *finished = mir_function_add_block(step, "coro.finished");
+  if (!entry || !resume_block || !value_block || !finished) {
+    return NULL;
+  }
+
+  MirBuilder wb;
+  mir_builder_init(&wb, builder->program, step);
+
+  mir_builder_position_at_end(&wb, entry);
+  mir_builder_set_br(&wb, resume_block->id);
+
+  /* Resume the coroutine; MIR_CORO_NEXT lowers to codegen_handle_resume, which
+     returns Option<yield_type> (Some when a value was yielded, None when done). */
+  mir_builder_position_at_end(&wb, resume_block);
+  MirValueId next = mir_coro_next(&wb, app, handle, coro_type);
+  MirValueId tag = mir_variant_tag(&wb, app, next);
+  MirValueId is_some = mir_tag_eq(&wb, app, tag, 0, TYPE_NAME_SOME);
+  if (next == MIR_NO_VALUE || tag == MIR_NO_VALUE || is_some == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_builder_set_cond(&wb, is_some, value_block->id, finished->id);
+
+  /* Some(dur): extract the Double wait-time and re-arm the scheduler with the
+     same callback and handle, delaying by dur seconds. */
+  mir_builder_position_at_end(&wb, value_block);
+  MirValueId payload =
+      mir_variant_payload(&wb, app, next, some_type, 0, TYPE_NAME_SOME);
+  /* `play_pattern` yields a bare Double (the inter-event wait-time). If a future
+     caller yields a tuple, field 0 is the duration, matching PlayRoutineHandler. */
+  MirValueId dur;
+  if (is_tuple_type(yield_type)) {
+    dur = mir_tuple_get(&wb, yield_type, app, payload, 0);
+  } else {
+    dur = payload;
+  }
+  if (payload == MIR_NO_VALUE || dur == MIR_NO_VALUE) {
+    return NULL;
+  }
+
+  Type *sched_params[] = {&t_uint64, &t_num, &t_ptr, coro_type};
+  Type *schedule_event_type = audio_mir_fn_type(
+      wb.fn->arena, sched_params, sizeof(sched_params) / sizeof(sched_params[0]),
+      &t_ptr);
+  MirValueId schedule_event_fn = audio_mir_extern_ref(
+      &wb, "schedule_event", schedule_event_type, app);
+  MirValueId self_ref = mir_fn_ref(&wb, step_type, app, step);
+  if (schedule_event_fn == MIR_NO_VALUE || self_ref == MIR_NO_VALUE) {
+    return NULL;
+  }
+  MirValueId sched_args[] = {tick, dur, self_ref, handle};
+  mir_call_value(&wb, &t_ptr, app, schedule_event_fn, schedule_event_type,
+                 sched_args, sizeof(sched_args) / sizeof(sched_args[0]));
+  mir_builder_set_return(&wb, mir_const_void(&wb, &t_void, app));
+
+  /* None: coroutine finished -- do not reschedule. */
+  mir_builder_position_at_end(&wb, finished);
+  mir_builder_set_return(&wb, mir_const_void(&wb, &t_void, app));
+
+  return step;
+}
+
 static MirValueId MirPlayPatternHandler(MirBuilder *builder, Ast *app,
                                         MirCtx *ctx, MirBuiltinSymbol *symbol) {
   (void)symbol;
+  /* `play_pattern` is `fn Double -> T -> T`: args[0] is the quant, args[1] is the
+     coroutine. The pipe form `co () |> play_pattern 0.` desugars to
+     `play_pattern 0. (co ())`, so the coroutine is the last argument. */
   if (!builder || !app || app->tag != AST_APPLICATION ||
-      app->data.AST_APPLICATION.len < 1) {
+      app->data.AST_APPLICATION.len < 2) {
     return MIR_NO_VALUE;
   }
 
-  /* Evaluate the coroutine argument so it is compiled (its coro.new + body).
-     The coroutine value itself is consumed here; a future implementation will
-     hand it to a runtime pattern scheduler. */
-  Ast *arg = app->data.AST_APPLICATION.args;
-  MirValueId cor = mir_expr(builder, arg, ctx);
+  Ast *quant_ast = app->data.AST_APPLICATION.args;
+  Ast *coro_ast = app->data.AST_APPLICATION.args + 1;
 
-  return mir_const_void(builder, app->type ? app->type : &t_void, app);
+  /* Evaluate the quant (Double) and the coroutine (its coro.new + body) so both
+     are compiled and their handles are available. */
+  MirValueId quant = mir_expr(builder, quant_ast, ctx);
+  MirValueId cor = mir_expr(builder, coro_ast, ctx);
+  if (quant == MIR_NO_VALUE || cor == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  Type *coro_type = is_coroutine_type(coro_ast->type) ? coro_ast->type : app->type;
+  if (!is_coroutine_type(coro_type)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirFunction *step = mir_build_play_pattern_step(builder, app, coro_type);
+  if (!step) {
+    return MIR_NO_VALUE;
+  }
+
+  /* Kick off the chain via the runtime `ylc_play_pattern_start`: it applies the
+     quant (0 = immediate, x > 0 = next multiple of x seconds since the
+     scheduler started, exactly like defer_quant) and schedules the first step.
+     Each step then reschedules itself with the wait-time yielded by the
+     coroutine. */
+  Type *start_params[] = {&t_num, &t_ptr, coro_type};
+  Type *start_type = audio_mir_fn_type(
+      builder->fn->arena, start_params,
+      sizeof(start_params) / sizeof(start_params[0]), &t_void);
+  MirValueId start_fn = audio_mir_extern_ref(builder, "ylc_play_pattern_start",
+                                             start_type, app);
+  MirValueId step_ref = mir_fn_ref(builder, step->type, app, step);
+  if (start_fn == MIR_NO_VALUE || step_ref == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId start_args[] = {quant, step_ref, cor};
+  mir_call_value(builder, &t_void, app, start_fn, start_type, start_args,
+                 sizeof(start_args) / sizeof(start_args[0]));
+
+  /* Return the coroutine value so the builtin call is satisfied (non-
+     MIR_NO_VALUE) and does not fall through to the unlinked `play_pattern`
+     extern symbol. */
+  return cor;
 }
 /* Library-load constructor: runs when `libaudio_jit.so` is loaded (the engine
    dependency). This wires the audio JIT into the MIR/JIT before any user code

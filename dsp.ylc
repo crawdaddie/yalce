@@ -620,7 +620,7 @@ let mega_cathedral = @Audio fn inp ->
 
 let s = @Audio fn f ->
 
-  let ff = 60. * (1 + lfnoise 1 0 0.1);
+  let ff = f * (1 + lfnoise 1 0 0.1);
   array_fill 8 (fn i -> ff * (1. + (0.02 * i) / 8))
   |> ~
   |> sq_osc
@@ -630,18 +630,30 @@ let s = @Audio fn f ->
 # let Play = extern fn T -> T;
 
 # let x = s 40 |> Play;
-let x = s 40. |> play_node;
 
+
+# NodeRef set_input_scalar(NodeRef node, int input, double value);
+let set_input_scalar = extern fn Ptr -> Int -> Double -> Ptr;
 
 let co = fn () -> 
-  yield 1.;
-  yield 1.;
-  yield 1.;
-  yield 1.
-  ;;
+  let x = s 40. |> play_node;
+  yield .5;
+  print "60\n";
+  set_input_scalar x 0 60.;
+  yield 0.25;
 
-let play_pattern = extern fn T -> T;
-co () |> play_pattern;
+  print "80\n";
+  set_input_scalar x 0 80.;
+  yield 0.25;
+
+  print "100\n";
+  set_input_scalar x 0 100.;
+  yield 0.25
+  # set_input_scalar x 0 120.
+;;
+
+let play_pattern = extern fn Double -> T -> T;
+co () |> play_pattern 1.;
 
 
 

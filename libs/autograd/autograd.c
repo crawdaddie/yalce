@@ -165,3 +165,60 @@ void autograd_proc_graph(Tensor *g) {
   fflush(stdout);
   graph_free(&graph);
 }
+
+/* ---- C-level allocation pool for intermediate Double arrays ----
+ *
+ * A simple bump allocator: one big malloc'd buffer, a cursor that advances
+ * on each alloc, and a reset that rewinds the cursor. No per-element
+ * malloc/free, no RC — the YLC side treats the returned _DoubleArray as a
+ * raw borrow (not RC-managed), so perceus won't try to dup/drop it.
+ *
+ * Usage from YLC:
+ *   let pool_alloc = extern fn Int -> Array of Double;   // get a zeroed array
+ *   let pool_reset = extern fn () -> ();                  // rewind for next pass
+ *
+ * Call pool_reset() at the start of each training step. The arrays returned
+ * by pool_alloc are valid until the next pool_reset().
+ */
+
+#define POOL_CAPACITY (1 << 20)  /* 1 MiB of doubles */
+static double *pool_base = NULL;
+static int32_t pool_cursor = 0;
+
+/* Each allocation reserves 8 bytes (YlcRcHeader {int32 rc=0, int32 tag=0})
+ * before the payload so perceus RC drop/dup treat it as a stack value
+ * (rc=0 → no-op). This avoids use-after-free when the pool buffer is reused. */
+static void pool_ensure(void) {
+  if (!pool_base) {
+    /* +8 per slot for the RC header; worst case POOL_CAPACITY slots */
+    pool_base = (double *)malloc((POOL_CAPACITY + 1) * sizeof(double) * 2);
+  }
+}
+
+/* Allocate n doubles from the pool (zeroed). Prepends an 8-byte RC header
+ * with rc=0 (stack semantics) so perceus won't free or dup the buffer.
+ * Returns a _DoubleArray pointing past the header. */
+_DoubleArray pool_alloc(int32_t n) {
+  pool_ensure();
+  /* Reserve 8 bytes (2 doubles worth) for the RC header before the payload */
+  int32_t aligned_cursor = (pool_cursor + 1) & ~1;  /* align to 2 doubles */
+  if (aligned_cursor + n + 2 > POOL_CAPACITY * 2) {
+    aligned_cursor = 0;
+  }
+  /* RC header: rc=0 (stack, no free), tag=0 */
+  double *header = pool_base + aligned_cursor;
+  ((int32_t *)header)[0] = 0;  /* rc = 0 (stack) */
+  ((int32_t *)header)[1] = 0;  /* tag = 0 */
+  double *ptr = pool_base + aligned_cursor + 2;  /* skip 8-byte header */
+  pool_cursor = aligned_cursor + 2 + n;
+  for (int32_t i = 0; i < n; i++) {
+    ptr[i] = 0.0;
+  }
+  return (_DoubleArray){n, 0, ptr};
+}
+
+/* Reset the pool cursor — all previously-allocated arrays are invalidated.
+ * Call this at the start of each forward pass. */
+void pool_reset(void) {
+  pool_cursor = 0;
+}

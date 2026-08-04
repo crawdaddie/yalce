@@ -31,17 +31,6 @@ void node_connect_input(int idx, NodeRef node, NodeRef input);
 void plug_input_in_graph(int idx, NodeRef node, NodeRef input);
 NodeRef pipe_into(NodeRef filter, int idx, NodeRef node);
 
-NodeRef sum2_node(NodeRef input1, NodeRef input2);
-NodeRef mul2_node(NodeRef input1, NodeRef input2);
-NodeRef sub2_node(NodeRef input1, NodeRef input2);
-NodeRef div2_node(NodeRef input1, NodeRef input2);
-NodeRef mod2_node(NodeRef input1, NodeRef input2);
-
-NodeRef sin_node(NodeRef freq);
-NodeRef sq_node(NodeRef freq);
-NodeRef saw_node(NodeRef freq);
-NodeRef pm_node(NodeRef freq, NodeRef mod_index, NodeRef mod_ratio);
-
 double midi_to_freq(int midi_note);
 double dmidi_to_freq(double midi_note);
 double semi_to_ratio(int semitones);

@@ -23,4 +23,7 @@ uint64_t get_sched_tick();
 void defer_quant(double quant, DeferQuantCallback callback);
 void defer_quant_offset(double quant, double offset,
                         DeferQuantCallback callback);
+
+void ylc_play_pattern_start(double quant, SchedulerCallback callback,
+                            void *handle);
 #endif
