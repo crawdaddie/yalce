@@ -1127,21 +1127,21 @@ static bool mir_function_add_extern_params(MirFunction *fn, Type *type,
 }
 
 MirFunction *mir_program_add_extern_function_arena(MirProgram *program,
-                                                  const char *name, Type *type,
-                                                  Ast *origin,
-                                                  MirArena *alloc_arena);
+                                                   const char *name, Type *type,
+                                                   Ast *origin,
+                                                   MirArena *alloc_arena);
 
 MirFunction *mir_program_add_extern_function(MirProgram *program,
-                                              const char *name, Type *type,
-                                              Ast *origin) {
+                                             const char *name, Type *type,
+                                             Ast *origin) {
   return mir_program_add_extern_function_arena(program, name, type, origin,
                                                NULL);
 }
 
 MirFunction *mir_program_add_extern_function_arena(MirProgram *program,
-                                                  const char *name, Type *type,
-                                                  Ast *origin,
-                                                  MirArena *alloc_arena) {
+                                                   const char *name, Type *type,
+                                                   Ast *origin,
+                                                   MirArena *alloc_arena) {
   if (!program || !name || !type) {
     return NULL;
   }
@@ -1152,8 +1152,8 @@ MirFunction *mir_program_add_extern_function_arena(MirProgram *program,
     return existing;
   }
 
-  MirFunction *fn = mir_program_add_function_arena(program, name, type, origin,
-                                                   alloc_arena);
+  MirFunction *fn =
+      mir_program_add_function_arena(program, name, type, origin, alloc_arena);
   if (!fn) {
     return NULL;
   }
@@ -5650,8 +5650,8 @@ static MirModule *mir_program_find_compiled_module_by_path(MirProgram *program,
 }
 
 /* Copy every export (name -> MirSymbol) from `src` into `dst`, sharing the same
-   underlying function/value so member references resolve to the already-compiled
-   functions instead of newly recompiled copies. */
+   underlying function/value so member references resolve to the
+   already-compiled functions instead of newly recompiled copies. */
 static void mir_module_share_exports(MirProgram *program, MirModule *dst,
                                      MirModule *src) {
   if (!program || !dst || !src) {
@@ -5679,9 +5679,8 @@ static MirFunction *mir_build_module_init_fn(MirBuilder *parent_builder,
      autograd3 opened directly by the importer and again by an imported module),
      reuse the already-built functions instead of recompiling a duplicate. */
   if (module->path) {
-    MirModule *existing =
-        mir_program_find_compiled_module_by_path(parent_builder->program,
-                                                 module->path);
+    MirModule *existing = mir_program_find_compiled_module_by_path(
+        parent_builder->program, module->path);
     if (existing && existing != module) {
       mir_module_share_exports(parent_builder->program, module, existing);
       /* A trivial init fn so the module has an entry point without recompiling
@@ -5703,8 +5702,8 @@ static MirFunction *mir_build_module_init_fn(MirBuilder *parent_builder,
       MirBuilder init_builder;
       mir_builder_init(&init_builder, parent_builder->program, init_fn);
       mir_builder_position_at_end(&init_builder, entry);
-      mir_builder_set_return(&init_builder,
-                             mir_const_void(&init_builder, &t_void, module_ast));
+      mir_builder_set_return(
+          &init_builder, mir_const_void(&init_builder, &t_void, module_ast));
       return init_fn;
     }
   }
@@ -9203,7 +9202,8 @@ static bool mir_infer_function_param_uses(MirFunction *fn) {
   }
 
   /* Coroutines and closure-returning functions retain borrowed values beyond
-     the call, so their parameters keep their construction-time ownership modes. */
+     the call, so their parameters keep their construction-time ownership modes.
+   */
   if (mir_function_returns_capturing(fn)) {
     return false;
   }
@@ -9220,9 +9220,11 @@ static bool mir_infer_function_param_uses(MirFunction *fn) {
       continue;
     }
 
-    MirParamConsumeScan scan = {
-        .fn = fn, .param_value = param_value, .any_consume = false,
-        .any_use = false, .any_phi = false};
+    MirParamConsumeScan scan = {.fn = fn,
+                                .param_value = param_value,
+                                .any_consume = false,
+                                .any_use = false,
+                                .any_phi = false};
     for (size_t bi = 0; bi < fn->blocks.len && !scan.any_consume; bi++) {
       MirBlock *block = fn->blocks.items ? fn->blocks.items[bi] : NULL;
       if (!block) {
@@ -9233,8 +9235,8 @@ static bool mir_infer_function_param_uses(MirFunction *fn) {
                                    mir_scan_param_consume_operand, &scan);
       }
       if (!scan.any_consume) {
-        mir_term_for_each_operand(&block->term,
-                                  mir_scan_param_consume_operand, &scan);
+        mir_term_for_each_operand(&block->term, mir_scan_param_consume_operand,
+                                  &scan);
       }
     }
 
@@ -9260,7 +9262,8 @@ static void mir_reapply_call_summaries(MirProgram *program) {
     return;
   }
   for (size_t fi = 0; fi < program->functions.len; fi++) {
-    MirFunction *fn = program->functions.items ? program->functions.items[fi] : NULL;
+    MirFunction *fn =
+        program->functions.items ? program->functions.items[fi] : NULL;
     if (!fn) {
       continue;
     }

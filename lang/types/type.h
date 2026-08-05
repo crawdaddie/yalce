@@ -31,6 +31,7 @@ typedef struct TypeClass {
 
 typedef enum {
   CONSTRAINT_EQUALITY,
+  CONSTRAINT_YIELD,
 } ConstraintKind;
 
 typedef struct Constraint {
@@ -40,6 +41,10 @@ typedef struct Constraint {
       Type *left;
       Type *right;
     } EQUALITY;
+    struct {
+      Type *yielded;
+      Type *yield_type;
+    } YIELD;
   } data;
   struct Constraint *next;
 } Constraint;

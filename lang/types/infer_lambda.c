@@ -64,9 +64,12 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
 
   Type *fn_type = body_type;
   if (child.yielded_type) {
-    // printf("[LAMBDA]\n");
-    // print_type(fn_type);
-    fn_type = create_coroutine_instance_type(fn_type);
+    // The coroutine's yield type is the type unified across all `yield`
+    // expressions (child.yielded_type), NOT the body's final expression type --
+    // trailing statements after the last yield (e.g. a cleanup `print` returning
+    // ()) must not override the yielded type. Using body_type here would make a
+    // `yield 0.5; ...; print "done"` coroutine infer as `Coroutine of ()`.
+    fn_type = create_coroutine_instance_type(child.yielded_type);
   }
   for (size_t i = len; i > 0; i--) {
     fn_type = type_fn(param_types[i - 1], fn_type);
