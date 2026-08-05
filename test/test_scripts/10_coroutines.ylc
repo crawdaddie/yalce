@@ -332,3 +332,20 @@ let test_sequenced_cors = fn () ->
   && x () == Some 2 
   && x () == Some 3 
 ;;
+
+let test_coroutine_instance_param = fn () ->
+  let d = [5,6,7] |> iter;
+  let co = fn durs ->
+    yield 1;
+    yield durs |> cor_map (fn x -> x);
+    yield 2
+  ;;
+  let x = co d;
+  x () == Some 1
+  && x () == Some 5
+  && x () == Some 6 
+  && x () == Some 7
+  && x () == Some 2
+  && x () == None
+
+;;

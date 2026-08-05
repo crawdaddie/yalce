@@ -38,10 +38,13 @@ let bufsize = extern fn Ptr -> Int;
 let lfnoise = extern fn Double -> Double -> Double -> Double;
 # Stepped low-frequency noise. Args: update frequency, low bound, high bound.
 let lfnoise0 = extern fn Double -> Double -> Double -> Double;
+
 # Marks a signal as done when it reaches its natural end.
 let kill_on_end = extern fn Double -> Double;
+
 # ADSR envelope. Args: attack, decay, sustain, release, trigger.
 let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
+
 # Rectangular gate envelope. Args: duration, trigger.
 let rect = extern fn Double -> Double -> Double;
 
@@ -557,7 +560,7 @@ let mega_cathedral = @Audio fn inp ->
   fdn8 0.0941 0.1188 0.1509 0.1925 0.2435 0.3083 0.3925 0.4975 10.0 inp
 ;;
 
-
+;
 
 # type SFInfo = (fd: Ptr, frames: Uint64, samplerate: Int, channels: Int);
 # type SF = (data: Array of Double, channels: Int, samplerate: Int);
@@ -618,14 +621,15 @@ let mega_cathedral = @Audio fn inp ->
 #
 # plot_soundfile sf 12000;
 
-let s = @Audio fn f ->
+let s = @Audio fn f gate ->
 
   let ff = f * (1 + lfnoise 1 0 0.1);
   array_fill 8 (fn i -> ff * (1. + (0.02 * i) / 8))
   |> ~
   |> sq_osc
   |> mix 2
-  |> (*) 0.5 
+  |> (*) (adsr 0.01 0.1 1. 0.1 gate |> kill_on_end)
+
 ;;
 # let Play = extern fn T -> T;
 
@@ -635,25 +639,38 @@ let s = @Audio fn f ->
 # NodeRef set_input_scalar(NodeRef node, int input, double value);
 let set_input_scalar = extern fn Ptr -> Int -> Double -> Ptr;
 
-let co = fn () -> 
-  let x = s 40. |> play_node;
-  yield .5;
-  print "60\n";
-  set_input_scalar x 0 60.;
-  yield 0.25;
-
-  print "80\n";
-  set_input_scalar x 0 80.;
-  yield 0.25;
-
-  print "100\n";
-  set_input_scalar x 0 100.;
-  yield 0.25
-  # set_input_scalar x 0 120.
+let co = fn durs -> 
+  let x = s 40. 1. |> play_node;
+  yield durs |> cor_map (fn d -> 
+      set_input_scalar x 0 (Math.rrand 40. 200.);
+      d
+    )
+  ;
+  set_input_scalar x 1 0.
 ;;
-
 let play_pattern = extern fn Double -> T -> T;
-co () |> play_pattern 1.;
+
+co ([0.25, 0.25, 0.25, 0.25, 0.25, 2.] |> iter) |> cor_loop |> cor_map ((*) 0.5)  |> play_pattern 1.;
+  # yield .5;
+  # set_input_scalar x 0 60.;
+  # yield 0.25;
+  #
+  # set_input_scalar x 0 80.;
+  # yield 0.25;
+  #
+  # set_input_scalar x 0 100.;
+  # yield 0.25;
+  #
+  # set_input_scalar x 0 120.;
+  # yield 0.25;
+  #
+  # set_input_scalar x 0 140.;
+  # yield 0.25;
+  #
+  # set_input_scalar x 0 160.;
+  # yield 1.;
+  # yield  0.
+
 
 
 

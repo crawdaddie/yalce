@@ -7250,19 +7250,20 @@ mir_build_play_pattern_step(MirBuilder *builder, Ast *app, Type *coro_type) {
   mir_builder_set_cond(&wb, is_some, value_block->id, finished->id);
 
   /* Some(dur): extract the Double wait-time and re-arm the scheduler with the
-     same callback and handle, delaying by dur seconds. */
+     same callback and handle, delaying by dur seconds. The Some payload is a
+     1-field wrapper (Some of T); mir_tuple_get(yield_type, payload, 0) unwraps
+     it to the yielded value, exactly as cor_map does (mir_core.c). If the
+     coroutine yields a tuple, field 0 of the tuple is the duration, matching
+     PlayRoutineHandler. */
   mir_builder_position_at_end(&wb, value_block);
   MirValueId payload =
       mir_variant_payload(&wb, app, next, some_type, 0, TYPE_NAME_SOME);
-  /* `play_pattern` yields a bare Double (the inter-event wait-time). If a future
-     caller yields a tuple, field 0 is the duration, matching PlayRoutineHandler. */
-  MirValueId dur;
-  if (is_tuple_type(yield_type)) {
-    dur = mir_tuple_get(&wb, yield_type, app, payload, 0);
-  } else {
-    dur = payload;
-  }
-  if (payload == MIR_NO_VALUE || dur == MIR_NO_VALUE) {
+  MirValueId yielded =
+      mir_tuple_get(&wb, yield_type, app, payload, 0);
+  MirValueId dur = is_tuple_type(yield_type)
+                       ? mir_tuple_get(&wb, yield_type, app, yielded, 0)
+                       : yielded;
+  if (payload == MIR_NO_VALUE || yielded == MIR_NO_VALUE || dur == MIR_NO_VALUE) {
     return NULL;
   }
 
