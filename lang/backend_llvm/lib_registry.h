@@ -7,6 +7,7 @@
 typedef struct JITLangCtx JITLangCtx;
 typedef struct MirProgram MirProgram;
 typedef struct MirCtx MirCtx;
+typedef void (*YlcMirProgramInitFn)(MirProgram *program, MirCtx *ctx);
 
 /*
  * Set immediately before a compiler-triggered dlopen() and cleared after the
@@ -35,6 +36,7 @@ extern LLVMModuleRef ylc_jit_module;
 extern LLVMBuilderRef ylc_jit_builder;
 extern MirProgram *ylc_mir_program;
 extern MirCtx *ylc_mir_ctx;
+extern YlcMirProgramInitFn ylc_mir_program_init_fn;
 typedef void (*YlcRuntimeLoadFn)(void);
 
 extern YlcRuntimeLoadFn ylc_runtime_load_fn;

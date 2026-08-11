@@ -15,6 +15,31 @@ let coroutine_map_double_loop = fn () ->
   && x () == Some 1.
 ;;
 
+let generic_iter_array_map = fn xs ->
+  xs |> iter |> cor_map (fn d -> d + 1.)
+;;
+
+let coroutine_generic_array_iter = fn () ->
+  let c = generic_iter_array_map [|1., 2.|] in
+     c () == Some 2.
+  && c () == Some 3.
+;;
+
+let generic_iter_array_restart = fn xs ->
+  xs
+  |> iter
+  |> cor_map (fn d -> d + 1.)
+  |> cor_loop;
+
+  yield 0.;
+  yield generic_iter_array_restart xs
+;;
+
+let coroutine_generic_array_restart_iter = fn () ->
+  let c = generic_iter_array_restart [|1., 2.|] in
+  c () == Some 0.
+;;
+
 let coroutine_zip_loop = fn () ->
   let a = fn () -> yield 1; yield 2;;
   let b = fn () -> yield 10.; yield 20.; yield 30.;;

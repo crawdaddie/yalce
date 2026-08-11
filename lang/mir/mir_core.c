@@ -125,8 +125,7 @@ static Type *mir_value_primitive_type(MirBuilder *builder, MirValueId value,
       if (def->data.op.kind == MIR_OP_KIND_CAST) {
         return def->data.op.to_type;
       }
-      return def->data.op.kind == MIR_OP_KIND_TRUNC_TO_INT ? &t_int
-                                                           : fallback;
+      return def->data.op.kind == MIR_OP_KIND_TRUNC_TO_INT ? &t_int : fallback;
     default:
       break;
     }
@@ -881,6 +880,124 @@ static MirFunction *mir_build_cor_loop_wrapper(MirBuilder *builder, Ast *app,
   return wrapper;
 }
 
+static MirFunction *mir_build_iter_array_loop_wrapper(MirBuilder *builder,
+                                                      Ast *app,
+                                                      Type *array_type,
+                                                      Type *coro_type) {
+  Type *element_type = mir_array_element_type(array_type);
+  if (!element_type || !is_coroutine_type(coro_type)) {
+    return NULL;
+  }
+
+  Type *wrapper_type = type_fn(array_type, coro_type);
+  wrapper_type->data.T_FN.attributes = set_attr(
+      wrapper_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
+  MirFunction *wrapper = mir_program_add_function(
+      builder->program, mir_iter_wrapper_name(builder->program, "array_loop"),
+      wrapper_type, app);
+  if (!wrapper) {
+    return NULL;
+  }
+
+  MirValueId array = mir_function_add_param(wrapper, "array", array_type, app);
+  if (array == MIR_NO_VALUE) {
+    return NULL;
+  }
+
+  MirBlock *entry = mir_function_add_block(wrapper, "entry");
+  MirBlock *check = mir_function_add_block(wrapper, "iter.array_loop.check");
+  MirBlock *bounds = mir_function_add_block(wrapper, "iter.array_loop.bounds");
+  MirBlock *value = mir_function_add_block(wrapper, "iter.array_loop.value");
+  MirBlock *resume = mir_function_add_block(wrapper, "iter.array_loop.resume");
+  MirBlock *reset = mir_function_add_block(wrapper, "iter.array_loop.reset");
+  MirBlock *done = mir_function_add_block(wrapper, "iter.array_loop.done");
+  if (!entry || !check || !bounds || !value || !resume || !reset || !done) {
+    return NULL;
+  }
+
+  MirBuilder wrapper_builder;
+  mir_builder_init(&wrapper_builder, builder->program, wrapper);
+
+  mir_builder_position_at_end(&wrapper_builder, entry);
+  MirValueId zero = mir_const_int(&wrapper_builder, &t_int, app, 0);
+  if (zero == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_builder_set_br(&wrapper_builder, check->id);
+
+  mir_builder_position_at_end(&wrapper_builder, check);
+  MirPhiIncomingVec incoming = {0};
+  mir_phi_incoming_vec_push(wrapper->arena, &incoming,
+                            (MirPhiIncoming){entry->id, zero});
+  MirValueId index = mir_phi(&wrapper_builder, &t_int, app, incoming);
+  MirInstr *index_phi = mir_function_find_def_instr(wrapper, index);
+  MirValueId size = mir_array_size(&wrapper_builder, app, array);
+  MirValueId has_items =
+      mir_primitive_instr(&wrapper_builder, MIR_OP_ILT, &t_bool, app,
+                          (MirValueId[]){zero, size}, 2);
+  if (index == MIR_NO_VALUE || !index_phi || index_phi->kind != MIR_PHI ||
+      size == MIR_NO_VALUE || has_items == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_builder_set_cond(&wrapper_builder, has_items, bounds->id, done->id);
+
+  mir_builder_position_at_end(&wrapper_builder, bounds);
+  MirValueId in_bounds =
+      mir_primitive_instr(&wrapper_builder, MIR_OP_ILT, &t_bool, app,
+                          (MirValueId[]){index, size}, 2);
+  if (in_bounds == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_builder_set_cond(&wrapper_builder, in_bounds, value->id, reset->id);
+
+  mir_builder_position_at_end(&wrapper_builder, value);
+  MirValueId element =
+      mir_array_at(&wrapper_builder, element_type, app, array, index);
+  MirValueId one = mir_const_int(&wrapper_builder, &t_int, app, 1);
+  MirValueId next_index = mir_iadd(&wrapper_builder, &t_int, app, index, one);
+  if (element == MIR_NO_VALUE || one == MIR_NO_VALUE ||
+      next_index == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_builder_set_yield(&wrapper_builder, element, resume->id);
+
+  mir_builder_position_at_end(&wrapper_builder, resume);
+  mir_phi_incoming_vec_push(wrapper->arena, &index_phi->data.phi.incoming,
+                            (MirPhiIncoming){resume->id, next_index});
+  mir_builder_set_br(&wrapper_builder, check->id);
+
+  mir_builder_position_at_end(&wrapper_builder, reset);
+  mir_phi_incoming_vec_push(wrapper->arena, &index_phi->data.phi.incoming,
+                            (MirPhiIncoming){reset->id, zero});
+  mir_builder_set_br(&wrapper_builder, check->id);
+
+  mir_builder_position_at_end(&wrapper_builder, done);
+  mir_builder_set_coro_done(&wrapper_builder);
+
+  return wrapper;
+}
+
+static Ast *mir_cor_loop_array_iter_source(Ast *arg) {
+  if (!arg || arg->tag != AST_APPLICATION ||
+      arg->data.AST_APPLICATION.len != 1) {
+    return NULL;
+  }
+
+  Ast *function = arg->data.AST_APPLICATION.function;
+  if (!function || function->tag != AST_IDENTIFIER) {
+    return NULL;
+  }
+
+  const char *iter_name = builtin_envs.iter ? builtin_envs.iter->name : "iter";
+  if (!iter_name ||
+      strcmp(function->data.AST_IDENTIFIER.value, iter_name) != 0) {
+    return NULL;
+  }
+
+  Ast *source = arg->data.AST_APPLICATION.args;
+  return source && is_array_type(source->type) ? source : NULL;
+}
+
 static MirValueId MirCorLoopHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
                                     MirBuiltinSymbol *symbol) {
   (void)symbol;
@@ -889,6 +1006,24 @@ static MirValueId MirCorLoopHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
   }
 
   Ast *arg = app->data.AST_APPLICATION.args;
+  Ast *array_iter_source = mir_cor_loop_array_iter_source(arg);
+  if (array_iter_source) {
+    MirFunction *wrapper = mir_build_iter_array_loop_wrapper(
+        builder, app, array_iter_source->type, app->type);
+    if (!wrapper) {
+      return MIR_NO_VALUE;
+    }
+
+    MirValueId source = mir_expr(builder, array_iter_source, ctx);
+    if (source == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+
+    MirValueId wrapper_ref = mir_fn_ref(builder, wrapper->type, app, wrapper);
+    return mir_coro_new_call(builder, app->type, app, wrapper_ref,
+                             wrapper->type, source);
+  }
+
   Type *coro_type = is_coroutine_type(arg->type) ? arg->type : app->type;
   MirValueId source = mir_expr(builder, arg, ctx);
   if (source == MIR_NO_VALUE) {
@@ -1860,6 +1995,47 @@ mir_lower_specialized_primitive_constructor_call(MirBuilder *builder,
                                       call->origin);
 }
 
+static Type *mir_call_first_arg_type(MirInstr *call) {
+  if (!call || !call->data.call.callee_type ||
+      call->data.call.callee_type->kind != T_FN) {
+    return NULL;
+  }
+  return call->data.call.callee_type->data.T_FN.from;
+}
+
+static MirValueId mir_lower_specialized_iter_call(MirBuilder *builder,
+                                                  MirInstr *call) {
+  if (!builder || !builder->fn || !call || call->data.call.operands.len != 1 ||
+      !is_coroutine_type(call->type)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId source = call->data.call.operands.items[0];
+  Type *source_type = mir_function_value_type(builder->fn, source);
+  if (!is_array_type(source_type) && !is_list_type(source_type)) {
+    source_type = mir_call_first_arg_type(call);
+  }
+
+  MirFunction *wrapper = NULL;
+  if (is_array_type(source_type)) {
+    wrapper = mir_build_iter_array_wrapper(builder, call->origin, source_type,
+                                           call->type);
+  } else if (is_list_type(source_type)) {
+    wrapper = mir_build_iter_list_wrapper(builder, call->origin, source_type,
+                                          call->type);
+  } else {
+    return MIR_NO_VALUE;
+  }
+  if (!wrapper) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId wrapper_ref =
+      mir_fn_ref(builder, wrapper->type, call->origin, wrapper);
+  return mir_coro_new_call(builder, call->type, call->origin, wrapper_ref,
+                           wrapper->type, source);
+}
+
 MirValueId mir_lower_specialized_builtin_call(MirBuilder *builder,
                                               MirInstr *call) {
   if (!call || !call->data.call.builtin) {
@@ -1913,6 +2089,9 @@ MirValueId mir_lower_specialized_builtin_call(MirBuilder *builder,
   }
   if (handler == MirDoubleConstructorHandler) {
     return mir_lower_specialized_primitive_constructor_call(builder, call);
+  }
+  if (handler == MirIterHandler) {
+    return mir_lower_specialized_iter_call(builder, call);
   }
   return MIR_NO_VALUE;
 }

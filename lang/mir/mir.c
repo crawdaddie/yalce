@@ -18,6 +18,7 @@
  *     constant operands.
  */
 #include "./mir.h"
+#include "backend_llvm/lib_registry.h"
 #include "config.h"
 #include "escape_analysis.h"
 #include "format_utils.h"
@@ -3754,14 +3755,25 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
     value_map[i] = MIR_NO_VALUE;
   }
 
+  Type *specialized_param_cursor = specialized_type;
   for (size_t i = 0; i < source->params.len; i++) {
     MirParam *param = &source->params.items[i];
-    Type *param_type = mir_substitute_type(program->arena, subst, param->type);
+    Type *param_type = NULL;
+    if (specialized_param_cursor &&
+        specialized_param_cursor->kind == T_FN) {
+      param_type = specialized_param_cursor->data.T_FN.from;
+      specialized_param_cursor = specialized_param_cursor->data.T_FN.to;
+    }
+    if (!param_type) {
+      param_type = mir_substitute_type(program->arena, subst, param->type);
+    }
     MirValueId value =
         mir_function_add_param(fn, param->name, param_type, param->origin);
     mir_function_set_param_use(fn, i, mir_function_param_use(source, i));
-    mir_function_set_value_callable_summary(
-        fn, value, mir_value_callable_summary(source, param->value));
+    if (!param_type || param_type->kind != T_FN) {
+      mir_function_set_value_callable_summary(
+          fn, value, mir_value_callable_summary(source, param->value));
+    }
     if (param->value < value_map_len) {
       value_map[param->value] = value;
     }
@@ -9029,6 +9041,15 @@ MirProgram *mir_build_program(MirArena *arena, Ast *prog_ast, MirCtx *ctx) {
       &program->builtins,
       (ht_allocator){.alloc = mir_ht_alloc, .free = NULL, .ctx = arena});
   mir_register_core_builtins(program);
+  if (ylc_mir_program_init_fn) {
+    MirProgram *saved_program = ylc_mir_program;
+    MirCtx *saved_ctx = ylc_mir_ctx;
+    ylc_mir_program = program;
+    ylc_mir_ctx = &build_ctx;
+    ylc_mir_program_init_fn(program, &build_ctx);
+    ylc_mir_program = saved_program;
+    ylc_mir_ctx = saved_ctx;
+  }
   MirModule *root_module = mir_program_add_module(
       program, NULL, prog_ast ? prog_ast->type : NULL, prog_ast, MIR_NO_MODULE);
   program->root_module = root_module ? root_module->id : MIR_NO_MODULE;

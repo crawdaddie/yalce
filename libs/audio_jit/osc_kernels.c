@@ -465,7 +465,7 @@ ylc_audio_arr_seq_kernel(ArraySeqState *state, double spf, int32_t size,
 
 #define GRAIN_WINDOW_TABSIZE (1 << 9)
 
-double grain_win[GRAIN_WINDOW_TABSIZE] = {
+static double grain_win[GRAIN_WINDOW_TABSIZE] = {
 #include "./grain_win.csv"
 };
 
@@ -549,7 +549,7 @@ static inline double audio_jit_table_read_clamped(double pos, int32_t tabsize,
   return audio_jit_lerp(table[i0], table[i0 + 1], frac);
 }
 
-double pow2table_read(double pos, int tabsize, double *table) {
+static double ylc_audio_pow2table_read(double pos, int tabsize, double *table) {
   if (!table || tabsize <= 0 || !isfinite(pos)) {
     return 0.0;
   }
@@ -620,7 +620,7 @@ ylc_audio_grains_kernel(GrainOscState *state, double spf, int32_t max_grains,
     double d_index = s + (p * (double)size);
     double grain_elapsed = 1.0 - (rem / w);
     double env_val =
-        pow2table_read(grain_elapsed, GRAIN_WINDOW_TABSIZE, grain_win);
+        ylc_audio_pow2table_read(grain_elapsed, GRAIN_WINDOW_TABSIZE, grain_win);
 
     sample += env_val * audio_jit_read_linear(buf, size, d_index);
     arrays.phases[i] += r / (double)size;

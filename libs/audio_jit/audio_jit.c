@@ -110,30 +110,65 @@ void ylc_audio_memzero(void *ptr, int32_t size) {
   }
 }
 
+void ylc_audio_node_set_state_init(void *node_raw, void *init_raw) {
+  Node *node = (Node *)node_raw;
+  if (!node) {
+    return;
+  }
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+#endif
+  node->state_init = (node_state_init_func_t)init_raw;
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
+}
+
+static size_t ylc_audio_align_size(size_t value, size_t alignment) {
+  if (alignment == 0) {
+    return value;
+  }
+  const size_t mask = alignment - 1;
+  return (value + mask) & ~mask;
+}
+
 extern double ylc_read_inlet_node(void *node_raw, int64_t frame);
 double ylc_read_inlet_node_i32(void *node_raw, int frame) {
   return ylc_read_inlet_node(node_raw, (int64_t)frame);
 }
 
 Node *ylc_create_audio_frame_node(frame_perform_func_t frame_perform,
-                                  int num_inputs, int output_layout,
-                                  int state_bytes, const char *meta_name) {
-  size_t total = sizeof(Node) + (size_t)state_bytes +
+                                   int num_inputs, int output_layout,
+                                   int state_bytes, const char *meta_name) {
+  size_t aligned_state_bytes =
+      ylc_audio_align_size(state_bytes > 0 ? (size_t)state_bytes : 0,
+                           __alignof__(double));
+  size_t total = sizeof(Node) + aligned_state_bytes +
                  ((size_t)BUF_SIZE * (size_t)output_layout * sizeof(double));
-  Node *node = (Node *)calloc(1, total);
+
+  const ylc_node_allocator_t *allocator = ylc_node_allocator_get();
+  Node *node;
+  if (allocator && allocator->alloc) {
+    node = (Node *)allocator->alloc(total, allocator->user_data);
+  } else {
+    node = (Node *)calloc(1, total);
+  }
   if (!node) {
     return NULL;
   }
 
   node->frame_perform = frame_perform;
   node->num_inputs = num_inputs;
-  node->state_size = state_bytes;
-  node->state_ptr = state_bytes ? (void *)((char *)node + sizeof(Node)) : NULL;
+  node->state_size = (int)aligned_state_bytes;
+  node->state_ptr =
+      aligned_state_bytes ? (void *)((char *)node + sizeof(Node)) : NULL;
   node->meta = (char *)meta_name;
   node->output = (Signal){
       .layout = output_layout,
       .size = BUF_SIZE,
-      .buf = (double *)((char *)node + sizeof(Node) + state_bytes),
+      .buf = (double *)((char *)node + sizeof(Node) + aligned_state_bytes),
   };
   node->next = NULL;
 
@@ -551,6 +586,25 @@ static MirValueId audio_mir_extern_ref(MirBuilder *builder, const char *name,
                                        Type *type, Ast *origin) {
   MirFunction *fn = audio_mir_extern_fn(builder, name, type, origin);
   return fn ? mir_fn_ref(builder, type, origin, fn) : MIR_NO_VALUE;
+}
+
+static void audio_mir_set_node_state_init(MirBuilder *builder, MirArena *arena,
+                                          Ast *origin, MirValueId node,
+                                          MirFunction *init_fn) {
+  if (!builder || !arena || node == MIR_NO_VALUE || !init_fn) {
+    return;
+  }
+
+  Type *set_params[] = {&t_ptr, &t_ptr};
+  Type *set_type =
+      audio_mir_fn_type(arena, set_params,
+                        sizeof(set_params) / sizeof(set_params[0]), &t_void);
+  MirValueId set_ref =
+      audio_mir_extern_ref(builder, "ylc_audio_node_set_state_init", set_type,
+                           origin);
+  MirValueId init_ref = mir_fn_ref(builder, init_fn->type, origin, init_fn);
+  mir_call_value(builder, &t_void, origin, set_ref, set_type,
+                 (MirValueId[]){node, init_ref}, 2);
 }
 
 static MirValueId audio_mir_fn_ref(AudioCompileCtx *audio, MirBuilder *builder,
@@ -3219,6 +3273,13 @@ static AudioValue audio_builtin_emit_bufsize(const AudioBuiltin *builtin,
                                              AudioCompileCtx *audio,
                                              Ast *origin, AudioValue *args,
                                              size_t argc);
+static AudioValue audio_builtin_emit_param(const AudioBuiltin *builtin,
+                                           AudioCompileCtx *audio, Ast *origin,
+                                           AudioValue *args, size_t argc);
+static AudioValue audio_builtin_emit_tempo_mul(const AudioBuiltin *builtin,
+                                               AudioCompileCtx *audio,
+                                               Ast *origin, AudioValue *args,
+                                               size_t argc);
 static AudioValue audio_builtin_emit_mix(const AudioBuiltin *builtin,
                                          AudioCompileCtx *audio, Ast *origin,
                                          AudioValue *args, size_t argc);
@@ -3571,6 +3632,39 @@ static const AudioBuiltin audio_builtins[] = {
      .source_argc = 1,
      .kernel_symbol = "ylc_audio_bufsize",
      .emit = audio_builtin_emit_bufsize,
+     .state_size = 0,
+     .state_align = 0,
+     .state_name = NULL,
+     .lane_expand_mask = 0,
+     .arg_order = NULL,
+     .kernel_argc = 0},
+
+    {.name = "param",
+     .source_argc = 1,
+     .kernel_symbol = NULL,
+     .emit = audio_builtin_emit_param,
+     .state_size = 0,
+     .state_align = 0,
+     .state_name = NULL,
+     .lane_expand_mask = 0,
+     .arg_order = NULL,
+     .kernel_argc = 0},
+
+    {.name = "tempo_mul",
+     .source_argc = 1,
+     .kernel_symbol = NULL,
+     .emit = audio_builtin_emit_tempo_mul,
+     .state_size = 0,
+     .state_align = 0,
+     .state_name = NULL,
+     .lane_expand_mask = 0,
+     .arg_order = NULL,
+     .kernel_argc = 0},
+
+    {.name = "tempo_coeff",
+     .source_argc = 1,
+     .kernel_symbol = NULL,
+     .emit = audio_builtin_emit_tempo_mul,
      .state_size = 0,
      .state_align = 0,
      .state_name = NULL,
@@ -4835,6 +4929,61 @@ static AudioValue audio_builtin_emit_bufsize(const AudioBuiltin *builtin,
                    : AUDIO_VALUE_NULL;
 }
 
+static AudioValue audio_builtin_emit_param(const AudioBuiltin *builtin,
+                                           AudioCompileCtx *audio, Ast *origin,
+                                           AudioValue *args, size_t argc) {
+  (void)builtin;
+  if (!audio || !audio->kernel_builder || !origin || argc != 1 || !args) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  int index = 0;
+  if (!audio_mir_value_const_int(audio, args[0].value, &index)) {
+    fprintf(stderr, "audio_jit: param index must be a compile-time Int\n");
+    return AUDIO_VALUE_NULL;
+  }
+
+  MirBuilder *b = audio->kernel_builder;
+  Type *params[] = {&t_int};
+  Type *param_type = audio_mir_fn_type(audio->arena, params,
+                                       sizeof(params) / sizeof(params[0]),
+                                       &t_num);
+  MirValueId param_fn =
+      audio_mir_extern_ref(b, "ylc_plugin_param_value", param_type, origin);
+  MirValueId index_value = mir_const_int(b, &t_int, origin, index);
+  if (param_fn == MIR_NO_VALUE || index_value == MIR_NO_VALUE) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  MirValueId value =
+      mir_call_value(b, &t_num, origin, param_fn, param_type,
+                     (MirValueId[]){index_value}, 1);
+  return audio_mir_value(&t_num, value, 1);
+}
+
+static AudioValue audio_builtin_emit_tempo_mul(const AudioBuiltin *builtin,
+                                               AudioCompileCtx *audio,
+                                               Ast *origin, AudioValue *args,
+                                               size_t argc) {
+  (void)builtin;
+  (void)args;
+  if (!audio || !audio->kernel_builder || !origin || argc != 1) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  MirBuilder *b = audio->kernel_builder;
+  Type *tempo_type = audio_mir_fn_type(audio->arena, NULL, 0, &t_num);
+  MirValueId tempo_fn =
+      audio_mir_extern_ref(b, "ylc_plugin_tempo_mul", tempo_type, origin);
+  if (tempo_fn == MIR_NO_VALUE) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  MirValueId value =
+      mir_call_value(b, &t_num, origin, tempo_fn, tempo_type, NULL, 0);
+  return audio_mir_value(&t_num, value, 1);
+}
+
 /* mix N signal  -- down/up-mix a multi-lane signal into N output channels.
 
    `N` (args[0]) is a compile-time Int giving the output channel count. `signal`
@@ -5405,14 +5554,15 @@ static bool audio_mir_static_eval(AudioCompileCtx *audio, Ast *ast,
          static kind if the element is itself statically evaluable; otherwise
          record it as a runtime element (NONE) carrying just the AST. */
       AudioStaticValue *item = items + i;
+      Ast *element_ast = ast->data.AST_LIST.items + i;
       *item = (AudioStaticValue){
           .kind = AUDIO_STATIC_NONE,
-          .ast = ast->data.AST_LIST.items + i,
-          .type = item->ast ? item->ast->type : NULL,
+          .ast = element_ast,
+          .type = element_ast ? element_ast->type : NULL,
           .len = 0,
           .items = NULL,
       };
-      audio_mir_static_eval(audio, ast->data.AST_LIST.items + i, item);
+      audio_mir_static_eval(audio, element_ast, item);
     }
     out->kind = ast->tag == AST_TUPLE   ? AUDIO_STATIC_TUPLE
                 : ast->tag == AST_ARRAY ? AUDIO_STATIC_ARRAY_LITERAL
@@ -6357,6 +6507,8 @@ static void audio_mir_emit_constructor(AudioCompileCtx *audio) {
   MirValueId node =
       mir_call_value(b, &t_ptr, audio->app, create_fn, create_type, create_args,
                      sizeof(create_args) / sizeof(create_args[0]));
+  audio_mir_set_node_state_init(b, audio->arena, audio->app, node,
+                                audio->init_fn);
 
   Type *state_params[] = {&t_ptr};
   Type *state_type = audio_mir_fn_type(
@@ -6590,6 +6742,8 @@ audio_mir_call_synth_outside_context(MirBuilder *builder, Ast *app, MirCtx *ctx,
     if (node == MIR_NO_VALUE) {
       return MIR_NO_VALUE;
     }
+    audio_mir_set_node_state_init(builder, builder->fn->arena, app, node,
+                                  synth->init_fn);
 
     Type *state_params[] = {&t_ptr};
     Type *state_type =
@@ -7010,6 +7164,176 @@ static MirValueId MirAudioSynthSymbolHandler(MirBuilder *builder, Ast *app,
   return audio_mir_call_synth_outside_context(builder, app, ctx, synth);
 }
 
+static MirAudioSynthSymbol *
+audio_mir_resolve_synth_symbol_arg(MirBuilder *builder, Ast *arg, MirCtx *ctx) {
+  if (!builder || !arg || !ctx) {
+    return NULL;
+  }
+
+  MirSymbol *symbol = mir_resolve_ast_symbol(builder, arg, ctx);
+  if (!symbol || symbol->kind != MIR_SYMBOL_CUSTOM ||
+      symbol->as.custom.handler != MirAudioSynthSymbolHandler) {
+    return NULL;
+  }
+
+  return (MirAudioSynthSymbol *)symbol->as.custom.data;
+}
+
+static MirFunction *audio_mir_build_voice_allocator(MirBuilder *builder,
+                                                    Ast *origin,
+                                                    MirAudioSynthSymbol *synth) {
+  if (!builder || !builder->program || !builder->fn || !synth ||
+      !synth->init_fn || !synth->kernel_fn || !synth->frame_fn) {
+    return NULL;
+  }
+
+  static unsigned counter = 0;
+  MirArena *arena = builder->fn->arena;
+  Type *params[] = {&t_int};
+  Type *allocator_type = audio_mir_fn_type(arena, params, 1, &t_ptr);
+  if (!allocator_type) {
+    return NULL;
+  }
+
+  const char *synth_name = synth->name ? synth->name : "anonymous";
+  const char *name =
+      mir_arena_printf(arena, "$$audio.alloc_voices.%s.%u", synth_name,
+                       counter++);
+  MirFunction *fn =
+      mir_program_add_function(builder->program, name, allocator_type, origin);
+  MirBlock *entry = fn ? mir_function_add_block(fn, "entry") : NULL;
+  if (!fn || !entry) {
+    return NULL;
+  }
+
+  MirBuilder wrapper;
+  mir_builder_init(&wrapper, builder->program, fn);
+  mir_builder_position_at_end(&wrapper, entry);
+
+  if (mir_function_add_param(fn, "i", &t_int, origin) == MIR_NO_VALUE) {
+    mir_builder_set_unreachable(&wrapper);
+    return fn;
+  }
+
+  Type *create_params[] = {synth->frame_fn->type, &t_int, &t_int, &t_int,
+                           &t_ptr};
+  Type *create_type =
+      audio_mir_fn_type(arena, create_params,
+                        sizeof(create_params) / sizeof(create_params[0]),
+                        &t_ptr);
+  MirValueId create_fn =
+      audio_mir_extern_ref(&wrapper, "ylc_create_audio_frame_node",
+                           create_type, origin);
+  MirValueId frame_ref =
+      mir_fn_ref(&wrapper, synth->frame_fn->type, origin, synth->frame_fn);
+  const char *meta_name = synth->name ? synth->name : "audio";
+  MirValueId meta =
+      mir_const_string(&wrapper, &t_ptr, origin, meta_name, strlen(meta_name));
+  MirValueId create_args[] = {
+      frame_ref,
+      mir_const_int(&wrapper, &t_int, origin, synth->num_inputs),
+      mir_const_int(&wrapper, &t_int, origin,
+                    audio_mir_kernel_output_lanes(synth->kernel_fn)),
+      mir_const_int(&wrapper, &t_int, origin, synth->state_bytes),
+      meta,
+  };
+  MirValueId node =
+      mir_call_value(&wrapper, &t_ptr, origin, create_fn, create_type,
+                     create_args, sizeof(create_args) / sizeof(create_args[0]));
+  if (node != MIR_NO_VALUE) {
+    audio_mir_set_node_state_init(&wrapper, arena, origin, node,
+                                  synth->init_fn);
+    Type *state_params[] = {&t_ptr};
+    Type *state_type =
+        audio_mir_fn_type(arena, state_params,
+                          sizeof(state_params) / sizeof(state_params[0]),
+                          audio_mir_ptr_to(arena, &t_char));
+    MirValueId state_fn =
+        audio_mir_extern_ref(&wrapper, "ylc_audio_node_inline_state",
+                             state_type, origin);
+    MirValueId state =
+        mir_call_value(&wrapper, fn_return_type(state_type), origin, state_fn,
+                       state_type, (MirValueId[]){node}, 1);
+    MirValueId init_ref =
+        mir_fn_ref(&wrapper, synth->init_fn->type, origin, synth->init_fn);
+    mir_call_value(&wrapper, &t_void, origin, init_ref, synth->init_fn->type,
+                   (MirValueId[]){state}, 1);
+
+    if (synth->num_inputs > 0) {
+      Type *scalar_params[] = {&t_num};
+      Type *scalar_type =
+          audio_mir_fn_type(arena, scalar_params,
+                            sizeof(scalar_params) / sizeof(scalar_params[0]),
+                            &t_ptr);
+      MirValueId scalar_ref =
+          audio_mir_extern_ref(&wrapper, "ylc_audio_graph_create_scalar_node",
+                               scalar_type, origin);
+      Type *plug_params[] = {&t_int, &t_ptr, &t_ptr};
+      Type *plug_type =
+          audio_mir_fn_type(arena, plug_params,
+                            sizeof(plug_params) / sizeof(plug_params[0]),
+                            &t_void);
+      MirValueId plug_ref =
+          audio_mir_extern_ref(&wrapper, "node_connect_input", plug_type,
+                               origin);
+      for (int input = 0; input < synth->num_inputs && input < MAX_INPUTS;
+           ++input) {
+        MirValueId scalar =
+            mir_call_value(&wrapper, &t_ptr, origin, scalar_ref, scalar_type,
+                           (MirValueId[]){
+                               mir_const_double(&wrapper, &t_num, origin, 0.0),
+                           },
+                           1);
+        mir_call_value(&wrapper, &t_void, origin, plug_ref, plug_type,
+                       (MirValueId[]){
+                           mir_const_int(&wrapper, &t_int, origin, input),
+                           node,
+                           scalar,
+                       },
+                       3);
+      }
+    }
+  }
+  if (node != MIR_NO_VALUE) {
+    mir_builder_set_return(&wrapper, node);
+  } else {
+    mir_builder_set_unreachable(&wrapper);
+  }
+
+  return fn;
+}
+
+static MirValueId MirAllocVoicesHandler(MirBuilder *builder, Ast *app,
+                                        MirCtx *ctx,
+                                        MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!builder || !builder->fn || !app || app->tag != AST_APPLICATION ||
+      app->data.AST_APPLICATION.len != 2) {
+    return MIR_NO_VALUE;
+  }
+
+  Ast *size_ast = app->data.AST_APPLICATION.args;
+  Ast *synth_ast = app->data.AST_APPLICATION.args + 1;
+  MirAudioSynthSymbol *synth =
+      audio_mir_resolve_synth_symbol_arg(builder, synth_ast, ctx);
+  if (!synth) {
+    fprintf(stderr, "audio_jit: alloc_voices expects an @Audio synth symbol\n");
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId size = mir_expr(builder, size_ast, ctx);
+  MirFunction *allocator =
+      audio_mir_build_voice_allocator(builder, app, synth);
+  if (size == MIR_NO_VALUE || !allocator) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId allocator_ref =
+      mir_fn_ref(builder, allocator->type, app, allocator);
+  return mir_emit_construct_ops2(builder, MIR_CONSTRUCT_ARRAY_FILL, app->type,
+                                 app, size, allocator_ref);
+}
+
 static bool audio_mir_bind_synth_symbol(MirAudioSynthBuildCtx *ctx,
                                         MirCtx *mir_ctx) {
   if (!ctx || !ctx->arena || !mir_ctx || !ctx->name || !ctx->ctor_fn ||
@@ -7024,7 +7348,7 @@ static bool audio_mir_bind_synth_symbol(MirAudioSynthBuildCtx *ctx,
   }
 
   return mir_ctx_bind_export_custom_symbol(
-      ctx->program, mir_ctx, ctx->name, ctx->app ? ctx->app->type : NULL,
+      ctx->program, mir_ctx, ctx->name, ctx->ctor_fn->type,
       ctx->app, MirAudioSynthSymbolHandler, synth);
 }
 
@@ -7066,8 +7390,8 @@ static MirValueId MirCompileAudioHandler(MirBuilder *builder, Ast *app,
     return MIR_NO_VALUE;
   }
 
-  return mir_fn_ref(builder, app->type ? app->type : audio_ctx.ctor_fn->type,
-                    app, audio_ctx.ctor_fn);
+  app->type = audio_ctx.ctor_fn->type;
+  return mir_fn_ref(builder, audio_ctx.ctor_fn->type, app, audio_ctx.ctor_fn);
 }
 
 static void audio_jit_init_wavetables(void) {
@@ -7079,8 +7403,10 @@ static void audio_jit_init_wavetables(void) {
   initialized = true;
 }
 
-static void audio_jit_register_osc_kernel_bitcode(void) {
-  const char *path = "libs/audio_jit/build/osc_kernels.bc";
+static void audio_jit_register_osc_kernel_bitcode(const char *bitcode_path) {
+  const char *path = bitcode_path && bitcode_path[0] != '\0'
+                         ? bitcode_path
+                         : "libs/audio_jit/build/osc_kernels.bc";
 
   if (ylc_mir_program && !mir_program_add_llvm_bitcode(ylc_mir_program, path)) {
     fprintf(stderr, "audio_jit: failed to register LLVM bitcode '%s'\n", path);
@@ -7152,10 +7478,10 @@ static void audio_mir_register_node_builtin(TypeEnv *tenv) {
 //   return MIR_NO_VALUE;
 // }
 //
-/* `play_pattern` builtin: `fn Double -> T -> T` -- takes a quant (Double) and a
+/* `play_pattern` builtin: `fn Double -> T -> Ptr` -- takes a quant (Double) and a
    coroutine yielding Double wait-times, and plays them as a scheduled event
    chain. Registered as the `play_pattern` builtin handler (the user declares
-   `let play_pattern = extern fn Double -> T -> T;`). The pipe form
+   `let play_pattern = extern fn Double -> T -> Ptr;`). The pipe form
    `co () |> play_pattern 0.` desugars to `play_pattern 0. (co ())`.
 
    The handler is invoked at MIR-build time for `coro |> play_pattern quant`. It
@@ -7172,8 +7498,9 @@ static void audio_mir_register_node_builtin(TypeEnv *tenv) {
    handle)`. The handler emits the initial kick via the runtime
    `ylc_play_pattern_start(quant, step, handle)`: quant 0 fires immediately, a
    positive value x defers to the next multiple of x seconds since the scheduler
-   started (exactly like defer_quant). It returns the coroutine value
-   (non-MIR_NO_VALUE) so the builtin call is satisfied. */
+   started (exactly like defer_quant). It returns the coroutine handle as the
+   task reference (non-MIR_NO_VALUE) so the builtin call is satisfied and callers
+   can pass that reference to `cancel_task`. */
 static MirFunction *
 mir_build_play_pattern_step(MirBuilder *builder, Ast *app, Type *coro_type) {
   /* Coroutine types are T_CONS whose first arg is the yield type (see
@@ -7267,23 +7594,28 @@ mir_build_play_pattern_step(MirBuilder *builder, Ast *app, Type *coro_type) {
     return NULL;
   }
 
-  Type *sched_params[] = {&t_uint64, &t_num, &t_ptr, coro_type};
+  Type *sched_params[] = {&t_uint64, &t_num};
   Type *schedule_event_type = audio_mir_fn_type(
       wb.fn->arena, sched_params, sizeof(sched_params) / sizeof(sched_params[0]),
       &t_ptr);
   MirValueId schedule_event_fn = audio_mir_extern_ref(
-      &wb, "schedule_event", schedule_event_type, app);
-  MirValueId self_ref = mir_fn_ref(&wb, step_type, app, step);
-  if (schedule_event_fn == MIR_NO_VALUE || self_ref == MIR_NO_VALUE) {
+      &wb, "ylc_clap_schedule_current_task_event", schedule_event_type, app);
+  if (schedule_event_fn == MIR_NO_VALUE) {
     return NULL;
   }
-  MirValueId sched_args[] = {tick, dur, self_ref, handle};
+  MirValueId sched_args[] = {tick, dur};
   mir_call_value(&wb, &t_ptr, app, schedule_event_fn, schedule_event_type,
                  sched_args, sizeof(sched_args) / sizeof(sched_args[0]));
   mir_builder_set_return(&wb, mir_const_void(&wb, &t_void, app));
 
   /* None: coroutine finished -- do not reschedule. */
   mir_builder_position_at_end(&wb, finished);
+  Type *complete_type = audio_mir_fn_type(wb.fn->arena, NULL, 0, &t_void);
+  MirValueId complete_fn = audio_mir_extern_ref(
+      &wb, "ylc_clap_complete_current_task", complete_type, app);
+  if (complete_fn != MIR_NO_VALUE) {
+    mir_call_value(&wb, &t_void, app, complete_fn, complete_type, NULL, 0);
+  }
   mir_builder_set_return(&wb, mir_const_void(&wb, &t_void, app));
 
   return step;
@@ -7292,7 +7624,7 @@ mir_build_play_pattern_step(MirBuilder *builder, Ast *app, Type *coro_type) {
 static MirValueId MirPlayPatternHandler(MirBuilder *builder, Ast *app,
                                         MirCtx *ctx, MirBuiltinSymbol *symbol) {
   (void)symbol;
-  /* `play_pattern` is `fn Double -> T -> T`: args[0] is the quant, args[1] is the
+  /* `play_pattern` is `fn Double -> T -> Ptr`: args[0] is the quant, args[1] is the
      coroutine. The pipe form `co () |> play_pattern 0.` desugars to
      `play_pattern 0. (co ())`, so the coroutine is the last argument. */
   if (!builder || !app || app->tag != AST_APPLICATION ||
@@ -7329,22 +7661,27 @@ static MirValueId MirPlayPatternHandler(MirBuilder *builder, Ast *app,
   Type *start_params[] = {&t_num, &t_ptr, coro_type};
   Type *start_type = audio_mir_fn_type(
       builder->fn->arena, start_params,
-      sizeof(start_params) / sizeof(start_params[0]), &t_void);
-  MirValueId start_fn = audio_mir_extern_ref(builder, "ylc_play_pattern_start",
-                                             start_type, app);
+      sizeof(start_params) / sizeof(start_params[0]), &t_ptr);
+  MirFunction *start_extern =
+      audio_mir_extern_fn(builder, "ylc_play_pattern_start", start_type, app);
+  if (start_extern && start_extern->summary.param_uses.len >= 3) {
+    start_extern->summary.param_uses.items[2] = MIR_OPERAND_USE_CONSUME;
+  }
+  MirValueId start_fn =
+      start_extern ? mir_fn_ref(builder, start_type, app, start_extern)
+                   : MIR_NO_VALUE;
   MirValueId step_ref = mir_fn_ref(builder, step->type, app, step);
   if (start_fn == MIR_NO_VALUE || step_ref == MIR_NO_VALUE) {
     return MIR_NO_VALUE;
   }
 
   MirValueId start_args[] = {quant, step_ref, cor};
-  mir_call_value(builder, &t_void, app, start_fn, start_type, start_args,
-                 sizeof(start_args) / sizeof(start_args[0]));
+  MirValueId task_ref =
+      mir_call_value(builder, &t_ptr, app, start_fn, start_type, start_args,
+                     sizeof(start_args) / sizeof(start_args[0]));
 
-  /* Return the coroutine value so the builtin call is satisfied (non-
-     MIR_NO_VALUE) and does not fall through to the unlinked `play_pattern`
-     extern symbol. */
-  return cor;
+  /* Return the scheduler-owned task token rather than the coroutine handle. */
+  return task_ref;
 }
 /* Library-load constructor: runs when `libaudio_jit.so` is loaded (the engine
    dependency). This wires the audio JIT into the MIR/JIT before any user code
@@ -7357,17 +7694,17 @@ static MirValueId MirPlayPatternHandler(MirBuilder *builder, Ast *app,
    The audio thread is already running by this point (the engine stream starts
    on engine init); user `@Audio fn`s compile later into synth bundles that the
    engine then drives per sample. */
-__attribute__((constructor)) static void ylc_audio_jit_init(void) {
+void ylc_audio_jit_register_current_program(const char *osc_bitcode_path) {
   // audio_jit_init_wavetables();
-  audio_jit_register_osc_kernel_bitcode();
+  audio_jit_register_osc_kernel_bitcode(osc_bitcode_path);
 
   if (!ylc_mir_program || !ylc_mir_ctx) {
     return;
   }
 
-  // for (TypeEnv *tenv = ylc_mir_ctx->env; tenv; tenv = tenv->next) {
-  //   audio_mir_register_node_builtin(tenv);
-  // }
+  for (TypeEnv *tenv = ylc_mir_ctx->env; tenv; tenv = tenv->next) {
+    audio_mir_register_node_builtin(tenv);
+  }
 
   TypeEnv audio_tenv = {.name = "Audio"};
   mir_register_builtin(ylc_mir_program, &audio_tenv, MirCompileAudioHandler,
@@ -7378,4 +7715,13 @@ __attribute__((constructor)) static void ylc_audio_jit_init(void) {
   mir_register_builtin(ylc_mir_program, &play_tenv, MirPlayPatternHandler,
                        MIR_BUILTIN_SYMBOL_EXTENSION, (MirOperandUse[]){}, 0,
                        MIR_RESULT_NONE);
+
+  TypeEnv alloc_voices_tenv = {.name = "alloc_voices"};
+  mir_register_builtin(ylc_mir_program, &alloc_voices_tenv,
+                       MirAllocVoicesHandler, MIR_BUILTIN_SYMBOL_EXTENSION,
+                       (MirOperandUse[]){}, 0, MIR_RESULT_OWNED);
+}
+
+__attribute__((constructor)) static void ylc_audio_jit_init(void) {
+  ylc_audio_jit_register_current_program(NULL);
 }

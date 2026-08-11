@@ -46,6 +46,32 @@ typedef struct {
 
 static MirProgram *lower_mir_current_program = NULL;
 
+static const char *mir_instr_kind_name(MirInstrKind kind) {
+  switch (kind) {
+  case MIR_CONST:
+    return "const";
+  case MIR_OP:
+    return "op";
+  case MIR_PHI:
+    return "phi";
+  case MIR_EXTRACT:
+    return "extract";
+  case MIR_CONSTRUCT:
+    return "construct";
+  case MIR_FN_REF:
+    return "fn_ref";
+  case MIR_CALL:
+    return "call";
+  case MIR_CORO_NEW:
+    return "coro.new";
+  case MIR_CORO_NEXT:
+    return "coro.next";
+  case MIR_CORO_RESET:
+    return "coro.reset";
+  }
+  return "unknown";
+}
+
 typedef struct {
   bool active;
   Type *yield_type;
@@ -140,9 +166,9 @@ static bool lower_mir_link_llvm_bitcode_dependencies(MirProgram *prog,
   }
 
   for (size_t i = 0; i < prog->llvm_bitcode_paths.len; i++) {
-    const char *path =
-        prog->llvm_bitcode_paths.items ? prog->llvm_bitcode_paths.items[i]
-                                       : NULL;
+    const char *path = prog->llvm_bitcode_paths.items
+                           ? prog->llvm_bitcode_paths.items[i]
+                           : NULL;
     if (!path) {
       continue;
     }
@@ -334,12 +360,10 @@ static bool lower_mir_append_c_abi_param_types(Type *type,
   return true;
 }
 
-static bool lower_mir_append_c_abi_call_arg(LLVMValueRef *args,
-                                            size_t *arg_count,
-                                            LLVMValueRef value, Type *type,
-                                            JITLangCtx *ctx,
-                                            LLVMModuleRef module,
-                                            LLVMBuilderRef builder) {
+static bool
+lower_mir_append_c_abi_call_arg(LLVMValueRef *args, size_t *arg_count,
+                                LLVMValueRef value, Type *type, JITLangCtx *ctx,
+                                LLVMModuleRef module, LLVMBuilderRef builder) {
   if (!args || !arg_count || !value) {
     return false;
   }
@@ -357,8 +381,7 @@ static bool lower_mir_append_c_abi_call_arg(LLVMValueRef *args,
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
   LLVMTypeRef i64_type = LLVMInt64TypeInContext(llvm_ctx);
   LLVMValueRef size = LLVMBuildExtractValue(builder, value, 0, "cabi.size");
-  LLVMValueRef offset =
-      LLVMBuildExtractValue(builder, value, 1, "cabi.offset");
+  LLVMValueRef offset = LLVMBuildExtractValue(builder, value, 1, "cabi.offset");
   LLVMValueRef data = LLVMBuildExtractValue(builder, value, 2, "cabi.data");
 
   LLVMValueRef size64 = LLVMBuildZExt(builder, size, i64_type, "cabi.size64");
@@ -382,15 +405,18 @@ static bool lower_mir_append_c_abi_call_arg(LLVMValueRef *args,
   return true;
 }
 
-static LLVMValueRef lower_mir_unpack_c_abi_view_result(
-    Type *type, LLVMValueRef value, JITLangCtx *ctx, LLVMModuleRef module,
-    LLVMBuilderRef builder) {
+static LLVMValueRef lower_mir_unpack_c_abi_view_result(Type *type,
+                                                       LLVMValueRef value,
+                                                       JITLangCtx *ctx,
+                                                       LLVMModuleRef module,
+                                                       LLVMBuilderRef builder) {
   if (!value || !lower_mir_is_c_abi_view_type(type)) {
     return value;
   }
 
   LLVMTypeRef result_type = lower_mir_abi_value_type(type, ctx, module, NULL);
-  if (!result_type || LLVMGetTypeKind(LLVMTypeOf(value)) != LLVMStructTypeKind ||
+  if (!result_type ||
+      LLVMGetTypeKind(LLVMTypeOf(value)) != LLVMStructTypeKind ||
       LLVMCountStructElementTypes(LLVMTypeOf(value)) < 2) {
     return value;
   }
@@ -402,10 +428,10 @@ static LLVMValueRef lower_mir_unpack_c_abi_view_result(
   LLVMValueRef header =
       LLVMBuildExtractValue(builder, value, 0, "cabi.ret.size_offset");
   LLVMValueRef data = LLVMBuildExtractValue(builder, value, 1, "cabi.ret.data");
-  LLVMValueRef size = LLVMBuildTrunc(builder, header, i32_type, "cabi.ret.size");
-  LLVMValueRef offset64 =
-      LLVMBuildLShr(builder, header, LLVMConstInt(i64_type, 32, false),
-                    "cabi.ret.offset64");
+  LLVMValueRef size =
+      LLVMBuildTrunc(builder, header, i32_type, "cabi.ret.size");
+  LLVMValueRef offset64 = LLVMBuildLShr(
+      builder, header, LLVMConstInt(i64_type, 32, false), "cabi.ret.offset64");
   LLVMValueRef offset =
       LLVMBuildTrunc(builder, offset64, i32_type, "cabi.ret.offset");
 
@@ -591,10 +617,10 @@ static LLVMTypeRef lower_mir_rc_header_type(LLVMModuleRef module) {
 }
 
 static LLVMValueRef lower_mir_heap_alloc_payload(LLVMModuleRef module,
-                                                  LLVMBuilderRef builder,
-                                                  LLVMTypeRef payload_type,
-                                                  unsigned tag_or_size_class,
-                                                  const char *name) {
+                                                 LLVMBuilderRef builder,
+                                                 LLVMTypeRef payload_type,
+                                                 unsigned tag_or_size_class,
+                                                 const char *name) {
   if (!module || !builder || !payload_type) {
     return NULL;
   }
@@ -623,10 +649,10 @@ static LLVMValueRef lower_mir_heap_alloc_payload(LLVMModuleRef module,
 }
 
 static LLVMValueRef lower_mir_stack_alloc_payload(LLVMModuleRef module,
-                                                   LLVMBuilderRef builder,
-                                                   LLVMTypeRef payload_type,
-                                                   unsigned tag_or_size_class,
-                                                   const char *name) {
+                                                  LLVMBuilderRef builder,
+                                                  LLVMTypeRef payload_type,
+                                                  unsigned tag_or_size_class,
+                                                  const char *name) {
   if (!module || !builder || !payload_type) {
     return NULL;
   }
@@ -1208,9 +1234,9 @@ static const char *lower_mir_raw_function_symbol_name(const char *name) {
   return strcmp(name, "$top") == 0 ? "top" : name;
 }
 
-static LLVMValueRef
-lower_mir_get_named_function_value(const char *name, LLVMTypeRef fn_type,
-                                   LLVMModuleRef module) {
+static LLVMValueRef lower_mir_get_named_function_value(const char *name,
+                                                       LLVMTypeRef fn_type,
+                                                       LLVMModuleRef module) {
   const char *symbol = lower_mir_raw_function_symbol_name(name);
   if (!symbol || !fn_type) {
     return NULL;
@@ -1226,9 +1252,9 @@ lower_mir_get_named_function_value(const char *name, LLVMTypeRef fn_type,
   return fn;
 }
 
-static LLVMTypeRef lower_mir_function_type_from_value_type(Type *fn_type,
-                                                           JITLangCtx *ctx,
-                                                           LLVMModuleRef module) {
+static LLVMTypeRef
+lower_mir_function_type_from_value_type(Type *fn_type, JITLangCtx *ctx,
+                                        LLVMModuleRef module) {
   if (!fn_type || fn_type->kind != T_FN ||
       lower_mir_type_has_unresolved_vars(fn_type)) {
     return NULL;
@@ -2234,33 +2260,31 @@ static LLVMValueRef lower_mir_list_cons(MirFunction *fn, MirInstr *instr,
     /* Reuse-aware cons: the token is a payload pointer (null => fresh malloc).
        A recycled node keeps rc == 1 (drop-reuse left it) and the same
        {header, payload} layout, so we overwrite the payload slot in place. */
-    LLVMValueRef token =
-        mir_llvm_value_get_rvalue(values, reuse_id, builder);
+    LLVMValueRef token = mir_llvm_value_get_rvalue(values, reuse_id, builder);
     if (token) {
       LLVMTypeRef generic_ptr2 = lower_mir_generic_ptr_type(module);
       if (LLVMTypeOf(token) != generic_ptr2) {
         token =
             LLVMBuildBitCast(builder, token, generic_ptr2, "list.reuse.cast");
       }
-      LLVMValueRef fresh = lower_mir_value_allocates_on_stack(fn, instr->result)
-                               ? lower_mir_stack_alloc_payload(module, builder,
-                                                                node_type, 0,
-                                                                "list.node.stack")
-                               : lower_mir_heap_alloc_payload(module, builder,
-                                                               node_type, 0,
-                                                               "list.node.heap");
-      LLVMValueRef is_null = LLVMBuildICmp(builder, LLVMIntEQ, token,
-                                           LLVMConstNull(generic_ptr2),
-                                           "list.reuse.is_null");
+      LLVMValueRef fresh =
+          lower_mir_value_allocates_on_stack(fn, instr->result)
+              ? lower_mir_stack_alloc_payload(module, builder, node_type, 0,
+                                              "list.node.stack")
+              : lower_mir_heap_alloc_payload(module, builder, node_type, 0,
+                                             "list.node.heap");
+      LLVMValueRef is_null =
+          LLVMBuildICmp(builder, LLVMIntEQ, token, LLVMConstNull(generic_ptr2),
+                        "list.reuse.is_null");
       node = LLVMBuildSelect(builder, is_null, fresh, token, "list.node");
     }
   }
   if (!node) {
     node = lower_mir_value_allocates_on_stack(fn, instr->result)
                ? lower_mir_stack_alloc_payload(module, builder, node_type, 0,
-                                                "list.node.stack")
+                                               "list.node.stack")
                : lower_mir_heap_alloc_payload(module, builder, node_type, 0,
-                                               "list.node.heap");
+                                              "list.node.heap");
   }
   if (!node) {
     return NULL;
@@ -2483,8 +2507,8 @@ static LLVMValueRef lower_mir_variant(MirFunction *fn, MirInstr *instr,
   }
 
   if (instr->data.construct.items.len == 0) {
-    return LLVMBuildInsertValue(builder, variant, LLVMConstNull(storage_type), 1,
-                                "variant.payload");
+    return LLVMBuildInsertValue(builder, variant, LLVMConstNull(storage_type),
+                                1, "variant.payload");
   }
 
   LLVMValueRef payload = lower_mir_constructor_payload_value(
@@ -3696,6 +3720,11 @@ static MirFunction *lower_mir_call_fn_ref_target(MirLlvmCtx *lctx,
   return target;
 }
 
+static void lower_mir_emit_value_rc_marker(LLVMBuilderRef builder,
+                                           LLVMValueRef value, Type *type,
+                                           LLVMModuleRef module,
+                                           JITLangCtx *ctx, bool is_dup);
+
 static LLVMValueRef lower_mir_emit_coro_reset_handle(Type *yield_type,
                                                      LLVMValueRef handle,
                                                      MirLlvmCtx *lctx,
@@ -3853,6 +3882,9 @@ static bool lower_mir_coro_new_attach_reset(
   args_value =
       LLVMBuildInsertValue(builder, args_value, stored_callee, 0, "coro.fn");
   for (size_t i = 0; i < arg_count; i++) {
+    lower_mir_emit_value_rc_marker(builder, arg_values[i],
+                                   arg_mir_types ? arg_mir_types[i] : NULL,
+                                   module, &lctx->jit_ctx, true);
     args_value = LLVMBuildInsertValue(builder, args_value, arg_values[i],
                                       (unsigned)(i + 1), "coro.arg");
   }
@@ -4086,15 +4118,14 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
       !lower_mir_type_has_unresolved_vars(
           instr->data.call.specialized_fn->type)) {
     callee_target = instr->data.call.specialized_fn;
-    callee = lower_mir_get_function_value(lctx, callee_target, module,
-                                          &callee_type);
+    callee =
+        lower_mir_get_function_value(lctx, callee_target, module, &callee_type);
   }
 
   if (!callee && instr->data.call.specialized_name) {
     MirFunction *specialized = lower_mir_find_function_by_name(
         lctx->program, instr->data.call.specialized_name);
-    if (specialized &&
-        !lower_mir_type_has_unresolved_vars(specialized->type)) {
+    if (specialized && !lower_mir_type_has_unresolved_vars(specialized->type)) {
       callee_target = specialized;
       callee =
           lower_mir_get_function_value(lctx, specialized, module, &callee_type);
@@ -4223,9 +4254,8 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
                      instr->type && instr->type->kind == T_VOID ? "" : "call");
   free(args);
   return callee_uses_c_abi
-             ? lower_mir_unpack_c_abi_view_result(instr->type, result,
-                                                  &lctx->jit_ctx, module,
-                                                  builder)
+             ? lower_mir_unpack_c_abi_view_result(
+                   instr->type, result, &lctx->jit_ctx, module, builder)
              : result;
 }
 
@@ -4554,7 +4584,7 @@ static LLVMValueRef lower_mir_rc_managed_ptr(MirFunction *fn, MirInstr *instr,
   }
 
   return LLVMGetTypeKind(LLVMTypeOf(value)) == LLVMPointerTypeKind ? value
-                                                                    : NULL;
+                                                                   : NULL;
 }
 
 static LLVMValueRef lower_mir_free_fn(LLVMModuleRef module) {
@@ -4563,14 +4593,12 @@ static LLVMValueRef lower_mir_free_fn(LLVMModuleRef module) {
     return free_fn;
   }
   LLVMTypeRef ptr_type = lower_mir_generic_ptr_type(module);
-  LLVMTypeRef fn_type =
-      LLVMFunctionType(LLVMVoidTypeInContext(LLVMGetModuleContext(module)),
-                       &ptr_type, 1, 0);
+  LLVMTypeRef fn_type = LLVMFunctionType(
+      LLVMVoidTypeInContext(LLVMGetModuleContext(module)), &ptr_type, 1, 0);
   return LLVMAddFunction(module, "free", fn_type);
 }
 
-static Type *lower_mir_find_rc_alias_type_in_type(Type *type,
-                                                  const char *alias,
+static Type *lower_mir_find_rc_alias_type_in_type(Type *type, const char *alias,
                                                   int depth) {
   if (!type || !alias || depth > 12) {
     return NULL;
@@ -4597,9 +4625,8 @@ static Type *lower_mir_find_rc_alias_type_in_type(Type *type,
   }
 
   if (type->closure_meta) {
-    Type *found =
-        lower_mir_find_rc_alias_type_in_type(type->closure_meta, alias,
-                                             depth + 1);
+    Type *found = lower_mir_find_rc_alias_type_in_type(type->closure_meta,
+                                                       alias, depth + 1);
     if (found) {
       return found;
     }
@@ -4608,8 +4635,7 @@ static Type *lower_mir_find_rc_alias_type_in_type(Type *type,
   switch (type->kind) {
   case T_CONS:
   case T_SUM:
-    for (int i = 0; type->data.T_CONS.args &&
-                    i < type->data.T_CONS.num_args;
+    for (int i = 0; type->data.T_CONS.args && i < type->data.T_CONS.num_args;
          i++) {
       Type *found = lower_mir_find_rc_alias_type_in_type(
           type->data.T_CONS.args[i], alias, depth + 1);
@@ -4620,8 +4646,8 @@ static Type *lower_mir_find_rc_alias_type_in_type(Type *type,
     return NULL;
 
   case T_FN: {
-    Type *found = lower_mir_find_rc_alias_type_in_type(
-        type->data.T_FN.from, alias, depth + 1);
+    Type *found = lower_mir_find_rc_alias_type_in_type(type->data.T_FN.from,
+                                                       alias, depth + 1);
     if (found) {
       return found;
     }
@@ -4786,8 +4812,8 @@ static bool lower_mir_types_same_rc_shape(Type *lhs, Type *rhs, int depth) {
   case T_FN:
     return lower_mir_types_same_rc_shape(lhs->data.T_FN.from,
                                          rhs->data.T_FN.from, depth + 1) &&
-           lower_mir_types_same_rc_shape(lhs->data.T_FN.to,
-                                         rhs->data.T_FN.to, depth + 1) &&
+           lower_mir_types_same_rc_shape(lhs->data.T_FN.to, rhs->data.T_FN.to,
+                                         depth + 1) &&
            lower_mir_types_same_rc_shape(lhs->closure_meta, rhs->closure_meta,
                                          depth + 1);
 
@@ -4797,8 +4823,8 @@ static bool lower_mir_types_same_rc_shape(Type *lhs, Type *rhs, int depth) {
 }
 
 static Type *lower_mir_find_equivalent_rc_alias_type_in_type(Type *type,
-                                                              Type *target,
-                                                              int depth) {
+                                                             Type *target,
+                                                             int depth) {
   if (!type || !target || depth > 12) {
     return NULL;
   }
@@ -4819,8 +4845,7 @@ static Type *lower_mir_find_equivalent_rc_alias_type_in_type(Type *type,
   switch (type->kind) {
   case T_CONS:
   case T_SUM:
-    for (int i = 0; type->data.T_CONS.args &&
-                    i < type->data.T_CONS.num_args;
+    for (int i = 0; type->data.T_CONS.args && i < type->data.T_CONS.num_args;
          i++) {
       Type *found = lower_mir_find_equivalent_rc_alias_type_in_type(
           type->data.T_CONS.args[i], target, depth + 1);
@@ -4835,8 +4860,8 @@ static Type *lower_mir_find_equivalent_rc_alias_type_in_type(Type *type,
     if (found) {
       return found;
     }
-    return lower_mir_find_equivalent_rc_alias_type_in_type(
-        type->data.T_FN.to, target, depth + 1);
+    return lower_mir_find_equivalent_rc_alias_type_in_type(type->data.T_FN.to,
+                                                           target, depth + 1);
   }
   case T_RECURSIVE_REF:
     /* A T_RECURSIVE_REF is a back-edge to the canonical declaration. Resolve
@@ -4903,9 +4928,8 @@ static Type *lower_mir_find_equivalent_rc_alias_type(Type *target) {
       }
       for (size_t j = 0; j < block->instrs.len; j++) {
         MirInstr *instr = &block->instrs.items[j];
-        found =
-            lower_mir_find_equivalent_rc_alias_type_in_type(instr->type,
-                                                            target, 0);
+        found = lower_mir_find_equivalent_rc_alias_type_in_type(instr->type,
+                                                                target, 0);
         if (found) {
           return found;
         }
@@ -4978,12 +5002,10 @@ static Type *lower_mir_resolve_rc_type_refs(Type *type, JITLangCtx *ctx,
   switch (type->kind) {
   case T_CONS:
   case T_SUM:
-    for (int i = 0; type->data.T_CONS.args &&
-                    i < type->data.T_CONS.num_args;
+    for (int i = 0; type->data.T_CONS.args && i < type->data.T_CONS.num_args;
          i++) {
-      type->data.T_CONS.args[i] =
-          lower_mir_resolve_rc_type_refs(type->data.T_CONS.args[i], ctx,
-                                         depth + 1);
+      type->data.T_CONS.args[i] = lower_mir_resolve_rc_type_refs(
+          type->data.T_CONS.args[i], ctx, depth + 1);
     }
     break;
   case T_FN:
@@ -5045,8 +5067,8 @@ static Type *lower_mir_resolve_rc_type_uncached(Type *type, JITLangCtx *ctx) {
       return deep_copy_type(aliased);
     }
     Type *decl_type = env_lookup(ctx->env, resolved->data.T_VAR.name);
-    if (decl_type && !(decl_type->kind == T_VAR &&
-                       types_equal(decl_type, resolved))) {
+    if (decl_type &&
+        !(decl_type->kind == T_VAR && types_equal(decl_type, resolved))) {
       return lower_mir_resolve_rc_type_refs(
           resolve_type_in_env(deep_copy_type(decl_type), ctx->env), ctx, 0);
     }
@@ -5104,8 +5126,7 @@ static bool lower_mir_type_is_managed_depth(Type *type, int depth) {
     return lower_mir_type_is_managed_depth(decl_type, depth + 1);
   }
 
-  if ((type->kind == T_CONS || type->kind == T_SUM) &&
-      type->data.T_CONS.args) {
+  if ((type->kind == T_CONS || type->kind == T_SUM) && type->data.T_CONS.args) {
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
       if (lower_mir_type_is_managed_depth(type->data.T_CONS.args[i],
                                           depth + 1)) {
@@ -5122,8 +5143,7 @@ static bool lower_mir_type_is_managed(Type *type) {
 }
 
 static bool lower_mir_type_is_managed_ctx(Type *type, JITLangCtx *ctx) {
-  return lower_mir_type_is_managed(
-      lower_mir_resolve_rc_type(type, ctx));
+  return lower_mir_type_is_managed(lower_mir_resolve_rc_type(type, ctx));
 }
 
 static const char *lower_mir_drop_type_mangle(Type *type);
@@ -5184,7 +5204,7 @@ static char *lower_mir_drop_type_fragment(Type *type) {
     return strdup("Module");
   case T_VAR:
     return lower_mir_drop_sanitize(type->data.T_VAR.name ? type->data.T_VAR.name
-                                                          : "TypeVar");
+                                                         : "TypeVar");
   case T_RECURSIVE_REF:
     return lower_mir_drop_sanitize(type->data.T_RECURSIVE_REF.name
                                        ? type->data.T_RECURSIVE_REF.name
@@ -5285,9 +5305,8 @@ static LLVMValueRef lower_mir_drop_fn_get_or_declare(Type *type,
     return fn;
   }
   LLVMTypeRef ptr_type = lower_mir_generic_ptr_type(module);
-  LLVMTypeRef fn_type =
-      LLVMFunctionType(LLVMVoidTypeInContext(LLVMGetModuleContext(module)),
-                       &ptr_type, 1, 0);
+  LLVMTypeRef fn_type = LLVMFunctionType(
+      LLVMVoidTypeInContext(LLVMGetModuleContext(module)), &ptr_type, 1, 0);
   fn = LLVMAddFunction(module, name, fn_type);
   return fn;
 }
@@ -5410,8 +5429,8 @@ static void lower_mir_emit_value_rc_marker(LLVMBuilderRef builder,
       Type *variant_type = type->data.T_CONS.args[i];
       LLVMBasicBlockRef case_bb =
           LLVMAppendBasicBlockInContext(llvm_ctx, parent_fn, "rc.sum.case");
-      next_test = LLVMAppendBasicBlockInContext(llvm_ctx, parent_fn,
-                                                "rc.sum.next");
+      next_test =
+          LLVMAppendBasicBlockInContext(llvm_ctx, parent_fn, "rc.sum.next");
       LLVMValueRef expected = LLVMConstInt(LLVMTypeOf(tag), (unsigned)i, false);
       LLVMValueRef is_case =
           LLVMBuildICmp(builder, LLVMIntEQ, tag, expected, "rc.sum.is_case");
@@ -5453,9 +5472,8 @@ static void lower_mir_emit_value_rc_marker(LLVMBuilderRef builder,
       if (!lower_mir_type_is_managed(field_type)) {
         continue;
       }
-      LLVMValueRef field =
-          LLVMBuildExtractValue(builder, value, (unsigned)i,
-                                is_dup ? "dup.field" : "drop.field");
+      LLVMValueRef field = LLVMBuildExtractValue(
+          builder, value, (unsigned)i, is_dup ? "dup.field" : "drop.field");
       lower_mir_emit_value_rc_marker(builder, field, field_type, module, ctx,
                                      is_dup);
     }
@@ -5463,12 +5481,13 @@ static void lower_mir_emit_value_rc_marker(LLVMBuilderRef builder,
 }
 
 static void lower_mir_drop_emit_child_drop(LLVMBuilderRef builder,
-                                            LLVMValueRef child_value,
-                                            Type *field_type,
-                                            LLVMModuleRef module,
-                                            JITLangCtx *ctx) {
+                                           LLVMValueRef child_value,
+                                           Type *field_type,
+                                           LLVMModuleRef module,
+                                           JITLangCtx *ctx) {
   field_type = lower_mir_resolve_rc_type(field_type, ctx);
-  if (!child_value || !field_type || !lower_mir_type_has_rc_header(field_type)) {
+  if (!child_value || !field_type ||
+      !lower_mir_type_has_rc_header(field_type)) {
     return;
   }
   LLVMValueRef child_drop_fn =
@@ -5485,37 +5504,35 @@ static void lower_mir_drop_emit_child_drop(LLVMBuilderRef builder,
   if (LLVMGetTypeKind(LLVMTypeOf(child_value)) != LLVMPointerTypeKind) {
     return;
   }
-  LLVMTypeRef fn_type =
-      LLVMFunctionType(LLVMVoidTypeInContext(LLVMGetModuleContext(module)),
-                       &ptr_type, 1, 0);
+  LLVMTypeRef fn_type = LLVMFunctionType(
+      LLVMVoidTypeInContext(LLVMGetModuleContext(module)), &ptr_type, 1, 0);
   LLVMBuildCall2(builder, fn_type, child_drop_fn, &child_value, 1, "");
 }
 
 static void lower_mir_drop_emit_field(LLVMBuilderRef builder,
-                                       LLVMValueRef payload_ptr,
-                                       LLVMTypeRef payload_type,
-                                       Type *field_type, unsigned field_index,
-                                       LLVMModuleRef module, JITLangCtx *ctx) {
+                                      LLVMValueRef payload_ptr,
+                                      LLVMTypeRef payload_type,
+                                      Type *field_type, unsigned field_index,
+                                      LLVMModuleRef module, JITLangCtx *ctx) {
   if (!field_type || !lower_mir_type_is_managed(field_type)) {
     return;
   }
-  LLVMValueRef field_ptr =
-      LLVMBuildStructGEP2(builder, payload_type, payload_ptr, field_index,
-                          "drop.field.ptr");
+  LLVMValueRef field_ptr = LLVMBuildStructGEP2(
+      builder, payload_type, payload_ptr, field_index, "drop.field.ptr");
   LLVMTypeRef field_storage =
       lower_mir_value_storage_type(field_type, ctx, module);
   if (!field_storage) {
     return;
   }
-  LLVMValueRef field_value = LLVMBuildLoad2(builder, field_storage, field_ptr,
-                                            "drop.field.value");
+  LLVMValueRef field_value =
+      LLVMBuildLoad2(builder, field_storage, field_ptr, "drop.field.value");
   lower_mir_emit_value_rc_marker(builder, field_value, field_type, module, ctx,
                                  false);
 }
 
 static void lower_mir_build_drop_fn_body(Type *type, LLVMValueRef drop_fn,
-                                          LLVMModuleRef module,
-                                          JITLangCtx *ctx) {
+                                         LLVMModuleRef module,
+                                         JITLangCtx *ctx) {
   if (!type || !drop_fn || !module) {
     return;
   }
@@ -5543,23 +5560,22 @@ static void lower_mir_build_drop_fn_body(Type *type, LLVMValueRef drop_fn,
     LLVMBasicBlockRef done_bb =
         LLVMAppendBasicBlockInContext(llvm_ctx, drop_fn, "drop.done");
 
-    LLVMValueRef is_null =
-        LLVMBuildICmp(builder, LLVMIntEQ, payload,
-                      LLVMConstNull(ptr_type), "drop.is_null");
+    LLVMValueRef is_null = LLVMBuildICmp(
+        builder, LLVMIntEQ, payload, LLVMConstNull(ptr_type), "drop.is_null");
     LLVMBuildCondBr(builder, is_null, null_bb, live_bb);
 
     LLVMPositionBuilderAtEnd(builder, live_bb);
     LLVMTypeRef header_type = lower_mir_rc_header_type(module);
     LLVMValueRef header_ptr =
         LLVMBuildGEP2(builder, LLVMInt8TypeInContext(llvm_ctx), payload,
-                       &(LLVMValueRef){LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx),
-                                                     -8, true)},
-                       1, "drop.header");
-    LLVMValueRef rc_ptr = LLVMBuildBitCast(builder, header_ptr,
-                                            LLVMPointerType(LLVMInt32TypeInContext(llvm_ctx), 0),
-                                            "drop.rc.ptr");
+                      &(LLVMValueRef){LLVMConstInt(
+                          LLVMInt32TypeInContext(llvm_ctx), -8, true)},
+                      1, "drop.header");
+    LLVMValueRef rc_ptr = LLVMBuildBitCast(
+        builder, header_ptr,
+        LLVMPointerType(LLVMInt32TypeInContext(llvm_ctx), 0), "drop.rc.ptr");
     LLVMValueRef rc = LLVMBuildLoad2(builder, LLVMInt32TypeInContext(llvm_ctx),
-                                    rc_ptr, "drop.rc");
+                                     rc_ptr, "drop.rc");
     LLVMValueRef is_stack =
         LLVMBuildICmp(builder, LLVMIntEQ, rc,
                       LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 0, false),
@@ -5589,8 +5605,8 @@ static void lower_mir_build_drop_fn_body(Type *type, LLVMValueRef drop_fn,
       lower_mir_drop_emit_field(builder, payload, node_type, elt_type, 0,
                                 module, ctx);
     }
-    LLVMValueRef tail_ptr = LLVMBuildStructGEP2(builder, node_type, payload, 1,
-                                                 "drop.tail.ptr");
+    LLVMValueRef tail_ptr =
+        LLVMBuildStructGEP2(builder, node_type, payload, 1, "drop.tail.ptr");
     LLVMValueRef tail =
         LLVMBuildLoad2(builder, ptr_type, tail_ptr, "drop.tail");
     lower_mir_drop_emit_child_drop(builder, tail, type, module, ctx);
@@ -5598,8 +5614,8 @@ static void lower_mir_build_drop_fn_body(Type *type, LLVMValueRef drop_fn,
 
     LLVMPositionBuilderAtEnd(builder, free_bb);
     LLVMValueRef free_fn = lower_mir_free_fn(module);
-    LLVMValueRef free_arg = LLVMBuildBitCast(builder, header_ptr, ptr_type,
-                                             "drop.free.arg");
+    LLVMValueRef free_arg =
+        LLVMBuildBitCast(builder, header_ptr, ptr_type, "drop.free.arg");
     LLVMTypeRef free_type =
         LLVMFunctionType(LLVMVoidTypeInContext(llvm_ctx), &ptr_type, 1, 0);
     LLVMBuildCall2(builder, free_type, free_fn, &free_arg, 1, "");
@@ -5625,24 +5641,22 @@ static void lower_mir_build_drop_fn_body(Type *type, LLVMValueRef drop_fn,
   LLVMBasicBlockRef done_bb =
       LLVMAppendBasicBlockInContext(llvm_ctx, drop_fn, "drop.done");
 
-  LLVMValueRef is_null =
-      LLVMBuildICmp(builder, LLVMIntEQ, payload, LLVMConstNull(ptr_type),
-                    "drop.is_null");
+  LLVMValueRef is_null = LLVMBuildICmp(builder, LLVMIntEQ, payload,
+                                       LLVMConstNull(ptr_type), "drop.is_null");
   LLVMBuildCondBr(builder, is_null, null_bb, live_bb);
 
   LLVMPositionBuilderAtEnd(builder, live_bb);
 
   LLVMTypeRef header_type = lower_mir_rc_header_type(module);
-  LLVMValueRef header_ptr =
-      LLVMBuildGEP2(builder, LLVMInt8TypeInContext(llvm_ctx), payload,
-                     &(LLVMValueRef){LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx),
-                                                   -8, true)},
-                     1, "drop.header");
+  LLVMValueRef header_ptr = LLVMBuildGEP2(
+      builder, LLVMInt8TypeInContext(llvm_ctx), payload,
+      &(LLVMValueRef){LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), -8, true)},
+      1, "drop.header");
   LLVMValueRef rc_ptr = LLVMBuildBitCast(
-      builder, header_ptr,
-      LLVMPointerType(LLVMInt32TypeInContext(llvm_ctx), 0), "drop.rc.ptr");
+      builder, header_ptr, LLVMPointerType(LLVMInt32TypeInContext(llvm_ctx), 0),
+      "drop.rc.ptr");
   LLVMValueRef rc = LLVMBuildLoad2(builder, LLVMInt32TypeInContext(llvm_ctx),
-                                  rc_ptr, "drop.rc");
+                                   rc_ptr, "drop.rc");
   LLVMValueRef is_stack =
       LLVMBuildICmp(builder, LLVMIntEQ, rc,
                     LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 0, false),
@@ -5656,10 +5670,9 @@ static void lower_mir_build_drop_fn_body(Type *type, LLVMValueRef drop_fn,
       builder, rc, LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 1, false),
       "drop.rc.dec");
   LLVMBuildStore(builder, decremented, rc_ptr);
-  LLVMValueRef is_zero =
-      LLVMBuildICmp(builder, LLVMIntEQ, decremented,
-                    LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 0, false),
-                    "drop.rc.zero");
+  LLVMValueRef is_zero = LLVMBuildICmp(
+      builder, LLVMIntEQ, decremented,
+      LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 0, false), "drop.rc.zero");
   LLVMBuildCondBr(builder, is_zero, dead_bb, done_bb);
   (void)header_type;
 
@@ -5681,55 +5694,50 @@ static void lower_mir_build_drop_fn_body(Type *type, LLVMValueRef drop_fn,
   } else if (is_array_type(type)) {
     /* Iterate the backing store using the element count stored in the header's
        tag_or_size_class field, dropping each managed element. */
-    Type *elt_type =
-        (type->data.T_CONS.args && type->data.T_CONS.num_args > 0)
-            ? type->data.T_CONS.args[0]
-            : NULL;
+    Type *elt_type = (type->data.T_CONS.args && type->data.T_CONS.num_args > 0)
+                         ? type->data.T_CONS.args[0]
+                         : NULL;
     elt_type = lower_mir_resolve_rc_type(elt_type, ctx);
     if (elt_type && lower_mir_type_is_managed_ctx(elt_type, ctx)) {
       LLVMTypeRef i32 = LLVMInt32TypeInContext(llvm_ctx);
-      LLVMValueRef tag_ptr =
-          LLVMBuildStructGEP2(builder, header_type, header_ptr, 1,
-                              "drop.tag.ptr");
-      LLVMValueRef count =
-          LLVMBuildLoad2(builder, i32, tag_ptr, "drop.count");
+      LLVMValueRef tag_ptr = LLVMBuildStructGEP2(builder, header_type,
+                                                 header_ptr, 1, "drop.tag.ptr");
+      LLVMValueRef count = LLVMBuildLoad2(builder, i32, tag_ptr, "drop.count");
 
       LLVMTypeRef elt_storage =
           lower_mir_value_storage_type(elt_type, ctx, module);
       if (elt_storage) {
-          LLVMBasicBlockRef loop_bb = LLVMAppendBasicBlockInContext(
-              llvm_ctx, drop_fn, "drop.arr.loop");
-          LLVMBasicBlockRef body_bb = LLVMAppendBasicBlockInContext(
-              llvm_ctx, drop_fn, "drop.arr.body");
-          LLVMBasicBlockRef after_bb = LLVMAppendBasicBlockInContext(
-              llvm_ctx, drop_fn, "drop.arr.after");
-          LLVMValueRef zero = LLVMConstInt(i32, 0, false);
-          LLVMValueRef one = LLVMConstInt(i32, 1, false);
-          LLVMBasicBlockRef preloop_bb = LLVMGetInsertBlock(builder);
-          LLVMValueRef cmp = LLVMBuildICmp(builder, LLVMIntEQ, count, zero,
-                                           "drop.arr.empty");
-          LLVMBuildCondBr(builder, cmp, after_bb, loop_bb);
+        LLVMBasicBlockRef loop_bb =
+            LLVMAppendBasicBlockInContext(llvm_ctx, drop_fn, "drop.arr.loop");
+        LLVMBasicBlockRef body_bb =
+            LLVMAppendBasicBlockInContext(llvm_ctx, drop_fn, "drop.arr.body");
+        LLVMBasicBlockRef after_bb =
+            LLVMAppendBasicBlockInContext(llvm_ctx, drop_fn, "drop.arr.after");
+        LLVMValueRef zero = LLVMConstInt(i32, 0, false);
+        LLVMValueRef one = LLVMConstInt(i32, 1, false);
+        LLVMBasicBlockRef preloop_bb = LLVMGetInsertBlock(builder);
+        LLVMValueRef cmp =
+            LLVMBuildICmp(builder, LLVMIntEQ, count, zero, "drop.arr.empty");
+        LLVMBuildCondBr(builder, cmp, after_bb, loop_bb);
 
-          LLVMPositionBuilderAtEnd(builder, loop_bb);
-          LLVMValueRef idx = LLVMBuildPhi(builder, i32, "drop.arr.idx");
-          LLVMAddIncoming(idx, &(LLVMValueRef){zero}, &preloop_bb, 1);
-          LLVMValueRef cont =
-              LLVMBuildICmp(builder, LLVMIntSLT, idx, count, "drop.arr.cont");
-          LLVMBuildCondBr(builder, cont, body_bb, after_bb);
+        LLVMPositionBuilderAtEnd(builder, loop_bb);
+        LLVMValueRef idx = LLVMBuildPhi(builder, i32, "drop.arr.idx");
+        LLVMAddIncoming(idx, &(LLVMValueRef){zero}, &preloop_bb, 1);
+        LLVMValueRef cont =
+            LLVMBuildICmp(builder, LLVMIntSLT, idx, count, "drop.arr.cont");
+        LLVMBuildCondBr(builder, cont, body_bb, after_bb);
 
-          LLVMPositionBuilderAtEnd(builder, body_bb);
-          LLVMValueRef elem_ptr = LLVMBuildGEP2(builder, elt_storage,
-                                                 payload, &idx, 1,
-                                                 "drop.arr.elem.ptr");
-          LLVMValueRef elem = LLVMBuildLoad2(builder, elt_storage, elem_ptr,
-                                              "drop.arr.elem");
-          lower_mir_emit_value_rc_marker(builder, elem, elt_type, module, ctx,
-                                         false);
-          LLVMBasicBlockRef backedge_bb = LLVMGetInsertBlock(builder);
-          LLVMValueRef next =
-              LLVMBuildAdd(builder, idx, one, "drop.arr.next");
-          LLVMAddIncoming(idx, &next, &backedge_bb, 1);
-          LLVMBuildBr(builder, loop_bb);
+        LLVMPositionBuilderAtEnd(builder, body_bb);
+        LLVMValueRef elem_ptr = LLVMBuildGEP2(builder, elt_storage, payload,
+                                              &idx, 1, "drop.arr.elem.ptr");
+        LLVMValueRef elem =
+            LLVMBuildLoad2(builder, elt_storage, elem_ptr, "drop.arr.elem");
+        lower_mir_emit_value_rc_marker(builder, elem, elt_type, module, ctx,
+                                       false);
+        LLVMBasicBlockRef backedge_bb = LLVMGetInsertBlock(builder);
+        LLVMValueRef next = LLVMBuildAdd(builder, idx, one, "drop.arr.next");
+        LLVMAddIncoming(idx, &next, &backedge_bb, 1);
+        LLVMBuildBr(builder, loop_bb);
 
         LLVMPositionBuilderAtEnd(builder, after_bb);
       }
@@ -5832,8 +5840,7 @@ static LLVMValueRef lower_mir_rc_marker(MirFunction *fn, MirInstr *instr,
   }
 
   {
-    LLVMValueRef drop_fn =
-        lower_mir_ensure_drop_fn(operand_type, module, ctx);
+    LLVMValueRef drop_fn = lower_mir_ensure_drop_fn(operand_type, module, ctx);
     if (drop_fn) {
       LLVMValueRef arg = ptr;
       if (LLVMTypeOf(arg) != ptr_type) {
@@ -5855,10 +5862,10 @@ static LLVMValueRef lower_mir_rc_marker(MirFunction *fn, MirInstr *instr,
 }
 
 static LLVMValueRef lower_mir_rc_drop_reuse(MirFunction *fn, MirInstr *instr,
-                                             MirLlvmValueMap *values,
-                                             LLVMModuleRef module,
-                                             LLVMBuilderRef builder,
-                                             JITLangCtx *ctx) {
+                                            MirLlvmValueMap *values,
+                                            LLVMModuleRef module,
+                                            LLVMBuilderRef builder,
+                                            JITLangCtx *ctx) {
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
   if (!instr || (fn && fn->skip_rc_markers)) {
     return LLVMConstNull(lower_mir_generic_ptr_type(module));
@@ -5893,37 +5900,30 @@ static LLVMValueRef lower_mir_rc_drop_reuse(MirFunction *fn, MirInstr *instr,
 
   LLVMTypeRef i32 = LLVMInt32TypeInContext(llvm_ctx);
   LLVMTypeRef header_type = lower_mir_rc_header_type(module);
-  LLVMValueRef header_ptr =
-      LLVMBuildGEP2(builder, LLVMInt8TypeInContext(llvm_ctx), ptr,
-                     &(LLVMValueRef){LLVMConstInt(i32, -8, true)}, 1,
-                     "drop_reuse.header");
+  LLVMValueRef header_ptr = LLVMBuildGEP2(
+      builder, LLVMInt8TypeInContext(llvm_ctx), ptr,
+      &(LLVMValueRef){LLVMConstInt(i32, -8, true)}, 1, "drop_reuse.header");
   LLVMValueRef rc_ptr = LLVMBuildBitCast(
       builder, header_ptr, LLVMPointerType(i32, 0), "drop_reuse.rc.ptr");
-  LLVMValueRef rc =
-      LLVMBuildLoad2(builder, i32, rc_ptr, "drop_reuse.rc");
+  LLVMValueRef rc = LLVMBuildLoad2(builder, i32, rc_ptr, "drop_reuse.rc");
 
   /* If the value is uniquely owned (rc == 1), recycle its storage: keep rc at 1
      and hand the payload pointer to the constructor that will overwrite it in
      place. Otherwise fall back to a normal drop and yield null so the
      constructor mallocs a fresh object. */
-  LLVMValueRef is_unique =
-      LLVMBuildICmp(builder, LLVMIntEQ, rc, LLVMConstInt(i32, 1, false),
-                    "drop_reuse.unique");
-  LLVMValueRef token =
-      LLVMBuildSelect(builder, is_unique, ptr, LLVMConstNull(ptr_type),
-                      "drop_reuse.token");
-  LLVMBasicBlockRef reuse_bb =
-      LLVMAppendBasicBlockInContext(llvm_ctx,
-                                    LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)),
-                                    "drop_reuse.reuse");
-  LLVMBasicBlockRef drop_bb =
-      LLVMAppendBasicBlockInContext(llvm_ctx,
-                                    LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)),
-                                    "drop_reuse.drop");
-  LLVMBasicBlockRef cont_bb =
-      LLVMAppendBasicBlockInContext(llvm_ctx,
-                                    LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)),
-                                    "drop_reuse.cont");
+  LLVMValueRef is_unique = LLVMBuildICmp(
+      builder, LLVMIntEQ, rc, LLVMConstInt(i32, 1, false), "drop_reuse.unique");
+  LLVMValueRef token = LLVMBuildSelect(
+      builder, is_unique, ptr, LLVMConstNull(ptr_type), "drop_reuse.token");
+  LLVMBasicBlockRef reuse_bb = LLVMAppendBasicBlockInContext(
+      llvm_ctx, LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)),
+      "drop_reuse.reuse");
+  LLVMBasicBlockRef drop_bb = LLVMAppendBasicBlockInContext(
+      llvm_ctx, LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)),
+      "drop_reuse.drop");
+  LLVMBasicBlockRef cont_bb = LLVMAppendBasicBlockInContext(
+      llvm_ctx, LLVMGetBasicBlockParent(LLVMGetInsertBlock(builder)),
+      "drop_reuse.cont");
   LLVMBuildCondBr(builder, is_unique, reuse_bb, drop_bb);
 
   LLVMPositionBuilderAtEnd(builder, reuse_bb);
@@ -6275,9 +6275,8 @@ static LLVMValueRef lower_mir_as_bytes(MirFunction *fn, MirInstr *instr,
   }
 
   LLVMTypeRef array_type = LLVMArrayType(char_type, width);
-  LLVMValueRef byte_array_ptr =
-      lower_mir_heap_alloc_payload(module, builder, array_type, 0,
-                                   "bytes.heap");
+  LLVMValueRef byte_array_ptr = lower_mir_heap_alloc_payload(
+      module, builder, array_type, 0, "bytes.heap");
   if (!byte_array_ptr) {
     return NULL;
   }
@@ -6720,9 +6719,9 @@ static bool lower_mir_block_body(MirLlvmCtx *lctx, MirFunction *fn,
                                          builder, &lctx->jit_ctx);
     if (!value || !mir_llvm_value_set(values, instr->result, value)) {
       fprintf(stderr,
-              "MIR to LLVM lowering failed instruction kind %d result %u in "
+              "MIR to LLVM lowering failed instruction %s result %u in "
               "%s bb%u\n",
-              instr->kind, instr->result,
+              mir_instr_kind_name(instr->kind), instr->result,
               fn && fn->name ? fn->name : "<anonymous>", mir_block->id);
       return false;
     }

@@ -345,6 +345,8 @@ TENSOR_ADD_CONSTRUCTOR_BODY="$ARTIFACT_DIR/tensor_add_constructor.mir"
 TENSOR_OP_ADD_MATCH_BODY="$ARTIFACT_DIR/tensor_op_add_payload_match.mir"
 TENSOR_OP_ADD_CONSUME_BODY="$ARTIFACT_DIR/tensor_op_add_payload_consume.mir"
 COROUTINE_MAP_LOOP_BODY="$ARTIFACT_DIR/coroutine_map_loop.mir"
+GENERIC_ARRAY_ITER_BODY="$ARTIFACT_DIR/generic_iter_array_map.Array_Double.Coroutine_Double.mir"
+GENERIC_ARRAY_RESTART_ITER_BODY="$ARTIFACT_DIR/generic_iter_array_restart.Array_Double.Coroutine_Double.mir"
 COROUTINE_ZIP_LOOP_BODY="$ARTIFACT_DIR/coroutine_zip_loop.mir"
 COROUTINE_RETURNED_BODY="$ARTIFACT_DIR/coroutine_returned.mir"
 COROUTINE_MAP_RETURNED_BODY="$ARTIFACT_DIR/coroutine_map_returned.mir"
@@ -429,6 +431,8 @@ extract_function "$RECURSIVE_DESTRUCTURE_MIR" "tensor_add_constructor" "$TENSOR_
 extract_function "$RECURSIVE_DESTRUCTURE_MIR" "tensor_op_add_payload_match" "$TENSOR_OP_ADD_MATCH_BODY"
 extract_function "$RECURSIVE_DESTRUCTURE_MIR" "tensor_op_add_payload_consume" "$TENSOR_OP_ADD_CONSUME_BODY"
 extract_function "$COROUTINE_MIR" "coroutine_map_loop" "$COROUTINE_MAP_LOOP_BODY"
+extract_function "$COROUTINE_MIR" "generic_iter_array_map.Array_Double.Coroutine_Double" "$GENERIC_ARRAY_ITER_BODY"
+extract_function "$COROUTINE_MIR" "generic_iter_array_restart.Array_Double.Coroutine_Double" "$GENERIC_ARRAY_RESTART_ITER_BODY"
 extract_function "$COROUTINE_MIR" "coroutine_zip_loop" "$COROUTINE_ZIP_LOOP_BODY"
 extract_function "$COROUTINE_MIR" "coroutine_returned" "$COROUTINE_RETURNED_BODY"
 extract_function "$COROUTINE_MIR" "coroutine_map_returned" "$COROUTINE_MAP_RETURNED_BODY"
@@ -833,6 +837,17 @@ assert_order "$COROUTINE_MIR" "cor_map should specialize captured generic builti
   'fn_ref \$builtin_Double\.Int\.Double' \
   'fn_ref \$\$builtin\.cor_map\.[0-9]+' \
   'coro\.new %[0-9]+\(%[0-9]+, %[0-9]+\)'
+assert_order "$GENERIC_ARRAY_ITER_BODY" "specialized generic iter should lower to array iterator wrapper" \
+  '^fn generic_iter_array_map\.Array_Double\.Coroutine_Double\(%0 xs: Array of Double @consume\)' \
+  'fn_ref \$\$builtin\.iter\.array\.[0-9]+' \
+  'coro\.new %[0-9]+\(%0\)'
+assert_not_contains "$GENERIC_ARRAY_ITER_BODY" 'call @iter' "specialized generic iter should not leave unresolved builtin call"
+assert_order "$GENERIC_ARRAY_RESTART_ITER_BODY" "recursive coroutine generic iter should lower source before cor_map" \
+  '^fn generic_iter_array_restart\.Array_Double\.Coroutine_Double\(%0 xs: Array of Double @consume\)' \
+  'fn_ref \$\$builtin\.iter\.array\.[0-9]+' \
+  'coro\.new %[0-9]+\(%0\)' \
+  'fn_ref \$builtin_cor_map_[0-9]+\.Fn_Double_Double\.Coroutine_Double\.Coroutine_Double'
+assert_not_contains "$GENERIC_ARRAY_RESTART_ITER_BODY" 'call @iter' "recursive coroutine generic iter should not leave unresolved builtin call"
 assert_order "$COROUTINE_MIR" "cor_zip pipeline should construct two sources, zip, then loop" \
   '^fn coroutine_zip_loop\(' \
   'fn_ref \$coroutine_zip_loop\.a' \

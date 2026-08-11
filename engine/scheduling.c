@@ -339,11 +339,11 @@ void defer_quant_offset(double quant, double offset,
 }
 
 /* Start a `play_pattern` event chain. `callback` is the per-step
-   SchedulerCallback (the MIR-lowered `__ylc_play_pattern_step`); `handle` is the
-   coroutine handle passed through as userdata. `quant` selects when the first
-   step fires: 0 (or negative) fires immediately; a positive value x defers to
-   the next multiple of x seconds of `global_sample_position` (i.e. since the
-   scheduler/engine started), exactly like defer_quant. Each step then
+   SchedulerCallback (the MIR-lowered `__ylc_play_pattern_step`); `handle` is
+   the coroutine handle passed through as userdata. `quant` selects when the
+   first step fires: 0 (or negative) fires immediately; a positive value x
+   defers to the next multiple of x seconds of `global_sample_position` (i.e.
+   since the scheduler/engine started), exactly like defer_quant. Each step then
    reschedules itself with the wait-time yielded by the coroutine. */
 void ylc_play_pattern_start(double quant, SchedulerCallback callback,
                             void *handle) {
@@ -352,6 +352,7 @@ void ylc_play_pattern_start(double quant, SchedulerCallback callback,
   }
 
   uint64_t now = get_current_sample();
+
   double delay_seconds = 0.0;
 
   if (quant > 0.0) {
@@ -362,13 +363,13 @@ void ylc_play_pattern_start(double quant, SchedulerCallback callback,
     uint64_t quant_samps = (uint64_t)(quant * sr);
     if (quant_samps > 0) {
       uint64_t offset_in_cycle = now % quant_samps;
-      uint64_t remainder = (offset_in_cycle == 0)
-                               ? quant_samps
-                               : quant_samps - offset_in_cycle;
+      uint64_t remainder =
+          (offset_in_cycle == 0) ? quant_samps : quant_samps - offset_in_cycle;
       delay_seconds = (double)remainder / (double)sr;
     }
   }
 
+  // printf("schedule event %llu\n", now);
   schedule_event(now, delay_seconds, callback, handle);
 }
 

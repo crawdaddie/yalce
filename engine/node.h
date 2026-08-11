@@ -8,6 +8,7 @@
 
 typedef void (*frame_perform_func_t)(void *ptr, void *state, void *inputs,
                                      int frame, double spf);
+typedef void (*node_state_init_func_t)(void *state);
 
 // Buffer / Signal information
 typedef struct {
@@ -34,11 +35,27 @@ typedef struct Node {
   struct Node *next; // For execution ordering
   char *meta;
   void *state_ptr;
+  node_state_init_func_t state_init;
   struct Node *bus;
+  struct Node *alloc_next; // For host-owned allocation tracking (ylc_clap)
 } Node;
 
 typedef Node *NodeRef;
 typedef Signal *SignalRef;
 typedef Node *Synth;
+
+/* Pluggable node allocator. A host (e.g. ylc_clap) can install its own
+   allocator to own node memory/lifetimes instead of using the default
+   calloc/free. When the installed allocator is NULL, node creation falls
+   back to calloc/free so the standalone engine/audio_jit path is
+   unchanged. */
+typedef struct ylc_node_allocator {
+  void *(*alloc)(size_t size, void *user_data);
+  void (*free)(void *ptr, void *user_data);
+  void *user_data;
+} ylc_node_allocator_t;
+
+const ylc_node_allocator_t *ylc_node_allocator_get(void);
+void ylc_node_allocator_set(const ylc_node_allocator_t *allocator);
 
 #endif

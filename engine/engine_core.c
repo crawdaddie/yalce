@@ -238,6 +238,16 @@ double ylc_read_inlet_node(void *node_raw, int64_t frame) {
   return node->output.buf[(size_t)frame * (size_t)layout];
 }
 
+static const ylc_node_allocator_t *ylc_current_node_allocator = NULL;
+
+const ylc_node_allocator_t *ylc_node_allocator_get(void) {
+  return ylc_current_node_allocator;
+}
+
+void ylc_node_allocator_set(const ylc_node_allocator_t *allocator) {
+  ylc_current_node_allocator = allocator;
+}
+
 void audio_engine_render(Ctx *ctx, int frame_count, double spf) {
   if (!ctx || frame_count <= 0) {
     return;

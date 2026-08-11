@@ -1,0 +1,23 @@
+let test = module () ->
+  let test_basic_eq = (
+    let a = (1, 2);
+    let c = (...a);
+    c == (1,2)
+  );
+  let test_neq = (
+    let a = (1, 2);
+    let b = (3, 4);
+    let c = (...a, ...b);
+    c != (1,2,3,5)
+  );
+  let test_nested_kept = (
+    let a = (1, 2);
+    let c = (...a, (10, 20));
+    c == (1, 2, (10, 20))
+  );
+  let test_negative = (
+    let a = (1, 2);
+    let c = (...a);
+    c != (1,3)
+  );
+;

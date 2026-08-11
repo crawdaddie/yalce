@@ -448,7 +448,7 @@ _DoubleArray matrix_vec_mul_double(int rows, int cols, _DoubleArray matrix,
 double vec_dot_double(_DoubleArray a, _DoubleArray b) {
   double *matrix_data = a.data;
   double *vector_data = b.data;
-  double out;
+  double out = 0.0;
   // Create a temporary array to store results
   for (int i = 0; i < a.size; i++) {
     out += matrix_data[i] * vector_data[i];

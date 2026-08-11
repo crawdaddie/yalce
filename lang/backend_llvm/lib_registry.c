@@ -10,6 +10,7 @@ LLVMModuleRef ylc_jit_module = NULL;
 LLVMBuilderRef ylc_jit_builder = NULL;
 MirProgram *ylc_mir_program = NULL;
 MirCtx *ylc_mir_ctx = NULL;
+YlcMirProgramInitFn ylc_mir_program_init_fn = NULL;
 
 // lang/backend_llvm/lib_registry.c
 YlcRuntimeLoadFn ylc_runtime_load_fn = NULL;

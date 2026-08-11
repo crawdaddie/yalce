@@ -109,6 +109,10 @@ typedef struct DM {
 
 DArr matrix_vec_mul(DM *matrix, DArr vector);
 
+_DoubleArray matrix_vec_mul_double(int rows, int cols, _DoubleArray matrix,
+                                   _DoubleArray vec, _DoubleArray out);
+double vec_dot_double(_DoubleArray a, _DoubleArray b);
+
 void _matrix_vec_mul(int rows, int cols, double *matrix_data, double *vec_data);
 
 void _vec_add(int size, double *vec1, double *vec2);

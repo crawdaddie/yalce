@@ -622,6 +622,14 @@ LLVMValueRef llvm_string_serialize(LLVMValueRef val, Type *val_type,
     return codegen_cons_to_string(val, val_type, ctx, module, builder);
   }
 
+  if (val_type->kind == T_SUM && is_simple_enum(val_type)) {
+    LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+    LLVMValueRef tag =
+        LLVMBuildZExt(builder, val, LLVMInt32TypeInContext(llvm_ctx),
+                      "simple.enum.tag");
+    return int_to_string(tag, module, builder);
+  }
+
   // if (is_list_type(val_type)) {
   //   return codegen_list_to_string(val, val_type, ctx, module, builder);
   // }
