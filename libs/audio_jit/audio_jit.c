@@ -7331,6 +7331,152 @@ static void audio_mir_register_node_builtin(TypeEnv *tenv) {
                        MIR_RESULT_OWNED);
 }
 
+static MirFunction *
+mir_build_standalone_play_pattern_step(MirBuilder *builder, Ast *app,
+                                       Type *coro_type) {
+  if (!builder || !builder->fn || !is_coroutine_type(coro_type) ||
+      !coro_type->data.T_CONS.args || coro_type->data.T_CONS.num_args < 1) {
+    return NULL;
+  }
+
+  Type *yield_type = coro_type->data.T_CONS.args[0];
+  Type *next_type = create_option_type(yield_type);
+  Type *some_type = next_type && next_type->data.T_CONS.args
+                        ? next_type->data.T_CONS.args[0]
+                        : NULL;
+  if (!yield_type || !next_type || !some_type) {
+    return NULL;
+  }
+
+  Type *step_params[] = {coro_type, &t_uint64};
+  Type *step_type = audio_mir_fn_type(
+      builder->fn->arena, step_params, sizeof(step_params) / sizeof(step_params[0]),
+      &t_void);
+  if (!step_type) {
+    return NULL;
+  }
+
+  static unsigned play_pattern_step_counter = 0;
+  char step_name[80];
+  snprintf(step_name, sizeof(step_name), "__ylc_play_pattern_step_%u",
+           play_pattern_step_counter++);
+
+  MirFunction *step =
+      mir_program_add_function(builder->program, step_name, step_type, app);
+  if (!step) {
+    return NULL;
+  }
+
+  MirValueId handle = mir_function_add_param(step, "handle", coro_type, app);
+  MirValueId tick = mir_function_add_param(step, "tick", &t_uint64, app);
+  if (handle == MIR_NO_VALUE || tick == MIR_NO_VALUE) {
+    return NULL;
+  }
+
+  MirBlock *entry = mir_function_add_block(step, "entry");
+  MirBlock *resume_block = mir_function_add_block(step, "coro.resume");
+  MirBlock *value_block = mir_function_add_block(step, "coro.value");
+  MirBlock *finished = mir_function_add_block(step, "coro.finished");
+  if (!entry || !resume_block || !value_block || !finished) {
+    return NULL;
+  }
+
+  MirBuilder wb;
+  mir_builder_init(&wb, builder->program, step);
+
+  mir_builder_position_at_end(&wb, entry);
+  mir_builder_set_br(&wb, resume_block->id);
+
+  mir_builder_position_at_end(&wb, resume_block);
+  MirValueId next = mir_coro_next(&wb, app, handle, coro_type);
+  MirValueId tag = mir_variant_tag(&wb, app, next);
+  MirValueId is_some = mir_tag_eq(&wb, app, tag, 0, TYPE_NAME_SOME);
+  if (next == MIR_NO_VALUE || tag == MIR_NO_VALUE || is_some == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_builder_set_cond(&wb, is_some, value_block->id, finished->id);
+
+  mir_builder_position_at_end(&wb, value_block);
+  MirValueId payload =
+      mir_variant_payload(&wb, app, next, some_type, 0, TYPE_NAME_SOME);
+  MirValueId yielded = mir_tuple_get(&wb, yield_type, app, payload, 0);
+  MirValueId dur = is_tuple_type(yield_type)
+                       ? mir_tuple_get(&wb, yield_type, app, yielded, 0)
+                       : yielded;
+  if (payload == MIR_NO_VALUE || yielded == MIR_NO_VALUE ||
+      dur == MIR_NO_VALUE) {
+    return NULL;
+  }
+
+  Type *sched_params[] = {&t_uint64, &t_num, &t_ptr, coro_type};
+  Type *schedule_event_type = audio_mir_fn_type(
+      wb.fn->arena, sched_params, sizeof(sched_params) / sizeof(sched_params[0]),
+      &t_ptr);
+  MirValueId schedule_event_fn =
+      audio_mir_extern_ref(&wb, "schedule_event", schedule_event_type, app);
+  MirValueId self_ref = mir_fn_ref(&wb, step_type, app, step);
+  if (schedule_event_fn == MIR_NO_VALUE || self_ref == MIR_NO_VALUE) {
+    return NULL;
+  }
+
+  MirValueId sched_args[] = {tick, dur, self_ref, handle};
+  mir_call_value(&wb, &t_ptr, app, schedule_event_fn, schedule_event_type,
+                 sched_args, sizeof(sched_args) / sizeof(sched_args[0]));
+  mir_builder_set_return(&wb, mir_const_void(&wb, &t_void, app));
+
+  mir_builder_position_at_end(&wb, finished);
+  mir_builder_set_return(&wb, mir_const_void(&wb, &t_void, app));
+
+  return step;
+}
+
+static MirValueId MirStandalonePlayPatternHandler(MirBuilder *builder,
+                                                  Ast *app, MirCtx *ctx,
+                                                  MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!builder || !app || app->tag != AST_APPLICATION ||
+      app->data.AST_APPLICATION.len < 2) {
+    return MIR_NO_VALUE;
+  }
+
+  Ast *quant_ast = app->data.AST_APPLICATION.args;
+  Ast *coro_ast = app->data.AST_APPLICATION.args + 1;
+  MirValueId quant = mir_expr(builder, quant_ast, ctx);
+  MirValueId cor = mir_expr(builder, coro_ast, ctx);
+  if (quant == MIR_NO_VALUE || cor == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  Type *coro_type =
+      is_coroutine_type(coro_ast->type) ? coro_ast->type : app->type;
+  if (!is_coroutine_type(coro_type)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirFunction *step =
+      mir_build_standalone_play_pattern_step(builder, app, coro_type);
+  if (!step) {
+    return MIR_NO_VALUE;
+  }
+
+  Type *start_params[] = {&t_num, &t_ptr, coro_type};
+  Type *start_type = audio_mir_fn_type(
+      builder->fn->arena, start_params,
+      sizeof(start_params) / sizeof(start_params[0]), &t_void);
+  MirValueId start_fn =
+      audio_mir_extern_ref(builder, "ylc_play_pattern_start", start_type, app);
+  MirValueId step_ref = mir_fn_ref(builder, step->type, app, step);
+  if (start_fn == MIR_NO_VALUE || step_ref == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId start_args[] = {quant, step_ref, cor};
+  mir_call_value(builder, &t_void, app, start_fn, start_type, start_args,
+                 sizeof(start_args) / sizeof(start_args[0]));
+
+  return cor;
+}
+
 /* Library-load constructor: runs when `libaudio_jit.so` is loaded (the engine
    dependency). This wires the audio JIT into the MIR/JIT before any user code
    is compiled:
@@ -7356,6 +7502,11 @@ void ylc_audio_jit_register_current_program(const char *osc_bitcode_path) {
 
   TypeEnv audio_tenv = {.name = "Audio"};
   mir_register_builtin(ylc_mir_program, &audio_tenv, MirCompileAudioHandler,
+                       MIR_BUILTIN_SYMBOL_EXTENSION, NULL, 0, MIR_RESULT_NONE);
+
+  TypeEnv play_tenv = {.name = "play_pattern"};
+  mir_register_builtin(ylc_mir_program, &play_tenv,
+                       MirStandalonePlayPatternHandler,
                        MIR_BUILTIN_SYMBOL_EXTENSION, NULL, 0, MIR_RESULT_NONE);
 }
 
