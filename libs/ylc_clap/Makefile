@@ -25,7 +25,7 @@ LLVM_LIBS := $(shell $(LLVM_CONFIG) --libs core orcjit native linker bitreader p
 INCLUDES := -isystem include -Isrc -I../../lang -I../../lang/backend_llvm -I../../lang/runtime -I../../engine -I$(AUDIO_JIT_ROOT)
 SOURCES := src/plugin.c src/script_runtime.c src/runtime_service.c \
 	src/script_jit.c src/orc.c src/lowering.c src/audio_graph.c src/gui.c \
-	src/runtime_symbols.c src/scheduler.c \
+	src/runtime_symbols.c src/scheduler.c src/audio_jit_symbols.c \
 	src/debug.c
 AUDIO_JIT_SOURCES := $(AUDIO_JIT_ROOT)/audio_jit.c
 LANG_ROOT := ../../lang

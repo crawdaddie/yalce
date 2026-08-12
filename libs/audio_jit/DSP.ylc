@@ -101,8 +101,6 @@ let dsp_iter = module () ->
   let array_foldi = extern fn (Int -> R -> T -> R) -> Array of T -> R -> R;
 ;
 
-let play_node = extern fn Ptr -> Ptr;
-
 # let s = @Audio fn freq ->
 #   let y = pm_osc 2. 1. in
 #   y (~[freq, freq])
@@ -611,5 +609,3 @@ let midi_freq = fn n ->
 #   yield __elapsed_secs st;
 #   yield time_coro st
 # ;;
-
-let play_pattern = extern fn Double -> T -> T;

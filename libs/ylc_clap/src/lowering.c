@@ -1,5 +1,6 @@
 #include "lowering.h"
 
+#include "audio_jit_symbols.h"
 #include "backend_llvm/builtin_functions.h"
 #include "backend_llvm/globals.h"
 #include "backend_llvm/lib_registry.h"
@@ -70,6 +71,7 @@ static const char *ylc_lower_get_default_base_libs_dir(void) {
 
 static void ylc_lower_register_audio_jit(MirProgram *program, MirCtx *ctx) {
   ylc_audio_jit_register_current_program(ylc_lower_audio_jit_bitcode_path);
+  ylc_clap_register_audio_jit_symbols(program, ctx);
 }
 
 static void ylc_lower_set_error(char *error, size_t error_size,

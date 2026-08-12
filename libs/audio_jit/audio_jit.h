@@ -3,7 +3,11 @@
 
 #include "../../engine/node.h"
 #include "../../lang/backend_llvm/common.h"
+#include "../../lang/mir/mir.h"
 #include "../../lang/ylc_datatypes.h"
+
+#include <stdbool.h>
+#include <stddef.h>
 
 LLVMValueRef ensure_float(Type *in_type, LLVMValueRef val,
                           LLVMBuilderRef builder);
@@ -15,6 +19,30 @@ Node *ylc_create_audio_frame_node(frame_perform_func_t frame_perform,
                                   int state_bytes, const char *meta_name);
 void ylc_audio_node_set_state_init(void *node_raw, void *init_raw);
 int ylc_rand_int(int n);
+
+typedef enum ylc_audio_jit_runtime_arg_kind {
+  YLC_AUDIO_JIT_RUNTIME_ARG_CONST_INT,
+  YLC_AUDIO_JIT_RUNTIME_ARG_NUM,
+} ylc_audio_jit_runtime_arg_kind_t;
+
+typedef struct ylc_audio_jit_runtime_arg {
+  ylc_audio_jit_runtime_arg_kind_t kind;
+  size_t source_index;
+} ylc_audio_jit_runtime_arg_t;
+
+typedef struct ylc_audio_jit_runtime_builtin_desc {
+  const char *name;
+  size_t source_argc;
+  const char *runtime_symbol;
+  const ylc_audio_jit_runtime_arg_t *runtime_args;
+  size_t runtime_argc;
+} ylc_audio_jit_runtime_builtin_desc_t;
+
+bool ylc_audio_jit_register_runtime_double_builtin(
+    const ylc_audio_jit_runtime_builtin_desc_t *desc);
+MirValueId ylc_audio_jit_emit_synth_voice_array(MirBuilder *builder, Ast *app,
+                                                MirCtx *ctx, Ast *size_ast,
+                                                Ast *synth_ast);
 
 extern int STYPE_AUDIO_JIT_SYM;
 extern int STYPE_AUDIO_JIT_INLINE_SYM;
@@ -91,6 +119,4 @@ void dsp_pitchshift_state_init(void *state_raw, int sample_rate,
 double dsp_pitchshift_next_sample(void *state_raw, double input,
                                   double pitch_ratio, double pitch_dispersion,
                                   double time_dispersion);
-
-static AudioValue audio_mir_delay_line(AudioCompileCtx *audio, Ast *app) {
 #endif
