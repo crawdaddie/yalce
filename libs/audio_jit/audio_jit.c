@@ -409,63 +409,6 @@ struct AudioBuiltin {
   size_t kernel_argc;
 };
 
-#define AUDIO_RUNTIME_BUILTIN_MAX_ARGS 8
-
-typedef struct AudioRuntimeBuiltin {
-  const char *name;
-  size_t source_argc;
-  const char *runtime_symbol;
-  ylc_audio_jit_runtime_arg_t runtime_args[AUDIO_RUNTIME_BUILTIN_MAX_ARGS];
-  size_t runtime_argc;
-  struct AudioRuntimeBuiltin *next;
-} AudioRuntimeBuiltin;
-
-static AudioRuntimeBuiltin *audio_runtime_builtins;
-
-static AudioRuntimeBuiltin *audio_mir_find_runtime_builtin(const char *name) {
-  if (!name) {
-    return NULL;
-  }
-  for (AudioRuntimeBuiltin *builtin = audio_runtime_builtins; builtin;
-       builtin = builtin->next) {
-    if (builtin->name && strcmp(builtin->name, name) == 0) {
-      return builtin;
-    }
-  }
-  return NULL;
-}
-
-bool ylc_audio_jit_register_runtime_double_builtin(
-    const ylc_audio_jit_runtime_builtin_desc_t *desc) {
-  if (!desc || !desc->name || !desc->runtime_symbol ||
-      desc->runtime_argc > AUDIO_RUNTIME_BUILTIN_MAX_ARGS ||
-      (desc->runtime_argc && !desc->runtime_args)) {
-    return false;
-  }
-
-  AudioRuntimeBuiltin *builtin = audio_mir_find_runtime_builtin(desc->name);
-  if (!builtin) {
-    builtin = calloc(1, sizeof(*builtin));
-    if (!builtin) {
-      return false;
-    }
-    builtin->name = desc->name;
-    builtin->next = audio_runtime_builtins;
-    audio_runtime_builtins = builtin;
-  }
-
-  builtin->source_argc = desc->source_argc;
-  builtin->runtime_symbol = desc->runtime_symbol;
-  builtin->runtime_argc = desc->runtime_argc;
-  for (size_t i = 0; i < desc->runtime_argc; i++) {
-    if (desc->runtime_args[i].source_index >= desc->source_argc) {
-      return false;
-    }
-    builtin->runtime_args[i] = desc->runtime_args[i];
-  }
-  return true;
-}
-
 /* Bit i of a lane-expand mask selects argument i for multi-channel expansion.
  */
 #define AUDIO_ARG_MASK(index) (UINT64_C(1) << (index))
@@ -3767,14 +3710,6 @@ static int audio_mir_fn_type_arity(Type *type) {
 }
 
 static int audio_mir_builtin_arity(AudioCompileCtx *audio, const char *name) {
-  AudioRuntimeBuiltin *runtime_builtin =
-      audio_mir_find_runtime_builtin(name);
-  if (runtime_builtin) {
-    return runtime_builtin->source_argc > (size_t)INT_MAX
-               ? 0
-               : (int)runtime_builtin->source_argc;
-  }
-
   const AudioBuiltin *builtin = audio_mir_find_builtin(name);
   if (!builtin) {
     return 0;
@@ -5107,66 +5042,6 @@ static AudioValue audio_mir_emit_builtin_values(AudioCompileCtx *audio,
                                                 AudioValue *args, size_t argc) {
   if (!name || (argc && !args)) {
     return AUDIO_VALUE_NULL;
-  }
-
-  AudioRuntimeBuiltin *runtime_builtin =
-      audio_mir_find_runtime_builtin(name);
-  if (runtime_builtin) {
-    if (argc != runtime_builtin->source_argc ||
-        runtime_builtin->runtime_argc > AUDIO_RUNTIME_BUILTIN_MAX_ARGS) {
-      return AUDIO_VALUE_NULL;
-    }
-
-    Type *params[AUDIO_RUNTIME_BUILTIN_MAX_ARGS];
-    MirValueId call_args[AUDIO_RUNTIME_BUILTIN_MAX_ARGS];
-    for (size_t i = 0; i < runtime_builtin->runtime_argc; i++) {
-      ylc_audio_jit_runtime_arg_t spec = runtime_builtin->runtime_args[i];
-      if (spec.source_index >= argc) {
-        return AUDIO_VALUE_NULL;
-      }
-      switch (spec.kind) {
-      case YLC_AUDIO_JIT_RUNTIME_ARG_CONST_INT: {
-        int value = 0;
-        if (!audio_mir_value_const_int(audio, args[spec.source_index].value,
-                                       &value)) {
-          fprintf(stderr,
-                  "audio_jit: %s argument %zu must be a compile-time Int\n",
-                  name, spec.source_index);
-          return AUDIO_VALUE_NULL;
-        }
-        params[i] = &t_int;
-        call_args[i] =
-            mir_const_int(audio->kernel_builder, &t_int, origin, value);
-        break;
-      }
-      case YLC_AUDIO_JIT_RUNTIME_ARG_NUM:
-        params[i] = &t_num;
-        call_args[i] = args[spec.source_index].value;
-        break;
-      }
-      if (call_args[i] == MIR_NO_VALUE) {
-        return AUDIO_VALUE_NULL;
-      }
-    }
-
-    Type *runtime_type =
-        audio_mir_fn_type(audio->arena, runtime_builtin->runtime_argc
-                                            ? params
-                                            : NULL,
-                          runtime_builtin->runtime_argc, &t_num);
-    MirValueId runtime_fn = audio_mir_extern_ref(
-        audio->kernel_builder, runtime_builtin->runtime_symbol, runtime_type,
-        origin);
-    if (runtime_fn == MIR_NO_VALUE) {
-      return AUDIO_VALUE_NULL;
-    }
-
-    MirValueId value =
-        mir_call_value(audio->kernel_builder, &t_num, origin, runtime_fn,
-                       runtime_type, runtime_builtin->runtime_argc ? call_args
-                                                                   : NULL,
-                       runtime_builtin->runtime_argc);
-    return audio_mir_value(&t_num, value, 1);
   }
 
   const AudioBuiltin *builtin = audio_mir_find_builtin(name);

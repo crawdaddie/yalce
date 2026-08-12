@@ -229,34 +229,6 @@ void ylc_clap_register_audio_jit_symbols(MirProgram *program, MirCtx *ctx) {
     return;
   }
 
-  static const ylc_audio_jit_runtime_arg_t param_args[] = {
-      {YLC_AUDIO_JIT_RUNTIME_ARG_CONST_INT, 0},
-  };
-  ylc_audio_jit_register_runtime_double_builtin(
-      &(ylc_audio_jit_runtime_builtin_desc_t){
-          .name = "param",
-          .source_argc = 1,
-          .runtime_symbol = "ylc_plugin_param_value",
-          .runtime_args = param_args,
-          .runtime_argc = sizeof(param_args) / sizeof(param_args[0]),
-      });
-  ylc_audio_jit_register_runtime_double_builtin(
-      &(ylc_audio_jit_runtime_builtin_desc_t){
-          .name = "tempo_mul",
-          .source_argc = 1,
-          .runtime_symbol = "ylc_plugin_tempo_mul",
-          .runtime_args = NULL,
-          .runtime_argc = 0,
-      });
-  ylc_audio_jit_register_runtime_double_builtin(
-      &(ylc_audio_jit_runtime_builtin_desc_t){
-          .name = "tempo_coeff",
-          .source_argc = 1,
-          .runtime_symbol = "ylc_plugin_tempo_mul",
-          .runtime_args = NULL,
-          .runtime_argc = 0,
-      });
-
   TypeEnv play_tenv = {.name = "play_pattern"};
   mir_register_builtin(program, &play_tenv, ylc_clap_play_pattern_handler,
                        MIR_BUILTIN_SYMBOL_EXTENSION, NULL, 0, MIR_RESULT_NONE);
