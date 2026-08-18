@@ -291,16 +291,20 @@ int main(int argc, char **argv) {
   };
 
   clap_process_status status = plugin->process(plugin, &process);
-  printf("status=%d first=%f mid=%f last=%f\n", status, out0[0], out0[64],
-         out0[255]);
+  printf("status=%d ch0_first=%f ch0_mid=%f ch0_last=%f ch1_first=%f "
+         "ch1_mid=%f ch1_last=%f\n",
+         status, out0[0], out0[64], out0[255], out1[0], out1[64],
+         out1[255]);
 
   plugin->on_main_thread(plugin);
   memset(out0, 0, sizeof(out0));
   memset(out1, 0, sizeof(out1));
   process.steady_time += process.frames_count;
   status = plugin->process(plugin, &process);
-  printf("callback_status=%d first=%f mid=%f last=%f\n", status, out0[0],
-         out0[64], out0[255]);
+  printf("callback_status=%d ch0_first=%f ch0_mid=%f ch0_last=%f "
+         "ch1_first=%f ch1_mid=%f ch1_last=%f\n",
+         status, out0[0], out0[64], out0[255], out1[0], out1[64],
+         out1[255]);
 
   process_thread_args_t thread_args = {
       .plugin = plugin,

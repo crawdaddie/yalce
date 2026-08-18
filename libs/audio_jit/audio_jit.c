@@ -3366,6 +3366,17 @@ static const AudioBuiltin audio_builtins[] = {
      .arg_order = NULL,
      .kernel_argc = 0},
 
+    {.name = "change_up",
+     .source_argc = 1,
+     .kernel_symbol = "ylc_audio_change_up_kernel",
+     .emit = audio_builtin_emit_num_state,
+     .state_size = sizeof(ChangeUpState),
+     .state_align = __alignof__(ChangeUpState),
+     .state_name = "change_up.state",
+     .lane_expand_mask = AUDIO_ARG_MASK(0),
+     .arg_order = NULL,
+     .kernel_argc = 0},
+
     {.name = "kill_on_end",
      .source_argc = 1,
      .kernel_symbol = "ylc_audio_kill_on_end_kernel",
@@ -7408,23 +7419,29 @@ mir_build_standalone_play_pattern_step(MirBuilder *builder, Ast *app,
     return NULL;
   }
 
-  Type *sched_params[] = {&t_uint64, &t_num, &t_ptr, coro_type};
+  Type *sched_params[] = {&t_uint64, &t_num};
   Type *schedule_event_type = audio_mir_fn_type(
       wb.fn->arena, sched_params, sizeof(sched_params) / sizeof(sched_params[0]),
       &t_ptr);
   MirValueId schedule_event_fn =
-      audio_mir_extern_ref(&wb, "schedule_event", schedule_event_type, app);
-  MirValueId self_ref = mir_fn_ref(&wb, step_type, app, step);
-  if (schedule_event_fn == MIR_NO_VALUE || self_ref == MIR_NO_VALUE) {
+      audio_mir_extern_ref(&wb, "ylc_schedule_current_task_event",
+                           schedule_event_type, app);
+  if (schedule_event_fn == MIR_NO_VALUE) {
     return NULL;
   }
 
-  MirValueId sched_args[] = {tick, dur, self_ref, handle};
+  MirValueId sched_args[] = {tick, dur};
   mir_call_value(&wb, &t_ptr, app, schedule_event_fn, schedule_event_type,
                  sched_args, sizeof(sched_args) / sizeof(sched_args[0]));
   mir_builder_set_return(&wb, mir_const_void(&wb, &t_void, app));
 
   mir_builder_position_at_end(&wb, finished);
+  Type *complete_type = audio_mir_fn_type(wb.fn->arena, NULL, 0, &t_void);
+  MirValueId complete_fn = audio_mir_extern_ref(
+      &wb, "ylc_complete_current_task", complete_type, app);
+  if (complete_fn != MIR_NO_VALUE) {
+    mir_call_value(&wb, &t_void, app, complete_fn, complete_type, NULL, 0);
+  }
   mir_builder_set_return(&wb, mir_const_void(&wb, &t_void, app));
 
   return step;
@@ -7462,19 +7479,23 @@ static MirValueId MirStandalonePlayPatternHandler(MirBuilder *builder,
   Type *start_params[] = {&t_num, &t_ptr, coro_type};
   Type *start_type = audio_mir_fn_type(
       builder->fn->arena, start_params,
-      sizeof(start_params) / sizeof(start_params[0]), &t_void);
+      sizeof(start_params) / sizeof(start_params[0]), &t_ptr);
+  MirFunction *start_extern =
+      audio_mir_extern_fn(builder, "ylc_play_pattern_start", start_type, app);
+  if (start_extern && start_extern->summary.param_uses.len >= 3) {
+    start_extern->summary.param_uses.items[2] = MIR_OPERAND_USE_CONSUME;
+  }
   MirValueId start_fn =
-      audio_mir_extern_ref(builder, "ylc_play_pattern_start", start_type, app);
+      start_extern ? mir_fn_ref(builder, start_type, app, start_extern)
+                   : MIR_NO_VALUE;
   MirValueId step_ref = mir_fn_ref(builder, step->type, app, step);
   if (start_fn == MIR_NO_VALUE || step_ref == MIR_NO_VALUE) {
     return MIR_NO_VALUE;
   }
 
   MirValueId start_args[] = {quant, step_ref, cor};
-  mir_call_value(builder, &t_void, app, start_fn, start_type, start_args,
-                 sizeof(start_args) / sizeof(start_args[0]));
-
-  return cor;
+  return mir_call_value(builder, &t_ptr, app, start_fn, start_type, start_args,
+                        sizeof(start_args) / sizeof(start_args[0]));
 }
 
 /* Library-load constructor: runs when `libaudio_jit.so` is loaded (the engine

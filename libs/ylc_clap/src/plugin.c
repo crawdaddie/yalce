@@ -824,6 +824,17 @@ static bool ylc_split_script_path(const char *path, char *dir, size_t dir_size,
   return name[0] != '\0';
 }
 
+static bool ylc_string_has_suffix(const char *value, const char *suffix) {
+  if (!value || !suffix) {
+    return false;
+  }
+
+  const size_t value_len = strlen(value);
+  const size_t suffix_len = strlen(suffix);
+  return value_len >= suffix_len &&
+         strcmp(value + value_len - suffix_len, suffix) == 0;
+}
+
 static void ylc_note_script_changed(ylc_plugin_t *self) {
   if (!self) {
     return;
@@ -867,14 +878,15 @@ static void ylc_drain_script_watcher(ylc_plugin_t *self) {
     const char *end = events.buffer + bytes;
     while (cursor < end) {
       const struct inotify_event *event = (const struct inotify_event *)cursor;
-      const bool watched_file =
-          event->len > 0 && strcmp(event->name, self->watched_name) == 0;
+      const bool watched_file = event->len > 0 &&
+                                (strcmp(event->name, self->watched_name) == 0 ||
+                                 ylc_string_has_suffix(event->name, ".ylc"));
       const bool saved = (event->mask & (IN_CLOSE_WRITE | IN_MOVED_TO)) != 0;
       const bool watch_invalid =
           (event->mask & (IN_DELETE_SELF | IN_MOVE_SELF | IN_IGNORED)) != 0;
 
       if (watched_file && saved) {
-        ylc_debug_log(self, "detected save for %s", self->watched_name);
+        ylc_debug_log(self, "detected save for %s", event->name);
         ylc_note_script_changed(self);
       }
       if (watch_invalid) {

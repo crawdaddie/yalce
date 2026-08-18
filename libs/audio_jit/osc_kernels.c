@@ -207,6 +207,15 @@ ylc_audio_changed_kernel(ChangedState *state, double spf, double input) {
   return out;
 }
 
+__attribute__((always_inline)) double
+ylc_audio_change_up_kernel(ChangeUpState *state, double spf, double input) {
+  (void)spf;
+  double out = state->seen && state->prev == 0.0 && input > 0.0 ? 1.0 : 0.0;
+  state->prev = input;
+  state->seen = 1;
+  return out;
+}
+
 static inline double audio_jit_tabread_core(int32_t size, int32_t offset,
                                             double *raw_data, double phase,
                                             int phase_is_normalized) {

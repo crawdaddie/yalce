@@ -16,6 +16,8 @@ let trig = extern fn Double -> Double;
 
 # Emits a trigger when the input value changes.
 let changed = extern fn Double -> Double;
+# Emits a trigger when the input transitions from zero to positive.
+let change_up = extern fn Double -> Double;
 # Read a table by normalized phase.
 let tabread = extern fn Array of Double -> Double -> Double;
 # Read a table by sample index.

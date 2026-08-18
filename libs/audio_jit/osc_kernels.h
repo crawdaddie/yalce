@@ -39,6 +39,11 @@ typedef struct ChangedState {
   uint64_t seen;
 } ChangedState;
 
+typedef struct ChangeUpState {
+  double prev;
+  uint64_t seen;
+} ChangeUpState;
+
 typedef struct DecayState {
   double value;
   double prev_trig;

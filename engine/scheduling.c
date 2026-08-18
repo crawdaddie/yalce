@@ -40,9 +40,21 @@ atomic_size_t audio_read_index = 0;
 // Global sample position counter (updated by audio thread)
 atomic_ullong global_sample_position = 0;
 
+typedef struct SchedulerTask {
+  bool cancelled;
+  bool completed;
+  struct SchedulerTask *parent;
+  struct SchedulerTask **children;
+  size_t num_children;
+  size_t children_cap;
+  SchedulerCallback callback;
+  void *userdata;
+} SchedulerTask;
+
 typedef struct {
   void (*callback)(void *userdata, uint64_t now);
   void *userdata;
+  SchedulerTask *task;
   uint64_t tick;
 } SchedulerEvent;
 
@@ -53,6 +65,110 @@ typedef struct {
 } EventHeap;
 
 #define INITIAL_CAPACITY 64
+#define INITIAL_TASK_CAPACITY 16
+
+static SchedulerTask **scheduler_tasks = NULL;
+static size_t scheduler_tasks_size = 0;
+static size_t scheduler_tasks_cap = 0;
+static _Thread_local SchedulerTask *current_task = NULL;
+
+static void init_task_store(void) {
+  if (scheduler_tasks) {
+    return;
+  }
+  scheduler_tasks = malloc(sizeof(SchedulerTask *) * INITIAL_TASK_CAPACITY);
+  scheduler_tasks_cap = scheduler_tasks ? INITIAL_TASK_CAPACITY : 0;
+  scheduler_tasks_size = 0;
+}
+
+static SchedulerTask *find_task(void *handle) {
+  SchedulerTask *needle = (SchedulerTask *)handle;
+  if (!needle) {
+    return NULL;
+  }
+  for (size_t i = 0; i < scheduler_tasks_size; ++i) {
+    if (scheduler_tasks[i] == needle) {
+      return scheduler_tasks[i];
+    }
+  }
+  return NULL;
+}
+
+static SchedulerTask *create_task(SchedulerCallback callback, void *userdata,
+                                  SchedulerTask *parent) {
+  init_task_store();
+  if (!scheduler_tasks) {
+    return NULL;
+  }
+
+  if (scheduler_tasks_size >= scheduler_tasks_cap) {
+    size_t next_cap =
+        scheduler_tasks_cap > 0 ? scheduler_tasks_cap * 2
+                                : INITIAL_TASK_CAPACITY;
+    SchedulerTask **tasks =
+        realloc(scheduler_tasks, sizeof(SchedulerTask *) * next_cap);
+    if (!tasks) {
+      return NULL;
+    }
+    scheduler_tasks = tasks;
+    scheduler_tasks_cap = next_cap;
+  }
+
+  SchedulerTask *task = calloc(1, sizeof(*task));
+  if (!task) {
+    return NULL;
+  }
+
+  task->callback = callback;
+  task->userdata = userdata;
+  task->parent = parent;
+  scheduler_tasks[scheduler_tasks_size++] = task;
+  return task;
+}
+
+static void task_add_child(SchedulerTask *parent, SchedulerTask *child) {
+  if (!parent || !child) {
+    return;
+  }
+
+  if (parent->num_children >= parent->children_cap) {
+    size_t next_cap = parent->children_cap > 0 ? parent->children_cap * 2 : 4;
+    SchedulerTask **children =
+        realloc(parent->children, sizeof(SchedulerTask *) * next_cap);
+    if (!children) {
+      return;
+    }
+    parent->children = children;
+    parent->children_cap = next_cap;
+  }
+
+  parent->children[parent->num_children++] = child;
+}
+
+static void cancel_task_recursive(SchedulerTask *task) {
+  if (!task || task->cancelled) {
+    return;
+  }
+
+  task->cancelled = true;
+  for (size_t i = 0; i < task->num_children; ++i) {
+    cancel_task_recursive(find_task(task->children[i]));
+  }
+}
+
+static bool task_is_done(SchedulerTask *task) {
+  return task && (task->cancelled || task->completed);
+}
+
+static uint64_t scheduler_seconds_to_samples(double seconds) {
+  int sr = ctx_sample_rate();
+  if (sr <= 0) {
+    sr = 48000;
+  }
+  int delay_samps = (int)(seconds * (double)sr);
+  return delay_samps > 0 ? (uint64_t)delay_samps : 0;
+}
+
 void init_heap(EventHeap *heap) {
   heap->events = malloc(sizeof(SchedulerEvent) * INITIAL_CAPACITY);
   heap->capacity = INITIAL_CAPACITY;
@@ -104,7 +220,7 @@ void heapify_down(EventHeap *heap, size_t index) {
 EventHeap scheduler_queue = {};
 SchedulerEvent pop_event(EventHeap *heap) {
   if (heap->size == 0) {
-    SchedulerEvent empty = {NULL, NULL, 0};
+    SchedulerEvent empty = {NULL, NULL, NULL, 0};
     return empty;
   }
 
@@ -145,6 +261,53 @@ void scheduler_wake() {
   write(wake_fd, &val, sizeof(val));
 }
 
+static void push_task_event(SchedulerTask *task, uint64_t delay_in_samples,
+                            uint64_t base_time) {
+  if (!task || task_is_done(task)) {
+    return;
+  }
+
+  EventHeap *queue = &scheduler_queue;
+  pthread_mutex_lock(&scheduler_mutex);
+
+  if (task_is_done(task)) {
+    pthread_mutex_unlock(&scheduler_mutex);
+    return;
+  }
+
+  if (queue->size >= queue->capacity) {
+    queue->capacity *= 2;
+    queue->events =
+        realloc(queue->events, sizeof(SchedulerEvent) * queue->capacity);
+  }
+
+  uint64_t target_time = base_time + delay_in_samples;
+
+  SchedulerEvent event = {.callback = task->callback,
+                          .userdata = task->userdata,
+                          .task = task,
+                          .tick = target_time};
+
+  queue->events[queue->size] = event;
+
+  heapify_up(queue, queue->size);
+  queue->size++;
+
+  bool is_earliest = (queue->events[0].tick == target_time);
+  pthread_mutex_unlock(&scheduler_mutex);
+
+  if (is_earliest) {
+    SCHED_DBG("push_task_event: new earliest tick=%llu, arming timer",
+              (unsigned long long)target_time);
+    arm_timer(target_time);
+    scheduler_wake();
+  } else {
+    SCHED_DBG("push_task_event: tick=%llu (earliest=%llu, heap size=%zu)",
+              (unsigned long long)target_time,
+              (unsigned long long)queue->events[0].tick, queue->size);
+  }
+}
+
 void push_event(void (*callback)(void *, uint64_t), void *userdata,
                 uint64_t delay_in_samples, uint64_t base_time) {
 
@@ -160,8 +323,10 @@ void push_event(void (*callback)(void *, uint64_t), void *userdata,
   // Calculate absolute timestamp for next event
   uint64_t target_time = base_time + delay_in_samples;
 
-  SchedulerEvent event = {
-      .callback = callback, .userdata = userdata, .tick = target_time};
+  SchedulerEvent event = {.callback = callback,
+                          .userdata = userdata,
+                          .task = NULL,
+                          .tick = target_time};
 
   queue->events[queue->size] = event;
 
@@ -223,14 +388,27 @@ static int collect_due_events(uint64_t current_sample) {
 static void fire_events(int count) {
   for (int i = 0; i < count; i++) {
     SchedulerEvent event = pending_batch[i];
+    if (event.task) {
+      pthread_mutex_lock(&scheduler_mutex);
+      bool cancelled = task_is_done(event.task);
+      pthread_mutex_unlock(&scheduler_mutex);
+      if (cancelled) {
+        continue;
+      }
+    }
+
     if (event.userdata == NULL) {
+      current_task = NULL;
       void (*cb)(uint64_t) = (void (*)(uint64_t))event.callback;
       cb(event.tick);
     } else {
       cur_tick = event.tick;
+      current_task = event.task;
       event.callback(event.userdata, cur_tick);
+      current_task = NULL;
     }
   }
+  cur_tick = 0;
 }
 
 uint64_t get_current_sample() { return atomic_load(&global_sample_position); }
@@ -304,6 +482,50 @@ void *schedule_event(uint64_t now, double delay_seconds,
   return userdata;
 }
 
+void *ylc_schedule_current_task_event(uint64_t now, double delay_seconds) {
+  if (!current_task) {
+    return NULL;
+  }
+
+  uint64_t delay_samps = scheduler_seconds_to_samples(delay_seconds);
+
+  pthread_mutex_lock(&scheduler_mutex);
+  SchedulerTask *task = find_task(current_task);
+  bool can_schedule = task && !task->cancelled && !task->completed;
+  pthread_mutex_unlock(&scheduler_mutex);
+
+  if (!can_schedule) {
+    return task;
+  }
+
+  push_task_event(task, delay_samps, now);
+  return task;
+}
+
+void ylc_complete_current_task(void) {
+  if (!current_task) {
+    return;
+  }
+
+  pthread_mutex_lock(&scheduler_mutex);
+  SchedulerTask *task = find_task(current_task);
+  if (task) {
+    task->completed = true;
+  }
+  pthread_mutex_unlock(&scheduler_mutex);
+}
+
+void cancel_task(void *handle) {
+  if (!handle) {
+    return;
+  }
+
+  pthread_mutex_lock(&scheduler_mutex);
+  SchedulerTask *task = find_task(handle);
+  cancel_task_recursive(task);
+  pthread_mutex_unlock(&scheduler_mutex);
+}
+
 void defer_quant(double quant, DeferQuantCallback callback) {
   int sr = ctx_sample_rate();
   if (sr == 0) {
@@ -345,10 +567,22 @@ void defer_quant_offset(double quant, double offset,
    defers to the next multiple of x seconds of `global_sample_position` (i.e.
    since the scheduler/engine started), exactly like defer_quant. Each step then
    reschedules itself with the wait-time yielded by the coroutine. */
-void ylc_play_pattern_start(double quant, SchedulerCallback callback,
-                            void *handle) {
+void *ylc_play_pattern_start(double quant, SchedulerCallback callback,
+                             void *handle) {
   if (!callback || !handle) {
-    return;
+    return NULL;
+  }
+
+  pthread_mutex_lock(&scheduler_mutex);
+  SchedulerTask *parent = find_task(current_task);
+  SchedulerTask *task = create_task(callback, handle, parent);
+  if (parent && task) {
+    task_add_child(parent, task);
+  }
+  pthread_mutex_unlock(&scheduler_mutex);
+
+  if (!task) {
+    return NULL;
   }
 
   uint64_t now = get_current_sample();
@@ -369,8 +603,10 @@ void ylc_play_pattern_start(double quant, SchedulerCallback callback,
     }
   }
 
-  // printf("schedule event %llu\n", now);
-  schedule_event(now, delay_seconds, callback, handle);
+  uint64_t delay_samps = scheduler_seconds_to_samples(delay_seconds);
+
+  push_task_event(task, delay_samps, now);
+  return task;
 }
 
 int scheduler_event_loop() {
