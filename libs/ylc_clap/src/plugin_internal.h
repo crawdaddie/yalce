@@ -18,6 +18,7 @@ typedef struct PCM_source PCM_source;
 #include "runtime_service.h"
 #include "scheduler.h"
 #include "script_runtime.h"
+#include "soundfile.h"
 
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -36,7 +37,7 @@ typedef struct _XGC *GC;
 #define YLC_REAPER_EXTENSION_ID "cockos.reaper_extension"
 #define YLC_SCRIPT_PATH_SIZE 1024
 #define YLC_GUI_WIDTH 560
-#define YLC_GUI_HEIGHT 164
+#define YLC_GUI_HEIGHT 720
 #define YLC_PATH_X 16
 #define YLC_PATH_Y 42
 #define YLC_PATH_W 528
@@ -51,9 +52,17 @@ typedef struct _XGC *GC;
 #define YLC_LOG_BUTTON_H 30
 #define YLC_STATUS_X 16
 #define YLC_STATUS_Y 142
+#define YLC_ARRAY_EDITOR_X 16
+#define YLC_ARRAY_EDITOR_Y 164
+#define YLC_ARRAY_EDITOR_W 528
+#define YLC_ARRAY_EDITOR_H 156
+#define YLC_ARRAY_EDITOR_GAP 12
 #define YLC_DEBUG_LINES 6
 #define YLC_DEBUG_LINE_SIZE 160
 #define YLC_INPUT_EVENT_LOG_CAPACITY 128
+#define YLC_PERSIST_ARRAY_MAX_SLOTS 1024u
+#define YLC_PERSIST_ARRAY_MAX_COUNT 1048576u
+#define YLC_UI_MAX_SLOTS 64u
 #define YLC_STATE_MAGIC 0x594c4350u
 #define YLC_STATE_VERSION 1u
 
@@ -107,6 +116,27 @@ typedef struct ylc_event_handlers {
   void (*on_unknown)(void *user_data, const clap_event_header_t *event);
 } ylc_event_handlers_t;
 
+typedef struct ylc_persistent_array_slot {
+  uint64_t key;
+  uint32_t count;
+  double *values;
+} ylc_persistent_array_slot_t;
+
+typedef enum ylc_ui_kind {
+  YLC_UI_NONE = 0,
+  YLC_UI_ENV = 1,
+  YLC_UI_ADSR = 2,
+  YLC_UI_SOUNDFILE = 3,
+} ylc_ui_kind_t;
+
+typedef struct ylc_ui_slot {
+  ylc_ui_kind_t kind;
+  uint32_t array_count;
+  double *array_values;
+  ylc_soundfile_t *soundfile;
+  int x, y, w, h;
+} ylc_ui_slot_t;
+
 typedef void *(*ylc_clap_get_reaper_context_fn)(const clap_host_t *host,
                                                 int sel);
 
@@ -129,6 +159,18 @@ typedef struct ylc_plugin {
   bool clap_initialized;
   bool destroying;
   double param_values[YLC_PARAM_COUNT];
+  ylc_persistent_array_slot_t *persistent_arrays;
+  uint32_t persistent_array_count;
+  uint32_t persistent_array_capacity;
+  ylc_ui_slot_t ui_slots[YLC_UI_MAX_SLOTS];
+  uint32_t ui_count;
+  ylc_soundfile_slot_t *soundfiles;
+  uint32_t soundfile_count;
+  uint32_t soundfile_capacity;
+  ylc_soundfile_inherit_t *sf_inherit;
+  uint32_t sf_inherit_count;
+  uint32_t sf_inherit_index;
+  bool sf_inherit_from_state;
   char script_path[YLC_SCRIPT_PATH_SIZE];
   char compiled_script_path[YLC_SCRIPT_PATH_SIZE];
   char watched_dir[YLC_SCRIPT_PATH_SIZE];
@@ -145,6 +187,27 @@ typedef struct ylc_plugin {
   bool gui_created;
   bool gui_visible;
   bool path_focused;
+  int32_t gui_selected_array;
+  int32_t gui_selected_point;
+  bool gui_dragging;
+  int32_t sf_dragging_edge;
+  int sf_drag_start_x;
+  uint64_t sf_drag_start_rs;
+  uint64_t sf_drag_start_re;
+  unsigned long dnd_aware;
+  unsigned long dnd_enter;
+  unsigned long dnd_position;
+  unsigned long dnd_status;
+  unsigned long dnd_drop;
+  unsigned long dnd_leave;
+  unsigned long dnd_finished;
+  unsigned long dnd_selection;
+  unsigned long dnd_action_copy;
+  unsigned long dnd_uri_list;
+  unsigned long dnd_property;
+  Window dnd_source;
+  int dnd_mouse_x;
+  int dnd_mouse_y;
   int debug_pipe_read_fd;
   int debug_pipe_write_fd;
   bool debug_pipe_registered;

@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "ylc_datatypes.h"
+
 #include "clap/events.h"
 #include "clap/process.h"
 
@@ -82,6 +84,12 @@ void *ylc_plugin_audio_play_voice(void *node);
 void *ylc_plugin_audio_set_voice_input(int32_t input, double value, void *node);
 double ylc_plugin_param_value(int32_t index);
 double ylc_plugin_tempo_mul(void);
+_DoubleArray ylc_plugin_persist_array(uint64_t key, _DoubleArray defaults);
+void EnvArrayUI(_DoubleArray values);
+void ADSRArrayUI(_DoubleArray values);
+int ylc_plugin_sf_channels(void *handle);
+int ylc_plugin_sf_samplerate(void *handle);
+_DoubleArray ylc_plugin_sf_data(void *handle);
 int ylc_plugin_debug_printf(const char *format, ...);
 int ylc_plugin_debug_fprintf(FILE *stream, const char *format, ...);
 int ylc_plugin_debug_fflush(FILE *stream);

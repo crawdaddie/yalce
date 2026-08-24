@@ -2,6 +2,7 @@
 
 #include "audio_graph.h"
 #include "script_jit.h"
+#include "soundfile.h"
 
 #include <pthread.h>
 #include <stddef.h>
@@ -65,6 +66,7 @@ void ylc_runtime_service_global_deinit(void) {
   pthread_mutex_lock(&service->lock);
   if (service->ref_count == 0) {
     ylc_audio_graph_uninstall_node_allocator();
+    ylc_soundfile_cache_clear();
     ylc_script_jit_destroy(service->script_jit);
     service->script_jit = NULL;
     service->initialized = false;

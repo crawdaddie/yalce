@@ -3,6 +3,7 @@
 #include "audio_graph.h"
 #include "scheduler.h"
 #include "script_runtime.h"
+#include "soundfile.h"
 #include "ylc_stdlib.h"
 
 #include <math.h>
@@ -65,6 +66,13 @@ static const ylc_runtime_symbol_t ylc_plugin_symbols[] = {
     {"set_voice_input", (void *)&ylc_plugin_audio_set_voice_input},
     {"param", (void *)&ylc_plugin_param_value},
     {"ylc_plugin_param_value", (void *)&ylc_plugin_param_value},
+    {"ylc_plugin_persist_array", (void *)&ylc_plugin_persist_array},
+    {"ylc_plugin_soundfile_ui", (void *)&ylc_plugin_soundfile_ui},
+    {"sf_channels", (void *)&ylc_plugin_sf_channels},
+    {"sf_samplerate", (void *)&ylc_plugin_sf_samplerate},
+    {"sf_data", (void *)&ylc_plugin_sf_data},
+    {"EnvArrayUI", (void *)&EnvArrayUI},
+    {"ADSRArrayUI", (void *)&ADSRArrayUI},
     {"tempo_mul", (void *)&ylc_plugin_tempo_mul},
     {"tempo_coeff", (void *)&ylc_plugin_tempo_mul},
     {"ylc_plugin_tempo_mul", (void *)&ylc_plugin_tempo_mul},

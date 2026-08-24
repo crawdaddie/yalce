@@ -72,6 +72,18 @@ typedef struct AdsrState {
   double prev_trig;
 } AdsrState;
 
+typedef struct ArrayEnvState {
+  double phase;
+  double prev_trig;
+  int32_t current_segment;
+  double start;
+  double target;
+  double time;
+  double curve;
+  int32_t active;
+  int32_t sustaining;
+} ArrayEnvState;
+
 typedef struct RectState {
   double remaining;
   double prev_trig;
@@ -121,6 +133,19 @@ typedef struct SahState {
   double prev_trig;
   double value;
 } SahState;
+
+/* disperser: cascade of identical 2nd-order allpass sections. Each section
+   holds two input taps (x1, x2) and two output taps (y1, y2). Up to
+   DISPERSER_MAX_STAGES sections are reserved; the active count is chosen per
+   sample from the `amount` parameter. See ylc_audio_disperser_kernel. */
+#define DISPERSER_MAX_STAGES 64
+
+typedef struct DisperserState {
+  double x1[DISPERSER_MAX_STAGES];
+  double x2[DISPERSER_MAX_STAGES];
+  double y1[DISPERSER_MAX_STAGES];
+  double y2[DISPERSER_MAX_STAGES];
+} DisperserState;
 
 /* pan: distribute a mono signal across N output channels (equal-power).
    `out` is a buffer of `n` doubles written by the kernel. See

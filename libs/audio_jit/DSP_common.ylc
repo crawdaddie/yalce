@@ -40,6 +40,10 @@ let kill_on_end = extern fn Double -> Double;
 
 # ADSR envelope. Args: attack, decay, sustain, release, trigger.
 let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
+# ADSR envelope from `[attack, decay, sustain, release]`.
+let adsr_array = extern fn Array of Double -> Double -> Double;
+# Point envelope from `[start, duration, curve, value, ...]`.
+let array_env = extern fn Array of Double -> Double -> Double -> Double;
 
 # Rectangular gate envelope. Args: duration, trigger.
 let rect = extern fn Double -> Double -> Double;
@@ -51,6 +55,14 @@ let comb = extern fn Double -> Double -> Double -> Double -> Double;
 # Delay-line allpass. Args: delay seconds, max delay seconds, feedback, input.
 # Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
 let dl_allpass = extern fn Double -> Double -> Double -> Double -> Double;
+
+# Disperser: a cascade of identical 2nd-order allpass sections all tuned to a
+# single cutoff, modeled on the Kilohearts Disperser (a stack of allpass
+# filters causing frequency-dependent delay, flat gain).
+# Args: freq (Hz cutoff), amount [0,1] (allpass order / number of stages,
+# 0 = bypass), pinch [0,1] (Q, inverted: 1 = chirpy / low Q / broad delay,
+# 0 = concentrated group delay around the cutoff), input.
+let disperser = extern fn Double -> Double -> Double -> Double -> Double;
 
 # Buffer playback. Args: buffer, rate, start position, trigger.
 let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;

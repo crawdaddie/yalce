@@ -315,6 +315,16 @@ typedef struct reaper_plugin_info_t
        void on_exit(void) { }
        plugin_register("atexit",(void*)on_exit);
 
+  ext_name:
+  ext_url:
+  ext_vendor:
+     These can all be registered at extension load-time only in order to provide information on the
+     plug-in (for purposes of the prefs view). ext_url should be a page where the user can get updates, ideally.
+
+       plugin_register("ext_name",(void*)"MyPluginName");
+
+
+
   accel_section:
   action_help:
   custom_action:

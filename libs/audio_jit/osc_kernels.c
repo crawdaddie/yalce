@@ -25,6 +25,71 @@ static inline int audio_jit_rising_edge(double trig, double prev_trig) {
   return prev_trig < 0.5 && trig >= 0.5;
 }
 
+static inline double audio_jit_clamp(double value, double lo, double hi) {
+  if (value < lo) {
+    return lo;
+  }
+  if (value > hi) {
+    return hi;
+  }
+  return value;
+}
+
+static inline double audio_jit_curve_interp(double t, double y0, double y1,
+                                            double curve) {
+  t = audio_jit_clamp(t, 0.0, 1.0);
+  if (fabs(curve) < 0.001) {
+    return audio_jit_lerp(y0, y1, t);
+  }
+
+  double sign = curve > 0.0 ? 1.0 : -1.0;
+  double amount = fabs(curve) * 3.0;
+  double k = exp(sign * amount);
+  double denom = k - 1.0;
+  if (fabs(denom) < 1e-12) {
+    return audio_jit_lerp(y0, y1, t);
+  }
+
+  double curved_t = (exp(sign * amount * t) - 1.0) / denom;
+  return audio_jit_lerp(y0, y1, curved_t);
+}
+
+static inline void audio_jit_array_env_set_segment(ArrayEnvState *state,
+                                                   int32_t segment,
+                                                   int32_t size, double *data) {
+  int32_t base = segment * 3;
+  state->phase = 0.0;
+  state->current_segment = segment;
+  state->start = data[base];
+  state->time = data[base + 1];
+  state->curve = data[base + 2];
+  state->target = data[base + 3];
+  (void)size;
+}
+
+static inline double audio_jit_array_env_current_value(ArrayEnvState *state) {
+  double duration = state->time > 0.0 ? state->time : 0.0;
+  double norm_phase = duration > 0.0 ? state->phase / duration : 1.0;
+  return audio_jit_curve_interp(norm_phase, state->start, state->target,
+                                state->curve);
+}
+
+static inline void
+audio_jit_array_env_set_custom_segment(ArrayEnvState *state, int32_t segment,
+                                       double start, double target, double time,
+                                       double curve) {
+  state->phase = 0.0;
+  state->current_segment = segment;
+  state->start = start;
+  state->target = target;
+  state->time = time;
+  state->curve = curve;
+}
+
+static inline int32_t audio_jit_array_env_segment_count(int32_t size) {
+  return size >= 4 ? (size - 1) / 3 : 0;
+}
+
 #define SIN_TABSIZE (1 << 11)
 static double sin_table[SIN_TABSIZE] = {
 #include "./sin_table.csv"
@@ -628,8 +693,8 @@ ylc_audio_grains_kernel(GrainOscState *state, double spf, int32_t max_grains,
 
     double d_index = s + (p * (double)size);
     double grain_elapsed = 1.0 - (rem / w);
-    double env_val =
-        ylc_audio_pow2table_read(grain_elapsed, GRAIN_WINDOW_TABSIZE, grain_win);
+    double env_val = ylc_audio_pow2table_read(grain_elapsed,
+                                              GRAIN_WINDOW_TABSIZE, grain_win);
 
     sample += env_val * audio_jit_read_linear(buf, size, d_index);
     arrays.phases[i] += r / (double)size;
@@ -878,6 +943,137 @@ ylc_audio_adsr_kernel(AdsrState *state, double spf, double attack, double decay,
   return value;
 }
 
+__attribute__((always_inline)) double
+ylc_audio_adsr_array_kernel(AdsrState *state, double spf, int32_t size,
+                            int32_t offset, double *data, double trig) {
+  double *values = audio_jit_array_data(offset, data);
+  if (!values || size < 4) {
+    return ylc_audio_adsr_kernel(state, spf, 0.0, 0.0, 0.0, 0.0, trig);
+  }
+
+  return ylc_audio_adsr_kernel(state, spf, values[0], values[1], values[2],
+                               values[3], trig);
+}
+
+__attribute__((always_inline)) double
+ylc_audio_array_env_kernel(ArrayEnvState *state, double spf, int32_t size,
+                           int32_t offset, double *data, double time_scale,
+                           double trig) {
+  double *values = audio_jit_array_data(offset, data);
+  int32_t segments = audio_jit_array_env_segment_count(size);
+  if (!state || !values || segments <= 0 || ((size - 1) % 3) != 0) {
+    if (state) {
+      state->prev_trig = trig;
+      state->active = 0;
+    }
+    return 0.0;
+  }
+
+  if (audio_jit_rising_edge(trig, state->prev_trig)) {
+    state->active = 1;
+    audio_jit_array_env_set_segment(state, 0, size, values);
+  }
+
+  double out = 0.0;
+  if (state->active) {
+    double duration = state->time > 0.0 ? state->time : 0.0;
+    double norm_phase = duration > 0.0 ? state->phase / duration : 1.0;
+    out = audio_jit_curve_interp(norm_phase, state->start, state->target,
+                                 state->curve);
+
+    double scale = time_scale > 0.0 ? time_scale : 1.0;
+    state->phase += spf / scale;
+
+    while (state->active && state->phase >= duration) {
+      state->current_segment++;
+      if (state->current_segment >= segments) {
+        state->active = 0;
+        out = state->target;
+        break;
+      }
+      audio_jit_array_env_set_segment(state, state->current_segment, size,
+                                      values);
+      duration = state->time > 0.0 ? state->time : 0.0;
+      if (duration > 0.0) {
+        break;
+      }
+    }
+  }
+
+  state->prev_trig = trig;
+  return out;
+}
+
+__attribute__((always_inline)) double
+ylc_audio_gated_array_env_kernel(ArrayEnvState *state, double spf, int32_t size,
+                                 int32_t offset, double *data, double gate) {
+  double *values = audio_jit_array_data(offset, data);
+  int32_t segments = audio_jit_array_env_segment_count(size);
+  if (!state || !values || segments <= 0 || ((size - 1) % 3) != 0) {
+    if (state) {
+      state->prev_trig = gate;
+      state->active = 0;
+      state->sustaining = 0;
+    }
+    return 0.0;
+  }
+
+  int rising = audio_jit_rising_edge(gate, state->prev_trig);
+  int falling = state->prev_trig >= 0.5 && gate < 0.5;
+  int release_segment = segments - 1;
+  int sustain_point = segments - 1;
+
+  if (rising) {
+    state->active = 1;
+    state->sustaining = 0;
+    audio_jit_array_env_set_segment(state, 0, size, values);
+  } else if (falling && state->active && state->current_segment < segments) {
+    double current = state->sustaining
+                         ? values[sustain_point * 3]
+                         : audio_jit_array_env_current_value(state);
+    audio_jit_array_env_set_custom_segment(
+        state, release_segment, current, values[segments * 3],
+        values[release_segment * 3 + 1], values[release_segment * 3 + 2]);
+    state->sustaining = 0;
+  }
+
+  double out = 0.0;
+  if (state->active) {
+    if (state->sustaining) {
+      out = values[sustain_point * 3];
+    } else {
+      out = audio_jit_array_env_current_value(state);
+      state->phase += spf;
+
+      while (state->active && !state->sustaining &&
+             state->phase >= (state->time > 0.0 ? state->time : 0.0)) {
+        state->current_segment++;
+        if (state->current_segment >= segments) {
+          state->active = 0;
+          out = state->target;
+          break;
+        }
+
+        if (state->current_segment == release_segment && gate >= 0.5 &&
+            segments > 1) {
+          state->sustaining = 1;
+          out = values[sustain_point * 3];
+          break;
+        }
+
+        audio_jit_array_env_set_segment(state, state->current_segment, size,
+                                        values);
+        if (state->time > 0.0) {
+          break;
+        }
+      }
+    }
+  }
+
+  state->prev_trig = gate;
+  return out;
+}
+
 __attribute__((always_inline)) double ylc_audio_rect_kernel(RectState *state,
                                                             double spf,
                                                             double duration,
@@ -913,6 +1109,94 @@ ylc_audio_sah_kernel(SahState *state, double spf, double sig, double trig) {
   state->prev_trig = trig;
   state->initialized = 1;
   return state->value;
+}
+
+/* disperser: a cascade of identical 2nd-order allpass sections, all tuned to a
+   single cutoff frequency, modeled on the Kilohearts Disperser ("a stack of
+   all-pass filters tuned to cause frequency dependent delay").
+
+   Per-sample args:
+     freq   - cutoff / center frequency in Hz (clamped to [1, Nyquist])
+     amount - normalized [0,1] controlling the allpass order: the number of
+              active stages is n = round(amount * DISPERSER_MAX_STAGES).
+              amount <= 0 bypasses the input unchanged.
+     pinch  - normalized [0,1] controlling the Q of every section. The mapping
+              is inverted so that higher pinch is more "chirpy" (low Q, broad
+              delay); lower pinch concentrates the group delay around the
+              cutoff. Mapped to Q = 0.5 * 100^(1-pinch) (0.5 .. 50).
+     input  - signal sample.
+
+   All sections share one set of coefficients, recomputed per sample so freq
+   and pinch may be audio-rate. Each section is the RBJ 2nd-order allpass:
+       y = a2*x + a1*x1 + x2 - a1*y1 - a2*y2
+   with a1 = -2*cos(w0)/(1+alpha), a2 = (1-alpha)/(1+alpha),
+   alpha = sin(w0)/(2Q), w0 = 2*pi*freq*spf. Cascading N identical sections
+   multiplies the single-section group delay (which peaks at the cutoff),
+   concentrating delay there and smearing transients across time without
+   changing gain. */
+__attribute__((always_inline)) double
+ylc_audio_disperser_kernel(DisperserState *state, double spf, double freq,
+                           double amount, double pinch, double input) {
+  if (!state || spf <= 0.0 || !isfinite(spf)) {
+    return input;
+  }
+
+  double a = amount;
+  if (!isfinite(a) || a < 0.0) {
+    a = 0.0;
+  } else if (a > 1.0) {
+    a = 1.0;
+  }
+  int n = (int)(a * (double)DISPERSER_MAX_STAGES + 0.5);
+  if (n <= 0) {
+    return input;
+  }
+  if (n > DISPERSER_MAX_STAGES) {
+    n = DISPERSER_MAX_STAGES;
+  }
+
+  double f = freq;
+  if (!isfinite(f) || f < 1.0) {
+    f = 1.0;
+  }
+  double nyq = 0.5 / spf;
+  if (f > nyq) {
+    f = nyq;
+  }
+
+  double p = pinch;
+  if (!isfinite(p) || p < 0.0) {
+    p = 0.0;
+  } else if (p > 1.0) {
+    p = 1.0;
+  }
+  double q = 0.5 * pow(100.0, 1.0 - p);
+
+  double w0 = 2.0 * M_PI * f * spf;
+  if (w0 > M_PI) {
+    w0 = M_PI;
+  }
+  double cosw = cos(w0);
+  double sinw = sin(w0);
+  double alpha = sinw / (2.0 * q);
+  double a0 = 1.0 + alpha;
+  double a1 = -2.0 * cosw / a0;
+  double a2 = (1.0 - alpha) / a0;
+
+  double x = input;
+  for (int i = 0; i < n; i++) {
+    double x1 = state->x1[i];
+    double x2 = state->x2[i];
+    double y1 = state->y1[i];
+    double y2 = state->y2[i];
+    double y = a2 * x + a1 * x1 + x2 - a1 * y1 - a2 * y2;
+    state->x2[i] = x1;
+    state->x1[i] = x;
+    state->y2[i] = y1;
+    state->y1[i] = y;
+    x = y;
+  }
+  return x;
 }
 
 /* pan: distribute a mono signal across N output channels with equal-power

@@ -19,6 +19,7 @@ READLINE_LIBS ?= -lreadline
 WARNFLAGS := -Wall -Wextra -Wpedantic
 X11_CFLAGS := $(shell $(PKG_CONFIG) --cflags x11 2>/dev/null)
 X11_LIBS := $(shell $(PKG_CONFIG) --libs x11 2>/dev/null)
+SNDFILE_LIBS := $(shell $(PKG_CONFIG) --libs sndfile 2>/dev/null)
 LLVM_CFLAGS := $(shell $(LLVM_CONFIG) --cflags 2>/dev/null)
 LLVM_LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags 2>/dev/null)
 LLVM_LIBS := $(shell $(LLVM_CONFIG) --libs core orcjit native linker bitreader passes analysis 2>/dev/null)
@@ -26,7 +27,7 @@ INCLUDES := -isystem include -Isrc -I../../lang -I../../lang/backend_llvm -I../.
 SOURCES := src/plugin.c src/script_runtime.c src/runtime_service.c \
 	src/script_jit.c src/orc.c src/lowering.c src/audio_graph.c src/gui.c \
 	src/runtime_symbols.c src/scheduler.c src/audio_jit_symbols.c \
-	src/debug.c
+	src/debug.c src/soundfile.c
 AUDIO_JIT_SOURCES := $(AUDIO_JIT_ROOT)/audio_jit.c
 LANG_ROOT := ../../lang
 LANG_SOURCES := $(filter-out \
@@ -56,7 +57,7 @@ deps:
 	sh scripts/fetch_deps.sh
 
 $(TARGET): $(OBJECTS) $(AUDIO_JIT_BITCODE)
-	$(CC) -shared $(LDFLAGS) $(LLVM_LDFLAGS) -o $@ $^ $(LDLIBS) $(X11_LIBS) $(LLVM_LIBS) $(READLINE_LIBS) -pthread
+	$(CC) -shared $(LDFLAGS) $(LLVM_LDFLAGS) -o $@ $^ $(LDLIBS) $(X11_LIBS) $(SNDFILE_LIBS) $(LLVM_LIBS) $(READLINE_LIBS) -pthread
 
 $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)

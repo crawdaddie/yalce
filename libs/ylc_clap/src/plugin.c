@@ -32,6 +32,11 @@ typedef struct ylc_saved_state_header {
   uint32_t script_path_len;
 } ylc_saved_state_header_t;
 
+typedef struct ylc_persistent_array_rc_header {
+  uint32_t rc;
+  uint32_t tag_or_size_class;
+} ylc_persistent_array_rc_header_t;
+
 enum {
   YLC_MIDI_EVENT_TYPE_NOTE_ON = 0,
   YLC_MIDI_EVENT_TYPE_NOTE_OFF = 1,
@@ -511,6 +516,179 @@ double ylc_plugin_tempo_mul(void) {
   return 60.0 / bpm;
 }
 
+static ylc_persistent_array_slot_t *
+ylc_persistent_array_find(ylc_plugin_t *self, uint64_t key) {
+  if (!self) {
+    return NULL;
+  }
+  for (uint32_t i = 0; i < self->persistent_array_count; ++i) {
+    if (self->persistent_arrays[i].key == key) {
+      return &self->persistent_arrays[i];
+    }
+  }
+  return NULL;
+}
+
+static double *ylc_persistent_array_alloc_values(uint32_t count) {
+  if (count == 0) {
+    return NULL;
+  }
+  const size_t count_size = (size_t)count;
+  if (count > YLC_PERSIST_ARRAY_MAX_COUNT ||
+      count_size >
+          (SIZE_MAX - sizeof(ylc_persistent_array_rc_header_t)) /
+              sizeof(double)) {
+    return NULL;
+  }
+
+  ylc_persistent_array_rc_header_t *header =
+      (ylc_persistent_array_rc_header_t *)calloc(
+          1, sizeof(*header) + sizeof(double) * count_size);
+  if (!header) {
+    return NULL;
+  }
+  header->rc = 0;
+  header->tag_or_size_class = count;
+  return (double *)(header + 1);
+}
+
+static void ylc_persistent_array_free_values(double *values) {
+  if (values) {
+    free(((ylc_persistent_array_rc_header_t *)values) - 1);
+  }
+}
+
+static ylc_persistent_array_slot_t *
+ylc_persistent_array_create(ylc_plugin_t *self, uint64_t key) {
+  if (!self ||
+      self->persistent_array_count >= YLC_PERSIST_ARRAY_MAX_SLOTS) {
+    return NULL;
+  }
+
+  if (self->persistent_array_count >= self->persistent_array_capacity) {
+    uint32_t next_capacity = self->persistent_array_capacity > 0
+                                 ? self->persistent_array_capacity * 2
+                                 : 8;
+    if (next_capacity > YLC_PERSIST_ARRAY_MAX_SLOTS) {
+      next_capacity = YLC_PERSIST_ARRAY_MAX_SLOTS;
+    }
+    ylc_persistent_array_slot_t *next =
+        (ylc_persistent_array_slot_t *)realloc(
+            self->persistent_arrays, sizeof(*next) * next_capacity);
+    if (!next) {
+      return NULL;
+    }
+    self->persistent_arrays = next;
+    self->persistent_array_capacity = next_capacity;
+  }
+
+  ylc_persistent_array_slot_t *slot =
+      &self->persistent_arrays[self->persistent_array_count++];
+  memset(slot, 0, sizeof(*slot));
+  slot->key = key;
+  return slot;
+}
+
+static bool ylc_persistent_array_set_count(ylc_persistent_array_slot_t *slot,
+                                           _DoubleArray defaults) {
+  if (!slot || defaults.size < 0 ||
+      (uint32_t)defaults.size > YLC_PERSIST_ARRAY_MAX_COUNT) {
+    return false;
+  }
+
+  uint32_t count = (uint32_t)defaults.size;
+  if (slot->values && slot->count == count) {
+    return true;
+  }
+
+  double *next = NULL;
+  if (count > 0) {
+    next = ylc_persistent_array_alloc_values(count);
+    if (!next) {
+      return false;
+    }
+
+    if (defaults.data) {
+      for (uint32_t i = 0; i < count; ++i) {
+        next[i] = defaults.data[i];
+      }
+    }
+
+    if (slot->values) {
+      uint32_t copy_count = slot->count < count ? slot->count : count;
+      memcpy(next, slot->values, sizeof(double) * copy_count);
+    }
+  }
+
+  ylc_persistent_array_free_values(slot->values);
+  slot->values = next;
+  slot->count = count;
+  return true;
+}
+
+_DoubleArray ylc_plugin_persist_array(uint64_t key, _DoubleArray defaults) {
+  ylc_plugin_t *self = ylc_debug_printf_context;
+  if (!self) {
+    return defaults;
+  }
+
+  ylc_persistent_array_slot_t *slot = ylc_persistent_array_find(self, key);
+  if (!slot) {
+    slot = ylc_persistent_array_create(self, key);
+  }
+  if (!slot || !ylc_persistent_array_set_count(slot, defaults)) {
+    return defaults;
+  }
+
+  ylc_mark_state_dirty(self);
+  return (_DoubleArray){
+      .size = (int32_t)slot->count,
+      .offset = 0,
+      .data = slot->values,
+  };
+}
+
+static void ylc_plugin_array_ui(uint32_t kind, const char *name,
+                                _DoubleArray values) {
+  ylc_plugin_t *self = ylc_debug_printf_context;
+  if (!self || values.size <= 0 || !values.data) {
+    return;
+  }
+
+  double *data = values.data + values.offset;
+  uint32_t count = (uint32_t)values.size;
+  for (uint32_t i = 0; i < self->ui_count; ++i) {
+    if (self->ui_slots[i].kind == (ylc_ui_kind_t)kind &&
+        self->ui_slots[i].array_values == data &&
+        self->ui_slots[i].array_count == count) {
+      return;
+    }
+  }
+
+  if (self->ui_count >= YLC_UI_MAX_SLOTS) {
+    ylc_debug_log(self, "%s ignored: too many UI slots",
+                  name ? name : "ArrayUI");
+    return;
+  }
+
+  self->ui_slots[self->ui_count++] = (ylc_ui_slot_t){
+      .kind = (ylc_ui_kind_t)kind, .array_count = count, .array_values = data};
+  ylc_debug_log(self, "%s registered %u values",
+                name ? name : "ArrayUI", count);
+  if (self->gui_selected_array < 0) {
+    self->gui_selected_array = 0;
+  }
+  ylc_gui_draw(self);
+}
+
+void EnvArrayUI(_DoubleArray values) {
+  ylc_plugin_array_ui(YLC_UI_ENV, "EnvArrayUI", values);
+}
+
+void ADSRArrayUI(_DoubleArray values) {
+  ylc_plugin_array_ui(YLC_UI_ADSR, "ADSRArrayUI", values);
+}
+
 int ctx_sample_rate(void) {
   return ylc_debug_printf_context && ylc_debug_printf_context->sample_rate > 0.0
              ? (int)ylc_debug_printf_context->sample_rate
@@ -546,6 +724,49 @@ void ylc_plugin_prepare_script_audio_graph(void *plugin_state) {
                         memory_order_release);
   atomic_store_explicit(&self->param_gesture_in_handler, (uintptr_t)0,
                         memory_order_release);
+
+  if (!self->sf_inherit_from_state) {
+    free(self->sf_inherit);
+    self->sf_inherit = NULL;
+    self->sf_inherit_count = 0;
+    uint32_t sf_ui_count = 0;
+    for (uint32_t i = 0; i < self->ui_count; ++i) {
+      if (self->ui_slots[i].kind == YLC_UI_SOUNDFILE &&
+          self->ui_slots[i].soundfile) {
+        ++sf_ui_count;
+      }
+    }
+    if (sf_ui_count > 0) {
+      self->sf_inherit = (ylc_soundfile_inherit_t *)calloc(
+          sf_ui_count, sizeof(ylc_soundfile_inherit_t));
+      if (self->sf_inherit) {
+        uint32_t idx = 0;
+        for (uint32_t i = 0; i < self->ui_count; ++i) {
+          if (self->ui_slots[i].kind != YLC_UI_SOUNDFILE ||
+              !self->ui_slots[i].soundfile) {
+            continue;
+          }
+          ylc_soundfile_t *sf = self->ui_slots[i].soundfile;
+          snprintf(self->sf_inherit[idx].path,
+                   sizeof(self->sf_inherit[idx].path), "%s", sf->user_path);
+          self->sf_inherit[idx].region_start = sf->region_start;
+          self->sf_inherit[idx].region_end = sf->region_end;
+          ++idx;
+        }
+        self->sf_inherit_count = sf_ui_count;
+      }
+    }
+  }
+  self->sf_inherit_from_state = false;
+  self->sf_inherit_index = 0;
+
+  ylc_soundfile_free_all(self);
+  self->ui_count = 0;
+  self->gui_selected_array = -1;
+  self->gui_selected_point = -1;
+  self->gui_dragging = false;
+  self->sf_dragging_edge = -1;
+
   ylc_audio_graph_clear(&self->jit_dummy_graph);
   ylc_clap_scheduler_clear(&self->scheduler);
 }
@@ -674,7 +895,7 @@ static bool ylc_script_program_is_current(ylc_plugin_t *self) {
 }
 
 static bool ylc_compile_and_install_script_program(ylc_plugin_t *self,
-                                                   const char *reason) {
+                                                    const char *reason) {
   if (!self || !self->runtime_service) {
     return false;
   }
@@ -704,6 +925,21 @@ static bool ylc_compile_and_install_script_program(ylc_plugin_t *self,
     }
   }
   return ok;
+}
+
+static bool ylc_reload_pending_script(ylc_plugin_t *self, const char *reason) {
+  if (!self) {
+    return false;
+  }
+
+  if (!atomic_exchange_explicit(&self->script_reload_pending, false,
+                                memory_order_acq_rel)) {
+    return false;
+  }
+
+  (void)ylc_compile_and_install_script_program(self, reason);
+  ylc_gui_draw(self);
+  return true;
 }
 
 static bool ylc_param_index_from_id(clap_id param_id, uint32_t *index) {
@@ -762,6 +998,45 @@ static bool ylc_stream_read_all(const clap_istream_t *stream, void *data,
       return false;
     }
 
+    cursor += read;
+    remaining -= (uint64_t)read;
+  }
+
+  return true;
+}
+
+static bool ylc_stream_read_optional_all(const clap_istream_t *stream,
+                                         void *data, uint64_t size,
+                                         bool *present) {
+  if (present) {
+    *present = false;
+  }
+  if (size == 0) {
+    if (present) {
+      *present = true;
+    }
+    return true;
+  }
+
+  uint8_t *cursor = (uint8_t *)data;
+  const int64_t first = stream->read(stream, cursor, size);
+  if (first == 0) {
+    return true;
+  }
+  if (first < 0) {
+    return false;
+  }
+  if (present) {
+    *present = true;
+  }
+
+  cursor += first;
+  uint64_t remaining = size - (uint64_t)first;
+  while (remaining > 0) {
+    const int64_t read = stream->read(stream, cursor, remaining);
+    if (read <= 0) {
+      return false;
+    }
     cursor += read;
     remaining -= (uint64_t)read;
   }
@@ -1131,6 +1406,14 @@ static void ylc_destroy(const clap_plugin_t *plugin) {
   ylc_gui_close(self);
   ylc_audio_graph_free_all_nodes(&self->jit_dummy_graph);
   ylc_clap_scheduler_destroy(&self->scheduler);
+  ylc_soundfile_free_all(self);
+  free(self->sf_inherit);
+  self->sf_inherit = NULL;
+  self->sf_inherit_count = 0;
+  for (uint32_t i = 0; i < self->persistent_array_count; ++i) {
+    ylc_persistent_array_free_values(self->persistent_arrays[i].values);
+  }
+  free(self->persistent_arrays);
   if (self->runtime_service) {
     ylc_runtime_service_release(self->runtime_service, self->instance_id);
     self->runtime_service = NULL;
@@ -1676,8 +1959,49 @@ static bool ylc_state_save(const clap_plugin_t *plugin,
   };
   memcpy(header.param_values, self->param_values, sizeof(header.param_values));
 
-  const bool ok = ylc_stream_write_all(stream, &header, sizeof(header)) &&
-                  ylc_stream_write_all(stream, self->script_path, path_len);
+  bool ok = ylc_stream_write_all(stream, &header, sizeof(header)) &&
+            ylc_stream_write_all(stream, self->script_path, path_len);
+
+  uint32_t slot_count = self->persistent_array_count;
+  ok = ok && ylc_stream_write_all(stream, &slot_count, sizeof(slot_count));
+  for (uint32_t i = 0; ok && i < slot_count; ++i) {
+    ylc_persistent_array_slot_t *slot = &self->persistent_arrays[i];
+    ok = ylc_stream_write_all(stream, &slot->key, sizeof(slot->key)) &&
+         ylc_stream_write_all(stream, &slot->count, sizeof(slot->count));
+    if (ok && slot->count > 0) {
+      ok = slot->values &&
+           ylc_stream_write_all(stream, slot->values,
+                                sizeof(double) * slot->count);
+    }
+  }
+
+  uint32_t sf_count = 0;
+  for (uint32_t i = 0; i < self->ui_count; ++i) {
+    if (self->ui_slots[i].kind == YLC_UI_SOUNDFILE &&
+        self->ui_slots[i].soundfile) {
+      ++sf_count;
+    }
+  }
+  ok = ok && ylc_stream_write_all(stream, &sf_count, sizeof(sf_count));
+  for (uint32_t i = 0; ok && i < self->ui_count; ++i) {
+    if (self->ui_slots[i].kind != YLC_UI_SOUNDFILE ||
+        !self->ui_slots[i].soundfile) {
+      continue;
+    }
+    ylc_soundfile_t *sf = self->ui_slots[i].soundfile;
+    uint64_t dummy_key = 0;
+    ok = ylc_stream_write_all(stream, &dummy_key, sizeof(dummy_key));
+    uint32_t path_len = (uint32_t)strlen(sf->user_path);
+    ok = ok && ylc_stream_write_all(stream, &path_len, sizeof(path_len));
+    if (ok && path_len > 0) {
+      ok = ylc_stream_write_all(stream, sf->user_path, path_len);
+    }
+    uint64_t rs = sf->region_start;
+    uint64_t re = sf->region_end;
+    ok = ok && ylc_stream_write_all(stream, &rs, sizeof(rs)) &&
+         ylc_stream_write_all(stream, &re, sizeof(re));
+  }
+
   ylc_debug_log(self, "state save %s", ok ? "ok" : "failed");
   return ok;
 }
@@ -1710,6 +2034,130 @@ static bool ylc_state_load(const clap_plugin_t *plugin,
   }
 
   self->script_path[header.script_path_len] = '\0';
+
+  uint32_t slot_count = 0;
+  bool has_persistent_arrays = false;
+  if (!ylc_stream_read_optional_all(stream, &slot_count, sizeof(slot_count),
+                                    &has_persistent_arrays)) {
+    ylc_debug_log(self, "state load failed: malformed persistent array count");
+    return false;
+  }
+
+  ylc_persistent_array_slot_t *loaded_slots = NULL;
+  uint32_t loaded_count = 0;
+  if (has_persistent_arrays) {
+    if (slot_count > YLC_PERSIST_ARRAY_MAX_SLOTS) {
+      ylc_debug_log(self, "state load failed: too many persistent arrays");
+      return false;
+    }
+    if (slot_count > 0) {
+      loaded_slots =
+          (ylc_persistent_array_slot_t *)calloc(slot_count, sizeof(*loaded_slots));
+      if (!loaded_slots) {
+        return false;
+      }
+    }
+
+    for (uint32_t i = 0; i < slot_count; ++i) {
+      uint64_t key = 0;
+      uint32_t count = 0;
+      if (!ylc_stream_read_all(stream, &key, sizeof(key)) ||
+          !ylc_stream_read_all(stream, &count, sizeof(count))) {
+        ylc_debug_log(self, "state load failed: short persistent array header");
+        for (uint32_t j = 0; j < loaded_count; ++j) {
+          ylc_persistent_array_free_values(loaded_slots[j].values);
+        }
+        free(loaded_slots);
+        return false;
+      }
+      if (count > YLC_PERSIST_ARRAY_MAX_COUNT) {
+        ylc_debug_log(self, "state load failed: persistent array too large");
+        for (uint32_t j = 0; j < loaded_count; ++j) {
+          ylc_persistent_array_free_values(loaded_slots[j].values);
+        }
+        free(loaded_slots);
+        return false;
+      }
+
+      loaded_slots[i].key = key;
+      loaded_slots[i].count = count;
+      if (count > 0) {
+        loaded_slots[i].values = ylc_persistent_array_alloc_values(count);
+        if (!loaded_slots[i].values ||
+            !ylc_stream_read_all(stream, loaded_slots[i].values,
+                                 sizeof(double) * count)) {
+          ylc_debug_log(self, "state load failed: short persistent array data");
+          for (uint32_t j = 0; j <= loaded_count; ++j) {
+            ylc_persistent_array_free_values(loaded_slots[j].values);
+          }
+          free(loaded_slots);
+          return false;
+        }
+      }
+      loaded_count++;
+    }
+  }
+
+  for (uint32_t i = 0; i < self->persistent_array_count; ++i) {
+    ylc_persistent_array_free_values(self->persistent_arrays[i].values);
+  }
+  free(self->persistent_arrays);
+  self->persistent_arrays = loaded_slots;
+  self->persistent_array_count = loaded_count;
+  self->persistent_array_capacity = loaded_count;
+
+  uint32_t sf_count = 0;
+  bool has_soundfiles = false;
+  if (!ylc_stream_read_optional_all(stream, &sf_count, sizeof(sf_count),
+                                    &has_soundfiles)) {
+    ylc_debug_log(self, "state load failed: malformed soundfile count");
+    return false;
+  }
+  free(self->sf_inherit);
+  self->sf_inherit = NULL;
+  self->sf_inherit_count = 0;
+  self->sf_inherit_from_state = true;
+  if (has_soundfiles && sf_count > 0 && sf_count <= YLC_SOUNDFILE_MAX_SLOTS) {
+    self->sf_inherit = (ylc_soundfile_inherit_t *)calloc(
+        sf_count, sizeof(ylc_soundfile_inherit_t));
+    if (!self->sf_inherit) {
+      return false;
+    }
+    for (uint32_t i = 0; i < sf_count; ++i) {
+      ylc_soundfile_inherit_t *p = &self->sf_inherit[i];
+      uint64_t key = 0;
+      uint32_t path_len = 0;
+      if (!ylc_stream_read_all(stream, &key, sizeof(key)) ||
+          !ylc_stream_read_all(stream, &path_len, sizeof(path_len))) {
+        free(self->sf_inherit);
+        self->sf_inherit = NULL;
+        return false;
+      }
+      (void)key;
+      if (path_len >= YLC_SOUNDFILE_PATH_SIZE) {
+        free(self->sf_inherit);
+        self->sf_inherit = NULL;
+        return false;
+      }
+      if (path_len > 0 &&
+          !ylc_stream_read_all(stream, p->path, path_len)) {
+        free(self->sf_inherit);
+        self->sf_inherit = NULL;
+        return false;
+      }
+      p->path[path_len] = '\0';
+      if (!ylc_stream_read_all(stream, &p->region_start,
+                               sizeof(p->region_start)) ||
+          !ylc_stream_read_all(stream, &p->region_end,
+                               sizeof(p->region_end))) {
+        free(self->sf_inherit);
+        self->sf_inherit = NULL;
+        return false;
+      }
+      self->sf_inherit_count++;
+    }
+  }
+
   ylc_mark_script_program_stale(self);
   atomic_store_explicit(&self->script_reload_pending, false,
                         memory_order_release);
@@ -1735,6 +2183,7 @@ static void ylc_posix_on_fd(const clap_plugin_t *plugin, int fd,
   if (fd == self->inotify_fd &&
       (flags & (CLAP_POSIX_FD_READ | CLAP_POSIX_FD_ERROR)) != 0) {
     ylc_drain_script_watcher(self);
+    ylc_reload_pending_script(self, "script save");
     ylc_gui_draw(self);
   }
 }
@@ -1807,11 +2256,7 @@ static void ylc_on_main_thread(const clap_plugin_t *plugin) {
     ylc_drain_script_watcher(self);
   }
 
-  if (atomic_exchange_explicit(&self->script_reload_pending, false,
-                               memory_order_acq_rel)) {
-    ylc_compile_and_install_script_program(self, "script save");
-    ylc_gui_draw(self);
-  }
+  ylc_reload_pending_script(self, "script save");
 
   if ((self->gui_visible ||
        (self->inotify_fd >= 0 && !self->inotify_registered)) &&

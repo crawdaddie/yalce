@@ -223,7 +223,14 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
     return NULL;
   }
 
-  Type *result_type = next_tvar();
+  /* A no-else if (allow_no_match) is a statement: its result is void.
+   * The body is type-checked but not unified with the result, so a
+   * non-void body (e.g. array assignment returning the container) does
+   * not make the match non-void. Otherwise collect_value is true in MIR,
+   * the no-match block becomes unreachable, and the optimizer folds the
+   * condition to constant true. */
+  bool allow_no_match = ast->data.AST_MATCH.allow_no_match;
+  Type *result_type = allow_no_match ? &t_void : next_tvar();
   for (size_t i = 0; i < ast->data.AST_MATCH.len; i++) {
     Ast *pattern = ast->data.AST_MATCH.branches + (i * 2);
     Ast *body = ast->data.AST_MATCH.branches + (i * 2) + 1;
@@ -239,7 +246,9 @@ Type *infer_match_expression(Ast *ast, TICtx *ctx) {
     if (!body_type) {
       return NULL;
     }
-    add_constraint(ctx, body_type, result_type);
+    if (!allow_no_match) {
+      add_constraint(ctx, body_type, result_type);
+    }
   }
 
   return result_type;

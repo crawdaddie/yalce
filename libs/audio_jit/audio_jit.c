@@ -3259,6 +3259,14 @@ static AudioValue audio_builtin_emit_array_trigger(const AudioBuiltin *builtin,
                                                    Ast *origin,
                                                    AudioValue *args,
                                                    size_t argc);
+static AudioValue audio_builtin_emit_array_env(const AudioBuiltin *builtin,
+                                               AudioCompileCtx *audio,
+                                               Ast *origin, AudioValue *args,
+                                               size_t argc);
+static AudioValue audio_builtin_emit_adsr_array(const AudioBuiltin *builtin,
+                                                AudioCompileCtx *audio,
+                                                Ast *origin, AudioValue *args,
+                                                size_t argc);
 static AudioValue audio_builtin_emit_grains(const AudioBuiltin *builtin,
                                             AudioCompileCtx *audio, Ast *origin,
                                             AudioValue *args, size_t argc);
@@ -3457,6 +3465,26 @@ static const AudioBuiltin audio_builtins[] = {
      .arg_order = NULL,
      .kernel_argc = 0},
 
+    /* disperser: a cascade of identical 2nd-order allpass sections all tuned
+       to a single cutoff, modeled on the Kilohearts Disperser.
+         disperser freq amount pinch x
+       freq   - cutoff frequency (Hz)
+       amount - [0,1] allpass order / number of active stages (0 = bypass)
+       pinch  - [0,1] Q; inverted so 1 = chirpy (low Q, broad delay), 0 =
+               concentrated group delay around the cutoff
+       x      - input signal. All args may be per-channel (multi-lane). */
+    {.name = "disperser",
+     .source_argc = 4,
+     .kernel_symbol = "ylc_audio_disperser_kernel",
+     .emit = audio_builtin_emit_num_state,
+     .state_size = sizeof(DisperserState),
+     .state_align = __alignof__(DisperserState),
+     .state_name = "disperser.state",
+     .lane_expand_mask = AUDIO_ARG_MASK(0) | AUDIO_ARG_MASK(1) |
+                         AUDIO_ARG_MASK(2) | AUDIO_ARG_MASK(3),
+     .arg_order = NULL,
+     .kernel_argc = 0},
+
     {.name = "arr_choose",
      .source_argc = 2,
      .kernel_symbol = "ylc_audio_arr_choose_kernel",
@@ -3619,6 +3647,28 @@ static const AudioBuiltin audio_builtins[] = {
      .lane_expand_mask = AUDIO_ARG_MASK(0) | AUDIO_ARG_MASK(1) |
                          AUDIO_ARG_MASK(2) | AUDIO_ARG_MASK(3) |
                          AUDIO_ARG_MASK(4),
+     .arg_order = NULL,
+     .kernel_argc = 0},
+
+    {.name = "adsr_array",
+     .source_argc = 2,
+     .kernel_symbol = "ylc_audio_adsr_array_kernel",
+     .emit = audio_builtin_emit_adsr_array,
+     .state_size = sizeof(AdsrState),
+     .state_align = __alignof__(AdsrState),
+     .state_name = "adsr_array.state",
+     .lane_expand_mask = AUDIO_ARG_MASK(1),
+     .arg_order = NULL,
+     .kernel_argc = 0},
+
+    {.name = "array_env",
+     .source_argc = 3,
+     .kernel_symbol = "ylc_audio_array_env_kernel",
+     .emit = audio_builtin_emit_array_env,
+     .state_size = sizeof(ArrayEnvState),
+     .state_align = __alignof__(ArrayEnvState),
+     .state_name = "array_env.state",
+     .lane_expand_mask = AUDIO_ARG_MASK(1) | AUDIO_ARG_MASK(2),
      .arg_order = NULL,
      .kernel_argc = 0},
 
@@ -4320,6 +4370,112 @@ static AudioValue audio_mir_emit_array_trigger_values(
   return audio_mir_multi_value(audio, origin, origin->type, samples, lanes);
 }
 
+static AudioValue audio_mir_emit_array_control_values(
+    AudioCompileCtx *audio, Ast *origin, AudioValue array,
+    const AudioValue *controls, size_t control_count, const char *kernel_symbol,
+    const char *state_name, size_t state_size, size_t state_align,
+    uint64_t control_expand_mask) {
+  if (!audio || !origin || !controls || control_count == 0 || !kernel_symbol ||
+      !state_name) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  AudioMirArrayParts parts = {0};
+  if (!audio_mir_extract_array_parts(audio, origin, array, &parts)) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  AudioMirKernelArgLanes *control_args = mir_arena_alloc(
+      audio->arena, sizeof(*control_args) * control_count,
+      __alignof__(AudioMirKernelArgLanes));
+  int lanes = 0;
+  if (!control_args ||
+      !audio_mir_normalize_num_kernel_args_masked(
+          audio, origin, controls, control_args, control_count,
+          control_expand_mask, 0, &lanes)) {
+    return AUDIO_VALUE_NULL;
+  }
+  if (lanes <= 0) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  MirBuilder *b = audio->kernel_builder;
+  size_t param_count = 5 + control_count;
+  Type **params =
+      mir_arena_alloc(audio->arena, sizeof(*params) * param_count,
+                      __alignof__(Type *));
+  if (!params) {
+    return AUDIO_VALUE_NULL;
+  }
+  params[0] = audio->ptr_char_type;
+  params[1] = &t_num;
+  params[2] = &t_int;
+  params[3] = &t_int;
+  params[4] = audio->ptr_double_type;
+  for (size_t i = 0; i < control_count; ++i) {
+    params[5 + i] = &t_num;
+  }
+
+  Type *kernel_type =
+      audio_mir_fn_type(audio->arena, params, param_count, &t_num);
+  MirValueId kernel_fn =
+      audio_mir_extern_ref(b, kernel_symbol, kernel_type, origin);
+  if (!kernel_type || kernel_fn == MIR_NO_VALUE) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  MirValueId *samples =
+      lanes > 1 ? audio_mir_alloc_lane_values(audio, lanes) : NULL;
+  if (lanes > 1 && !samples) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  for (int lane = 0; lane < lanes; ++lane) {
+    const char *slot_name =
+        lanes > 1 ? mir_arena_printf(audio->arena, "%s.%d", state_name, lane)
+                  : state_name;
+    AudioStateSlot *slot =
+        audio_mir_reserve_state_block(audio, state_size, state_align,
+                                      slot_name);
+    if (!slot) {
+      return AUDIO_VALUE_NULL;
+    }
+
+    MirValueId state_ptr = audio_mir_state_slot_ptr(
+        audio, b, origin, audio->state_param, slot->offset, &t_char);
+    if (state_ptr == MIR_NO_VALUE) {
+      return AUDIO_VALUE_NULL;
+    }
+
+    MirValueId *call_args =
+        mir_arena_alloc(audio->arena, sizeof(*call_args) * param_count,
+                        __alignof__(MirValueId));
+    if (!call_args) {
+      return AUDIO_VALUE_NULL;
+    }
+    call_args[0] = state_ptr;
+    call_args[1] = audio->spf_param;
+    call_args[2] = parts.size;
+    call_args[3] = parts.offset;
+    call_args[4] = parts.data;
+    for (size_t i = 0; i < control_count; ++i) {
+      call_args[5 + i] = control_args[i].values[lane];
+    }
+
+    MirValueId sample = mir_call_value(b, &t_num, origin, kernel_fn,
+                                       kernel_type, call_args, param_count);
+    if (sample == MIR_NO_VALUE) {
+      return AUDIO_VALUE_NULL;
+    }
+    if (lanes == 1) {
+      return audio_mir_value(&t_num, sample, 1);
+    }
+    samples[lane] = sample;
+  }
+
+  return audio_mir_multi_value(audio, origin, origin->type, samples, lanes);
+}
+
 static bool audio_mir_grains_max_grains(AudioCompileCtx *audio,
                                         AudioValue value, const char *name,
                                         int *out_max_grains) {
@@ -4842,6 +4998,46 @@ static AudioValue audio_builtin_emit_array_trigger(const AudioBuiltin *builtin,
       audio, origin, args[0], args[1], builtin->kernel_symbol,
       builtin->state_name, builtin->state_size, builtin->state_align,
       trig_mask);
+}
+
+static AudioValue audio_builtin_emit_adsr_array(const AudioBuiltin *builtin,
+                                                AudioCompileCtx *audio,
+                                                Ast *origin, AudioValue *args,
+                                                size_t argc) {
+  if (!builtin || argc != 2) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  uint64_t control_mask =
+      (builtin->lane_expand_mask & AUDIO_ARG_MASK(1)) ? AUDIO_ARG_MASK(0) : 0;
+  AudioValue controls[] = {args[1]};
+  return audio_mir_emit_array_control_values(
+      audio, origin, args[0], controls, 1, builtin->kernel_symbol,
+      builtin->state_name, builtin->state_size, builtin->state_align,
+      control_mask);
+}
+
+static AudioValue audio_builtin_emit_array_env(const AudioBuiltin *builtin,
+                                               AudioCompileCtx *audio,
+                                               Ast *origin, AudioValue *args,
+                                               size_t argc) {
+  if (!builtin || argc != 3) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  uint64_t control_mask = 0;
+  if (builtin->lane_expand_mask & AUDIO_ARG_MASK(1)) {
+    control_mask |= AUDIO_ARG_MASK(0);
+  }
+  if (builtin->lane_expand_mask & AUDIO_ARG_MASK(2)) {
+    control_mask |= AUDIO_ARG_MASK(1);
+  }
+
+  AudioValue controls[] = {args[1], args[2]};
+  return audio_mir_emit_array_control_values(
+      audio, origin, args[0], controls, 2, builtin->kernel_symbol,
+      builtin->state_name, builtin->state_size, builtin->state_align,
+      control_mask);
 }
 
 static AudioValue audio_builtin_emit_grains(const AudioBuiltin *builtin,

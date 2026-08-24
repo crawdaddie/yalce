@@ -4,6 +4,7 @@
 #include "types/builtins.h"
 #include "types/type.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -223,6 +224,119 @@ static MirValueId ylc_clap_alloc_voices_handler(MirBuilder *builder, Ast *app,
       app->data.AST_APPLICATION.args + 1);
 }
 
+static uint64_t ylc_clap_persist_array_hash_bytes(uint64_t hash,
+                                                  const void *data,
+                                                  size_t size) {
+  const unsigned char *bytes = (const unsigned char *)data;
+  for (size_t i = 0; i < size; ++i) {
+    hash ^= (uint64_t)bytes[i];
+    hash *= 1099511628211ull;
+  }
+  return hash;
+}
+
+static uint64_t ylc_clap_persist_array_key(const Ast *app) {
+  uint64_t hash = 1469598103934665603ull;
+  if (!app || !app->loc_info) {
+    uintptr_t fallback = (uintptr_t)app;
+    return ylc_clap_persist_array_hash_bytes(hash, &fallback,
+                                             sizeof(fallback));
+  }
+
+  const loc_info *loc = app->loc_info;
+  if (loc->src_file) {
+    hash = ylc_clap_persist_array_hash_bytes(hash, loc->src_file,
+                                             strlen(loc->src_file));
+  }
+  hash = ylc_clap_persist_array_hash_bytes(hash, &loc->absolute_offset,
+                                           sizeof(loc->absolute_offset));
+  hash = ylc_clap_persist_array_hash_bytes(hash, &loc->line,
+                                           sizeof(loc->line));
+  hash = ylc_clap_persist_array_hash_bytes(hash, &loc->col, sizeof(loc->col));
+  return hash;
+}
+
+static bool ylc_clap_is_double_array_type(Type *type) {
+  return type && is_array_type(type) && type->data.T_CONS.args &&
+         type->data.T_CONS.num_args == 1 &&
+         type->data.T_CONS.args[0] &&
+         type->data.T_CONS.args[0]->kind == T_NUM;
+}
+
+static MirValueId ylc_clap_persist_array_handler(MirBuilder *builder, Ast *app,
+                                                 MirCtx *ctx,
+                                                 MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!builder || !app || app->tag != AST_APPLICATION ||
+      app->data.AST_APPLICATION.len != 1) {
+    return MIR_NO_VALUE;
+  }
+
+  Ast *array_ast = app->data.AST_APPLICATION.args;
+  if (!ylc_clap_is_double_array_type(array_ast->type) ||
+      !ylc_clap_is_double_array_type(app->type)) {
+    fprintf(stderr, "persist_array expects Array of Double\n");
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId defaults = mir_expr(builder, array_ast, ctx);
+  if (defaults == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  Type *params[] = {&t_uint64, array_ast->type};
+  Type *persist_type = ylc_clap_mir_fn_type(
+      builder->fn->arena, params, sizeof(params) / sizeof(params[0]), app->type);
+  MirValueId persist_fn = ylc_clap_mir_extern_ref(
+      builder, "ylc_plugin_persist_array", persist_type, app);
+  MirValueId key =
+      mir_const_uint64(builder, &t_uint64, app, ylc_clap_persist_array_key(app));
+  if (persist_fn == MIR_NO_VALUE || key == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId args[] = {key, defaults};
+  return mir_call_value(builder, app->type, app, persist_fn, persist_type, args,
+                         sizeof(args) / sizeof(args[0]));
+}
+
+static MirValueId ylc_clap_soundfile_ui_handler(MirBuilder *builder, Ast *app,
+                                                MirCtx *ctx,
+                                                MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!builder || !app || app->tag != AST_APPLICATION ||
+      app->data.AST_APPLICATION.len != 1) {
+    return MIR_NO_VALUE;
+  }
+
+  Ast *path_ast = app->data.AST_APPLICATION.args;
+  if (!is_string_type(path_ast->type)) {
+    fprintf(stderr, "SoundFileUI expects a String path\n");
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId default_path = mir_expr(builder, path_ast, ctx);
+  if (default_path == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  Type *params[] = {&t_uint64, &t_string};
+  Type *ui_type = ylc_clap_mir_fn_type(builder->fn->arena, params,
+                                       sizeof(params) / sizeof(params[0]),
+                                       &t_ptr);
+  MirValueId ui_fn = ylc_clap_mir_extern_ref(builder, "ylc_plugin_soundfile_ui",
+                                             ui_type, app);
+  MirValueId key = mir_const_uint64(builder, &t_uint64, app,
+                                    ylc_clap_persist_array_key(app));
+  if (ui_fn == MIR_NO_VALUE || key == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId args[] = {key, default_path};
+  return mir_call_value(builder, &t_ptr, app, ui_fn, ui_type, args,
+                        sizeof(args) / sizeof(args[0]));
+}
+
 void ylc_clap_register_audio_jit_symbols(MirProgram *program, MirCtx *ctx) {
   (void)ctx;
   if (!program) {
@@ -238,4 +352,20 @@ void ylc_clap_register_audio_jit_symbols(MirProgram *program, MirCtx *ctx) {
                        ylc_clap_alloc_voices_handler,
                        MIR_BUILTIN_SYMBOL_EXTENSION, NULL, 0,
                        MIR_RESULT_OWNED);
+
+  TypeEnv persist_array_tenv = {.name = "persist_array"};
+  MirOperandUse persist_param_uses[] = {MIR_OPERAND_USE_BORROW};
+  mir_register_builtin(program, &persist_array_tenv,
+                       ylc_clap_persist_array_handler,
+                       MIR_BUILTIN_SYMBOL_EXTENSION, persist_param_uses,
+                       sizeof(persist_param_uses) / sizeof(persist_param_uses[0]),
+                       MIR_RESULT_BORROWED);
+
+  TypeEnv soundfile_ui_tenv = {.name = "SoundFileUI"};
+  MirOperandUse soundfile_param_uses[] = {MIR_OPERAND_USE_BORROW};
+  mir_register_builtin(program, &soundfile_ui_tenv,
+                       ylc_clap_soundfile_ui_handler,
+                       MIR_BUILTIN_SYMBOL_EXTENSION, soundfile_param_uses,
+                       sizeof(soundfile_param_uses) / sizeof(soundfile_param_uses[0]),
+                       MIR_RESULT_NONE);
 }

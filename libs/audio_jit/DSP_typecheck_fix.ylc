@@ -65,6 +65,10 @@ let lfnoise0 = extern fn Double -> Double -> Double -> Double;
 let kill_on_end = extern fn Double -> Double;
 # ADSR envelope. Args: attack, decay, sustain, release, trigger.
 let adsr = extern fn Double -> Double -> Double -> Double -> Double -> Double;
+# ADSR envelope from `[attack, decay, sustain, release]`.
+let adsr_array = extern fn Array of Double -> Double -> Double;
+# Point envelope from `[start, duration, curve, value, ...]`.
+let array_env = extern fn Array of Double -> Double -> Double -> Double;
 # Rectangular gate envelope. Args: duration, trigger.
 let rect = extern fn Double -> Double -> Double;
 
