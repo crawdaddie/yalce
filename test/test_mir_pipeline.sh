@@ -11,7 +11,9 @@ VARIANT_SRC="$SCRIPT_DIR/mir_scripts/variant_match_pipeline.ylc"
 CONSTRUCT_SRC="$SCRIPT_DIR/mir_scripts/construct_extract_pipeline.ylc"
 ARRAY_OP_SRC="$SCRIPT_DIR/mir_scripts/array_ops_pipeline.ylc"
 COROUTINE_SRC="$SCRIPT_DIR/mir_scripts/coroutine_pipeline.ylc"
+AUDIO_JIT_TASK_SRC="$SCRIPT_DIR/mir_scripts/audio_jit_task_pipeline.ylc"
 EXTERN_SRC="$SCRIPT_DIR/mir_scripts/extern_pipeline.ylc"
+NULL_PTR_SRC="$SCRIPT_DIR/mir_scripts/null_ptr_pipeline.ylc"
 LLVM_SHAPE_SRC="$SCRIPT_DIR/mir_scripts/llvm_shape_pipeline.ylc"
 MATCH_DESTRUCTURE_SRC="$SCRIPT_DIR/mir_scripts/match_destructure_pipeline.ylc"
 RECURSIVE_DESTRUCTURE_SRC="$SCRIPT_DIR/mir_scripts/recursive_destructure_pipeline.ylc"
@@ -197,11 +199,13 @@ VARIANT_MIR="$ARTIFACT_DIR/variant_match_pipeline.mir"
 CONSTRUCT_MIR="$ARTIFACT_DIR/construct_extract_pipeline.mir"
 ARRAY_OP_MIR="$ARTIFACT_DIR/array_ops_pipeline.mir"
 COROUTINE_MIR="$ARTIFACT_DIR/coroutine_pipeline.mir"
+AUDIO_JIT_TASK_MIR="$ARTIFACT_DIR/audio_jit_task_pipeline.mir"
 EXTERN_MIR="$ARTIFACT_DIR/extern_pipeline.mir"
 LLVM_IR="$ARTIFACT_DIR/perceus_pipeline.ll"
 CLOSURE_LLVM_IR="$ARTIFACT_DIR/closure_partial_pipeline.ll"
 COROUTINE_LLVM_IR="$ARTIFACT_DIR/coroutine_pipeline.ll"
 EXTERN_LLVM_IR="$ARTIFACT_DIR/extern_pipeline.ll"
+NULL_PTR_LLVM_IR="$ARTIFACT_DIR/null_ptr_pipeline.ll"
 LLVM_SHAPE_IR="$ARTIFACT_DIR/llvm_shape_pipeline.ll"
 MATCH_DESTRUCTURE_MIR="$ARTIFACT_DIR/match_destructure_pipeline.mir"
 MATCH_DESTRUCTURE_LLVM_IR="$ARTIFACT_DIR/match_destructure_pipeline.ll"
@@ -231,6 +235,7 @@ run_dump_mir "$VARIANT_SRC" "$VARIANT_MIR"
 run_dump_mir "$CONSTRUCT_SRC" "$CONSTRUCT_MIR"
 run_dump_mir "$ARRAY_OP_SRC" "$ARRAY_OP_MIR"
 run_dump_mir "$COROUTINE_SRC" "$COROUTINE_MIR"
+run_dump_mir "$AUDIO_JIT_TASK_SRC" "$AUDIO_JIT_TASK_MIR"
 run_dump_mir "$EXTERN_SRC" "$EXTERN_MIR"
 run_dump_mir "$MATCH_DESTRUCTURE_SRC" "$MATCH_DESTRUCTURE_MIR"
 run_dump_mir "$RECURSIVE_DESTRUCTURE_SRC" "$RECURSIVE_DESTRUCTURE_MIR"
@@ -239,6 +244,7 @@ run_dump_llvm_pre "$OWNERSHIP_SRC" "$LLVM_IR"
 run_dump_llvm_pre "$CLOSURE_SRC" "$CLOSURE_LLVM_IR"
 run_dump_llvm_pre "$COROUTINE_SRC" "$COROUTINE_LLVM_IR"
 run_dump_llvm_pre "$EXTERN_SRC" "$EXTERN_LLVM_IR"
+run_dump_llvm_pre "$NULL_PTR_SRC" "$NULL_PTR_LLVM_IR"
 run_dump_llvm_pre "$LLVM_SHAPE_SRC" "$LLVM_SHAPE_IR"
 run_dump_llvm_pre "$MATCH_DESTRUCTURE_SRC" "$MATCH_DESTRUCTURE_LLVM_IR"
 run_dump_llvm_pre "$RECURSIVE_DESTRUCTURE_SRC" "$RECURSIVE_DESTRUCTURE_LLVM_IR"
@@ -819,6 +825,12 @@ assert_order "$COROUTINE_MIR" "cor_map pipeline should construct iter, map, then
   'coro\.new %[0-9]+\(%[0-9]+, %[0-9]+\)' \
   'fn_ref \$\$builtin\.cor_loop\.[0-9]+' \
   'coro\.new %[0-9]+\(%[0-9]+\)'
+assert_contains "$AUDIO_JIT_TASK_MIR" 'extern fn play_pattern\(.*\) -> Task @owned' "audio_jit play_pattern should expose an owned Task"
+assert_order "$AUDIO_JIT_TASK_MIR" "audio_jit play_pattern should return the scheduler task handle" \
+  '^fn start_task\(' \
+  'fn_ref \$ylc_play_pattern_start' \
+  'call %[0-9]+\(%[0-9]+, %[0-9]+, %[0-9]+\) : Ptr' \
+  'return %[0-9]+.*return/consume#0'
 assert_order "$COROUTINE_MIR" "cor_map wrapper should drive source and yield mapped values" \
   '^fn \$builtin\.cor_map\.[0-9]+\(' \
   '^  bb1 cor_map\.check:' \
@@ -1281,6 +1293,15 @@ assert_order "$LLVM_IR" "borrowed-return managed phi should lower array size rea
 assert_contains "$EXTERN_LLVM_IR" '^declare i32 @abs\(i32' "specialized extern should declare the base C symbol"
 assert_contains "$EXTERN_LLVM_IR" 'call i32 @abs\(i32 -1\)' "specialized extern calls should target the base C symbol"
 assert_not_contains "$EXTERN_LLVM_IR" 'abs\.Int\.Int' "specialized extern MIR names should not become LLVM symbols"
+assert_contains "$NULL_PTR_LLVM_IR" 'call void @cancel_task\(ptr null\)' "literal 0 should lower to null for Ptr arguments"
+assert_order "$NULL_PTR_LLVM_IR" "Int Ptr argument should lower through inttoptr" \
+  'define void @call_addr\(i32 %x\)' \
+  'inttoptr i32 %x to ptr' \
+  'call void @cancel_task\(ptr %[A-Za-z0-9_.]+\)'
+assert_order "$NULL_PTR_LLVM_IR" "Ptr constructor should lower Int through inttoptr" \
+  'define void @call_ctor\(i32 %x\)' \
+  'inttoptr i32 %x to ptr' \
+  'call void @cancel_task\(ptr %[A-Za-z0-9_.]+\)'
 assert_contains "$LLVM_SHAPE_IR" 'define i32 @tuple_shape\.Int\.Int' "LLVM shape fixture should lower tuple function"
 assert_order "$LLVM_SHAPE_IR" "tuple construct/extract should lower to insertvalue/extractvalue" \
   'insertvalue \{ i32, i32 \} undef' \

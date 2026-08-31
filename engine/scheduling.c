@@ -23,6 +23,8 @@
 static int timer_fd, wake_fd, epoll_fd;
 
 static pthread_mutex_t scheduler_mutex = PTHREAD_MUTEX_INITIALIZER;
+static bool scheduler_fds_ready = false;
+static bool scheduler_thread_started = false;
 
 // Lock-free queue for sample-accurate events
 typedef struct {
@@ -170,8 +172,12 @@ static uint64_t scheduler_seconds_to_samples(double seconds) {
 }
 
 void init_heap(EventHeap *heap) {
+  if (!heap || heap->events) {
+    return;
+  }
+
   heap->events = malloc(sizeof(SchedulerEvent) * INITIAL_CAPACITY);
-  heap->capacity = INITIAL_CAPACITY;
+  heap->capacity = heap->events ? INITIAL_CAPACITY : 0;
   heap->size = 0;
 }
 
@@ -257,6 +263,10 @@ static void arm_timer(uint64_t target_tick) {
 }
 
 void scheduler_wake() {
+  if (!scheduler_fds_ready) {
+    return;
+  }
+
   uint64_t val = 1;
   write(wake_fd, &val, sizeof(val));
 }
@@ -269,6 +279,11 @@ static void push_task_event(SchedulerTask *task, uint64_t delay_in_samples,
 
   EventHeap *queue = &scheduler_queue;
   pthread_mutex_lock(&scheduler_mutex);
+  init_heap(queue);
+  if (!queue->events) {
+    pthread_mutex_unlock(&scheduler_mutex);
+    return;
+  }
 
   if (task_is_done(task)) {
     pthread_mutex_unlock(&scheduler_mutex);
@@ -276,9 +291,16 @@ static void push_task_event(SchedulerTask *task, uint64_t delay_in_samples,
   }
 
   if (queue->size >= queue->capacity) {
-    queue->capacity *= 2;
-    queue->events =
-        realloc(queue->events, sizeof(SchedulerEvent) * queue->capacity);
+    size_t next_cap =
+        queue->capacity > 0 ? queue->capacity * 2 : INITIAL_CAPACITY;
+    SchedulerEvent *events =
+        realloc(queue->events, sizeof(SchedulerEvent) * next_cap);
+    if (!events) {
+      pthread_mutex_unlock(&scheduler_mutex);
+      return;
+    }
+    queue->events = events;
+    queue->capacity = next_cap;
   }
 
   uint64_t target_time = base_time + delay_in_samples;
@@ -296,7 +318,7 @@ static void push_task_event(SchedulerTask *task, uint64_t delay_in_samples,
   bool is_earliest = (queue->events[0].tick == target_time);
   pthread_mutex_unlock(&scheduler_mutex);
 
-  if (is_earliest) {
+  if (is_earliest && scheduler_fds_ready) {
     SCHED_DBG("push_task_event: new earliest tick=%llu, arming timer",
               (unsigned long long)target_time);
     arm_timer(target_time);
@@ -313,11 +335,23 @@ void push_event(void (*callback)(void *, uint64_t), void *userdata,
 
   EventHeap *queue = &scheduler_queue;
   pthread_mutex_lock(&scheduler_mutex);
+  init_heap(queue);
+  if (!queue->events) {
+    pthread_mutex_unlock(&scheduler_mutex);
+    return;
+  }
 
   if (queue->size >= queue->capacity) {
-    queue->capacity *= 2;
-    queue->events =
-        realloc(queue->events, sizeof(SchedulerEvent) * queue->capacity);
+    size_t next_cap =
+        queue->capacity > 0 ? queue->capacity * 2 : INITIAL_CAPACITY;
+    SchedulerEvent *events =
+        realloc(queue->events, sizeof(SchedulerEvent) * next_cap);
+    if (!events) {
+      pthread_mutex_unlock(&scheduler_mutex);
+      return;
+    }
+    queue->events = events;
+    queue->capacity = next_cap;
   }
 
   // Calculate absolute timestamp for next event
@@ -337,7 +371,7 @@ void push_event(void (*callback)(void *, uint64_t), void *userdata,
   bool is_earliest = (queue->events[0].tick == target_time);
   pthread_mutex_unlock(&scheduler_mutex);
 
-  if (is_earliest) {
+  if (is_earliest && scheduler_fds_ready) {
     SCHED_DBG("push_event: new earliest tick=%llu, arming timer",
               (unsigned long long)target_time);
     arm_timer(target_time);
@@ -357,15 +391,23 @@ uint64_t get_tl_tick() {
 uint64_t get_sched_tick() { return sched_now; }
 
 void scheduler_init_fds() {
+  if (scheduler_fds_ready) {
+    return;
+  }
+
   timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
   wake_fd = eventfd(0, EFD_NONBLOCK);
   epoll_fd = epoll_create1(0);
+  if (timer_fd < 0 || wake_fd < 0 || epoll_fd < 0) {
+    return;
+  }
 
   struct epoll_event ev = {.events = EPOLLIN};
   ev.data.fd = timer_fd;
   epoll_ctl(epoll_fd, EPOLL_CTL_ADD, timer_fd, &ev);
   ev.data.fd = wake_fd;
   epoll_ctl(epoll_fd, EPOLL_CTL_ADD, wake_fd, &ev);
+  scheduler_fds_ready = true;
 }
 
 // Batch of events to fire outside the lock
@@ -610,13 +652,24 @@ void *ylc_play_pattern_start(double quant, SchedulerCallback callback,
 }
 
 int scheduler_event_loop() {
+  if (scheduler_thread_started) {
+    return 0;
+  }
+
   init_heap(&scheduler_queue);
+  if (!scheduler_queue.events) {
+    return 1;
+  }
   scheduler_init_fds();
+  if (!scheduler_fds_ready) {
+    return 1;
+  }
 
   pthread_t thread;
   if (pthread_create(&thread, NULL, scheduler_thread_fn, NULL) != 0) {
     fprintf(stderr, "Failed to create timer thread\n");
     return 1;
   }
+  scheduler_thread_started = true;
   return 0;
 }

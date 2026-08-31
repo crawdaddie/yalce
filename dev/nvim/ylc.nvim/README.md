@@ -5,7 +5,7 @@ Neovim plugin for running `ylc <current-file> -i` in a side terminal and sending
 ## Features
 
 - `:YlcOpen` starts a YLC REPL for the current file in a vertical split
-- `:YlcOpen` starts notebook mode automatically when the current buffer ends in `.ylcnb`
+- `:YlcOpen` starts notebook mode automatically for `.ylcnb` buffers or buffers containing `#%%`
 - `:YlcOpenKitty` starts YLC in an external Kitty window and sends snippets via Kitty remote control
 - `:YlcOpenDebug` starts `ylc` under `lldb`, runs it automatically, and uses the same input send path as normal mode
 - `:YlcReload` restarts the plugin-managed YLC job if one is open, otherwise starts one

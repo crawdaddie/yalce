@@ -221,8 +221,17 @@ local function is_notebook_path(path)
 	return type(path) == "string" and path:sub(-6) == ".ylcnb"
 end
 
+local function has_cell_markers(bufnr)
+	for _, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
+		if is_cell_marker(line) then
+			return true
+		end
+	end
+	return false
+end
+
 local function current_buffer_is_notebook()
-	return is_notebook_path(current_file_path())
+	return is_notebook_path(current_file_path()) or has_cell_markers(0)
 end
 
 local function current_env()
@@ -507,12 +516,7 @@ local function current_buffer_lines(bufnr)
 end
 
 local function buffer_has_notebook_markers(bufnr)
-	for _, line in ipairs(current_buffer_lines(bufnr)) do
-		if is_cell_marker(line) then
-			return true
-		end
-	end
-	return false
+	return has_cell_markers(bufnr)
 end
 
 local function get_notebook_prelude_text(bufnr)
@@ -788,7 +792,9 @@ local function build_cmd(script_path)
 end
 
 local function build_notebook_cmd()
-	return tbl_copy(config.cmd)
+	local cmd = tbl_copy(config.cmd)
+	cmd[#cmd + 1] = config.interactive_flag
+	return cmd
 end
 
 local function build_debug_cmd(script_path, notebook)
@@ -905,7 +911,7 @@ function M.open(opts)
 		return
 	end
 
-	if not opts.debug and not opts.raw_cmd and not opts.notebook and is_notebook_path(script_path) then
+	if not opts.debug and not opts.raw_cmd and not opts.notebook and current_buffer_is_notebook() then
 		M.open_notebook(opts)
 		return
 	end

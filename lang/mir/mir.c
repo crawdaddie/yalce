@@ -559,6 +559,18 @@ static MirArena *mir_durable_arena(MirCtx *ctx) {
   return NULL;
 }
 
+static MirArena *mir_function_arena(MirBuilder *builder, MirCtx *ctx) {
+  MirArena *durable = mir_durable_arena(ctx);
+  if (durable) {
+    return durable;
+  }
+
+  if (ylc_config.interactive_mode && builder && builder->program) {
+    return builder->program->durable_arena;
+  }
+  return NULL;
+}
+
 // Allocate the next global storage slot for a durable top-level global
 // from the root frame's monotonic counter. Returns -1 when there is no
 // persistent root frame (one-shot compilation); the lowering then falls
@@ -1147,9 +1159,11 @@ MirFunction *mir_program_add_extern_function_arena(MirProgram *program,
     return NULL;
   }
 
+  bool needs_durable = alloc_arena && alloc_arena == program->durable_arena;
   MirFunction *existing = mir_program_find_function_by_name(program, name);
   if (existing && existing->is_extern && existing->type &&
-      types_equal(existing->type, type)) {
+      types_equal(existing->type, type) &&
+      (!needs_durable || existing->arena == alloc_arena)) {
     return existing;
   }
 
@@ -3562,21 +3576,21 @@ static Type *mir_fn_type_from_args(MirArena *arena, Type **args, size_t len,
                                    Type *result_type);
 
 static Type *mir_clone_call_type_from_source_operands(MirProgram *program,
+                                                      MirArena *arena,
                                                       MirTypeSubst *subst,
                                                       MirFunction *source,
                                                       const MirInstr *instr,
                                                       Type *result_type) {
-  if (!program || !program->arena || !source || !instr ||
+  if (!program || !arena || !source || !instr ||
       !mir_instr_is_call_like(instr)) {
     return NULL;
   }
 
   size_t operand_count = instr->data.call.operands.len;
   Type **operand_types =
-      operand_count
-          ? mir_arena_alloc(program->arena, sizeof(Type *) * operand_count,
-                            MIR_ALIGNOF(Type *))
-          : NULL;
+      operand_count ? mir_arena_alloc(arena, sizeof(Type *) * operand_count,
+                                      MIR_ALIGNOF(Type *))
+                    : NULL;
   if (operand_count && !operand_types) {
     return NULL;
   }
@@ -3587,11 +3601,10 @@ static Type *mir_clone_call_type_from_source_operands(MirProgram *program,
     if (!source_type) {
       return NULL;
     }
-    operand_types[i] = mir_substitute_type(program->arena, subst, source_type);
+    operand_types[i] = mir_substitute_type(arena, subst, source_type);
   }
 
-  return mir_fn_type_from_args(program->arena, operand_types, operand_count,
-                               result_type);
+  return mir_fn_type_from_args(arena, operand_types, operand_count, result_type);
 }
 
 static void mir_resolve_named_extract_field(MirFunction *fn, MirInstr *instr) {
@@ -3723,24 +3736,30 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
     return NULL;
   }
 
+  MirArena *fn_arena =
+      source->arena == program->durable_arena ? program->durable_arena
+                                              : program->arena;
+  Type *fn_type = fn_arena == program->durable_arena
+                      ? deep_copy_type(specialized_type)
+                      : specialized_type;
+
   MirTypeSubst *subst = NULL;
-  if (!mir_collect_type_subst(program->arena, &subst, source->type,
-                              specialized_type)) {
+  if (!mir_collect_type_subst(program->arena, &subst, source->type, fn_type)) {
     return NULL;
   }
 
-  MirFunction *fn =
-      mir_program_add_function(program, name, specialized_type, source->origin);
+  MirFunction *fn = mir_program_add_function_arena(program, name, fn_type,
+                                                   source->origin, fn_arena);
   if (!fn) {
     return NULL;
   }
   fn->is_extern = source->is_extern;
   fn->skip_rc_markers = source->skip_rc_markers;
   fn->specialization_of = source;
-  fn->specialization_type = specialized_type;
+  fn->specialization_type = fn_type;
 
   if (source->is_extern) {
-    mir_function_add_extern_params(fn, specialized_type, source->origin);
+    mir_function_add_extern_params(fn, fn_type, source->origin);
     return fn;
   }
 
@@ -3755,7 +3774,7 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
     value_map[i] = MIR_NO_VALUE;
   }
 
-  Type *specialized_param_cursor = specialized_type;
+  Type *specialized_param_cursor = fn_type;
   for (size_t i = 0; i < source->params.len; i++) {
     MirParam *param = &source->params.items[i];
     Type *param_type = NULL;
@@ -3796,7 +3815,7 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
     for (size_t j = 0; j < source_block->instrs.len; j++) {
       MirInstr *instr = &source_block->instrs.items[j];
       MirInstr clone = mir_clone_instr_with_subst(
-          program->arena, subst, value_map, value_map_len, instr);
+          fn_arena, subst, value_map, value_map_len, instr);
 
       MirValueId result = MIR_NO_VALUE;
       if (clone.kind == MIR_FN_REF && clone.type &&
@@ -3836,7 +3855,7 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
       }
       if (clone.kind == MIR_CALL && clone.data.call.builtin) {
         Type *callee_type = mir_clone_call_type_from_source_operands(
-            program, subst, source, instr, clone.type);
+            program, fn_arena, subst, source, instr, clone.type);
         if (callee_type && !mir_type_has_type_vars(callee_type)) {
           clone.data.call.callee_type = callee_type;
         }
@@ -5503,7 +5522,7 @@ static MirValueId mir_lambda_value(MirBuilder *builder, Ast *expr, MirCtx *ctx,
   MirArena *durable = NULL;
   bool is_closure_fn = is_closure(expr->type) && expr->type->closure_meta;
   if (!is_closure_fn) {
-    durable = mir_durable_arena(ctx);
+    durable = mir_function_arena(builder, ctx);
   }
   MirArena *alloc_arena = durable ? durable : builder->program->arena;
 
@@ -5565,7 +5584,7 @@ static MirValueId mir_extern_fn_value(MirBuilder *builder, Ast *expr,
      REPL inputs (mir_register_durable_functions re-uses it). Allocate the
      extern MirFunction from the persistent durable arena when present, like
      top-level non-capturing lambdas (see mir_lambda_value). */
-  MirArena *durable = ctx ? mir_durable_arena(ctx) : NULL;
+  MirArena *durable = mir_function_arena(builder, ctx);
   MirArena *alloc_arena = durable ? durable : builder->program->arena;
   MirFunction *fn = mir_program_add_extern_function_arena(
       builder->program, fn_name, expr->type, expr, alloc_arena);
@@ -7667,6 +7686,7 @@ static bool mir_populate_function_body(MirProgram *program, MirFunction *fn,
       .frame = NULL,
       .current_module = ctx ? ctx->current_module : program->root_module,
       .export_bindings = false,
+      .prefer_global_loads = ylc_config.interactive_mode,
   };
   ht fn_table;
   MirStackFrame fn_frame;
@@ -8958,6 +8978,21 @@ static bool mir_build_test_top(MirProgram *program, Ast *prog, MirCtx *root_ctx,
 // Safe to call on the root frame only (where durable symbols live);
 // nested frames have no durable entries. `ht_set` must not be called
 // during iteration, and this only reads, so it is fine.
+static void mir_register_function_once(MirProgram *program, MirFunction *fn) {
+  if (!program || !program->arena || !fn) {
+    return;
+  }
+
+  for (size_t i = 0; i < program->functions.len; i++) {
+    if (program->functions.items[i] == fn) {
+      return;
+    }
+  }
+
+  fn->id = (MirFunctionId)program->functions.len;
+  MIR_VEC_PUSH(program->arena, &program->functions, MirFunction *, fn);
+}
+
 static void mir_register_durable_functions(MirProgram *program,
                                            MirStackFrame *frame) {
   if (!program || !program->arena || !frame || !frame->table) {
@@ -8973,19 +9008,34 @@ static void mir_register_durable_functions(MirProgram *program,
         !symbol->as.function) {
       continue;
     }
-    MirFunction *fn = symbol->as.function;
-    // Skip if already registered in this program (same pointer present).
-    for (size_t i = 0; i < program->functions.len; i++) {
-      if (program->functions.items[i] == fn) {
-        fn = NULL;
-        break;
-      }
-    }
-    if (!fn) {
+    mir_register_function_once(program, symbol->as.function);
+  }
+
+  for (size_t i = 0; i < program->functions.len; i++) {
+    MirFunction *owner = program->functions.items[i];
+    if (!owner || owner->arena != program->durable_arena) {
       continue;
     }
-    fn->id = (MirFunctionId)program->functions.len;
-    MIR_VEC_PUSH(program->arena, &program->functions, MirFunction *, fn);
+
+    for (size_t bi = 0; bi < owner->blocks.len; bi++) {
+      MirBlock *block = owner->blocks.items ? owner->blocks.items[bi] : NULL;
+      if (!block) {
+        continue;
+      }
+
+      for (size_t ii = 0; ii < block->instrs.len; ii++) {
+        MirInstr *instr = &block->instrs.items[ii];
+        if (instr->kind == MIR_FN_REF && instr->data.fn_ref.fn &&
+            instr->data.fn_ref.fn->arena == program->durable_arena) {
+          mir_register_function_once(program, instr->data.fn_ref.fn);
+        }
+
+        if (mir_instr_is_call_like(instr) && instr->data.call.specialized_fn &&
+            instr->data.call.specialized_fn->arena == program->durable_arena) {
+          mir_register_function_once(program, instr->data.call.specialized_fn);
+        }
+      }
+    }
   }
 }
 

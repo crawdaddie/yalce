@@ -949,7 +949,7 @@ static const char *lower_mir_function_symbol_name(MirLlvmCtx *lctx,
   // expected symbol name).
   if (ylc_config.interactive_mode && lctx && lctx->program &&
       lctx->program->durable_arena && fn &&
-      fn->arena == lctx->program->durable_arena) {
+      fn->arena == lctx->program->durable_arena && !fn->is_extern) {
     return mir_arena_printf(lctx->program->arena, "%s.%u", name,
                             lctx->program->generation);
   }
@@ -3344,7 +3344,9 @@ static LLVMValueRef lower_mir_variant_payload(MirInstr *instr,
   return NULL;
 }
 
-static LLVMValueRef lower_mir_primitive_cast(MirInstr *instr,
+static bool lower_mir_is_zero_int(MirFunction *fn, MirValueId value);
+
+static LLVMValueRef lower_mir_primitive_cast(MirFunction *fn, MirInstr *instr,
                                              MirLlvmValueMap *values,
                                              LLVMModuleRef module,
                                              LLVMBuilderRef builder,
@@ -3364,6 +3366,14 @@ static LLVMValueRef lower_mir_primitive_cast(MirInstr *instr,
 
   if (from_type->kind == to_type->kind) {
     return value;
+  }
+
+  if (mir_llvm_is_integral_type(from_type, ctx, module) &&
+      is_pointer_type(to_type)) {
+    if (lower_mir_is_zero_int(fn, instr->data.op.operands[0])) {
+      return LLVMConstNull(to_llvm_type);
+    }
+    return LLVMBuildIntToPtr(builder, value, to_llvm_type, "inttoptr");
   }
 
   if (from_type->kind == T_NUM &&
@@ -3534,6 +3544,65 @@ static LLVMTypeRef lower_mir_call_operand_abi_type(MirFunction *fn,
     return lower_mir_closure_env_ptr_type(logical_type, ctx, module);
   }
   return lower_mir_abi_value_type(logical_type, ctx, module, NULL);
+}
+
+static Type *lower_mir_call_param_type(Type *callee_type, size_t arg_index) {
+  size_t index = 0;
+  for (Type *cursor = callee_type; cursor && cursor->kind == T_FN;
+       cursor = cursor->data.T_FN.to) {
+    Type *param_type = cursor->data.T_FN.from;
+    if (!param_type || param_type->kind == T_VOID) {
+      continue;
+    }
+
+    if (index == arg_index) {
+      return param_type;
+    }
+    index++;
+  }
+
+  return NULL;
+}
+
+static bool lower_mir_is_ptr_int(Type *type) {
+  return type && (type->kind == T_INT || type->kind == T_UINT64);
+}
+
+static bool lower_mir_is_zero_int(MirFunction *fn, MirValueId value) {
+  static const int64_t null_ptr_literal = 0;
+
+  MirInstr *def = mir_function_find_def_instr(fn, value);
+  return def && def->kind == MIR_CONST &&
+         ((def->data.const_value.kind == MIR_CONST_KIND_INT &&
+           def->data.const_value.as.int_value == null_ptr_literal) ||
+          (def->data.const_value.kind == MIR_CONST_KIND_UINT64 &&
+           def->data.const_value.as.uint64_value == (uint64_t)null_ptr_literal));
+}
+
+static LLVMValueRef lower_mir_int_to_ptr_arg(MirFunction *fn,
+                                             MirValueId value,
+                                             LLVMValueRef arg,
+                                             Type *arg_type,
+                                             Type *param_type, JITLangCtx *ctx,
+                                             LLVMModuleRef module,
+                                             LLVMBuilderRef builder) {
+  if (!arg || !lower_mir_is_ptr_int(arg_type) || !param_type) {
+    return NULL;
+  }
+
+  LLVMTypeRef abi_type = lower_mir_abi_value_type(param_type, ctx, module, NULL);
+  if (!abi_type || LLVMGetTypeKind(abi_type) != LLVMPointerTypeKind) {
+    return NULL;
+  }
+
+  if (lower_mir_is_zero_int(fn, value)) {
+    return LLVMConstNull(abi_type);
+  }
+
+  if (LLVMGetTypeKind(LLVMTypeOf(arg)) != LLVMIntegerTypeKind) {
+    return NULL;
+  }
+  return LLVMBuildIntToPtr(builder, arg, abi_type, "inttoptr");
 }
 
 static LLVMTypeRef lower_mir_extract_record_type(MirFunction *fn,
@@ -4207,6 +4276,9 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
   }
 
   size_t arg_count = 0;
+  size_t logical_arg_index = 0;
+  Type *call_type = callee_target ? callee_target->type
+                                  : instr->data.call.callee_type;
   for (size_t i = 0; i < instr->data.call.operands.len; i++) {
     MirValueId operand_id = instr->data.call.operands.items[i];
     if (operand_id == MIR_NO_VALUE || operand_id >= values->len) {
@@ -4222,11 +4294,21 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
       continue;
     }
 
+    Type *param_type =
+        lower_mir_call_param_type(call_type, logical_arg_index);
     LLVMValueRef arg = mir_llvm_value_get_rvalue(values, operand_id, builder);
     if (!arg) {
       free(args);
       return NULL;
     }
+    LLVMValueRef ptr_arg = lower_mir_int_to_ptr_arg(
+        fn, operand_id, arg, operand_type, param_type, &lctx->jit_ctx, module,
+        builder);
+    if (ptr_arg) {
+      arg = ptr_arg;
+    }
+    logical_arg_index++;
+
     if (callee_uses_c_abi) {
       if (!lower_mir_append_c_abi_call_arg(args, &arg_count, arg, operand_type,
                                            &lctx->jit_ctx, module, builder)) {
@@ -5308,6 +5390,12 @@ static LLVMValueRef lower_mir_drop_fn_get_or_declare(Type *type,
   LLVMTypeRef fn_type = LLVMFunctionType(
       LLVMVoidTypeInContext(LLVMGetModuleContext(module)), &ptr_type, 1, 0);
   fn = LLVMAddFunction(module, name, fn_type);
+
+  // Interactive chunks may each need the same generated helper name.
+  if (ylc_config.interactive_mode) {
+    LLVMSetLinkage(fn, LLVMInternalLinkage);
+  }
+
   return fn;
 }
 
@@ -6306,7 +6394,7 @@ static LLVMValueRef lower_mir_op(MirFunction *fn, MirInstr *instr,
   switch (instr->data.op.kind) {
   case MIR_OP_KIND_CAST:
   case MIR_OP_KIND_TRUNC_TO_INT:
-    return lower_mir_primitive_cast(instr, values, module, builder, ctx);
+    return lower_mir_primitive_cast(fn, instr, values, module, builder, ctx);
   case MIR_OP_KIND_PRIMITIVE:
     return lower_mir_primitive(instr, values, builder);
   case MIR_OP_KIND_ARRAY_SIZE:

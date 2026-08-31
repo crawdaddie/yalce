@@ -575,12 +575,22 @@ static int audio_mir_sizeof_type(Type *type) {
   }
 }
 
+MirFunction *mir_program_add_extern_function_arena(MirProgram *program,
+                                                   const char *name, Type *type,
+                                                   Ast *origin,
+                                                   MirArena *alloc_arena);
+
 static MirFunction *audio_mir_extern_fn(MirBuilder *builder, const char *name,
                                         Type *type, Ast *origin) {
   if (!builder || !builder->program || !name || !type) {
     return NULL;
   }
-  return mir_program_add_extern_function(builder->program, name, type, origin);
+
+  MirArena *arena = audio_mir_bundle_arena(builder);
+  Type *fn_type = arena == builder->program->durable_arena ? deep_copy_type(type)
+                                                           : type;
+  return mir_program_add_extern_function_arena(builder->program, name, fn_type,
+                                              origin, arena);
 }
 
 static MirValueId audio_mir_extern_ref(MirBuilder *builder, const char *name,
@@ -7546,6 +7556,11 @@ mir_build_standalone_play_pattern_step(MirBuilder *builder, Ast *app,
     return NULL;
   }
 
+  MirArena *step_arena = audio_mir_bundle_arena(builder);
+  if (step_arena == builder->program->durable_arena) {
+    coro_type = deep_copy_type(coro_type);
+  }
+
   Type *yield_type = coro_type->data.T_CONS.args[0];
   Type *next_type = create_option_type(yield_type);
   Type *some_type = next_type && next_type->data.T_CONS.args
@@ -7557,7 +7572,7 @@ mir_build_standalone_play_pattern_step(MirBuilder *builder, Ast *app,
 
   Type *step_params[] = {coro_type, &t_uint64};
   Type *step_type = audio_mir_fn_type(
-      builder->fn->arena, step_params, sizeof(step_params) / sizeof(step_params[0]),
+      step_arena, step_params, sizeof(step_params) / sizeof(step_params[0]),
       &t_void);
   if (!step_type) {
     return NULL;
@@ -7568,8 +7583,8 @@ mir_build_standalone_play_pattern_step(MirBuilder *builder, Ast *app,
   snprintf(step_name, sizeof(step_name), "__ylc_play_pattern_step_%u",
            play_pattern_step_counter++);
 
-  MirFunction *step =
-      mir_program_add_function(builder->program, step_name, step_type, app);
+  MirFunction *step = mir_program_add_function_arena(
+      builder->program, step_name, step_type, app, step_arena);
   if (!step) {
     return NULL;
   }
@@ -7672,9 +7687,13 @@ static MirValueId MirStandalonePlayPatternHandler(MirBuilder *builder,
     return MIR_NO_VALUE;
   }
 
-  Type *start_params[] = {&t_num, &t_ptr, coro_type};
+  MirArena *start_arena = audio_mir_bundle_arena(builder);
+  Type *start_coro_type =
+      start_arena == builder->program->durable_arena ? deep_copy_type(coro_type)
+                                                     : coro_type;
+  Type *start_params[] = {&t_num, &t_ptr, start_coro_type};
   Type *start_type = audio_mir_fn_type(
-      builder->fn->arena, start_params,
+      start_arena, start_params,
       sizeof(start_params) / sizeof(start_params[0]), &t_ptr);
   MirFunction *start_extern =
       audio_mir_extern_fn(builder, "ylc_play_pattern_start", start_type, app);
@@ -7724,7 +7743,8 @@ void ylc_audio_jit_register_current_program(const char *osc_bitcode_path) {
   TypeEnv play_tenv = {.name = "play_pattern"};
   mir_register_builtin(ylc_mir_program, &play_tenv,
                        MirStandalonePlayPatternHandler,
-                       MIR_BUILTIN_SYMBOL_EXTENSION, NULL, 0, MIR_RESULT_NONE);
+                       MIR_BUILTIN_SYMBOL_EXTENSION, NULL, 0,
+                       MIR_RESULT_OWNED);
 }
 
 __attribute__((constructor)) static void ylc_audio_jit_init(void) {

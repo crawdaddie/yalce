@@ -57,6 +57,11 @@ run_repl() {
   printf '%s\n' "$input" | "$YLC" 2>&1 | strip_ansi
 }
 
+run_repl_continued() {
+  local input="$1"
+  printf '%s\n' "$input" '' '%quit' | "$YLC" 2>&1 | strip_ansi
+}
+
 # Assert the transcript contains a pattern (case passes) — used for
 # successful cross-input references that print a value.
 # Assert the transcript does NOT contain a pattern — used to catch the
@@ -197,6 +202,135 @@ let c = b + 1
 let d = c + 1')
 assert_not_contains "$OUT" 'unresolved identifier' "chain of 4 inputs resolves each prior binding"
 assert_not_contains "$OUT" 'Error' "a->b->c->d chain typechecks and lowers"
+
+# ---------------------------------------------------------------------------
+
+section "same-input functions read globals"
+
+OUT=$(run_repl_continued 'let arr = array_fill_const 1 0; \
+let f = fn () -> arr[0];; \
+f ();')
+assert_not_contains "$OUT" 'could not resolve call callee' "same-input function reads array global"
+assert_not_contains "$OUT" 'Segmentation fault|SIGSEGV|JIT session error|Error' "same-input global function call runs"
+
+OUT=$(run_repl_continued 'let _ = dlopen "./engine/build/libyalce_synth.so"; \
+let cancel_task = extern fn Ptr -> (); \
+let task_ref = array_fill_const 1 (Ptr 0); \
+let task = fn t -> task_ref[0] |> cancel_task; task_ref[0] := t;; \
+task (Ptr 0);')
+assert_not_contains "$OUT" 'cancel_task\.[0-9]+' "interactive extern keeps C symbol name"
+assert_not_contains "$OUT" 'Segmentation fault|SIGSEGV|JIT session error|Error' "same-input extern global function call runs"
+
+OUT=$(printf '%s\n' \
+  'let _ = dlopen "./engine/build/libyalce_synth.so"; \' \
+  'let cancel_task = extern fn Ptr -> (); \' \
+  'let task_ref = array_fill_const 1 (Ptr 0); \' \
+  'let task = fn t -> task_ref[0] |> cancel_task; task_ref[0] := t;; \' \
+  'task (Ptr 0);' \
+  '' \
+  'task (Ptr 0);' \
+  '%quit' | "$YLC" 2>&1 | strip_ansi)
+assert_not_contains "$OUT" 'duplicate definition of symbol' "second task stop does not redefine drop helpers"
+assert_not_contains "$OUT" 'double free|corruption|Segmentation fault|SIGSEGV|JIT session error|Error' "second task stop does not crash"
+
+OUT=$(printf '%s\n' \
+  'let _ = dlopen "./libs/audio_jit/libaudio_jit.so"; \' \
+  'type Task = Ptr; \' \
+  'let play_pattern = extern fn Double -> T -> Task; \' \
+  'let cancel_task = extern fn Task -> (); \' \
+  'let task_ref = array_fill_const 1 (Ptr 0); \' \
+  'let task = fn t -> task_ref[0] |> cancel_task; task_ref[0] := t;; \' \
+  'let co = fn () -> yield 0.01; yield co ();; \' \
+  'co () |> play_pattern 0. |> task;' \
+  '' \
+  'task (Ptr 0);' \
+  '%quit' | "$YLC" -i --base "$ROOT_DIR" 2>&1 | strip_ansi)
+assert_not_contains "$OUT" 'free\(\): invalid size|invalid pointer|double free|corruption|corrupted size' "task stop keeps allocator state valid"
+assert_not_contains "$OUT" 'Segmentation fault|SIGSEGV|JIT session error|Error' "task stop after play_pattern runs"
+
+OUT=$(printf '%s\n' \
+  'let _ = dlopen "./libs/audio_jit/libaudio_jit.so"; \' \
+  'open libs/audio_jit/DSP_common; \' \
+  'let scheduler_event_loop = extern fn () -> Int; \' \
+  'let usleep = extern fn Int -> Int; \' \
+  'scheduler_event_loop (); \' \
+  'type Task = Ptr; \' \
+  'let play_pattern = extern fn Double -> T -> Task; \' \
+  'let cancel_task = extern fn Task -> (); \' \
+  'let task_ref = array_fill_const 1 (Ptr 0); \' \
+  'let task = fn t -> task_ref[0] |> cancel_task; task_ref[0] := t;; \' \
+  'let child = fn () -> yield 1.; yield child ();; \' \
+  'let co = fn () -> child () |> play_pattern 0.; yield 4.; yield co ();; \' \
+  'co () |> play_pattern 0. |> task;' \
+  '' \
+  'usleep 50000; task (Ptr 0);' \
+  '%quit' | "$YLC" -i --base "$ROOT_DIR" 2>&1)
+STATUS=$?
+OUT=$(printf '%s' "$OUT" | strip_ansi)
+if [ "$STATUS" -eq 0 ]; then
+  pass "task stop after child play_pattern exits cleanly"
+else
+  fail "task stop after child play_pattern exits cleanly (status $STATUS)"
+  printf '%s\n' "$OUT" | sed 's/^/      | /' >&2
+fi
+assert_not_contains "$OUT" 'Segmentation fault|SIGSEGV|JIT session error|Error' "task stop after child play_pattern runs"
+
+OUT=$(printf '%s\n' \
+  'let _ = dlopen "./libs/audio_jit/libaudio_jit.so"; \' \
+  'open libs/audio_jit/DSP_common; \' \
+  'let scheduler_event_loop = extern fn () -> Int; \' \
+  'let usleep = extern fn Int -> Int; \' \
+  'scheduler_event_loop (); \' \
+  'type Task = Ptr; \' \
+  'let play_pattern = extern fn Double -> T -> Task; \' \
+  'let cancel_task = extern fn Task -> (); \' \
+  'let pass = fn p -> p;; \' \
+  'let task_ref = array_fill_const 1 (Ptr 0); \' \
+  'let task = fn t -> task_ref[0] |> cancel_task; task_ref[0] := t;; \' \
+  'let xs = [| 1., 1. |]; \' \
+  'let co = fn () -> xs |> iter |> cor_map (fn d -> pass (Ptr 0); d) |> play_pattern 0.; yield 4.; yield co ();; \' \
+  'co () |> play_pattern 0. |> task;' \
+  '' \
+  'usleep 50000; task (Ptr 0);' \
+  '%quit' | "$YLC" -i --base "$ROOT_DIR" 2>&1)
+STATUS=$?
+OUT=$(printf '%s' "$OUT" | strip_ansi)
+if [ "$STATUS" -eq 0 ]; then
+  pass "task stop after mapped child pattern exits cleanly"
+else
+  fail "task stop after mapped child pattern exits cleanly (status $STATUS)"
+  printf '%s\n' "$OUT" | sed 's/^/      | /' >&2
+fi
+assert_not_contains "$OUT" 'Segmentation fault|SIGSEGV|JIT session error|Error' "task stop after mapped child pattern runs"
+
+OUT=$(printf '%s\n' \
+  'let _ = dlopen "./libs/audio_jit/libaudio_jit.so"; \' \
+  'open libs/audio_jit/DSP_common; \' \
+  'let scheduler_event_loop = extern fn () -> Int; \' \
+  'let usleep = extern fn Int -> Int; \' \
+  'scheduler_event_loop (); \' \
+  'type Task = Ptr; \' \
+  'let play_pattern = extern fn Double -> T -> Task; \' \
+  'let cancel_task = extern fn Task -> (); \' \
+  'let play_node = fn p -> p;; \' \
+  'let task_ref = array_fill_const 1 (Ptr 0); \' \
+  'let task = fn t -> task_ref[0] |> cancel_task; task_ref[0] := t;; \' \
+  'let fx = @Audio fn x -> x |> Filter.lpf 1000. 0.2;; \' \
+  'let xs = [| 1., 1. |]; \' \
+  'let co = fn () -> xs |> iter |> cor_map (fn d -> fx d |> play_node; d) |> play_pattern 0.; yield 4.; yield co ();; \' \
+  'co () |> play_pattern 0. |> task;' \
+  '' \
+  'usleep 50000; task (Ptr 0);' \
+  '%quit' | "$YLC" -i --base "$ROOT_DIR" 2>&1)
+STATUS=$?
+OUT=$(printf '%s' "$OUT" | strip_ansi)
+if [ "$STATUS" -eq 0 ]; then
+  pass "task stop after imported audio kernel exits cleanly"
+else
+  fail "task stop after imported audio kernel exits cleanly (status $STATUS)"
+  printf '%s\n' "$OUT" | sed 's/^/      | /' >&2
+fi
+assert_not_contains "$OUT" 'Segmentation fault|SIGSEGV|JIT session error|Error' "task stop after imported audio kernel runs"
 
 # ---------------------------------------------------------------------------
 

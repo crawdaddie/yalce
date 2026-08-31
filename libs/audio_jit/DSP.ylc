@@ -3,6 +3,7 @@ let _ = dlopen "./libaudio_jit.so";
 open DSP_common;
 let init_audio = extern fn () -> () in
 init_audio ();
-let play_pattern = extern fn Double -> T -> Ptr;
-let cancel_task = extern fn Ptr -> ();
+type Task = Ptr;
+let play_pattern = extern fn Double -> T -> Task;
+let cancel_task = extern fn Task -> ();
 let play_node = extern fn Ptr -> Ptr;

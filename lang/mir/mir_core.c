@@ -75,6 +75,22 @@ static bool mir_type_is_primitive_eq(Type *type) {
   }
 }
 
+static bool mir_builder_is_durable(MirBuilder *builder) {
+  return builder && builder->program && builder->program->durable_arena &&
+         builder->fn && builder->fn->arena == builder->program->durable_arena;
+}
+
+static MirArena *mir_generated_fn_arena(MirBuilder *builder) {
+  if (mir_builder_is_durable(builder)) {
+    return builder->program->durable_arena;
+  }
+  return builder && builder->program ? builder->program->arena : NULL;
+}
+
+static Type *mir_generated_type(MirBuilder *builder, Type *type) {
+  return mir_builder_is_durable(builder) ? deep_copy_type(type) : type;
+}
+
 static Type *mir_primitive_target_type(Type *lhs_type, Type *rhs_type,
                                        const char *trait_name) {
   if (!lhs_type || !rhs_type) {
@@ -689,6 +705,28 @@ static MirValueId MirDoubleConstructorHandler(MirBuilder *builder, Ast *app,
                                       app);
 }
 
+static bool mir_type_is_ptr_int(Type *type) {
+  return type && (type->kind == T_INT || type->kind == T_UINT64);
+}
+
+static MirValueId MirPtrConstructorHandler(MirBuilder *builder, Ast *app,
+                                           MirCtx *ctx,
+                                           MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!mir_builtin_arity(app, 1)) {
+    return MIR_NO_VALUE;
+  }
+
+  Ast *arg = app->data.AST_APPLICATION.args;
+  Type *from_type = arg->type;
+  if (!mir_type_is_ptr_int(from_type)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId value = mir_expr(builder, arg, ctx);
+  return mir_primitive_cast(builder, from_type, &t_ptr, app, value);
+}
+
 static MirValueId MirAddHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
                                 MirBuiltinSymbol *symbol) {
   MirArithmeticBuiltin ops = {MIR_OP_IADD, MIR_OP_UADD, MIR_OP_FADD};
@@ -794,6 +832,9 @@ static MirValueId MirLogicalNotHandler(MirBuilder *builder, Ast *app,
 
 static MirFunction *mir_build_cor_loop_wrapper(MirBuilder *builder, Ast *app,
                                                Type *coro_type) {
+  MirArena *wrapper_arena = mir_generated_fn_arena(builder);
+  coro_type = mir_generated_type(builder, coro_type);
+
   Type *yield_type = mir_coro_yield_type(coro_type);
   Type *next_type = yield_type ? create_option_type(yield_type) : NULL;
   Type *some_type = next_type && next_type->data.T_CONS.args
@@ -806,9 +847,9 @@ static MirFunction *mir_build_cor_loop_wrapper(MirBuilder *builder, Ast *app,
   Type *wrapper_type = type_fn(coro_type, coro_type);
   wrapper_type->data.T_FN.attributes = set_attr(
       wrapper_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
-  MirFunction *wrapper = mir_program_add_function(
+  MirFunction *wrapper = mir_program_add_function_arena(
       builder->program, mir_cor_loop_wrapper_name(builder->program),
-      wrapper_type, app);
+      wrapper_type, app, wrapper_arena);
   if (!wrapper) {
     return NULL;
   }
@@ -884,6 +925,10 @@ static MirFunction *mir_build_iter_array_loop_wrapper(MirBuilder *builder,
                                                       Ast *app,
                                                       Type *array_type,
                                                       Type *coro_type) {
+  MirArena *wrapper_arena = mir_generated_fn_arena(builder);
+  array_type = mir_generated_type(builder, array_type);
+  coro_type = mir_generated_type(builder, coro_type);
+
   Type *element_type = mir_array_element_type(array_type);
   if (!element_type || !is_coroutine_type(coro_type)) {
     return NULL;
@@ -892,9 +937,9 @@ static MirFunction *mir_build_iter_array_loop_wrapper(MirBuilder *builder,
   Type *wrapper_type = type_fn(array_type, coro_type);
   wrapper_type->data.T_FN.attributes = set_attr(
       wrapper_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
-  MirFunction *wrapper = mir_program_add_function(
+  MirFunction *wrapper = mir_program_add_function_arena(
       builder->program, mir_iter_wrapper_name(builder->program, "array_loop"),
-      wrapper_type, app);
+      wrapper_type, app, wrapper_arena);
   if (!wrapper) {
     return NULL;
   }
@@ -1044,6 +1089,11 @@ static MirFunction *mir_build_cor_map_wrapper(MirBuilder *builder, Ast *app,
                                               Type *map_type,
                                               Type *source_coro_type,
                                               Type *output_coro_type) {
+  MirArena *wrapper_arena = mir_generated_fn_arena(builder);
+  map_type = mir_generated_type(builder, map_type);
+  source_coro_type = mir_generated_type(builder, source_coro_type);
+  output_coro_type = mir_generated_type(builder, output_coro_type);
+
   Type *input_type = mir_coro_yield_type(source_coro_type);
   Type *output_type = mir_coro_yield_type(output_coro_type);
   Type *next_type = input_type ? create_option_type(input_type) : NULL;
@@ -1059,9 +1109,9 @@ static MirFunction *mir_build_cor_map_wrapper(MirBuilder *builder, Ast *app,
       type_fn(map_type, type_fn(source_coro_type, output_coro_type));
   wrapper_type->data.T_FN.attributes = set_attr(
       wrapper_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
-  MirFunction *wrapper = mir_program_add_function(
+  MirFunction *wrapper = mir_program_add_function_arena(
       builder->program, mir_cor_map_wrapper_name(builder->program),
-      wrapper_type, app);
+      wrapper_type, app, wrapper_arena);
   if (!wrapper) {
     return NULL;
   }
@@ -1160,6 +1210,11 @@ static MirFunction *mir_build_cor_zip_wrapper(MirBuilder *builder, Ast *app,
                                               Type *left_coro_type,
                                               Type *right_coro_type,
                                               Type *output_coro_type) {
+  MirArena *wrapper_arena = mir_generated_fn_arena(builder);
+  left_coro_type = mir_generated_type(builder, left_coro_type);
+  right_coro_type = mir_generated_type(builder, right_coro_type);
+  output_coro_type = mir_generated_type(builder, output_coro_type);
+
   Type *left_type = mir_coro_yield_type(left_coro_type);
   Type *right_type = mir_coro_yield_type(right_coro_type);
   Type *output_type = mir_coro_yield_type(output_coro_type);
@@ -1181,9 +1236,9 @@ static MirFunction *mir_build_cor_zip_wrapper(MirBuilder *builder, Ast *app,
       type_fn(left_coro_type, type_fn(right_coro_type, output_coro_type));
   wrapper_type->data.T_FN.attributes = set_attr(
       wrapper_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
-  MirFunction *wrapper = mir_program_add_function(
+  MirFunction *wrapper = mir_program_add_function_arena(
       builder->program, mir_cor_zip_wrapper_name(builder->program),
-      wrapper_type, app);
+      wrapper_type, app, wrapper_arena);
   if (!wrapper) {
     return NULL;
   }
@@ -1307,6 +1362,10 @@ static MirValueId MirCorZipHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
 static MirFunction *mir_build_iter_array_wrapper(MirBuilder *builder, Ast *app,
                                                  Type *array_type,
                                                  Type *coro_type) {
+  MirArena *wrapper_arena = mir_generated_fn_arena(builder);
+  array_type = mir_generated_type(builder, array_type);
+  coro_type = mir_generated_type(builder, coro_type);
+
   Type *element_type = mir_array_element_type(array_type);
   if (!element_type || !is_coroutine_type(coro_type)) {
     return NULL;
@@ -1315,9 +1374,9 @@ static MirFunction *mir_build_iter_array_wrapper(MirBuilder *builder, Ast *app,
   Type *wrapper_type = type_fn(array_type, coro_type);
   wrapper_type->data.T_FN.attributes = set_attr(
       wrapper_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
-  MirFunction *wrapper = mir_program_add_function(
+  MirFunction *wrapper = mir_program_add_function_arena(
       builder->program, mir_iter_wrapper_name(builder->program, "array"),
-      wrapper_type, app);
+      wrapper_type, app, wrapper_arena);
   if (!wrapper) {
     return NULL;
   }
@@ -1387,6 +1446,10 @@ static MirFunction *mir_build_iter_array_wrapper(MirBuilder *builder, Ast *app,
 static MirFunction *mir_build_iter_list_wrapper(MirBuilder *builder, Ast *app,
                                                 Type *list_type,
                                                 Type *coro_type) {
+  MirArena *wrapper_arena = mir_generated_fn_arena(builder);
+  list_type = mir_generated_type(builder, list_type);
+  coro_type = mir_generated_type(builder, coro_type);
+
   Type *element_type = type_of_list(list_type);
   if (!element_type || !is_coroutine_type(coro_type)) {
     return NULL;
@@ -1395,9 +1458,9 @@ static MirFunction *mir_build_iter_list_wrapper(MirBuilder *builder, Ast *app,
   Type *wrapper_type = type_fn(list_type, coro_type);
   wrapper_type->data.T_FN.attributes = set_attr(
       wrapper_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
-  MirFunction *wrapper = mir_program_add_function(
+  MirFunction *wrapper = mir_program_add_function_arena(
       builder->program, mir_iter_wrapper_name(builder->program, "list"),
-      wrapper_type, app);
+      wrapper_type, app, wrapper_arena);
   if (!wrapper) {
     return NULL;
   }
@@ -1986,11 +2049,19 @@ mir_lower_specialized_primitive_constructor_call(MirBuilder *builder,
   MirValueId operand = call->data.call.operands.items[0];
   Type *from_type = mir_call_primitive_operand_type(builder, call, 0);
   Type *target_type = call->type;
-  if (!from_type || !target_type || !mir_type_is_primitive_numeric(from_type) ||
-      !mir_type_is_primitive_numeric(target_type)) {
+  if (!from_type || !target_type) {
     return MIR_NO_VALUE;
   }
 
+  if (mir_type_is_ptr_int(from_type) && is_pointer_type(target_type)) {
+    return mir_primitive_cast(builder, from_type, target_type, call->origin,
+                              operand);
+  }
+
+  if (!mir_type_is_primitive_numeric(from_type) ||
+      !mir_type_is_primitive_numeric(target_type)) {
+    return MIR_NO_VALUE;
+  }
   return mir_primitive_cast_if_needed(builder, operand, from_type, target_type,
                                       call->origin);
 }
@@ -2088,6 +2159,9 @@ MirValueId mir_lower_specialized_builtin_call(MirBuilder *builder,
     return mir_lower_specialized_eq_call(builder, call, true);
   }
   if (handler == MirDoubleConstructorHandler) {
+    return mir_lower_specialized_primitive_constructor_call(builder, call);
+  }
+  if (handler == MirPtrConstructorHandler) {
     return mir_lower_specialized_primitive_constructor_call(builder, call);
   }
   if (handler == MirIterHandler) {
@@ -2202,6 +2276,11 @@ void mir_register_core_builtins(MirProgram *program) {
 
   mir_register_builtin(program, lookup_builtin_env(TYPE_NAME_DOUBLE),
                        MirDoubleConstructorHandler, MIR_BUILTIN_SYMBOL_CORE,
+                       (const MirOperandUse[]){MIR_OPERAND_USE_BORROW}, 1,
+                       MIR_RESULT_OWNED);
+
+  mir_register_builtin(program, lookup_builtin_env(TYPE_NAME_PTR),
+                       MirPtrConstructorHandler, MIR_BUILTIN_SYMBOL_CORE,
                        (const MirOperandUse[]){MIR_OPERAND_USE_BORROW}, 1,
                        MIR_RESULT_OWNED);
 

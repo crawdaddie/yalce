@@ -908,7 +908,8 @@ void initialize_builtin_types() {
                   make_monomorphic_env(TYPE_NAME_BOOL, &t_bool));
   add_builtin_env(TYPE_NAME_VOID,
                   make_monomorphic_env(TYPE_NAME_VOID, &t_void));
-  add_builtin_env(TYPE_NAME_PTR, make_monomorphic_env(TYPE_NAME_PTR, &t_ptr));
+  add_builtin_env(TYPE_NAME_PTR,
+                  make_from_constructor_env(TYPE_NAME_PTR, &t_ptr));
 
   // Register print: String -> Void (monomorphic)
   builtin_envs.print = make_monomorphic_env("print", &t_builtin_print);

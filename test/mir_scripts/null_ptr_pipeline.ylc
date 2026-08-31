@@ -1,0 +1,14 @@
+let _ = dlopen "../../engine/build/libyalce_synth.so";
+let cancel_task = extern fn Ptr -> ();
+
+let call_cancel = fn () ->
+  cancel_task 0
+;;
+
+let call_addr = fn x: (Int) ->
+  cancel_task x
+;;
+
+let call_ctor = fn x: (Int) ->
+  cancel_task (Ptr x)
+;;
