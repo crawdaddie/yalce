@@ -956,6 +956,16 @@ static const char *lower_mir_function_symbol_name(MirLlvmCtx *lctx,
   return name;
 }
 
+static bool lower_mir_function_is_repl_local(MirFunction *fn) {
+  if (!ylc_config.interactive_mode || !fn || fn->is_extern || !fn->name) {
+    return false;
+  }
+
+  // REPL chunks share one JITDylib; transient helpers must not export
+  // stable names like `$DSP.foo_module_init`.
+  return strcmp(fn->name, "$top") != 0;
+}
+
 static LLVMTypeRef lower_mir_function_type(MirFunction *fn, JITLangCtx *ctx,
                                            LLVMModuleRef module) {
   if (!fn) {
@@ -1098,7 +1108,9 @@ static LLVMValueRef lower_mir_declare_function(MirLlvmCtx *lctx,
     return NULL;
   }
 
-  LLVMSetLinkage(llvm_fn, LLVMExternalLinkage);
+  LLVMSetLinkage(llvm_fn, lower_mir_function_is_repl_local(fn)
+                              ? LLVMInternalLinkage
+                              : LLVMExternalLinkage);
   if (is_coroutine_constructor_type(fn->type)) {
     LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
     LLVMAttributeRef attr =
@@ -1214,7 +1226,9 @@ static LLVMValueRef lower_mir_get_function_value(MirLlvmCtx *lctx,
     const char *name = lower_mir_function_symbol_name(lctx, target);
     fn = LLVMAddFunction(module, name, fn_type);
     if (fn) {
-      LLVMSetLinkage(fn, LLVMExternalLinkage);
+      LLVMSetLinkage(fn, lower_mir_function_is_repl_local(target)
+                             ? LLVMInternalLinkage
+                             : LLVMExternalLinkage);
       if (lower_mir_function_uses_c_abi(lctx, target)) {
         LLVMSetFunctionCallConv(fn, LLVMCCallConv);
       }

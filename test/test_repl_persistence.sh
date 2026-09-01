@@ -332,6 +332,63 @@ else
 fi
 assert_not_contains "$OUT" 'Segmentation fault|SIGSEGV|JIT session error|Error' "task stop after imported audio kernel runs"
 
+OUT=$(printf '%s\n' \
+  'open test/fixtures/audio_jit/DSP_noinit; \' \
+  'let scheduler_event_loop = extern fn () -> Int; \' \
+  'let usleep = extern fn Int -> Int; \' \
+  'scheduler_event_loop (); \' \
+  'let task_ref = array_fill_const 1 (Ptr 0); \' \
+  'let task = fn t -> task_ref[0] |> cancel_task; task_ref[0] := t;; \' \
+  'let fx = @Audio fn x -> x |> Filter.lpf 1000. 0.2;; \' \
+  'let xs = [| 1., 1. |]; \' \
+  'let co = fn () -> xs |> iter |> cor_map (fn d -> fx d |> play_node; d) |> play_pattern 0.; yield 4.; yield co ();; \' \
+  'co () |> play_pattern 0. |> task;' \
+  '' \
+  'usleep 50000; co () |> play_pattern 0. |> task;' \
+  '%quit' | "$YLC" -i --base "$ROOT_DIR" 2>&1)
+STATUS=$?
+OUT=$(printf '%s' "$OUT" | strip_ansi)
+if [ "$STATUS" -eq 0 ]; then
+  pass "second play_pattern start exits cleanly"
+else
+  fail "second play_pattern start exits cleanly (status $STATUS)"
+  printf '%s\n' "$OUT" | sed 's/^/      | /' >&2
+fi
+assert_not_contains "$OUT" 'Symbols not found: \[ play_pattern \]' "second play_pattern start keeps audio_jit builtin"
+assert_not_contains "$OUT" 'duplicate definition of symbol' "second play_pattern start does not duplicate module init"
+assert_not_contains "$OUT" 'corrupted size|Segmentation fault|SIGSEGV|JIT session error|Error' "second play_pattern start does not crash"
+
+OUT=$(printf '%s\n' \
+  'open test/fixtures/audio_jit/DSP_noinit; \' \
+  'let tempo_mul = fn () -> 60. / 150.;; \' \
+  'let scheduler_event_loop = extern fn () -> Int; \' \
+  'let usleep = extern fn Int -> Int; \' \
+  'scheduler_event_loop (); \' \
+  'import std/Math; \' \
+  'let task_ref = array_fill_const 1 (Ptr 0); \' \
+  'let task = fn t -> task_ref[0] |> cancel_task; task_ref[0] := t;; \' \
+  'let fx = @Audio fn lo dr -> lo;; \' \
+  'let xs = [| 0.75, 0.5, 0.25 |]; \' \
+  'let co = fn () -> \' \
+  '  xs |> iter |> cor_map (fn d -> fx (Math.rrand 200. 400.) 0.01 |> play_node; d * tempo_mul ()) |> play_pattern 0.; \' \
+  '  yield 4. * tempo_mul (); \' \
+  '  yield co () \' \
+  ';; \' \
+  'co () |> play_pattern 0. |> task;' \
+  '' \
+  'usleep 50000; co () |> play_pattern 0. |> task;' \
+  'usleep 50000; task (Ptr 0);' \
+  '%quit' | "$YLC" -i --base "$ROOT_DIR" 2>&1)
+STATUS=$?
+OUT=$(printf '%s' "$OUT" | strip_ansi)
+if [ "$STATUS" -eq 0 ]; then
+  pass "imported rrand task replacement exits cleanly"
+else
+  fail "imported rrand task replacement exits cleanly (status $STATUS)"
+  printf '%s\n' "$OUT" | sed 's/^/      | /' >&2
+fi
+assert_not_contains "$OUT" 'corrupted size|Segmentation fault|SIGSEGV|JIT session error|Error' "imported rrand task replacement does not crash"
+
 # ---------------------------------------------------------------------------
 
 section "module imports persist across REPL inputs"

@@ -6025,8 +6025,9 @@ static MirValueId mir_import_value(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
 
   ht module_table;
   MirStackFrame module_frame;
+  // Imported expression exports need root durable slots for later REPL chunks.
   mir_stack_frame_init(builder->program->arena, &module_table, &module_frame,
-                       NULL);
+                       ctx ? ctx->frame : NULL);
   MirCtx module_ctx = {
       .env = imported->env ? imported->env : ctx->env,
       .frame = &module_frame,
@@ -6370,8 +6371,9 @@ static MirSymbol *mir_materialize_imported_module_symbol(MirBuilder *builder,
 
   ht module_table;
   MirStackFrame module_frame;
+  // Imported expression exports need root durable slots for later REPL chunks.
   mir_stack_frame_init(builder->program->arena, &module_table, &module_frame,
-                       NULL);
+                       ctx ? ctx->frame : NULL);
   MirCtx module_ctx = {
       .env = imported->env ? imported->env
                            : (ctx ? ctx->env : builder->program->type_env),
@@ -6438,8 +6440,9 @@ static MirSymbol *mir_materialize_opened_import_member_symbol(
 
   ht module_table;
   MirStackFrame module_frame;
+  // Imported expression exports need root durable slots for later REPL chunks.
   mir_stack_frame_init(builder->program->arena, &module_table, &module_frame,
-                       NULL);
+                       ctx ? ctx->frame : NULL);
   MirCtx module_ctx = {
       .env = imported->env ? imported->env
                            : (ctx ? ctx->env : builder->program->type_env),

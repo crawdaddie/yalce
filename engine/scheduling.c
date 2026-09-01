@@ -617,6 +617,11 @@ void *ylc_play_pattern_start(double quant, SchedulerCallback callback,
 
   pthread_mutex_lock(&scheduler_mutex);
   SchedulerTask *parent = find_task(current_task);
+  if (current_task && task_is_done(parent)) {
+    pthread_mutex_unlock(&scheduler_mutex);
+    return NULL;
+  }
+
   SchedulerTask *task = create_task(callback, handle, parent);
   if (parent && task) {
     task_add_child(parent, task);

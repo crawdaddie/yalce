@@ -2,6 +2,7 @@
 #include "../../engine/ctx.h"
 #include "../../engine/node.h"
 #include "../../lang/backend_llvm/lib_registry.h"
+#include "../../lang/config.h"
 #include "../../lang/types/builtins.h"
 #include "../../lang/types/inference.h"
 #include "../../lang/types/type_ser.h"
@@ -7524,12 +7525,22 @@ static void audio_jit_init_wavetables(void) {
 }
 
 static void audio_jit_register_osc_kernel_bitcode(const char *bitcode_path) {
+  static bool repl_bitcode_registered = false;
   const char *path = bitcode_path && bitcode_path[0] != '\0'
                          ? bitcode_path
                          : "libs/audio_jit/build/osc_kernels.bc";
 
-  if (ylc_mir_program && !mir_program_add_llvm_bitcode(ylc_mir_program, path)) {
-    fprintf(stderr, "audio_jit: failed to register LLVM bitcode '%s'\n", path);
+  // The first REPL chunk exports kernel bitcode into the JITDylib; later
+  // chunks should reference those symbols, not define them again.
+  bool skip_repl_bitcode =
+      ylc_config.interactive_mode && ylc_mir_program && repl_bitcode_registered;
+  if (ylc_mir_program && !skip_repl_bitcode) {
+    if (!mir_program_add_llvm_bitcode(ylc_mir_program, path)) {
+      fprintf(stderr, "audio_jit: failed to register LLVM bitcode '%s'\n",
+              path);
+    } else if (ylc_config.interactive_mode) {
+      repl_bitcode_registered = true;
+    }
   }
 
   if (ylc_jit_module && !ylc_link_llvm_bitcode_file(ylc_jit_module, path)) {
@@ -7747,6 +7758,22 @@ void ylc_audio_jit_register_current_program(const char *osc_bitcode_path) {
                        MIR_RESULT_OWNED);
 }
 
+static void ylc_audio_jit_register_program(MirProgram *program, MirCtx *ctx) {
+  MirProgram *saved_program = ylc_mir_program;
+  MirCtx *saved_ctx = ylc_mir_ctx;
+
+  ylc_mir_program = program;
+  ylc_mir_ctx = ctx;
+  ylc_audio_jit_register_current_program(NULL);
+
+  ylc_mir_program = saved_program;
+  ylc_mir_ctx = saved_ctx;
+}
+
 __attribute__((constructor)) static void ylc_audio_jit_init(void) {
+  if (!ylc_mir_program_init_fn) {
+    ylc_mir_program_init_fn = ylc_audio_jit_register_program;
+  }
+
   ylc_audio_jit_register_current_program(NULL);
 }

@@ -493,6 +493,16 @@ static void spawn_child_cb(void *userdata, uint64_t tick) {
   ylc_complete_current_task();
 }
 
+static void spawn_after_cancel_cb(void *userdata, uint64_t tick) {
+  (void)userdata;
+  (void)tick;
+  task_step_count++;
+
+  cancel_task(current_task);
+  task_child_handle = ylc_play_pattern_start(1.0, complete_only_cb,
+                                             (void *)&task_step_count);
+}
+
 static void test_play_pattern_cancel_returned_handle(void) {
   reset_all();
   ctx.sample_rate = 48000;
@@ -531,6 +541,22 @@ static void test_play_pattern_cancel_parent_cancels_child(void) {
   cancel_task(parent);
   process_scheduler_events(48000);
   assert(task_step_count == 1);
+  assert(scheduler_queue.size == 0);
+}
+
+static void test_cancelled_parent_rejects_child(void) {
+  reset_all();
+  ctx.sample_rate = 48000;
+  task_step_count = 0;
+  task_child_handle = NULL;
+
+  void *parent = ylc_play_pattern_start(0.0, spawn_after_cancel_cb,
+                                        (void *)&task_step_count);
+  assert(parent != NULL);
+
+  process_scheduler_events(0);
+  assert(task_step_count == 1);
+  assert(task_child_handle == NULL);
   assert(scheduler_queue.size == 0);
 }
 
@@ -859,6 +885,7 @@ int main(void) {
   RUN_TEST(test_schedule_event_conversion);
   RUN_TEST(test_play_pattern_cancel_returned_handle);
   RUN_TEST(test_play_pattern_cancel_parent_cancels_child);
+  RUN_TEST(test_cancelled_parent_rejects_child);
 
   printf("\n=== Layer 2: Audio Instruction Processing ===\n");
   RUN_TEST(test_pre_on_time_scalar);
