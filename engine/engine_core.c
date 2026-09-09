@@ -127,6 +127,25 @@ static int render_plan_add_node(AudioRenderPlan *plan, Node *node) {
     }
   }
 
+  /* Mix-bus sources render before the bus node itself. Prune finished
+     (trig_end) sources from the bus list here — the audio thread owns the
+     list, so this is the safe place to unlink them. */
+  if (node->mix_head) {
+    Node **link = &node->mix_head;
+    while (*link) {
+      Node *source = *link;
+      if (source->trig_end) {
+        *link = source->mix_next;
+        source->mix_next = NULL;
+        continue;
+      }
+      if (!render_plan_add_node(plan, source)) {
+        return 0;
+      }
+      link = &source->mix_next;
+    }
+  }
+
   if (!node->frame_perform && !node->write_to_output && !node->bus) {
     return 1;
   }
@@ -411,32 +430,108 @@ NodeRef pipe_into(NodeRef filter, int idx, NodeRef node) {
   return filter;
 }
 
-NodeRef play_into(NodeRef target, NodeRef node) {
-  if (target && node && target->num_inputs > 0) {
-    pipe_into(target, target->num_inputs - 1, node);
+/* Per-frame mix-bus perform: sum every live source's samples into this
+   node's (mono) output buffer, downmixing multi-channel sources by
+   summing their channels. Sources whose trig_end has been set (e.g. a
+   voice whose kill_on_end fired) are skipped; the plan builder unlinks
+   them from the list. */
+static void mix_bus_perform(void *node_raw, void *state, void *inputs,
+                            int frame, double spf) {
+  (void)state;
+  (void)inputs;
+  (void)spf;
+  Node *node = (Node *)node_raw;
+  if (!node || !node->output.buf || frame < 0 || frame >= node->output.size) {
+    return;
   }
+
+  double sample = 0.0;
+  for (Node *source = node->mix_head; source; source = source->mix_next) {
+    if (source->trig_end || !source->output.buf ||
+        frame >= source->output.size) {
+      continue;
+    }
+    int layout = source->output.layout > 0 ? source->output.layout : 1;
+    double *in =
+        source->output.buf + (size_t)frame * (size_t)layout;
+    for (int c = 0; c < layout; c++) {
+      sample += in[c];
+    }
+  }
+  node->output.buf[(size_t)frame] = sample;
+}
+
+/* Return the mix bus feeding `target`'s input slot, creating and connecting
+   one on first use. The bus replaces the target's existing input connection
+   (e.g. a const inlet) and becomes the persistent summing point every
+   play_into voice is routed through. */
+static Node *play_into_mix_bus(NodeRef target, int input) {
+  if (!target || input < 0 || input >= MAX_INPUTS || target->num_inputs <= 0) {
+    return NULL;
+  }
+
+  Node *bus = (Node *)target->connections[input].source_node_index;
+  if (bus && bus->frame_perform == mix_bus_perform && !bus->trig_end) {
+    return bus;
+  }
+
+  bus = node_alloc(0, 1, BUF_SIZE, "mix_bus");
+  if (!bus) {
+    return NULL;
+  }
+  bus->frame_perform = mix_bus_perform;
+
+  /* Connect directly (same control-thread pattern as
+     set_input_buf_immediate) so subsequent bus lookups see it without
+     waiting for the audio thread; plug_input_in_graph marks the graph
+     dirty so the render plan rebuilds with the bus as the input. */
+  plug_input_in_graph(input, target, bus);
+  return bus;
+}
+
+static NodeRef play_into_common(uint64_t tick, NodeRef target, int input,
+                                NodeRef node) {
+  if (!target || !node) {
+    return node;
+  }
+  if (init_audio() != 0) {
+    return NULL;
+  }
+
+  Node *bus = play_into_mix_bus(target, input);
+  if (!bus) {
+    return node;
+  }
+
+  /* Route the voice through the msg queue: the audio thread adds it to the
+     bus's source list at the block boundary, coherent with play_node
+     timing. The voice is not written to the main output. */
+  push_msg(&ctx.msg_queue,
+           (audio_instruction){NODE_MIX_INPUT,
+                               tick,
+                               {.NODE_MIX_INPUT = {.mixer = bus,
+                                                   .source = node}}});
   return node;
+}
+
+NodeRef play_into(NodeRef target, NodeRef node) {
+  if (!target || !node) {
+    return node;
+  }
+  int input = target->num_inputs > 0 ? target->num_inputs - 1 : 0;
+  return play_into_common(get_tl_tick(), target, input, node);
 }
 
 NodeRef play_into_offset(uint64_t tick, NodeRef target, NodeRef node) {
-  if (target && node) {
-    int input = target->num_inputs > 0 ? target->num_inputs - 1 : 0;
-    node->write_to_output = false;
-    push_msg(&ctx.msg_queue,
-             (audio_instruction){NODE_PIPE_INPUT,
-                                 tick,
-                                 {.NODE_PIPE_INPUT = {.target = target,
-                                                      .input = input,
-                                                      .value = node}}});
+  if (!target || !node) {
+    return node;
   }
-  return node;
+  int input = target->num_inputs > 0 ? target->num_inputs - 1 : 0;
+  return play_into_common(tick, target, input, node);
 }
 
 NodeRef play_into_idx(NodeRef target, int idx, NodeRef node) {
-  if (target && node) {
-    pipe_into(target, idx, node);
-  }
-  return node;
+  return play_into_common(get_tl_tick(), target, idx, node);
 }
 
 double midi_to_freq(int midi_note) {

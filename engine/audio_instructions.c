@@ -91,6 +91,23 @@ static void process_msg_pre(int frame_offset, audio_instruction msg) {
     break;
   }
 
+  case NODE_MIX_INPUT: {
+    struct NODE_MIX_INPUT payload = msg.payload.NODE_MIX_INPUT;
+    Node *mixer = payload.mixer;
+    Node *source = payload.source;
+    if (node_pending_free(mixer) || node_pending_free(source)) {
+      break;
+    }
+
+    source->frame_offset = frame_offset;
+    source->write_to_output = false;
+    source->mix_next = mixer->mix_head;
+    mixer->mix_head = source;
+    audio_ctx_mark_dirty();
+
+    break;
+  }
+
   case NODE_SET_TRIG: {
     struct NODE_SET_TRIG payload = msg.payload.NODE_SET_TRIG;
     Node *node = payload.target;
@@ -196,6 +213,11 @@ void print_msg(audio_instruction *msg) {
            msg->payload.NODE_PIPE_INPUT.target,
            msg->payload.NODE_PIPE_INPUT.input,
            msg->payload.NODE_PIPE_INPUT.value);
+    break;
+  }
+  case NODE_MIX_INPUT: {
+    printf(" node_mix_input %p <- %p\n", msg->payload.NODE_MIX_INPUT.mixer,
+           msg->payload.NODE_MIX_INPUT.source);
     break;
   }
   case NODE_REMOVE: {

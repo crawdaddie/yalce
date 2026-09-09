@@ -35,6 +35,8 @@ let phase_osc = extern fn Double -> Double -> Double;
 
 # White noise in the range [-1, 1].
 let white = extern fn () -> Double;
+# Pink noise (-3 dB/oct) in the range [-1, 1].
+let pink = extern fn () -> Double;
 # Ramp oscillator / phase accumulator. Arg: frequency.
 let phasor = extern fn Double -> Double;
 # Resettable phasor. Args: frequency, trigger/reset signal.

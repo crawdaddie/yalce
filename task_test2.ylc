@@ -1,0 +1,353 @@
+open libs/audio_jit/DSP;
+import std/Math;
+
+let set_input_scalar = extern fn Ptr -> Int -> Double -> Ptr;
+let set_input_trig = extern fn Ptr -> Int -> Ptr;
+
+let tempo_mul = fn () -> 60. / 160.;;
+
+# Random int in [0, n) that never repeats the previous draw. Draws uniformly
+# from the n-1 values != prev by remapping [0, n-2) -> [0, n) \ {prev}: values
+# below prev pass through, values >= prev shift up one. First draw (prev = -1)
+# is unconstrained. State lives in a top-level mutable cell, so the guarantee
+# holds across every call from anywhere.
+let rint_prev = [| -1 |];
+let rand_int_neq = fn n ->
+  let prev = rint_prev[0];
+  let v =
+    if prev < 0 then Math.rand_int n
+    else (
+      if n < 2 then 0
+      else (
+        let r = Math.rand_int (n - 1) in
+        if r < prev then r else r + 1
+      )
+    );
+  rint_prev[0] := v;
+  v
+;;
+
+let kick = @Audio fn () ->
+  let t = trig 0;
+  # pitch
+  let freq = t |> decay 0.01 |> scale 30 4000;
+
+  freq
+  |> sin_osc 
+
+  # noise component
+  |> (+) (
+    t |> decay 0.1
+    |> (*) (white ())
+    |> Filter.lpf 1000 0.2
+  )
+  |> (*) 2. |> Math.tanh
+
+  #amp envelope
+  |> (*) (adsr 0 0.1 0.8 0.2 (t |> rect 0.25) |> kill_on_end)
+  ;;
+
+let chirp_pan = @Audio fn lo dr ->
+  let t = trig 0;
+  let freq = t |> decay dr |> scale lo 8000;
+  freq
+  |> sin_osc 
+  |> (*) (adsr 0 0.1 1. 0.02 (t |> rect 0.1) |> kill_on_end)
+  |> (*) 0.5
+  #|> pan 2 (lfnoise 1 0. 1.)
+  ;;
+
+let chirp = @Audio fn lo dr ->
+  let t = trig 0;
+  let freq = t |> decay dr |> scale lo 1000;
+  freq
+  |> sin_osc 
+  |> (+) (t |> decay 0.1 |> (*) (white ()) |> Filter.hpf 1000. 2.)
+  |> (*) (adsr 0 0.1 1. 0.02 (t |> rect 0.01))
+  |> (*) 2. |> Math.tanh
+  |> (*) 0.5
+  ;;
+
+
+
+let snr = @Audio fn dec pmul ->
+  let t = trig 0;
+  sin_osc (pmul * ~[330., 410., 550., 770.] )
+  |> mix 1
+  |> (*) 3. |> Math.tanh
+  |> (*) (sin_osc 591.)
+  |> (*) (sin_osc 150.)
+  |> (+) (chirp 100. 0.1)
+  |> (*) 0.5
+  |> (*) (t |> decay dec) 
+  |> (+) (
+    let x = pink ()
+      |> Filter.hpf 1500 4.
+      |> (*) (t |> decay (dec * 0.6))
+  )
+  |> (*) (t |> decay dec |> kill_on_end) 
+  ;;
+
+let metal_hat = @Audio fn dec ->
+  pink ()
+  |> Filter.hpf 3000 4.
+  |> (*) (sin_osc 670.)
+  |> (*) (trig 0 |> decay dec |> kill_on_end) 
+
+  ;;
+
+# let chirp_arr = ([| 0.75, 0.5, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.75, 0.75|] |> Math.shuffle_ip);
+
+let task_ref = [| Ptr 0, |];
+let task = fn t -> 
+  task_ref[0] |> cancel_task;
+  task_ref[0] := t
+  ;;
+
+
+# Beat/division stutter (Ableton-style beat repeat), built from the existing
+# delay_line / tabread_samp primitives -- no new kernel needed.
+#
+# On a rising edge of `trig_sig` it captures the most recent `subdiv` beats and,
+# while `active` is 1., continuously loops that frozen chunk. `reverse` flips it
+# backward and `rate` changes playback pitch (0.5 = octave down, 2. = octave up).
+# When `active` drops to 0 the stutter stops and the dry signal passes through.
+#   trig_sig    - trigger: a rising edge fires a fresh capture
+#   active      - 1. while this effect is selected, else 0.
+#   beat_length - length of one beat in seconds
+#   subdiv      - chunk length to grab, in beats
+#   reverse     - 1. plays backward, 0. forward
+#   rate        - playback rate / pitch multiplier (1. = normal)
+#   inp         - mono input sample
+let stutter = @Audio fn trig_sig active beat_length subdiv rate inp ->
+  let live = delay_line 4.;            # always-recording source ring (4s)
+  let size = array_size live;          # ring size in samples
+  let seg  = beat_length * subdiv;     # chunk length in seconds
+  let n    = Math.max 8. (seg / spf);  # chunk length in samples
+  let wi = [| 0 |];                    # ring write index (Int)
+  let sw = [| 0 |];                    # captured write index (Int)
+  let st = [| 0., 0. |];               # playhead, prev_trig
+  let rate_mul = [|1.|];
+
+  let w         = wi[0];
+  let start_w   = sw[0];
+  let playhead  = st[0];
+
+  live[w] := inp;                       # keep recording into the ring
+
+
+  let st_start = if trig_sig == 1. then w else start_w;
+  let st_play  = if trig_sig == 1. then (n - 1.) else playhead;
+
+  let step = rate;
+
+  # read the frozen chunk (interpolated at a fractional playhead)
+  let chunk = tabread_samp live (st_start - n + 1. + st_play);
+
+  let out = if active == 1. then chunk else inp;
+
+  let p1 = st_play + step;
+  let fl = Math.floor (p1 / n);
+  let pw = p1 - n * fl;
+
+  sw[0] := st_start;
+  st[0] := if active >= 0.5 then pw else st_play;
+  st[1] := trig_sig;
+  wi[0] := (w + 1) % size;
+
+  out
+;;
+let bool_to_double = fn x -> 
+  match x with
+  | true -> 1.
+  | false -> 0.
+  ;;
+
+
+# Effect processor selected by the `sel` parameter:
+#   0.        -> dry (bypass)
+#   [1., 2.)  -> comb filter
+#   [2., 3.)  -> lowpass filter
+#   ...       -> further ranges reserved for more effects
+#
+# A 1-sample trigger is generated every time `sel` enters a new range
+# (`changed (Math.floor sel)`); it feeds the active effect, and that effect
+# stops when `sel` moves out of its range.
+
+let fx = @Audio fn sel tr subdiv beat_len rate inp ->
+  let range = Math.round (Math.floor sel);     # integer range index
+  let cc = 
+    inp |> comb (lfnoise 2. 0.001 0.04) 0.1 0.8;
+
+  let rm = 
+    inp * sin_osc (lfnoise0 (1. / beat_len) 300. 1000.);
+
+  let fl =
+    inp 
+    |> (*) 3. |> Math.tanh
+    |> Filter.lpf (lfnoise 4. 50. 1000.) 5.
+    ;
+
+  let rr = inp * (bool_to_double (sel == 5.)) |> Filter.hpf 1000. 1. |> Reverb.concert;
+  let stutt = inp |> stutter tr ((sel == 6.) |> bool_to_double) beat_len subdiv rate;
+  let sig = match sel with
+    | 0. -> inp                                 # dry
+    | 1. -> cc
+    | 2. -> fl 
+    | 3. -> rm
+    | 4. -> inp |> Filter.hpf (lfnoise 3. 800. 2000.) 4.
+    | 5. -> inp
+    | 6. -> stutt
+    | _ -> inp
+    ;
+
+  sig + rr
+  |> glue -12. 4. 0.005 0.15 6. 3.
+ # |> stutter (changed sel) (1.) beat_len subdiv rate
+
+;;
+
+let g = fx 0. 0. 1. (tempo_mul ()) 1. 0. |> play_node;
+
+
+let play_fx = fn n -> play_into g n;;
+let co = fn () ->
+  [| 5.5, 2.5, 4.5, 0.75, 0.75, 2.|]
+  |> iter
+  |> cor_map (fn d ->
+    kick () |> play_node;
+    d * tempo_mul () 
+  ) |> play_pattern 0.
+  ;
+
+  let x = fn g -> 
+    let d = Math.array_choose [|0.25, 0.25, 0.25, 0.5|];
+    yield (d, g);
+    yield (d, g + d);
+    yield x (g + 2 * d)
+  ;;
+
+  x 0.
+  |> cor_map_opt (fn (d, g) -> 
+    match g < 16. with 
+    | true -> (
+      metal_hat (sin (g * 1.4) |> Math.bipolar_scale 0.01 0.03) |> play_fx;
+      Some (d * tempo_mul ()) 
+    )
+    | _ -> None
+  )
+  |> play_pattern 0.
+  ;
+
+  let sp = fn g -> 
+    yield (1., g);
+    snr 0.2 1. |> play_fx;
+    yield (2., g + 1.);
+    snr 0.2 1.5 |> play_fx;
+    yield (.75, g + 3.);
+    snr 0.1 1. |> play_fx;
+    yield (0.25, g + 3.75);
+
+    yield (1., g);
+    snr 0.5 2. |> play_fx;
+    yield (2., g + 1.);
+    snr 0.2 1.5 |> play_fx;
+    yield (.25, g + 3.);
+    snr 0.1 1. |> play_fx;
+    yield (0.75, g + 3.25);
+    yield sp (g + 4.)
+  ;;
+
+  sp 0. 
+  |> cor_map_opt (fn (d, g) -> 
+    match g < 16. with 
+    | true -> Some (d * tempo_mul ()) 
+    | _ -> None
+  )
+  |> play_pattern 0.;
+
+
+  let ch = fn () ->
+    yield 1.;
+    chirp_pan 600 .01 |> play_fx;
+    yield 0.25; 
+    chirp_pan 200 .01 |> play_fx;
+    yield 0.25; 
+
+
+    yield 2.5;
+    yield 0.25;
+    chirp_pan 600 .01 |> play_fx;
+    yield 0.25; 
+    chirp_pan 200 .01 |> play_fx;
+    yield 0.25;
+    chirp_pan 600 .01 |> play_fx;
+    yield 0.25; 
+    chirp_pan 200 .01 |> play_fx;
+
+    yield 1.25;
+    chirp_pan 600 .01 |> play_fx;
+    yield 0.25; 
+    chirp_pan 200 .01 |> play_fx;
+    yield 0.25; 
+
+
+    yield 2.5;
+    yield 0.25;
+    chirp_pan 600 .01 |> play_fx;
+    yield 0.25; 
+    chirp_pan 200 .01 |> play_fx;
+    yield 0.25;
+    chirp_pan 600 .01 |> play_fx;
+    yield 0.25; 
+    chirp_pan 200 .01 |> play_fx
+  ;;
+
+  ch ()
+  |> cor_map (fn d -> d * tempo_mul ())
+  |> play_pattern 0.;
+
+
+
+
+
+  let stut_sched = fn a -> 
+    let d = Math.array_choose [| 0.75, 0.75, 0.75, 0.5, 0.25 |];
+    yield (d, a);
+    # yield (1., a);
+    yield stut_sched (a + d)
+  ;;
+
+  stut_sched 0.
+  |> cor_map_opt (fn (d, a) ->
+    match a < 16. with
+    | true -> (
+      # print `{Math.array_choose [|0., 1., 2., 3.|]}\n`;
+      # let sel = Math.array_choose [|0., 1., 2., 3.|];
+      set_input_scalar g 0 (Double (Math.rand_int 12)); 
+      # set_input_scalar g 0 6.;
+      set_input_scalar g 2 (Math.array_choose [|1.5, 0.25, 0.25, 0.5, 0.125,|]) ;
+      set_input_scalar g 4 (Math.array_choose [|1., 1., 1., 2., -1.|]) ;
+      set_input_trig g 1;
+      Some (d * tempo_mul ())
+    )
+    | _ -> None
+  )
+  |> play_pattern 0.;
+
+
+
+  yield 16. * tempo_mul (); 
+
+  yield co ()
+  ;;
+
+co () |> play_pattern 0. |> task;
+
+#%%
+
+# co () |> play_pattern 0. |> task;
+#%%
+
+# task (Ptr 0);
+

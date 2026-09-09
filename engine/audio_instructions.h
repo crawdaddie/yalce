@@ -11,6 +11,7 @@ typedef struct {
     NODE_REMOVE,
     NODE_SET_INPUT,
     NODE_PIPE_INPUT,
+    NODE_MIX_INPUT,
   } type;
   // int frame_offset;
   uint64_t tick;
@@ -43,6 +44,11 @@ typedef struct {
       int input;
       Node *value;
     } NODE_PIPE_INPUT;
+
+    struct NODE_MIX_INPUT {
+      Node *mixer;
+      Node *source;
+    } NODE_MIX_INPUT;
 
     struct NODE_SET_TRIG {
       Node *target;

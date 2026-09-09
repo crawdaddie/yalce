@@ -147,6 +147,16 @@ typedef struct DisperserState {
   double y2[DISPERSER_MAX_STAGES];
 } DisperserState;
 
+/* glue compressor: SSL-bus-style "glue" compressor. `rms` holds the one-pole
+   RMS detector state (squared domain); `env_a`/`env_b` hold the fast and slow
+   ballistics envelopes of the gain reduction (dB). See
+   ylc_audio_glue_kernel in osc_kernels.c. */
+typedef struct GlueCompState {
+  double rms;
+  double env_a;
+  double env_b;
+} GlueCompState;
+
 /* pan: distribute a mono signal across N output channels (equal-power).
    `out` is a buffer of `n` doubles written by the kernel. See
    ylc_audio_pan_kernel in osc_kernels.c. */

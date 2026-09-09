@@ -38,6 +38,9 @@ typedef struct Node {
   node_state_init_func_t state_init;
   struct Node *bus;
   struct Node *alloc_next; // For host-owned allocation tracking (ylc_clap)
+  struct Node *mix_head;  // Mix bus: head of summed source nodes (this node is
+                          // a mix bus when non-NULL)
+  struct Node *mix_next;  // Mix bus: link to the next source in the bus's list
 } Node;
 
 typedef Node *NodeRef;

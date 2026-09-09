@@ -1199,6 +1199,96 @@ ylc_audio_disperser_kernel(DisperserState *state, double spf, double freq,
   return x;
 }
 
+/* glue compressor: an SSL-bus-style "glue" compressor.
+
+   Detection is RMS (one-pole, ~10 ms integration) so it follows the program
+   material rather than single peaks, and the gain computer is a classic
+   soft-knee curve in the dB domain.
+
+   The glue character comes from two parallel attack/release ballistics
+   applied to the gain reduction: a fast pair (attack/4, release/4) and a
+   slow pair (attack*4, release*4), combined with max(). A brief transient is
+   caught by the fast path, which recovers quickly; sustained material
+   engages the slow path, which releases gradually -- the program-dependent
+   "breathing" of a bus compressor.
+
+   Per-sample args (all may be audio-rate / multi-lane):
+     thresh  - threshold in dB
+     ratio   - compression ratio (1 = no compression)
+     attack  - attack time in seconds
+     release - release time in seconds
+     knee    - soft-knee width in dB
+     makeup  - output gain in dB
+     input   - signal sample. */
+__attribute__((always_inline)) double
+ylc_audio_glue_kernel(GlueCompState *state, double spf, double thresh,
+                      double ratio, double attack, double release, double knee,
+                      double makeup, double input) {
+  if (!state || spf <= 0.0 || !isfinite(spf)) {
+    return input;
+  }
+
+  double x = isfinite(input) ? input : 0.0;
+
+  /* --- RMS detector (one-pole in the squared domain) --- */
+  const double det_tc = 0.010; /* 10 ms detector integration */
+  double det_coef = 1.0 - exp(-spf / det_tc);
+  state->rms += (x * x - state->rms) * det_coef;
+  if (!isfinite(state->rms) || state->rms < 1e-24) {
+    state->rms = 1e-24;
+  }
+  double det_db = 10.0 * log10(state->rms);
+
+  /* --- soft-knee gain computer (dB domain) --- */
+  double r = ratio;
+  if (!isfinite(r) || r < 1.0) {
+    r = 1.0;
+  }
+  double slope = 1.0 - (1.0 / r);
+  double kw = knee;
+  if (!isfinite(kw) || kw < 0.0) {
+    kw = 0.0;
+  }
+  double over = det_db - thresh;
+  double gr = 0.0; /* target gain reduction in dB, <= 0 */
+  if (over <= -0.5 * kw) {
+    gr = 0.0;
+  } else if (over >= 0.5 * kw) {
+    gr = -(slope * over);
+  } else {
+    double t = over + 0.5 * kw;
+    gr = -(slope * t * t / (2.0 * kw));
+  }
+
+  /* --- dual ballistics: fast and slow envelopes, combined with max --- */
+  double atk = isfinite(attack) && attack > 0.0 ? attack : 0.0;
+  double rel = isfinite(release) && release > 0.0 ? release : 0.0;
+  double a_fast = atk > 0.0 ? 1.0 - exp(-spf / (atk * 0.25)) : 1.0;
+  double r_fast = rel > 0.0 ? 1.0 - exp(-spf / (rel * 0.25)) : 1.0;
+  double a_slow = atk > 0.0 ? 1.0 - exp(-spf / (atk * 4.0)) : 1.0;
+  double r_slow = rel > 0.0 ? 1.0 - exp(-spf / (rel * 4.0)) : 1.0;
+
+  state->env_a +=
+      (gr - state->env_a) * ((gr > state->env_a) ? a_fast : r_fast);
+  state->env_b +=
+      (gr - state->env_b) * ((gr > state->env_b) ? a_slow : r_slow);
+  if (!isfinite(state->env_a)) {
+    state->env_a = 0.0;
+  }
+  if (!isfinite(state->env_b)) {
+    state->env_b = 0.0;
+  }
+
+  double gr_env = state->env_a > state->env_b ? state->env_a : state->env_b;
+
+  /* --- apply gain reduction + makeup --- */
+  double gain = pow(10.0, (gr_env + makeup) * 0.05);
+  if (!isfinite(gain)) {
+    gain = 1.0;
+  }
+  return x * gain;
+}
+
 /* pan: distribute a mono signal across N output channels with equal-power
    panning.
 

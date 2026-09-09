@@ -3496,6 +3496,31 @@ static const AudioBuiltin audio_builtins[] = {
      .arg_order = NULL,
      .kernel_argc = 0},
 
+    /* glue compressor: SSL-bus-style "glue" compressor with RMS detection,
+       a soft knee and program-dependent dual attack/release ballistics
+       (fast path catches transients, slow path holds the bus down).
+         glue thresh ratio attack release knee makeup input
+       thresh  - threshold in dB
+       ratio   - compression ratio (1 = bypass)
+       attack  - attack time in seconds
+       release - release time in seconds
+       knee    - soft-knee width in dB
+       makeup  - output gain in dB
+       input   - signal. All args may be per-channel (multi-lane). */
+    {.name = "glue",
+     .source_argc = 7,
+     .kernel_symbol = "ylc_audio_glue_kernel",
+     .emit = audio_builtin_emit_num_state,
+     .state_size = sizeof(GlueCompState),
+     .state_align = __alignof__(GlueCompState),
+     .state_name = "glue.state",
+     .lane_expand_mask = AUDIO_ARG_MASK(0) | AUDIO_ARG_MASK(1) |
+                         AUDIO_ARG_MASK(2) | AUDIO_ARG_MASK(3) |
+                         AUDIO_ARG_MASK(4) | AUDIO_ARG_MASK(5) |
+                         AUDIO_ARG_MASK(6),
+     .arg_order = NULL,
+     .kernel_argc = 0},
+
     {.name = "arr_choose",
      .source_argc = 2,
      .kernel_symbol = "ylc_audio_arr_choose_kernel",
@@ -6489,7 +6514,7 @@ static MirValueId audio_mir_read_frame_input(AudioCompileCtx *audio,
   MirBuilder *b = audio->frame_builder;
   MirValueId index = mir_const_int(b, &t_int, audio->app, (int)input_index);
   MirValueId slot = mir_ptr_offset(b, audio->ptr_ptr_type, audio->app,
-                                   audio->inputs_param, index);
+                                    audio->inputs_param, index);
   MirValueId inlet = mir_ptr_load(b, &t_ptr, audio->app, slot);
 
   Type *read_params[] = {&t_ptr, &t_int};

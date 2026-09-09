@@ -1,6 +1,6 @@
 let Audio = extern fn (T: (Double ... -> Double)) -> T;
 
-# Table-lookup sine oscillator. Arg: frequency in Hz.
+# aTyable-lookup sine oscillator. Arg: frequency in Hz.
 
 let ~ = extern fn Array of T -> T;
 let sin_osc = extern fn Double -> Double;
@@ -49,6 +49,7 @@ let array_env = extern fn Array of Double -> Double -> Double -> Double;
 let rect = extern fn Double -> Double -> Double;
 
 let delay_line = extern fn Double -> Array of Double;
+
 # Comb filter. Args: delay seconds, max delay seconds, feedback, input.
 # Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
 let comb = extern fn Double -> Double -> Double -> Double -> Double;
@@ -63,6 +64,12 @@ let dl_allpass = extern fn Double -> Double -> Double -> Double -> Double;
 # 0 = bypass), pinch [0,1] (Q, inverted: 1 = chirpy / low Q / broad delay,
 # 0 = concentrated group delay around the cutoff), input.
 let disperser = extern fn Double -> Double -> Double -> Double -> Double;
+
+# Glue compressor (SSL-style bus compressor): RMS detection, soft knee and
+# program-dependent dual attack/release ballistics -- fast recovery on
+# transients, slow smooth release on sustained material.
+# Args: threshold dB, ratio, attack secs, release secs, knee dB, makeup dB, input.
+let glue = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double;
 
 # Buffer playback. Args: buffer, rate, start position, trigger.
 let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;
@@ -372,6 +379,27 @@ let dispersion32 = @Audio fn base amount x ->
 
 let white = @Audio fn () ->
   Math.rrand -1. 1.
+;;
+
+# Pink noise (-3 dB/oct) in the range [-1, 1], via Paul Kellet's filter.
+let pink = @Audio fn () ->
+  let B = [| 0., 0., 0., 0., 0., 0., 0. |];
+  let w = Math.rrand -1. 1.;
+  let b0 = 0.99886  * B[0] + w * 0.0555179;
+  let b1 = 0.99332  * B[1] + w * 0.0750759;
+  let b2 = 0.96900  * B[2] + w * 0.1538520;
+  let b3 = 0.86650  * B[3] + w * 0.3104856;
+  let b4 = 0.55000  * B[4] + w * 0.5329522;
+  let b5 = -0.7616  * B[5] - w * 0.0168980;
+  let out = (b0 + b1 + b2 + b3 + b4 + b5 + B[6] + w * 0.5362) * 0.11;
+  B[0] := b0;
+  B[1] := b1;
+  B[2] := b2;
+  B[3] := b3;
+  B[4] := b4;
+  B[5] := b5;
+  B[6] := w * 0.115926;
+  out
 ;;
 
 let Reverb = module () ->

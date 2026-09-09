@@ -192,6 +192,59 @@ let test_cor_map = fn () ->
 
 ;;
 
+let test_cor_map_opt_ends_early = fn () ->
+  let c = fn () -> yield 1; yield 2; yield 3; yield 4;;
+  let x = c () |> cor_map_opt (fn n -> match n > 2 with
+    | true -> None
+    | _ -> Some (n * 10)
+  ) in
+     x () == Some 10
+  && x () == Some 20
+  && x () == None
+  && x () == None
+
+;;
+
+let test_cor_map_opt_none_first = fn () ->
+  let c = fn () -> yield 1; yield 2;;
+  let x = c () |> cor_map_opt (fn n -> if n == 99 then Some n else None) in
+     x () == None
+  && x () == None
+
+;;
+
+let test_cor_map_opt_all_some = fn () ->
+  let c = fn () -> yield 1; yield 2; yield 3;;
+  let x = c () |> cor_map_opt (fn n -> Some (n + 100)) in
+     x () == Some 101
+  && x () == Some 102
+  && x () == Some 103
+  && x () == None
+
+;;
+
+let test_cor_map_opt_composed = fn () ->
+  let c = fn () -> yield 1; yield 2; yield 3; yield 4;;
+  let x = c ()
+    |> cor_map ((*) 2)
+    |> cor_map_opt (fn n -> if n == 4 then None else Some (n + 1))
+  in
+     x () == Some 3
+  && x () == None
+  && x () == None
+
+;;
+
+let test_cor_map_opt_floats = fn () ->
+  let c = fn () -> yield 1.; yield 2.; yield 3.;;
+  let x = c () |> cor_map_opt (fn n -> Some (n / 2.)) in
+     x () == Some 0.5
+  && x () == Some 1.
+  && x () == Some 1.5
+  && x () == None
+
+;;
+
 # let test_cor_zip_struct_map = fn () ->
 #   let x =
 #     (

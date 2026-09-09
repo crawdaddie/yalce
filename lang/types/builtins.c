@@ -448,6 +448,27 @@ static TypeEnv *make_cor_map_env(void) {
   return entry;
 }
 
+static TypeEnv *make_cor_map_opt_env(void) {
+  Type *a = tvar("a");
+  Type *b = tvar("b");
+  Type *mapper = type_fn(a, create_option_type(b));
+  Type *input = create_coroutine_instance_type(a);
+  Type *output = create_coroutine_instance_type(b);
+  Type *fn_type = type_fn(mapper, type_fn(input, output));
+
+  TypeList *tl_a = vlist_of_typevar(a);
+  TypeList *tl_b = vlist_of_typevar(b);
+  tl_a->next = tl_b;
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "cor_map_opt",
+                      .type = fn_type,
+                      .scheme_vars = tl_a,
+                      .predicates = NULL,
+                      .next = NULL};
+  return entry;
+}
+
 static TypeEnv *make_array_size_env(void) {
   // array_size : Array a -> Int
   Type *a = tvar("a");
@@ -932,6 +953,8 @@ void initialize_builtin_types() {
   builtin_envs.cor_map = make_cor_map_env();
 
   add_builtin_env("cor_map", builtin_envs.cor_map);
+  builtin_envs.cor_map_opt = make_cor_map_opt_env();
+  add_builtin_env("cor_map_opt", builtin_envs.cor_map_opt);
   builtin_envs.cor_loop = make_cor_loop_env();
   add_builtin_env("cor_loop", builtin_envs.cor_loop);
 

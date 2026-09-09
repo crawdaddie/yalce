@@ -39,6 +39,7 @@ typedef struct BuiltinEnvRefs {
   TypeEnv *cstr;
   TypeEnv *sizeof_env;
   TypeEnv *cor_map;
+  TypeEnv *cor_map_opt;
   TypeEnv *cor_loop;
   TypeEnv *cor_zip;
   TypeEnv *cor_zip_struct;

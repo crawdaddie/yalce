@@ -437,6 +437,13 @@ static const char *mir_cor_map_wrapper_name(MirProgram *program) {
   return mir_arena_strdup(program->arena, name);
 }
 
+static const char *mir_cor_map_opt_wrapper_name(MirProgram *program) {
+  char name[64];
+  snprintf(name, sizeof(name), "$builtin.cor_map_opt.%u",
+           program ? (unsigned)program->functions.len : 0);
+  return mir_arena_strdup(program->arena, name);
+}
+
 static const char *mir_cor_zip_wrapper_name(MirProgram *program) {
   char name[64];
   snprintf(name, sizeof(name), "$builtin.cor_zip.%u",
@@ -1196,6 +1203,154 @@ static MirValueId MirCorMapHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
 
   MirFunction *wrapper = mir_build_cor_map_wrapper(builder, app, map_type,
                                                    source_coro_type, app->type);
+  if (!wrapper) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId wrapper_ref = mir_fn_ref(builder, wrapper->type, app, wrapper);
+  MirValueId args[] = {mapper, source};
+  return mir_coro_new_call_args(builder, app->type, app, wrapper_ref,
+                                wrapper->type, args, 2);
+}
+
+static MirFunction *mir_build_cor_map_opt_wrapper(MirBuilder *builder, Ast *app,
+                                                  Type *map_type,
+                                                  Type *source_coro_type,
+                                                  Type *output_coro_type) {
+  MirArena *wrapper_arena = mir_generated_fn_arena(builder);
+  map_type = mir_generated_type(builder, map_type);
+  source_coro_type = mir_generated_type(builder, source_coro_type);
+  output_coro_type = mir_generated_type(builder, output_coro_type);
+
+  Type *input_type = mir_coro_yield_type(source_coro_type);
+  Type *output_type = mir_coro_yield_type(output_coro_type);
+  Type *next_type = input_type ? create_option_type(input_type) : NULL;
+  Type *some_type = next_type && next_type->data.T_CONS.args
+                        ? next_type->data.T_CONS.args[0]
+                        : NULL;
+  if (!map_type || map_type->kind != T_FN || !input_type || !output_type ||
+      !some_type) {
+    return NULL;
+  }
+
+  Type *mapped_opt_type = map_type->data.T_FN.to;
+  Type *mapped_some_type =
+      is_option_type(mapped_opt_type) && mapped_opt_type->data.T_CONS.args
+          ? mapped_opt_type->data.T_CONS.args[0]
+          : NULL;
+  if (!mapped_opt_type || !mapped_some_type) {
+    return NULL;
+  }
+
+  Type *wrapper_type =
+      type_fn(map_type, type_fn(source_coro_type, output_coro_type));
+  wrapper_type->data.T_FN.attributes = set_attr(
+      wrapper_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
+  MirFunction *wrapper = mir_program_add_function_arena(
+      builder->program, mir_cor_map_opt_wrapper_name(builder->program),
+      wrapper_type, app, wrapper_arena);
+  if (!wrapper) {
+    return NULL;
+  }
+
+  MirValueId mapper = mir_function_add_param(wrapper, "map", map_type, app);
+  MirValueId source =
+      mir_function_add_param(wrapper, "source", source_coro_type, app);
+  if (mapper == MIR_NO_VALUE || source == MIR_NO_VALUE) {
+    return NULL;
+  }
+
+  MirBlock *entry = mir_function_add_block(wrapper, "entry");
+  MirBlock *check = mir_function_add_block(wrapper, "cor_map_opt.check");
+  MirBlock *value = mir_function_add_block(wrapper, "cor_map_opt.value");
+  MirBlock *mapped = mir_function_add_block(wrapper, "cor_map_opt.mapped");
+  MirBlock *emit = mir_function_add_block(wrapper, "cor_map_opt.emit");
+  MirBlock *done = mir_function_add_block(wrapper, "cor_map_opt.done");
+  if (!entry || !check || !value || !mapped || !emit || !done) {
+    return NULL;
+  }
+
+  MirBuilder wrapper_builder;
+  mir_builder_init(&wrapper_builder, builder->program, wrapper);
+
+  mir_builder_position_at_end(&wrapper_builder, entry);
+  mir_builder_set_br(&wrapper_builder, check->id);
+
+  mir_builder_position_at_end(&wrapper_builder, check);
+  MirValueId next =
+      mir_coro_next(&wrapper_builder, app, source, source_coro_type);
+  MirValueId tag = mir_variant_tag(&wrapper_builder, app, next);
+  MirValueId is_some =
+      mir_tag_eq(&wrapper_builder, app, tag, 0, TYPE_NAME_SOME);
+  if (next == MIR_NO_VALUE || tag == MIR_NO_VALUE || is_some == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_builder_set_cond(&wrapper_builder, is_some, value->id, done->id);
+
+  mir_builder_position_at_end(&wrapper_builder, value);
+  MirValueId payload = mir_variant_payload(&wrapper_builder, app, next,
+                                           some_type, 0, TYPE_NAME_SOME);
+  MirValueId item =
+      mir_tuple_get(&wrapper_builder, input_type, app, payload, 0);
+  if (payload == MIR_NO_VALUE || item == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_builder_set_br(&wrapper_builder, mapped->id);
+
+  mir_builder_position_at_end(&wrapper_builder, mapped);
+  MirValueId mapped_opt = mir_call_value(&wrapper_builder, mapped_opt_type, app,
+                                         mapper, map_type, &item, 1);
+  MirValueId mapped_tag = mir_variant_tag(&wrapper_builder, app, mapped_opt);
+  MirValueId mapped_is_some =
+      mir_tag_eq(&wrapper_builder, app, mapped_tag, 0, TYPE_NAME_SOME);
+  if (mapped_opt == MIR_NO_VALUE || mapped_tag == MIR_NO_VALUE ||
+      mapped_is_some == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_builder_set_cond(&wrapper_builder, mapped_is_some, emit->id, done->id);
+
+  mir_builder_position_at_end(&wrapper_builder, emit);
+  MirValueId mapped_payload = mir_variant_payload(
+      &wrapper_builder, app, mapped_opt, mapped_some_type, 0, TYPE_NAME_SOME);
+  MirValueId mapped_item =
+      mir_tuple_get(&wrapper_builder, output_type, app, mapped_payload, 0);
+  if (mapped_payload == MIR_NO_VALUE || mapped_item == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_builder_set_yield(&wrapper_builder, mapped_item, check->id);
+
+  mir_builder_position_at_end(&wrapper_builder, done);
+  mir_builder_set_coro_done(&wrapper_builder);
+
+  return wrapper;
+}
+
+static MirValueId MirCorMapOptHandler(MirBuilder *builder, Ast *app,
+                                      MirCtx *ctx, MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!mir_builtin_arity(app, 2) || !is_coroutine_type(app->type)) {
+    return MIR_NO_VALUE;
+  }
+
+  Ast *map_arg = app->data.AST_APPLICATION.args;
+  Ast *source_arg = app->data.AST_APPLICATION.args + 1;
+  Type *map_type = map_arg->type;
+  Type *source_coro_type = source_arg->type;
+  if (!map_type || map_type->kind != T_FN ||
+      is_coroutine_constructor_type(map_type) ||
+      !is_option_type(map_type->data.T_FN.to) ||
+      !is_coroutine_type(source_coro_type)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId mapper = mir_expr(builder, map_arg, ctx);
+  MirValueId source = mir_expr(builder, source_arg, ctx);
+  if (mapper == MIR_NO_VALUE || source == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirFunction *wrapper = mir_build_cor_map_opt_wrapper(
+      builder, app, map_type, source_coro_type, app->type);
   if (!wrapper) {
     return MIR_NO_VALUE;
   }
@@ -2251,6 +2406,12 @@ void mir_register_core_builtins(MirProgram *program) {
 
   mir_register_builtin(
       program, builtin_envs.cor_map, MirCorMapHandler, MIR_BUILTIN_SYMBOL_CORE,
+      (const MirOperandUse[]){MIR_OPERAND_USE_CONSUME, MIR_OPERAND_USE_CONSUME},
+      2, MIR_RESULT_OWNED);
+
+  mir_register_builtin(
+      program, builtin_envs.cor_map_opt, MirCorMapOptHandler,
+      MIR_BUILTIN_SYMBOL_CORE,
       (const MirOperandUse[]){MIR_OPERAND_USE_CONSUME, MIR_OPERAND_USE_CONSUME},
       2, MIR_RESULT_OWNED);
 

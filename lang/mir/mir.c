@@ -3778,13 +3778,33 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
   for (size_t i = 0; i < source->params.len; i++) {
     MirParam *param = &source->params.items[i];
     Type *param_type = NULL;
-    if (specialized_param_cursor &&
-        specialized_param_cursor->kind == T_FN) {
-      param_type = specialized_param_cursor->data.T_FN.from;
-      specialized_param_cursor = specialized_param_cursor->data.T_FN.to;
-    }
-    if (!param_type) {
-      param_type = mir_substitute_type(program->arena, subst, param->type);
+    if (param->name && strcmp(param->name, "$env") == 0) {
+      /* The synthetic closure-env param is not a link in the function's
+         curried T_FN type chain (it lives in closure_meta). Typing it from
+         the cursor would steal the first real parameter's type and emit
+         field extractions against a non-tuple env. Use the substituted env
+         type instead, and only consume the cursor when the specialization
+         type itself carries the env as its first link (impl_type shape). */
+      Type *env_type =
+          mir_substitute_type(program->arena, subst, param->type);
+      if (specialized_param_cursor &&
+          specialized_param_cursor->kind == T_FN &&
+          specialized_param_cursor->data.T_FN.from &&
+          types_equal(specialized_param_cursor->data.T_FN.from, env_type)) {
+        param_type = specialized_param_cursor->data.T_FN.from;
+        specialized_param_cursor = specialized_param_cursor->data.T_FN.to;
+      } else {
+        param_type = env_type;
+      }
+    } else {
+      if (specialized_param_cursor &&
+          specialized_param_cursor->kind == T_FN) {
+        param_type = specialized_param_cursor->data.T_FN.from;
+        specialized_param_cursor = specialized_param_cursor->data.T_FN.to;
+      }
+      if (!param_type) {
+        param_type = mir_substitute_type(program->arena, subst, param->type);
+      }
     }
     MirValueId value =
         mir_function_add_param(fn, param->name, param_type, param->origin);
