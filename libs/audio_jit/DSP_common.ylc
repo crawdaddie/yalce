@@ -10,9 +10,10 @@ let pm_osc = extern fn Double -> Double -> Double -> Double;
 let phasor = extern fn Double -> Double;
 
 # Resettable phasor. Args: frequency, trigger/reset signal.
-# let phasor_sinc = extern fn Double -> Double -> Double;
+let phasor_sinc = extern fn Double -> Double -> Double;
 # Impulse generator. Arg: trigger frequency; `0` is commonly used for a one-shot trigger.
 let trig = extern fn Double -> Double;
+let trig_sinc = extern fn Double -> Double -> Double;
 
 # Emits a trigger when the input value changes.
 let changed = extern fn Double -> Double;

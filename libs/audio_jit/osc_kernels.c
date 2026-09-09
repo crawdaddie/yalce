@@ -3,6 +3,7 @@
 #include "ylc_datatypes.h"
 #include <math.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 static inline double audio_jit_wrap_index(double index, double size) {
@@ -240,9 +241,18 @@ ylc_audio_phasor_kernel(PhasorState *state, double spf, double freq) {
 }
 
 __attribute__((always_inline)) double
+ylc_audio_phasor_retrig_kernel(PhasorState *state, double spf, double freq,
+                               double trig) {
+  double phase = state->phase;
+  state->phase = fmod(state->phase + freq * spf, 1.0);
+  if (trig) {
+    state->phase = 0.;
+  }
+  return phase;
+}
+
+__attribute__((always_inline)) double
 ylc_audio_trig_once_kernel(TrigOnceState *state, double spf, double freq) {
-  (void)spf;
-  (void)freq;
   if (state->fired) {
     return 0.0;
   }
@@ -259,6 +269,24 @@ ylc_audio_trig_kernel(TrigState *state, double spf, double freq) {
   double out = (!state->initialized || wrapped) ? 1.0 : 0.0;
 
   state->phase = advanced - floor(advanced);
+  state->initialized = 1;
+  return out;
+}
+
+__attribute__((always_inline)) double
+ylc_audio_trig_retrig_kernel(TrigState *state, double spf, double freq,
+                             double retrig) {
+  double phase = state->phase;
+  double step = freq * spf;
+  double advanced = phase + step;
+  double wrapped = step >= 0.0 ? advanced >= 1.0 : advanced < 0.0;
+  double out = (!state->initialized || wrapped) ? 1.0 : 0.0;
+
+  state->phase = advanced - floor(advanced);
+  if (retrig) {
+    state->phase = 0.;
+    out = 1.;
+  }
   state->initialized = 1;
   return out;
 }
@@ -1268,10 +1296,8 @@ ylc_audio_glue_kernel(GlueCompState *state, double spf, double thresh,
   double a_slow = atk > 0.0 ? 1.0 - exp(-spf / (atk * 4.0)) : 1.0;
   double r_slow = rel > 0.0 ? 1.0 - exp(-spf / (rel * 4.0)) : 1.0;
 
-  state->env_a +=
-      (gr - state->env_a) * ((gr > state->env_a) ? a_fast : r_fast);
-  state->env_b +=
-      (gr - state->env_b) * ((gr > state->env_b) ? a_slow : r_slow);
+  state->env_a += (gr - state->env_a) * ((gr > state->env_a) ? a_fast : r_fast);
+  state->env_b += (gr - state->env_b) * ((gr > state->env_b) ? a_slow : r_slow);
   if (!isfinite(state->env_a)) {
     state->env_a = 0.0;
   }
