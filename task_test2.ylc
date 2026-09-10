@@ -6,27 +6,6 @@ let set_input_trig = extern fn Ptr -> Int -> Ptr;
 
 let tempo_mul = fn () -> 60. / 160.;;
 
-# Random int in [0, n) that never repeats the previous draw. Draws uniformly
-# from the n-1 values != prev by remapping [0, n-2) -> [0, n) \ {prev}: values
-# below prev pass through, values >= prev shift up one. First draw (prev = -1)
-# is unconstrained. State lives in a top-level mutable cell, so the guarantee
-# holds across every call from anywhere.
-let rint_prev = [| -1 |];
-let rand_int_neq = fn n ->
-  let prev = rint_prev[0];
-  let v =
-    if prev < 0 then Math.rand_int n
-    else (
-      if n < 2 then 0
-      else (
-        let r = Math.rand_int (n - 1) in
-        if r < prev then r else r + 1
-      )
-    );
-  rint_prev[0] := v;
-  v
-;;
-
 let kick = @Audio fn () ->
   let t = trig 0;
   # pitch
@@ -272,7 +251,7 @@ let co = fn () ->
   |> cor_map_opt (fn (d, g) -> 
     match g < 15. with 
     | true -> (
-      metal_hat (sin (g * 1.4) |> Math.bipolar_scale 0.01 0.03) |> play_fx;
+      metal_hat (sin (g * tempo_mul () * 16) |> Math.bipolar_scale 0.01 0.03) |> play_fx;
       Some (d * tempo_mul ()) 
     )
     | _ -> None
@@ -284,18 +263,33 @@ let co = fn () ->
     yield (1., g);
     snr 0.2 1. |> play_fx;
     yield (2., g + 1.);
-    snr 0.2 1.5 |> play_fx;
-    yield (.75, g + 3.);
-    snr 0.1 1. |> play_fx;
-    yield (0.25, g + 3.75);
+    snr 0.1 2 |> play_fx;
+    # yield (.5, g + 3.);
+    # snr 0.1 2. |> play_fx;
+    # yield (0.5, g + 3.5);
+    yield (1., g + 3.);
 
-    yield (1., g);
-    snr 0.5 2. |> play_fx;
-    yield (2., g + 1.);
-    snr 0.2 1.5 |> play_fx;
-    yield (.25, g + 3.);
-    snr 0.1 1. |> play_fx;
-    yield (0.75, g + 3.25);
+    # yield (1.5, g + 4.);
+    # snr 0.05 2. |> play_fx;
+
+    # yield (1.5, g + 5.5);
+    # snr 0.1 2. |> play_fx;
+    #
+    # yield (1.5, g + 5.);
+    # snr 0.1 2. |> play_fx;
+    #
+    # yield (0.25, g + 6.5);
+    # snr 0.1 2. |> play_fx;
+    #
+    # yield (0.25, g + 6.75);
+    # snr 0.1 1.8 |> play_fx;
+    #
+    # yield (1.25, g + 8.);
+    # yield (2., g + 1.);
+    # snr 0.2 1.5 |> play_fx;
+    # yield (.25, g + 3.);
+    # snr 0.1 1. |> play_fx;
+    # yield (0.75, g + 3.25);
     yield sp (g + 4.)
   ;;
 
@@ -353,7 +347,7 @@ let co = fn () ->
 
 
   let stut_sched = fn a -> 
-    let d = Math.array_choose [| 1., 0.75, 0.5, 0.25 |];
+    let d = Math.array_choose [| 1., 1.5, 0.75, 0.5, 0.25 |];
     yield (d, a);
     # yield (1., a);
     yield stut_sched (a + d)
