@@ -32,7 +32,7 @@ let chirp_pan = @Audio fn lo dr ->
   freq
   |> sin_osc 
   |> (*) (adsr 0 0.1 1. 0.02 (t |> rect 0.1) |> kill_on_end)
-  |> (*) 0.5
+  |> (*) 0.3
   #|> pan 2 (lfnoise 1 0. 1.)
   ;;
 
@@ -184,6 +184,14 @@ let bool_to_double = fn x ->
   | false -> 0.
   ;;
 
+# let bit_reduce = @Audio fn depth inp ->
+#   inp * depth |> Math.round |> (/) depth 
+# ;;
+# Bit-depth reduction. Args: bits (1..24), input.
+let bitcrush = @Audio fn bits inp ->
+  let levels = Math.pow 2. (bits - 1.) in
+  Math.floor (inp * levels + 0.5) / levels
+;;
 
 # Effect processor selected by the `sel` parameter:
 #   0.        -> dry (bypass)
@@ -197,31 +205,34 @@ let bool_to_double = fn x ->
 
 let fx = @Audio fn sel tr subdiv beat_len rate inp ->
   let range = Math.round (Math.floor sel);     # integer range index
+  let rr = inp + (inp * (bool_to_double (sel == 5.)) |> Filter.hpf 1000. 1. |> Reverb.concert);
+
   let cc = 
-    inp |> comb (lfnoise 2. 0.001 0.04) 0.1 0.8;
+    rr |> comb (lfnoise 2. 0.001 0.04) 0.1 0.8;
 
   let rm = 
-    inp * sin_osc (lfnoise0 (1. / beat_len) 300. 1000.);
+    rr * sin_osc (lfnoise0 (1. / beat_len) 1000. 3000.);
 
   let fl =
-    inp 
+    rr
     |> (*) 3. |> Math.tanh
     |> Filter.lpf (lfnoise 4. 50. 1000.) 5.
     ;
 
-  let rr = inp * (bool_to_double (sel == 5.)) |> Filter.hpf 1000. 1. |> Reverb.concert;
-  let stutt = inp |> stutter tr ((sel == 6.) |> bool_to_double) beat_len subdiv rate;
+  let stutt = rr |> stutter tr ((sel == 6.) |> bool_to_double) beat_len subdiv rate;
+
   let sig = match sel with
-    | 0. -> inp                                 # dry
+    | 0. -> rr                               # dry
     | 1. -> cc
     | 2. -> fl 
     | 3. -> rm
-    | 4. -> inp |> Filter.hpf (lfnoise 3. 800. 2000.) 4.
+    | 4. -> rr |> Filter.hpf (lfnoise 3. 800. 2000.) 4.
     | 6. -> stutt
-    | _ -> inp
+    | 7. -> rr |> bitcrush (lfnoise 2. 1. 4.)
+    | _ -> rr
     ;
 
-  sig + rr
+  sig 
   |> glue -12. 4. 0.005 0.15 6. 3.
  # |> stutter (changed sel) (1.) beat_len subdiv rate
 
@@ -251,7 +262,7 @@ let co = fn () ->
   |> cor_map_opt (fn (d, g) -> 
     match g < 15. with 
     | true -> (
-      metal_hat (sin (g * tempo_mul () * 16) |> Math.bipolar_scale 0.01 0.03) |> play_fx;
+      metal_hat (sin (g * tempo_mul () * 32.) |> Math.bipolar_scale 0.01 0.03) |> play_fx;
       Some (d * tempo_mul ()) 
     )
     | _ -> None
@@ -318,24 +329,24 @@ let co = fn () ->
     yield 0.25;
     chirp_pan 600 .01 |> play_fx;
     yield 0.25; 
-    chirp_pan 200 .01 |> play_fx;
-
-    yield 1.25;
-    chirp_pan 600 .01 |> play_fx;
-    yield 0.25; 
-    chirp_pan 200 .01 |> play_fx;
-    yield 0.25; 
-
-
-    yield 2.5;
-    yield 0.25;
-    chirp_pan 600 .01 |> play_fx;
-    yield 0.25; 
-    chirp_pan 200 .01 |> play_fx;
-    yield 0.25;
-    chirp_pan 600 .01 |> play_fx;
-    yield 0.25; 
     chirp_pan 200 .01 |> play_fx
+
+    # yield 1.25;
+    # chirp_pan 600 .01 |> play_fx;
+    # yield 0.25; 
+    # chirp_pan 200 .01 |> play_fx;
+    # yield 0.25; 
+    #
+    #
+    # yield 2.5;
+    # yield 0.25;
+    # chirp_pan 600 .01 |> play_fx;
+    # yield 0.25; 
+    # chirp_pan 200 .01 |> play_fx;
+    # yield 0.25;
+    # chirp_pan 600 .01 |> play_fx;
+    # yield 0.25; 
+    # chirp_pan 200 .01 |> play_fx
   ;;
 
   ch ()
