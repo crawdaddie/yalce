@@ -19,6 +19,7 @@ LLVMValueRef codegen_get_array_size(LLVMBuilderRef builder,
                                     LLVMTypeRef element_type);
 
 LLVMTypeRef codegen_array_type(LLVMTypeRef element_type);
+LLVMTypeRef codegen_string_type(LLVMTypeRef char_type);
 
 LLVMValueRef codegen_create_array(Ast *ast, JITLangCtx *ctx,
                                   LLVMModuleRef module, LLVMBuilderRef builder);

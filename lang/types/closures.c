@@ -64,6 +64,33 @@ void extend_closed_vals(Ast *fn, Ast *ref, Type *ref_type) {
   fn->data.AST_LAMBDA.num_closed_vals++;
 }
 
+void extend_coroutine_state_vals(Ast *fn, Ast *ref, Type *ref_type) {
+
+  for (AstList *l = fn->data.AST_LAMBDA.params; l; l = l->next) {
+
+    if (l->ast->tag == AST_IDENTIFIER &&
+        CHARS_EQ(ref->data.AST_IDENTIFIER.value,
+                 l->ast->data.AST_IDENTIFIER.value)) {
+      // avoid closing this function's existing params
+      return;
+    }
+  }
+
+  for (AstList *l = fn->data.AST_LAMBDA.yield_boundary_crossers; l;
+       l = l->next) {
+    if (CHARS_EQ(ref->data.AST_IDENTIFIER.value,
+                 l->ast->data.AST_IDENTIFIER.value)) {
+      // avoid adding closure variable twice
+      return;
+    }
+  }
+
+  ref->type = ref_type;
+  fn->data.AST_LAMBDA.yield_boundary_crossers =
+      ast_list_extend_left(fn->data.AST_LAMBDA.yield_boundary_crossers, ref);
+  fn->data.AST_LAMBDA.num_yield_boundary_crossers++;
+}
+
 static void propagate_closed_val_through_scopes(Ast *ast, Type *ref_type,
                                                 int binding_scope, TICtx *ctx) {
   if (!ctx || !ctx->current_scope || !ast) {
@@ -78,30 +105,6 @@ static void propagate_closed_val_through_scopes(Ast *ast, Type *ref_type,
   }
 }
 
-void handle_closed_over_ref(Ast *ast, TypeEnv *ref, TICtx *ctx) {
-
-  int this_scope = ctx->current_fn_base_scope;
-  int ref_scope = ref->type->scope;
-  // TODO: sort this out
-  // let K = fn () ->
-  //   let z = 2;
-  //   (fn a: (Int) -> z + 2 + a)
-  // ;;
-  // if a is typed suddenly the ref to z gets the wrong scope and is not
-  // registered as being closed-over
-
-  // if ((!is_rec_fn_ref) && (ref_scope > 0) && (this_scope > ref_scope)) {
-  //   // printf("closure stufff???? this scope %d ref_scope %d is_fn_param %d
-  //   // "
-  //   //        "is_rec fn ref %d\n",
-  //   //        this_scope, ref_scope, is_fn_param, ref->is_recursive_fn_ref);
-  //   // print_ast(ctx->current_fn_ast);
-  //   // print_ast(ast);
-  //   // extend_closure_free_vars(ctx->current_fn_ast, ast, ref->type);
-  //   extend_closed_vals(ctx->current_fn_ast, ast, ref->type);
-  // }
-}
-
 void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx) {
 
   if (!ctx || !ctx->current_scope) {
@@ -109,6 +112,15 @@ void handle_closed_over_value(binding_md binding_info, Ast *ast, TICtx *ctx) {
   }
 
   int scope = binding_info.data.VAR.scope;
+  int yield_boundary_scope = binding_info.data.VAR.yield_boundary_scope;
+
+  if (ctx->current_fn_ast &&
+      ctx->current_fn_ast->data.AST_LAMBDA.num_yields > yield_boundary_scope) {
+
+    ast->data.AST_IDENTIFIER.crosses_yield_boundary = true;
+    extend_coroutine_state_vals(ctx->current_fn_ast, ast, ast->type);
+  }
+
   if (scope > 0 && scope < ctx->current_fn_base_scope) {
     propagate_closed_val_through_scopes(ast, ast->type, scope, ctx);
   }

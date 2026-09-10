@@ -1,0 +1,30 @@
+let add = fn a b -> a + b;;
+
+let make_adder = fn x ->
+  add x
+;;
+
+let use_local_partial = fn x ->
+  let f = add x;
+  f 40
+;;
+
+let duplicate_array = fn n ->
+  let xs = [| n, n + 1 |];
+  (xs, xs)
+;;
+
+let choose_array = fn flag n ->
+  if flag then [| n, n + 1 |] else [| n + 2, n + 3 |]
+;;
+
+let escaped_then_called = fn x ->
+  let f = make_adder x;
+  f 2
+;;
+
+let a = use_local_partial 10;
+let b = escaped_then_called 20;
+let p = duplicate_array (a + b);
+let c = choose_array true 7;
+p

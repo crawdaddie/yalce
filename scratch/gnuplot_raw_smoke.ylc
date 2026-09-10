@@ -1,0 +1,16 @@
+let popen = extern fn Ptr -> Ptr -> Ptr;
+let fprintf = extern fn Ptr -> Ptr -> Int;
+let fflush = extern fn Ptr -> Int;
+let pclose = extern fn Ptr -> Int;
+
+let gp = popen (cstr "gnuplot") (cstr "w");
+fprintf gp "set terminal pngcairo size 400,300\n";
+fprintf gp "set output '/tmp/yalce_raw_smoke.png'\n";
+fprintf gp "plot '-' using 1:2 with lines title 'x'\n";
+fprintf gp "0 1\n";
+fprintf gp "1 2\n";
+fprintf gp "2 3\n";
+fprintf gp "e\n";
+fflush gp;
+pclose gp;
+print "done\n";

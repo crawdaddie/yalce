@@ -1,10 +1,3 @@
-# let chain_wrap = fn def: (() -> Synth) -> 
-#   reset_chain ();
-#   let x = def () in
-#   end_chain x
-# ;;
- 
-# TODO: add impls for Ord and Eq??
 let Arithmetic : Synth = module 
   let rank = 5.; # rank must be a literal
   let add = fn a: (Synth) b: (Synth) -> sum2_node a b;;
@@ -25,35 +18,4 @@ let Constructor : Synth = module
 ;
 
 
-let instantiate_template = extern fn List of (Int, Double) -> Ptr -> Synth;
-
-let array_to_buf = extern fn Array of Double -> Synth;
-
-# let play_node = extern fn Synth -> Synth;
-# let play_node_offset = extern fn Int -> Synth -> Synth;
-let play_node_offset_w_kill = extern fn Uint64 -> Double -> Int -> Synth -> Synth;
-
-let init_audio = extern fn () -> () in
-  init_audio ()
-;
-let compile_blob_template = extern fn (() -> Synth) -> Ptr;
-
-let play_tpl = fn f ->
-  f |> compile_blob_template |> instantiate_template [] |> play_node;;
-
-
 let sin = sin_node;
-
-
-let get_sq_table = extern fn () -> Ptr of Double;
-let get_sq_tabsize = extern fn () -> Int;
-let get_sin_table = extern fn () -> Ptr of Double;
-let get_sin_tabsize = extern fn () -> Int;
-let get_saw_table = extern fn () -> Ptr of Double;
-let get_saw_tabsize = extern fn () -> Int;
-
-
-
-let set_main_vol = extern fn Double -> ();
-
-

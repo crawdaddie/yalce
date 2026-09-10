@@ -1,0 +1,11 @@
+let Audio = extern fn (T: (Double ... -> Double)) -> T;
+let sin_osc = extern fn Double -> Double;
+let play_node = extern fn Ptr -> Ptr;
+
+let _ = dlopen "../libs/audio_jit/libaudio_jit.so";
+
+let s = @Audio fn () ->
+  sin_osc 220.
+;;
+
+print "compiled audio node\n";

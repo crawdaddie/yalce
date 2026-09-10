@@ -15,7 +15,6 @@
 
 /* ── Headers (types only) ─────────────────────────────────── */
 
-#include "../audio_graph.h"
 #include "../audio_instructions.h"
 #include "../common.h"
 #include "../ctx.h"
@@ -25,36 +24,24 @@
 
 Ctx ctx;
 
-/* audio_graph.h externs */
-AudioGraph *_graph = NULL;
-Node *_chain_head = NULL;
-Node *_chain_tail = NULL;
-
 /* ── Stubs for functions we don't need ────────────────────── */
 
-void perform_audio_graph(Node *_node, AudioGraph *graph, Node *_inputs[],
-                         int nframes, double spf) {
-  (void)_node;
-  (void)graph;
-  (void)_inputs;
-  (void)nframes;
-  (void)spf;
-}
-
-NodeRef group_add(NodeRef node, NodeRef group) {
-  (void)node;
-  (void)group;
-  return NULL;
-}
-
 void audio_ctx_add(Node *node) { (void)node; }
-void offset_node_bufs(Node *node, int f) {
+void audio_ctx_add_before(Node *target, Node *node) {
+  (void)target;
   (void)node;
-  (void)f;
 }
-void unoffset_node_bufs(Node *node, int f) {
-  (void)node;
-  (void)f;
+void audio_ctx_mark_dirty(void) {}
+
+void node_connect_input(int idx, NodeRef node, NodeRef input) {
+  if (!node || idx < 0 || idx >= MAX_INPUTS) {
+    return;
+  }
+  node->connections[idx].input_index = idx;
+  node->connections[idx].source_node_index = (uint64_t)input;
+  if (idx >= node->num_inputs) {
+    node->num_inputs = idx + 1;
+  }
 }
 
 double pow2table_read(double pos, int tabsize, double *table) {
@@ -102,8 +89,21 @@ static void reset_msg_queue(audio_instructions_queue *q) {
 
 static void reset_deferred(void) { num_deferred = 0; }
 
+static void reset_tasks(void) {
+  for (size_t i = 0; i < scheduler_tasks_size; ++i) {
+    free(scheduler_tasks[i]->children);
+    free(scheduler_tasks[i]);
+  }
+  free(scheduler_tasks);
+  scheduler_tasks = NULL;
+  scheduler_tasks_size = 0;
+  scheduler_tasks_cap = 0;
+  current_task = NULL;
+}
+
 static void reset_all(void) {
   reset_heap();
+  reset_tasks();
   reset_msg_queue(&ctx.msg_queue);
   reset_deferred();
   atomic_store(&global_sample_position, 0);
@@ -123,13 +123,12 @@ static void process_scheduler_events(uint64_t current_sample) {
 }
 
 /*
- * Create a minimal Node + AudioGraph that process_msg_pre/post can operate on.
- * Memory layout: [Node][AudioGraph][inlet_nodes...]
+ * Create a minimal Node with raw input nodes. This mirrors the new runtime
+ * graph model used by process_msg_pre/post.
  * Returns the outer Node*. Caller must free().
  */
 typedef struct {
   Node node;
-  AudioGraph graph;
   Node inlet_nodes[MAX_INPUTS];
   double inlet_bufs[MAX_INPUTS][BUF_SIZE];
 } MockSynth;
@@ -137,17 +136,14 @@ typedef struct {
 static MockSynth *create_mock_synth(int num_inlets) {
   MockSynth *m = calloc(1, sizeof(MockSynth));
 
-  m->node.perform = (perform_func_t)perform_audio_graph;
-  m->node.state_ptr = &m->graph;
-
-  m->graph.num_inlets = num_inlets;
-  m->graph.nodes = m->inlet_nodes;
+  m->node.num_inputs = num_inlets;
 
   for (int i = 0; i < num_inlets; i++) {
-    m->graph.inlets[i] = i;
     m->inlet_nodes[i].output.buf = m->inlet_bufs[i];
     m->inlet_nodes[i].output.layout = 1;
     m->inlet_nodes[i].output.size = BUF_SIZE;
+    m->node.connections[i].input_index = i;
+    m->node.connections[i].source_node_index = (uint64_t)&m->inlet_nodes[i];
   }
 
   return m;
@@ -468,6 +464,102 @@ static void test_schedule_event_conversion(void) {
   assert(scheduler_queue.size == 0);
 }
 
+static int task_step_count = 0;
+static void *task_child_handle = NULL;
+
+static void reschedule_once_cb(void *userdata, uint64_t tick) {
+  (void)userdata;
+  task_step_count++;
+  if (task_step_count == 1) {
+    ylc_schedule_current_task_event(tick, 1.0);
+  } else {
+    ylc_complete_current_task();
+  }
+}
+
+static void complete_only_cb(void *userdata, uint64_t tick) {
+  (void)userdata;
+  (void)tick;
+  task_step_count++;
+  ylc_complete_current_task();
+}
+
+static void spawn_child_cb(void *userdata, uint64_t tick) {
+  (void)userdata;
+  (void)tick;
+  task_step_count++;
+  task_child_handle = ylc_play_pattern_start(1.0, complete_only_cb,
+                                             (void *)&task_step_count);
+  ylc_complete_current_task();
+}
+
+static void spawn_after_cancel_cb(void *userdata, uint64_t tick) {
+  (void)userdata;
+  (void)tick;
+  task_step_count++;
+
+  cancel_task(current_task);
+  task_child_handle = ylc_play_pattern_start(1.0, complete_only_cb,
+                                             (void *)&task_step_count);
+}
+
+static void test_play_pattern_cancel_returned_handle(void) {
+  reset_all();
+  ctx.sample_rate = 48000;
+  task_step_count = 0;
+
+  void *handle =
+      ylc_play_pattern_start(0.0, reschedule_once_cb, (void *)&task_step_count);
+  assert(handle != NULL);
+  assert(scheduler_queue.size == 1);
+
+  process_scheduler_events(0);
+  assert(task_step_count == 1);
+  assert(scheduler_queue.size == 1);
+
+  cancel_task(handle);
+  process_scheduler_events(48000);
+  assert(task_step_count == 1);
+  assert(scheduler_queue.size == 0);
+}
+
+static void test_play_pattern_cancel_parent_cancels_child(void) {
+  reset_all();
+  ctx.sample_rate = 48000;
+  task_step_count = 0;
+  task_child_handle = NULL;
+
+  void *parent =
+      ylc_play_pattern_start(0.0, spawn_child_cb, (void *)&task_step_count);
+  assert(parent != NULL);
+
+  process_scheduler_events(0);
+  assert(task_step_count == 1);
+  assert(task_child_handle != NULL);
+  assert(scheduler_queue.size == 1);
+
+  cancel_task(parent);
+  process_scheduler_events(48000);
+  assert(task_step_count == 1);
+  assert(scheduler_queue.size == 0);
+}
+
+static void test_cancelled_parent_rejects_child(void) {
+  reset_all();
+  ctx.sample_rate = 48000;
+  task_step_count = 0;
+  task_child_handle = NULL;
+
+  void *parent = ylc_play_pattern_start(0.0, spawn_after_cancel_cb,
+                                        (void *)&task_step_count);
+  assert(parent != NULL);
+
+  process_scheduler_events(0);
+  assert(task_step_count == 1);
+  assert(task_child_handle == NULL);
+  assert(scheduler_queue.size == 0);
+}
+
 /* ══════════════════════════════════════════════════════════════
    LAYER 2: Audio Instruction Processing (pre/post with mock nodes)
    ══════════════════════════════════════════════════════════════ */
@@ -610,6 +702,31 @@ static void test_pre_post_trig(void) {
 
   process_msg_queue_post(0, BUF_SIZE, &ctx.msg_queue, consumed);
   assert(buf[20] == 0.0);
+
+  free(m);
+}
+
+static void test_pre_pipe_input_sets_dependency(void) {
+  reset_all();
+  MockSynth *m = create_mock_synth(1);
+  Node source = {
+      .output = {.layout = 1, .size = BUF_SIZE, .buf = m->inlet_bufs[0]},
+      .write_to_output = true,
+  };
+
+  audio_instruction msg = {.type = NODE_PIPE_INPUT, .tick = 25};
+  msg.payload.NODE_PIPE_INPUT.target = &m->node;
+  msg.payload.NODE_PIPE_INPUT.input = 0;
+  msg.payload.NODE_PIPE_INPUT.value = &source;
+
+  push_msg(&ctx.msg_queue, msg);
+
+  int consumed = process_msg_queue_pre(10, BUF_SIZE, &ctx.msg_queue);
+  assert(consumed == 1);
+  assert(m->node.connections[0].source_node_index == (uint64_t)&source);
+  assert(m->node.connections[0].input_index == 0);
+  assert(source.frame_offset == 15);
+  assert(source.write_to_output == false);
 
   free(m);
 }
@@ -766,6 +883,9 @@ int main(void) {
   RUN_TEST(test_process_events_reschedule);
   RUN_TEST(test_defer_quant_alignment);
   RUN_TEST(test_schedule_event_conversion);
+  RUN_TEST(test_play_pattern_cancel_returned_handle);
+  RUN_TEST(test_play_pattern_cancel_parent_cancels_child);
+  RUN_TEST(test_cancelled_parent_rejects_child);
 
   printf("\n=== Layer 2: Audio Instruction Processing ===\n");
   RUN_TEST(test_pre_on_time_scalar);
@@ -773,6 +893,7 @@ int main(void) {
   RUN_TEST(test_pre_late_message);
   RUN_TEST(test_pre_early_message_deferred);
   RUN_TEST(test_pre_post_trig);
+  RUN_TEST(test_pre_pipe_input_sets_dependency);
   RUN_TEST(test_pre_multiple_messages_ordering);
   RUN_TEST(test_pre_post_full_buffer_coverage);
 

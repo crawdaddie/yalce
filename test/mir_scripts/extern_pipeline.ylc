@@ -1,0 +1,7 @@
+let abs = extern fn T -> T;
+
+let call_abs = fn x ->
+  abs x
+;;
+
+abs (-1)

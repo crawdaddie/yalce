@@ -1,0 +1,149 @@
+open autograd; 
+type FlatNode = (
+  id: Int,
+  tensor_id: Int,
+  op: Int,
+  shape: Array of Int,
+  operands: Array of List of Int
+);
+
+type FlatState = (
+  next_id: Int,
+  seen: List of (Int, Int),
+  forward: List of FlatNode
+);
+
+
+let find_seen = fn tensor_id seen ->
+  match seen with
+  | [] -> None
+  | (tid, local_id)::rest ->
+    if tid == tensor_id then Some local_id else find_seen tensor_id rest
+;;
+
+let drop_id_sentinel = fn ids ->
+  match ids with
+  | [] -> []
+  | _::[] -> []
+  | x::rest -> x :: drop_id_sentinel rest
+;;
+
+let id_map_from_nodes = fn nodes next_id ->
+  match nodes with
+  | [] -> []
+  | node::rest -> (node.id, next_id) :: id_map_from_nodes rest (next_id + 1)
+;;
+
+let remap_id = fn old_id id_map ->
+  match id_map with
+  | [] -> old_id
+  | (seen_id, new_id)::rest ->
+    if seen_id == old_id then new_id else remap_id old_id rest
+;;
+
+let remap_ids = fn ids id_map ->
+  match ids with
+  | [] -> []
+  | id::rest -> (remap_id id id_map) :: remap_ids rest id_map
+;;
+
+let renumber_nodes = fn nodes id_map ->
+  match nodes with
+  | [] -> []
+  | node::rest -> (
+    let operands = node.operands;
+    let new_operands = remap_ids (operands[0]) id_map;
+    let new_node = FlatNode
+      (remap_id node.id id_map)
+      node.tensor_id
+      node.op
+      node.shape
+      [| new_operands |];
+    new_node :: renumber_nodes rest id_map
+  )
+;;
+
+let flatten_node = fn state: (FlatState) t: (TensorNode) ->
+  match find_seen t.id state.seen with
+  | Some local_id -> (state, local_id)
+  | None -> (
+    let operands = tensor_operands t;
+    let operand_count = array_size operands;
+    let operand_ids_ref = [| [0] |];
+    let local_id = state.next_id;
+    let node = FlatNode
+      local_id
+      t.id
+      t.op
+      t.shape
+      operand_ids_ref;
+
+    let emitted_state = FlatState
+      (local_id + 1)
+      ((t.id, local_id) :: state.seen)
+      (node :: state.forward);
+
+    let state_ref = [| emitted_state |];
+
+    for offset = 0 .. operand_count in (
+      let i = operand_count - 1 - offset;
+      let (next_state, operand_id) = flatten_node (state_ref[0]) (operands[i]);
+      state_ref[0] := next_state;
+      operand_ids_ref[0] := operand_id :: operand_ids_ref[0]
+    );
+
+    operand_ids_ref[0] := drop_id_sentinel (operand_ids_ref[0]);
+    (state_ref[0], local_id)
+  )
+;;
+
+let flatten_graph = fn output ->
+  let init = FlatState 0 [] [];
+  let (state, temp_output_id) = flatten_node init output;
+  let id_map = id_map_from_nodes state.forward 0;
+  let nodes = renumber_nodes state.forward id_map;
+  let output_id = remap_id temp_output_id id_map;
+  (nodes, output_id)
+;;
+
+let print_int_list = fn xs ->
+  match xs with
+  | [] -> ()
+  | x::rest -> (
+    print ` %{x}`;
+    print_int_list rest
+  )
+;;
+
+let print_shape = fn shape ->
+  print `[`;
+  for i = 0 .. array_size shape in (
+    if i > 0 then print `, ` else ();
+    print `{shape[i]}`
+  );
+  print `]`
+;;
+
+let print_flat_nodes = fn nodes: (List of FlatNode) ->
+  match nodes with
+  | [] -> ()
+  | node::rest -> (
+    print `%{node.id} tensor_id:{node.tensor_id} {op_name node.op} shape:`;
+    print_shape node.shape;
+    print ` operands:`;
+    print_int_list (node.operands[0]);
+    print `\n`;
+    print_flat_nodes rest
+  )
+;;
+
+# let x0 = Data.x_at 0;
+# let output = Model.infer x0;
+# let (nodes, output_id) = flatten_graph output;
+#
+# print `
+# YLC flattened polynomial MLP graph
+# output: %{output_id}
+#
+# `;
+# print_flat_nodes nodes;

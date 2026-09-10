@@ -7,52 +7,7 @@
 DECLARE_ARENA_ALLOCATOR_DEFAULT(t);
 void reset_type_var_counter();
 
-typedef struct Subst {
-  const char *var;
-  Type *type;
-  struct Subst *next;
-} Subst;
-
-typedef struct Constraint {
-  Type *var;  // Variable type (e.g., "t0")
-  Type *type; // Required type (e.g., Int or Double)
-  struct Constraint *next;
-} Constraint;
-typedef struct {
-  enum BindingType {
-    BT_VAR,
-    BT_EXTERN_FN,
-    BT_RECURSIVE_REF,
-    BT_FN_PARAM,
-  } type;
-
-  union {
-    struct {
-      int scope;
-      int yield_boundary_scope;
-    } VAR;
-
-    struct {
-      int scope;
-    } RECURSIVE_REF;
-
-    struct {
-      int scope;
-    } FN_PARAM;
-
-  } data;
-} binding_md;
-
-// TypeEnv represents a mapping from variable names to their types
-typedef struct TypeEnv {
-  const char *name;
-  Type *type;
-  binding_md md;
-  int ref_count;
-
-  struct TypeEnv *next;
-  bool is_opened_var;
-} TypeEnv;
+extern int type_var_counter;
 
 typedef struct LambdaScope {
   Ast *fn_ast;
@@ -68,6 +23,7 @@ typedef struct TICtx {
   LambdaScope *current_scope;
 
   Constraint *constraints;
+  Predicate *predicates; // accumulated trait obligations
   Type *yielded_type;
   int scope;
   int current_fn_base_scope;
@@ -76,7 +32,12 @@ typedef struct TICtx {
   FILE *err_stream; // Replace const char *err
 } TICtx;
 
+typedef struct {
+  Subst *subst;
+} Solution;
+
 Type *infer(Ast *ast, TICtx *ctx);
+int infer_solve(TICtx *ctx, Solution *sol);
 
 typedef struct VarList {
   const char *var;
@@ -90,11 +51,23 @@ typedef struct VarList {
 // } Scheme;
 
 Type *infer(Ast *ast, TICtx *ctx);
+
+// New binding-based polymorphism (HM core)
+void generalize_env(TypeEnv *entry, TypeEnv *env);
+Type *instantiate_env(TypeEnv *entry, TICtx *ctx);
+
+// Backward-compatible T_SCHEME wrappers (transitionary)
 Type *generalize(Type *t, TICtx *ctx);
 Type *instantiate(Type *sch, TICtx *ctx);
 Type *instantiate_type_in_env(Type *sch, TypeEnv *env);
 Type *env_lookup(TypeEnv *env, const char *name);
 TypeEnv *env_extend(TypeEnv *env, const char *name, Type *type);
+TypeEnv *env_extend_with_preds(TypeEnv *env, const char *name, Type *type,
+                               Predicate *preds);
+
+TypeList *free_vars_type(TypeList *acc, Type *t);
+TypeList *free_vars_env(TypeList *acc, TypeEnv *env);
+
 Type *extract_member_from_sum_type(Type *cons, Ast *id);
 Type *extract_member_from_sum_type_idx(Type *cons, Ast *id, int *idx);
 void *type_error(Ast *ast, const char *fmt, ...);
@@ -123,11 +96,36 @@ void add_constraint(TICtx *result, Type *var, Type *type);
 
 Type *resolve_type_in_env(Type *r, TypeEnv *env);
 
-Type *resolve_tc_rank(Type *type);
-Type *resolve_tc_rank_in_env(Type *type, TypeEnv *env);
-
-Type *find_in_subst(Subst *subst, const char *name);
+Type *find_in_subst(Subst *subst, int var_id);
 
 bool is_constant_expr(Ast *expr, TICtx *ctx);
 
+// Predicate helpers
+Predicate *predicate_append(Predicate *list, TypeClass *trait, Type *type);
+Predicate *predicate_append_applied(Predicate *list, TypeClass *trait,
+                                    Type *type, TypeList *params);
+Predicate *predicate_append_comparable(Predicate *list, TypeClass *trait,
+                                       Type *witness, Type **args);
+Predicate *predicate_append_has_field(Predicate *list, Type *record,
+                                      const char *field_name,
+                                      Type *field_type);
+Predicate *predicate_apply_subst(Subst *subst, Predicate *preds);
+Predicate *predicate_duplicate(Predicate *preds);
+int resolve_predicates(Subst **subst, Predicate *preds);
+
+void print_predicates(Predicate *predicates);
+
+int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx);
+
+Type *infer_expr(Ast *ast, TICtx *ctx);
+
+void set_env_slice_scope(TypeEnv *slice_head, TypeEnv *boundary, int scope);
+void set_env_slice_yield_boundary(TypeEnv *slice_head, TypeEnv *boundary,
+                                  int yield_boundary_scope);
+
+Type *apply_subst_to_type(Subst *subst, Type *t);
+
+bool predicate_is_generic(Predicate *p);
+
+Type *lookup_subst(Subst *subst, int var_id);
 #endif

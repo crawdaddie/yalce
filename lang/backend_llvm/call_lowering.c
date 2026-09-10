@@ -139,6 +139,7 @@ LLVMTypeRef lowered_callable_llvm_type(LoweredCallable callable,
 }
 
 #define is_ident(f, name) strcmp(f->data.AST_IDENTIFIER.value, name) == 0
+
 LLVMValueRef emit_lowered_call(Ast *app, LoweredCallable callable,
                                Type *original_callable_type, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
@@ -155,7 +156,10 @@ LLVMValueRef emit_lowered_call(Ast *app, LoweredCallable callable,
 
   size_t arg_offset = 0;
   if (callable.has_env) {
-    arg_vals[0] = callable.env;
+    LLVMTypeRef llvm_rec_type =
+        closure_record_type(original_callable_type, ctx, module);
+    arg_vals[0] = LLVMBuildBitCast(builder, callable.env,
+                                   LLVMPointerType(llvm_rec_type, 0), "env");
     arg_offset = 1;
   }
 
@@ -165,8 +169,10 @@ LLVMValueRef emit_lowered_call(Ast *app, LoweredCallable callable,
 
     LLVMValueRef val = codegen(arg_ast, ctx, module, builder);
 
-    Type *from_type = deep_copy_type(arg_ast->type);
-    from_type = resolve_type_in_env(from_type, ctx->env);
+    Type *from_type = specialize_type_for_codegen(arg_ast->type, ctx);
+    if (to_type) {
+      to_type = specialize_type_for_codegen(to_type, ctx);
+    }
     val =
         handle_type_conversions(val, from_type, to_type, ctx, module, builder);
 
@@ -184,6 +190,21 @@ LLVMValueRef emit_lowered_call(Ast *app, LoweredCallable callable,
     sprintf(name, "call.record_member");
   }
 
-  return LLVMBuildCall2(builder, llvm_callable_type, callable.fn, arg_vals,
-                        (unsigned)num_call_args, name);
+  LLVMValueRef call = LLVMBuildCall2(builder, llvm_callable_type, callable.fn,
+                                    arg_vals, (unsigned)num_call_args, name);
+
+  // A tail call reuses the caller's stack frame, invalidating any stack
+  // alloca whose address is passed as an argument before the callee reads it.
+  // This is observed with asbytes results (heap-avoidance stack allocas) fed
+  // to extern functions like hash_string: LLVM marks the call `tail` and the
+  // buffer becomes garbage. Mark such calls notail. We check the LLVM value
+  // provenance rather than AST ea_md, since the marker is on the allocation
+  // site and not reachable from the argument AST.
+  for (unsigned i = 0; i < (unsigned)num_call_args; i++) {
+    if (LLVMGetTypeKind(LLVMTypeOf(arg_vals[i])) == LLVMPointerTypeKind) {
+      LLVMSetTailCallKind(call, LLVMTailCallKindNoTail);
+      break;
+    }
+  }
+  return call;
 }

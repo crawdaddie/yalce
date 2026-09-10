@@ -1,11 +1,132 @@
 #ifndef _LANG_TYPE_TYPE_H
 #define _LANG_TYPE_TYPE_H
 #include "../parse.h"
+#include "./subst_table.h"
 #include <stdbool.h>
 #include <unistd.h>
+
+typedef struct Type Type;
+
+typedef struct ModuleTypeMeta {
+  int num_type_params;
+  int num_value_params;
+  Type **type_params;
+  const char **type_param_names;
+} ModuleTypeMeta;
+
+typedef struct TypeList {
+  Type *type;
+  struct TypeList *next;
+} TypeList;
+
+enum TypeClassType { TC_FN, TC_STRUCTURAL };
+
+typedef struct TypeClass {
+  const char *name;
+  double rank;
+  Type *module;
+  TypeList *params;
+  struct TypeClass *next;
+} TypeClass;
+
+typedef enum {
+  CONSTRAINT_EQUALITY,
+  CONSTRAINT_YIELD,
+} ConstraintKind;
+
+typedef struct Constraint {
+  ConstraintKind kind;
+  union {
+    struct {
+      Type *left;
+      Type *right;
+    } EQUALITY;
+    struct {
+      Type *yielded;
+      Type *yield_type;
+    } YIELD;
+  } data;
+  struct Constraint *next;
+} Constraint;
+
+// A predicate: "type t must implement trait tc"
+typedef enum {
+  PRED_TRAIT,      // type must implement a typeclass
+  PRED_COMPARABLE, // operands compare at a common witness type under a tc
+  PRED_HAS_FIELD,  // record type must expose a named field type
+} PredicateKind;
+
+typedef struct Predicate {
+  PredicateKind kind;
+  TypeClass *trait;
+  union {
+    struct {
+      Type *type;
+      TypeList *params;
+    } TRAIT;
+    struct {
+      Type *witness;
+      Type **args;
+    } COMPARABLE;
+    struct {
+      Type *record;
+      const char *field_name;
+      Type *field_type;
+    } HAS_FIELD;
+  } data;
+  struct Predicate *next;
+} Predicate;
+
+typedef struct {
+  enum BindingType {
+    BT_VAR,
+    BT_FUNCTION,
+    BT_EXTERN_FN,
+    BT_RECURSIVE_REF,
+    BT_FN_PARAM,
+    BT_TYPE_DECL,
+    BT_TYPE_CONSTRUCTOR,
+  } type;
+
+  union {
+    struct {
+      int scope;
+      int yield_boundary_scope;
+    } VAR;
+
+    struct {
+      int scope;
+    } RECURSIVE_REF;
+
+    struct {
+      int scope;
+    } FN_PARAM;
+
+  } data;
+} binding_md;
+
+// TypeEnv represents a mapping from variable names to their types
+// with optional scheme variables for HM-style polymorphism.
+// scheme_vars: free variables in `type` that were NOT free in the
+// environment at generalization time. NULL means monomorphic.
+typedef struct TypeEnv {
+  const char *name;
+  Type *type;
+  binding_md md;
+  int ref_count;
+
+  TypeList *scheme_vars; // vars to freshen on instantiation
+  Predicate *predicates; // trait obligations for this binding (NULL = none)
+  struct TypeEnv *next;
+  struct TypeEnv *generalize_boundary;
+  bool can_generalize;
+  bool needs_generalization;
+  bool is_opened_var;
+  bool is_module_seed;
+} TypeEnv;
+
 #define _TSTORAGE_SIZE_DEFAULT 200000
 
-void reset_type_var_counter();
 Type *next_tvar();
 
 typedef struct Method {
@@ -14,17 +135,6 @@ typedef struct Method {
   size_t size;
   Type *signature;
 } Method;
-
-enum TypeClassType { TC_FN, TC_STRUCTURAL };
-
-typedef struct TypeClass {
-  const char *name;
-  double rank;
-  Type *module;
-  struct TypeClass *next;
-} TypeClass;
-
-typedef struct Type Type;
 
 bool is_string_type(Type *type);
 
@@ -41,8 +151,10 @@ bool is_string_type(Type *type);
 #define TYPE_NAME_UINT64  "Uint64"
 #define TYPE_NAME_VOID    "()"
 #define TYPE_NAME_VARIANT "Sum"
+#define TYPE_NAME_OPTION  "Option"
 #define TYPE_NAME_SOME    "Some"
 #define TYPE_NAME_NONE    "None"
+#define TYPE_NAME_EMPTY_LIST "[]"
 #define TYPE_NAME_QUEUE   "Queue"
 #define TYPE_NAME_MODULE  "Module"
 
@@ -64,6 +176,7 @@ bool is_string_type(Type *type);
 #define TYPE_NAME_TYPECLASS_ARITHMETIC "Arithmetic"
 #define TYPE_NAME_TYPECLASS_EQ "Eq"
 #define TYPE_NAME_TYPECLASS_ORD "Ord"
+#define TYPE_NAME_TYPECLASS_FROM "From"
 #define TYPE_NAME_RUN_IN_SCHEDULER "run_in_scheduler"
 #define TYPE_NAME_COROUTINE_CONSTRUCTOR "CoroutineConstructor"
 #define TYPE_NAME_COROUTINE_INSTANCE "Coroutine"
@@ -91,18 +204,14 @@ bool is_string_type(Type *type);
                                           ret_type)}}})
 #define arithmetic_var(n)                                                      \
   (Type) {                                                                     \
-    T_VAR, {.T_VAR = n},                                                       \
+    T_VAR, {.T_VAR = {.name = n, .id = -1}},                                   \
         .implements = &(TypeClass){.name = TYPE_NAME_TYPECLASS_ARITHMETIC,     \
                                    .rank = 1000.},                             \
   }
 
-#define MAKE_TC_RESOLVE_2(tc, a, b)                                            \
-  ((Type){T_TYPECLASS_RESOLVE,                                                 \
-          {.T_CONS = {.name = tc, .num_args = 2, .args = (Type *[]){a, b}}}})
-
 #define ord_var(n)                                                             \
   (Type) {                                                                     \
-    T_VAR, {.T_VAR = n},                                                       \
+    T_VAR, {.T_VAR = {.name = n, .id = -1}},                                   \
         .implements =                                                          \
             &(TypeClass){.name = TYPE_NAME_TYPECLASS_ORD, .rank = 1000.},      \
   }
@@ -122,35 +231,33 @@ bool is_string_type(Type *type);
 //   }
 //
 #define eq_var(n)                                                              \
-  (Type) { T_VAR, {.T_VAR = n}, }
+  (Type) { T_VAR, {.T_VAR = {.name = n, .id = -1}}, }
 
 #define TCONS(name, num, ...)                                                  \
   ((Type){T_CONS, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}})
 
-#define TLIST(_t)                                                              \
-  ((Type){T_CONS, {.T_CONS = {TYPE_NAME_LIST, (Type *[]){_t}, 1}}})
+#define TLIST(_t) (*create_list_type_of_type(_t))
 #define TARRAY(_t)                                                             \
   ((Type){T_CONS, {.T_CONS = {TYPE_NAME_ARRAY, (Type *[]){_t}, 1}}})
 
 #define TTUPLE(num, ...)                                                       \
   ((Type){T_CONS, {.T_CONS = {TYPE_NAME_TUPLE, (Type *[]){__VA_ARGS__}, num}}})
 
-#define TOPT(of) TCONS(TYPE_NAME_VARIANT, 2, &TCONS("Some", 1, of), &t_none)
+#define TOPT(of) ((Type){T_SUM, {.T_CONS = {TYPE_NAME_OPTION, (Type *[]){&TCONS(TYPE_NAME_SOME, 1, of), &t_none}, 2}}})
 
-#define TSUM(num, ...) \
-  ((Type){T_CONS, {.T_CONS = {TYPE_NAME_VARIANT, (Type *[]){__VA_ARGS__}, num}}}) 
-
-// #define TYPECLASS_RESOLVE(tc_name, dep1, dep2, resolver)                       \
-//   ((Type){                                                                     \
-//       .kind = T_TYPECLASS_RESOLVE,                                             \
-//       .data = {.T_TYPECLASS_RESOLVE = {.comparison_tc = tc_name,               \
-//                                        .dependencies = (Type *[]){dep1, dep2}, \
-//                                        .resolve_dependencies = resolver}}})
+#define TSUM(num, name, ...) \
+  ((Type){T_SUM, {.T_CONS = {name, (Type *[]){__VA_ARGS__}, num}}}) 
 
 #define TVAR(n)                                                                \
   ((Type){                                                                     \
       T_VAR,                                                                   \
-      {.T_VAR = n},                                                            \
+      {.T_VAR = {.name = n, .id = -1}},                                        \
+  })
+
+#define TREC(n)                                                                \
+  ((Type){                                                                     \
+      T_RECURSIVE_REF,                                                         \
+      {.T_RECURSIVE_REF = {.name = n}},                                        \
   })
 
 
@@ -165,10 +272,12 @@ enum TypeKind {
   T_STRING = 6,
   T_FN,
   T_CONS,
+  T_SUM,
   T_VAR,
+  T_RECURSIVE_REF,
   T_EMPTY_LIST,
-  T_TYPECLASS_RESOLVE,
-  T_SCHEME,
+  T_MODULE,
+  // T_SCHEME,
 };
 #define TYPE_FLAGS_PRIMITIVE ((1 << T_STRING) | ((1 << T_STRING) - 1))
 
@@ -183,6 +292,7 @@ typedef uint64_t FnAttributes;
 #define FN_ATTR_REALTIME_SAFE  0x0000000000000008ULL  // Safe for audio callback
 #define FN_ATTR_ALLOCATES      0x0000000000000010ULL  // Module export
 #define FN_ATTR_RECURSIVE      0x0000000000000020ULL  // Recursive function
+#define FN_ATTR_COROUTINE_CONSTRUCTOR 0x0000000000000040ULL
 //
 //
 typedef uint64_t TypeAttributes;
@@ -210,12 +320,8 @@ uint64_t clear_attr(uint64_t attrs, uint64_t flag);
 
 // Pretty printing
 const char* fn_attr_to_string(FnAttributes attr);
-void print_fn_attrs(FnAttributes attrs);
+void print_fn_type_attrs(FnAttributes attrs);
 
-typedef struct TypeList {
-  Type *type;
-  struct TypeList *next;
-} TypeList;
 
 typedef struct Type {
   enum TypeKind kind;
@@ -223,7 +329,15 @@ typedef struct Type {
     // Type Variables (T_VAR):
     // They represent unknown types that can be unified with other types during
     // inference.
-    const char *T_VAR;
+    struct {
+      const char *name;
+      int id;
+    } T_VAR;
+
+    struct {
+      const char *name;
+      TypeEnv *decl;
+    } T_RECURSIVE_REF;
 
     struct {
       const char *name;
@@ -239,10 +353,9 @@ typedef struct Type {
     } T_FN;
 
     struct {
-      TypeList *vars;
-      int num_vars;
-      Type *type;
-    } T_SCHEME;
+      TypeEnv *env;
+      int size;
+    } T_MODULE;
 
   } data;
 
@@ -275,6 +388,7 @@ int fn_type_args_len(Type *);
 
 Type *empty_type();
 Type *tvar(const char *name);
+Type *trec(const char *name, TypeEnv *decl);
 bool is_generic(Type *t);
 
 Type *type_fn(Type *from, Type *to);
@@ -288,6 +402,7 @@ bool is_pointer_type(Type *type);
 bool is_closure(Type *type);
 
 bool is_array_type(Type *type);
+bool is_variadic_type(Type *type);
 
 
 Type *replace_in(Type *type, Type *tvar, Type *replacement);
@@ -301,6 +416,7 @@ Type *create_option_type(Type *option_of);
 bool is_option_type(Type *t);
 
 Type *type_of_option(Type *option);
+Type *type_of_list(Type *list);
 
 Type *get_builtin_type(const char *id_chars);
 
@@ -324,6 +440,7 @@ Type *concat_struct_types(Type *a, Type *b);
 bool is_struct_of_coroutines(Type *fn_type);
 
 TypeClass *get_typeclass_by_name(Type *t, const char *name);
+TypeClass *get_typeclass_instance(Type *t, const char *name, TypeList *params);
 double get_typeclass_rank(Type *t, const char *name);
 
 bool type_implements(Type *t, TypeClass *tc);
@@ -350,10 +467,7 @@ void typeclasses_extend(Type *t, TypeClass *tc);
 
 bool is_module(Type *t);
 
-Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2);
-
-
-#define MSCHEME(n, vlist, t) ((Type){T_SCHEME, {.T_SCHEME = {.vars = vlist, .num_vars = n, .type = t}}})
+// #define MSCHEME(n, vlist, t) ((Type){T_SCHEME, {.T_SCHEME = {.vars = vlist, .num_vars = n, .type = t}}})
 
 // Recursive macro helpers for building TypeList chains
 #define _TYPELIST_1(t1) \
@@ -396,4 +510,3 @@ Type *create_tc_resolve(TypeClass *tc, Type *t1, Type *t2);
 
 #define _GET_ARG_COUNT_HELPER(_1, _2, _3, _4, _5, _6, _7, _8, N, ...) N
 #endif
-

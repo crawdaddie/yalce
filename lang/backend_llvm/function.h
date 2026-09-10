@@ -13,7 +13,9 @@ LLVMValueRef build_ret(LLVMValueRef val, Type *type, LLVMBuilderRef builder);
     return NULL;                                                               \
   }                                                                            \
   LLVMSetLinkage(func, LLVMExternalLinkage);                                   \
-  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");               \
+  LLVMBasicBlockRef block =                                                    \
+      LLVMAppendBasicBlockInContext(LLVMGetModuleContext(_module), func,       \
+                                    "entry");                                  \
   LLVMBasicBlockRef prev_block = LLVMGetInsertBlock(builder);                  \
   LLVMPositionBuilderAtEnd(builder, block);
 
@@ -33,11 +35,16 @@ LLVMValueRef get_specific_callable(JITSymbol *sym, Type *expected_fn_type,
                                    LLVMBuilderRef builder);
 
 LLVMValueRef specific_fns_lookup(SpecificFns *fns, Type *key);
+LLVMValueRef specific_fns_lookup_decl(SpecificFns *fns, Type *key,
+                                      LLVMTypeRef llvm_fn_type,
+                                      LLVMModuleRef module);
 
 bool fn_types_match(Type *t1, Type *t2);
 
 LLVMValueRef codegen_lambda_body(Ast *ast, JITLangCtx *fn_ctx,
                                  LLVMModuleRef module, LLVMBuilderRef builder);
+
+void set_tail_call_expressions(Ast *ast);
 
 void add_recursive_fn_ref(ObjString fn_name, LLVMValueRef func, Type *fn_type,
                           JITLangCtx *fn_ctx);
@@ -52,6 +59,8 @@ SpecificFns *specific_fns_extend(SpecificFns *fns, Type *key,
 
 TypeEnv *create_env_for_generic_fn(TypeEnv *env, Type *generic_type,
                                    Type *specific_type);
+
+Subst *create_subst_for_generic_fn(Type *generic_type, Type *specific_type);
 
 TypeEnv *create_env_from_subst(TypeEnv *env, Subst *subst);
 

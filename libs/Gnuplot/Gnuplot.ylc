@@ -1,0 +1,491 @@
+import std/Math;
+
+let popen = extern fn Ptr -> Ptr -> Ptr;
+let fprintf = extern fn Ptr -> String -> Int;
+let fflush = extern fn Ptr -> Int;
+let pclose = extern fn Ptr -> Int;
+
+let gp = fn () -> popen (cstr "gnuplot") (cstr "w") ;;
+let start = fn () -> gp ();;
+
+let flush = fn gp ->
+  fflush gp;
+  gp
+;;
+
+let close = fn gp -> pclose gp;;
+
+let finish = fn gp ->
+  fflush gp;
+  pclose gp
+;;
+
+let with_gp = fn f ->
+  let p = popen (cstr "gnuplot") (cstr "w");
+  f p;
+  finish p
+;;
+let figure = fn f -> with_gp f;;
+
+let write = fn text gp ->
+  fprintf gp text;
+  gp
+;;
+
+let writeln = fn text gp ->
+  fprintf gp text;
+  fprintf gp "\n";
+  gp
+;;
+
+let cmd = fn text gp ->
+  fprintf gp text;
+  gp
+;;
+
+let terminal_kitty = fn width height gp ->
+  fprintf gp `set terminal kittycairo size {width},{height} scroll\n`;
+  gp
+;;
+
+let terminal_png = fn filename width height gp ->
+  fprintf gp `set terminal pngcairo size {width},{height}\n`;
+  fprintf gp "set output '";
+  fprintf gp filename;
+  fprintf gp "'\n";
+  gp
+;;
+
+let unset_output = fn gp ->
+  fprintf gp "unset output\n";
+  gp
+;;
+
+let title = fn text gp ->
+  fprintf gp "set title '";
+  fprintf gp text;
+  fprintf gp "'\n";
+  gp
+;;
+
+let xlabel = fn text gp ->
+  fprintf gp "set xlabel '";
+  fprintf gp text;
+  fprintf gp "'\n";
+  gp
+;;
+
+let ylabel = fn text gp ->
+  fprintf gp "set ylabel '";
+  fprintf gp text;
+  fprintf gp "'\n";
+  gp
+;;
+
+let zlabel = fn text gp ->
+  fprintf gp "set zlabel '";
+  fprintf gp text;
+  fprintf gp "'\n";
+  gp
+;;
+
+let grid = fn gp ->
+  fprintf gp "set grid\n";
+  gp
+;;
+
+let zeroaxis = fn gp ->
+  fprintf gp "set zeroaxis\n";
+  gp
+;;
+
+let square = fn gp ->
+  fprintf gp "set size ratio -1\n";
+  gp
+;;
+
+let hidden3d = fn gp ->
+  fprintf gp "set hidden3d\n";
+  gp
+;;
+
+let xrange = fn lo hi gp ->
+  fprintf gp `set xrange [{lo}:{hi}]\n`;
+  gp
+;;
+
+let yrange = fn lo hi gp ->
+  fprintf gp `set yrange [{lo}:{hi}]\n`;
+  gp
+;;
+
+let zrange = fn lo hi gp ->
+  fprintf gp `set zrange [{lo}:{hi}]\n`;
+  gp
+;;
+
+let view = fn rot_x rot_z gp ->
+  fprintf gp `set view {rot_x}, {rot_z}\n`;
+  gp
+;;
+
+let default_2d = fn plot_title x_label y_label gp ->
+  terminal_kitty 900 500 gp
+    |> title plot_title
+    |> xlabel x_label
+    |> ylabel y_label
+    |> grid
+;;
+
+let figure_2d = fn plot_title x_label y_label ->
+  gp () |> default_2d plot_title x_label y_label
+;;
+
+let end_data = fn gp ->
+  fprintf gp "e\n";
+  gp
+;;
+
+let plot_expr = fn expression style series_title gp ->
+  fprintf gp expression;
+  fprintf gp " ";
+  fprintf gp style;
+  fprintf gp " title '";
+  fprintf gp series_title;
+  fprintf gp "'";
+  gp
+;;
+
+let plot_inline = fn using style series_title gp ->
+  fprintf gp "'-' using ";
+  fprintf gp using;
+  fprintf gp " ";
+  fprintf gp style;
+  fprintf gp " title '";
+  fprintf gp series_title;
+  fprintf gp "'";
+  gp
+;;
+
+let plot_inline_notitle = fn using style gp ->
+  fprintf gp "'-' using ";
+  fprintf gp using;
+  fprintf gp " ";
+  fprintf gp style;
+  fprintf gp " notitle";
+  gp
+;;
+
+let plot_separator = fn gp ->
+  fprintf gp ", ";
+  gp
+;;
+
+let plot_newline = fn gp ->
+  fprintf gp "\n";
+  gp
+;;
+
+let begin_plot = fn gp ->
+  fprintf gp "plot ";
+  gp
+;;
+
+let begin_splot = fn gp ->
+  fprintf gp "splot ";
+  gp
+;;
+
+type SeriesSpec = (
+  kind: Int,
+  source: String,
+  style: String,
+  name: String,
+  style_kind: Int,
+  linewidth: Int,
+  point_type: Int,
+  point_size: Double
+);
+
+let series_inline = fn using style series_title ->
+  (kind: 0, source: using, style: style, name: series_title, style_kind: 0, linewidth: 1, point_type: 7, point_size: 1.0)
+;;
+
+let series_inline_notitle = fn using style ->
+  (kind: 2, source: using, style: style, name: "", style_kind: 0, linewidth: 1, point_type: 7, point_size: 1.0)
+;;
+
+let series_expr = fn expression style series_title ->
+  (kind: 1, source: expression, style: style, name: series_title, style_kind: 0, linewidth: 1, point_type: 7, point_size: 1.0)
+;;
+
+let lines = fn series_title -> (kind: 0, source: "1:2", style: "", name: series_title, style_kind: 1, linewidth: 1, point_type: 7, point_size: 1.0);;
+let lines_lw = fn width: (Int) series_title -> (kind: 0, source: "1:2", style: "", name: series_title, style_kind: 1, linewidth: width, point_type: 7, point_size: 1.0);;
+let points = fn series_title -> (kind: 0, source: "1:2", style: "", name: series_title, style_kind: 2, linewidth: 1, point_type: 7, point_size: 1.0);;
+let points_pt = fn point_type: (Int) point_size: (Double) series_title -> (kind: 0, source: "1:2", style: "", name: series_title, style_kind: 2, linewidth: 1, point_type: point_type, point_size: point_size);;
+let minmax_vectors = fn series_title -> (kind: 0, source: "1:2:(0):($3-$2)", style: "", name: series_title, style_kind: 3, linewidth: 1, point_type: 7, point_size: 1.0);;
+let function_lines = fn expression series_title -> (kind: 1, source: expression, style: "", name: series_title, style_kind: 1, linewidth: 1, point_type: 7, point_size: 1.0);;
+let function_lines_lw = fn expression width: (Int) series_title -> (kind: 1, source: expression, style: "", name: series_title, style_kind: 1, linewidth: width, point_type: 7, point_size: 1.0);;
+
+let emit_style = fn spec: (SeriesSpec) gp ->
+  if spec.style_kind == 1 then (
+    fprintf gp "with lines";
+    if spec.linewidth > 1 then fprintf gp ` linewidth {spec.linewidth}` else 0
+  ) else (
+    if spec.style_kind == 2 then (
+      fprintf gp `with points pointtype {spec.point_type} pointsize {spec.point_size}`
+    ) else (
+      if spec.style_kind == 3 then (
+        fprintf gp "with vectors nohead linewidth 1"
+      ) else (
+        fprintf gp spec.style
+      )
+    )
+  );
+  gp
+;;
+
+let emit_spec = fn spec: (SeriesSpec) gp ->
+  if spec.kind == 0 then (
+    fprintf gp "'-' using ";
+    fprintf gp spec.source;
+    fprintf gp " ";
+    emit_style spec gp;
+    fprintf gp " title '";
+    fprintf gp spec.name;
+    fprintf gp "'";
+    gp
+  ) else (
+    if spec.kind == 1 then (
+      fprintf gp spec.source;
+      fprintf gp " ";
+      emit_style spec gp;
+      fprintf gp " title '";
+      fprintf gp spec.name;
+      fprintf gp "'";
+      gp
+    ) else (
+      fprintf gp "'-' using ";
+      fprintf gp spec.source;
+      fprintf gp " ";
+      emit_style spec gp;
+      fprintf gp " notitle";
+      gp
+    )
+  )
+;;
+
+let plot1 = fn a: (SeriesSpec) gp ->
+  let p0 = begin_plot gp;
+  let p1 = emit_spec a p0;
+  plot_newline p1
+;;
+
+let plot2 = fn a: (SeriesSpec) b: (SeriesSpec) gp ->
+  let p0 = begin_plot gp;
+  let p1 = emit_spec a p0;
+  let p2 = plot_separator p1;
+  let p3 = emit_spec b p2;
+  plot_newline p3
+;;
+
+let plot3 = fn a: (SeriesSpec) b: (SeriesSpec) c: (SeriesSpec) gp ->
+  let p0 = begin_plot gp;
+  let p1 = emit_spec a p0;
+  let p2 = plot_separator p1;
+  let p3 = emit_spec b p2;
+  let p4 = plot_separator p3;
+  let p5 = emit_spec c p4;
+  plot_newline p5
+;;
+
+let plot4 = fn a: (SeriesSpec) b: (SeriesSpec) c: (SeriesSpec) d: (SeriesSpec) gp ->
+  let p0 = begin_plot gp;
+  let p1 = emit_spec a p0;
+  let p2 = plot_separator p1;
+  let p3 = emit_spec b p2;
+  let p4 = plot_separator p3;
+  let p5 = emit_spec c p4;
+  let p6 = plot_separator p5;
+  let p7 = emit_spec d p6;
+  plot_newline p7
+;;
+
+let emit_y = fn ys: (Array of T) gp ->
+  for i = 0 .. array_size ys in (
+    fprintf gp `{i} {ys[i]}\n`
+  );
+  end_data gp
+;;
+
+let emit_y_count = fn ys: (Array of T) count gp ->
+  let n = Math.min (array_size ys) count;
+  for i = 0 .. n in (
+    fprintf gp `{i} {ys[i]}\n`
+  );
+  end_data gp
+;;
+
+let emit_xy = fn xs: (Array of T) ys: (Array of R) gp ->
+  let n = Math.min (array_size xs) (array_size ys);
+  for i = 0 .. n in (
+    fprintf gp `{xs[i]} {ys[i]}\n`
+  );
+  end_data gp
+;;
+
+let emit_xyz = fn xs: (Array of T) ys: (Array of R) zs: (Array of S) gp ->
+  let n = Math.min (Math.min (array_size xs) (array_size ys)) (array_size zs);
+  for i = 0 .. n in (
+    fprintf gp `{xs[i]} {ys[i]} {zs[i]}\n`
+  );
+  end_data gp
+;;
+
+let emit_xy_if = fn xs: (Array of T) ys: (Array of R) keep gp ->
+  let n = Math.min (array_size xs) (array_size ys);
+  for i = 0 .. n in (
+    if keep i (xs[i]) (ys[i]) then (
+      fprintf gp `{xs[i]} {ys[i]}\n`
+    )
+  );
+  end_data gp
+;;
+
+let emit_points2_if = fn count point keep gp ->
+  for i = 0 .. count in (
+    let (x, y, label) = point i;
+    if keep label then (
+      fprintf gp `{x} {y}\n`
+    )
+  );
+  end_data gp
+;;
+
+let plot_y = fn plot_title ys ->
+  with_gp (fn gp ->
+    default_2d plot_title "index" "value" gp
+      |> plot1 (lines "value")
+      |> emit_y ys
+  )
+;;
+
+let plot_y_count = fn plot_title y_label ys count ->
+  with_gp (fn gp ->
+    default_2d plot_title "index" y_label gp
+      |> plot1 (lines "value")
+      |> emit_y_count ys count
+  )
+;;
+
+let plot_losses = fn losses epochs ->
+  plot_y_count "Training loss" "loss" losses (epochs + 1)
+;;
+
+let plot_xy = fn plot_title x_label y_label xs ys ->
+  with_gp (fn gp ->
+    default_2d plot_title x_label y_label gp
+      |> plot1 (lines "series")
+      |> emit_xy xs ys
+  )
+;;
+
+let scatter_xy = fn plot_title x_label y_label xs ys ->
+  with_gp (fn gp ->
+    default_2d plot_title x_label y_label gp
+      |> plot1 (points "points")
+      |> emit_xy xs ys
+  )
+;;
+
+let plot_y_many = fn plot_title y_label series ->
+  with_gp (fn gp ->
+    let n = array_size series;
+    default_2d plot_title "index" y_label gp;
+    begin_plot gp;
+    for i = 0 .. n in (
+      plot_inline "1:2" "with lines" `series {i}` gp;
+      if i < (n - 1) then plot_separator gp else plot_newline gp
+    );
+    for i = 0 .. n in (
+      emit_y series[i] gp
+    );
+    gp
+  )
+;;
+
+let plot_xy_many = fn plot_title x_label y_label xs ys_series ->
+  with_gp (fn gp ->
+    let n = array_size ys_series;
+    default_2d plot_title x_label y_label gp;
+    begin_plot gp;
+    for i = 0 .. n in (
+      plot_inline "1:2" "with lines" `series {i}` gp;
+      if i < (n - 1) then plot_separator gp else plot_newline gp
+    );
+    for i = 0 .. n in (
+      emit_xy xs ys_series[i] gp
+    );
+    gp
+  )
+;;
+
+let soundfile_chunks = fn sample_count max_points ->
+  let points = if max_points > 0 then max_points else 1;
+  let step = if sample_count > points then sample_count / points else 1;
+  (step, (sample_count + step - 1) / step)
+;;
+
+let soundfile_axes_on = fn data: (Array of T) samplerate gp ->
+  let duration = (Double (array_size data)) / (Double samplerate);
+  terminal_kitty 1000 450 gp
+    |> title "Soundfile plot"
+    |> xlabel "time (s)"
+    |> ylabel "amplitude"
+    |> grid
+    |> zeroaxis
+    |> xrange 0. duration
+;;
+
+let soundfile_axes = fn data: (Array of T) samplerate ->
+  gp () |> soundfile_axes_on data samplerate
+;;
+
+let emit_minmax_chunks_by = fn less data: (Array of T) samplerate max_points gp ->
+  let n = array_size data;
+  if n <= 0 then (
+    end_data gp
+  ) else (
+    let (step, chunks) = soundfile_chunks n max_points;
+    for chunk = 0 .. chunks in (
+      let i = chunk * step;
+      let stop = Math.min (i + step) n;
+      let lo = [| data[i] |];
+      let hi = [| data[i] |];
+      for j = i .. stop in (
+        let v = data[j];
+        let next_lo = if less v (lo[0]) then v else lo[0];
+        let next_hi = if less (hi[0]) v then v else hi[0];
+        lo[0] := next_lo;
+        hi[0] := next_hi
+      );
+      fprintf gp `{(Double i) / (Double samplerate)} {lo[0]} {hi[0]}\n`
+    );
+    end_data gp
+  )
+;;
+
+let emit_minmax_chunks = fn less data samplerate max_points gp ->
+  emit_minmax_chunks_by less data samplerate max_points gp
+;;
+
+let plot_soundfile_data = fn data samplerate max_points ->
+  soundfile_axes data samplerate
+    |> plot1 (minmax_vectors "chunk min/max")
+    |> emit_minmax_chunks (fn a: (Double) b: (Double) -> a < b) data samplerate max_points
+    |> finish
+;;
+
+let plot_soundfile = fn sf max_points ->
+  plot_soundfile_data sf.data sf.samplerate max_points
+;;

@@ -1,6 +1,0 @@
-# type Foo = (a: Int,);
-#
-# print @@ typeof Foo;
-
-let a = extern fn T -> (cons: (Array of Double -> Ptr), );
-print @@ typeof a;

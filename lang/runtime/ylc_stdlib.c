@@ -23,6 +23,35 @@ void str_copy(char *dest, char *src, int len) {
 void print(_String str) { printf("%s", str.chars); }
 void printc(char c) { printf("%c", c); }
 
+static YlcRcHeader *__ylc_header(void *payload) {
+  return (YlcRcHeader *)((char *)payload - sizeof(YlcRcHeader));
+}
+
+void __ylc_dup(void *ptr) {
+  if (!ptr) {
+    return;
+  }
+  YlcRcHeader *header = __ylc_header(ptr);
+  if (header->rc == 0) {
+    return;
+  }
+  header->rc += 1;
+}
+
+void __ylc_drop(void *ptr) {
+  if (!ptr) {
+    return;
+  }
+  YlcRcHeader *header = __ylc_header(ptr);
+  if (header->rc == 0) {
+    return;
+  }
+  header->rc -= 1;
+  if (header->rc == 0) {
+    free(header);
+  }
+}
+
 void fprint(FILE *f, _String str) { fprintf(f, "%s", str.chars); }
 struct char_matrix {
   int32_t rows;
@@ -101,7 +130,7 @@ _String string_concat(_String *strings, int num_strings) {
     offset += lengths[i];
   }
 
-  return (_String){total_len, concatted};
+  return (_String){total_len, 0, concatted};
 }
 
 _String string_add(_String a, _String b) {
@@ -109,7 +138,7 @@ _String string_add(_String a, _String b) {
 }
 
 char *cstr(_String s) { return s.chars; }
-_String from_cstr(int len, char *s) { return (_String){len, s}; }
+_String from_cstr(int len, char *s) { return (_String){len, 0, s}; }
 
 int char_to_hex_int(char c) {
   // Convert the character to lowercase for easier processing
@@ -142,7 +171,7 @@ _String transpose_string(int input_rows, int input_cols, int output_rows,
     }
   }
   transposed[output_idx + 1] = '\0';
-  _String result = {output_idx, transposed};
+  _String result = {output_idx, 0, transposed};
   return result;
 }
 
@@ -235,6 +264,7 @@ ReadLinesResult read_lines(FILE *f) {
 
   head->data.chars = NULL;
   head->data.size = 0;
+  head->data.offset = 0;
   head->next = NULL;
 
   _YLC__String_List *current = head;
@@ -260,6 +290,7 @@ ReadLinesResult read_lines(FILE *f) {
 
       new_node->data.chars = line_start;
       new_node->data.size = line_length;
+      new_node->data.offset = 0;
       new_node->next = NULL;
 
       current->next = new_node;
@@ -274,6 +305,7 @@ ReadLinesResult read_lines(FILE *f) {
   }
 
   head->data.chars = file_bytes.bytes;
+  head->data.offset = 0;
 
   _YLC__String_List *result = head->next;
   free(head);
@@ -282,7 +314,21 @@ ReadLinesResult read_lines(FILE *f) {
 }
 
 struct _OptFile open_file(_String path, _String mode) {
-  FILE *f = fopen(path.chars, mode.chars);
+  const char *filename = path.chars;
+
+  if (*filename == '~') {
+    char *HOME = getenv("HOME");
+    if (!HOME) {
+      fprintf(stderr, "could not resolve ~");
+      return (struct _OptFile){1, NULL};
+    }
+
+    char *mem = calloc(strlen(HOME) + strlen(filename), sizeof(char));
+    sprintf(mem, "%s%s", HOME, filename + 1);
+    filename = mem;
+  }
+
+  FILE *f = fopen(filename, mode.chars);
   if (f) {
     return (struct _OptFile){0, f};
   }
@@ -377,6 +423,40 @@ void _matrix_vec_mul(int rows, int cols, double *matrix_data,
   }
 }
 
+// Correctly defined _matrix_vec_mul implementation
+_DoubleArray matrix_vec_mul_double(int rows, int cols, _DoubleArray matrix,
+                                   _DoubleArray vec, _DoubleArray out) {
+  double *matrix_data = matrix.data;
+  double *vector_data = vec.data;
+  double *temp = out.data;
+  // Create a temporary array to store results
+  for (int i = 0; i < rows; i++) {
+    temp[i] = 0.0;
+    for (int j = 0; j < cols; j++) {
+      temp[i] += matrix_data[i * cols + j] * vector_data[j];
+    }
+  }
+
+  // Copy results back to the vector
+  for (int i = 0; i < rows; i++) {
+    temp[i] = temp[i];
+  }
+
+  return out;
+}
+
+double vec_dot_double(_DoubleArray a, _DoubleArray b) {
+  double *matrix_data = a.data;
+  double *vector_data = b.data;
+  double out = 0.0;
+  // Create a temporary array to store results
+  for (int i = 0; i < a.size; i++) {
+    out += matrix_data[i] * vector_data[i];
+  }
+
+  return out;
+}
+
 // Define vec_add to properly add vectors
 void _vec_add(int size, double *vec1, double *vec2) {
   for (int i = 0; i < size; i++) {
@@ -451,7 +531,7 @@ double *mmap_double_array(int32_t data_size, double *data,
 }
 
 _DoubleArray double_array_from_raw(int32_t size, double *data) {
-  return (_DoubleArray){size, data};
+  return (_DoubleArray){size, 0, data};
 }
 
 void mmap_sync_array(int32_t size, double *data) {
@@ -554,6 +634,7 @@ STRLIST *string_split(_String str, _String delim) {
     if (strncmp(str.chars + i, delim.chars, delim.size) == 0) {
       STRLIST *new_node = malloc(sizeof(STRLIST));
       new_node->data.size = i - start;
+      new_node->data.offset = 0;
       new_node->data.chars = str.chars + start;
       new_node->next = NULL;
 
@@ -573,6 +654,7 @@ STRLIST *string_split(_String str, _String delim) {
 
   STRLIST *new_node = malloc(sizeof(STRLIST));
   new_node->data.size = str.size - start;
+  new_node->data.offset = 0;
   new_node->data.chars = str.chars + start;
   new_node->next = NULL;
 
@@ -633,7 +715,7 @@ int parse_num(const char *str) {
 }
 
 _String cstr_to_str(char *chars) {
-  return (_String){.size = strlen(chars), .chars = chars};
+  return (_String){.size = strlen(chars), .offset = 0, .chars = chars};
 }
 
 int set_env(_String varname, _String val) {
@@ -699,6 +781,10 @@ int regex_find_one(char *str, char *pattern, int32_t *res) {
 int32_t rshift(int32_t x, int32_t n) { return x >> n; }
 int32_t lshift(int32_t x, int32_t n) { return x << n; }
 int32_t bit_and(int32_t x, int32_t y) { return x & y; }
+uint64_t u64_bit_and(uint64_t x, uint64_t y) { return x & y; }
+uint64_t u64_bit_xor(uint64_t x, uint64_t y) { return x ^ y; }
+int32_t u64_to_int(uint64_t x) { return (uint32_t)x; }
+uint64_t char_to_uint64(char c) { return (uint64_t)(unsigned char)c; }
 
 // Convert a byte to a 2-character hex string (e.g., 255 -> "ff", 16 -> "10")
 _String char_to_hex_string(char byte) {
@@ -706,7 +792,7 @@ _String char_to_hex_string(char byte) {
 
   char *result = malloc(3); // 2 hex chars + null terminator
   if (!result) {
-    return (_String){.size = 0, .chars = NULL};
+    return (_String){.size = 0, .offset = 0, .chars = NULL};
   }
 
   unsigned char ubyte =
@@ -715,7 +801,7 @@ _String char_to_hex_string(char byte) {
   result[1] = hex_chars[ubyte & 0x0F];        // Low nibble
   result[2] = '\0';
 
-  return (_String){.size = 2, .chars = result};
+  return (_String){.size = 2, .offset = 0, .chars = result};
 }
 int ilog2(long long x) { return 64 - __builtin_clzl(x) - 1; }
 

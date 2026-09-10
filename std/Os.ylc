@@ -1,6 +1,6 @@
-let getenv = extern fn Ptr of Char -> Ptr of Char;
-let strlen = extern fn Ptr of Char -> Int;
-let from_cstr = extern fn Int -> Ptr of Char -> String;
+let getenv = extern fn Ptr -> Ptr;
+let strlen = extern fn Ptr -> Int;
+let from_cstr = extern fn Int -> Ptr -> String;
 
 let get_env = fn e ->
   match getenv (cstr e) with

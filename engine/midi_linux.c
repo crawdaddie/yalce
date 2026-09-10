@@ -1,6 +1,7 @@
 #include "common.h"
 #ifndef __APPLE__
 #include "midi.h"
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -288,8 +289,8 @@ int send_note_on_ts(midi_endpoint_t destination, char channel, char note,
   snd_seq_ev_set_noteon(&ev, channel, note, velocity);
 
   if (debug) {
-    printf("Sending note on: ch=%u note=%u vel=%u ts=%llu\n", channel, note,
-           velocity, ts);
+    printf("Sending note on: ch=%u note=%u vel=%u ts=%" PRIu64 "\n", channel,
+           note, velocity, ts);
   }
 
   int result = snd_seq_event_output(seq_handle, &ev);

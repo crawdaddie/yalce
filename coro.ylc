@@ -1,0 +1,13 @@
+let co_void = fn () ->
+  yield 1;
+  yield 2;
+  yield 3
+;;
+
+let co = co_void ()
+in
+   co () == Some 1
+&& co () == Some 2
+&& co () == Some 3
+&& co () == None
+&& co () == None

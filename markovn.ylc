@@ -1,0 +1,50 @@
+import std/Math;
+import std/Arrays;
+
+let Markov = module () ->
+  let matrix = fn states memsize ->
+    let rows = Math.ipow states memsize;
+    let data = array_fill_const (states * rows) 0.;
+    (states, memsize, data)
+  ;;
+
+  let encode_history = fn states arr ->
+    Arrays.fold (fn acc s -> (acc * states) + s) 0 arr
+  ;;
+
+  let decode_cur_state = fn states hist_idx ->
+    hist_idx % states
+  ;;
+
+  let next_history_idx = fn n m hist_idx next ->
+    let rows = Math.ipow n m;
+    ((hist_idx * n) + next) % rows
+  ;;
+
+  let next = fn (n, m, pm) hist_idx ->
+    let row = pm[(hist_idx * n) .. (hist_idx * n + n)];
+    let ran = Math.rand_double ();
+
+    let aux = fn acc i ->
+      if (ran <= acc || (i+1) >= n) then
+        i
+      else
+        aux (acc + row[i + 1]) (i + 1)
+    ;;
+
+    let out_idx = aux (row[0]) 0;
+    let hist_idx2 = next_history_idx n m hist_idx out_idx;
+    (out_idx, hist_idx2)
+  ;;
+;
+
+# Example:
+
+let mm = Markov.matrix 4 3;
+# let hist_idx = Arrays.fold (fn acc s -> (acc * 4) + s) 0 [|0,1,2,3|];
+let hist_idx = Markov.encode_history 4 [|0,1,2|];
+let n = Markov.next mm hist_idx;
+
+print `hist_idx: {hist_idx}\n`;
+print `current state: {Markov.current_state 4 hist_idx}\n`;
+print `next: {n}`

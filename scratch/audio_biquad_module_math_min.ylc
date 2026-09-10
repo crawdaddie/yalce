@@ -1,0 +1,20 @@
+let Audio = extern fn (T: (Double ... -> Double)) -> T;
+let _ = dlopen "../libs/audio_jit/libaudio_jit.so";
+
+import std/Math;
+
+let Filter = module () ->
+  let _min = fn a: (Double) b: (Double) -> Math.min a b;;
+  let biquad = @Audio fn b0 b1 b2 a1 a2 x ->
+    let X = [| 0., 0. |];
+    let Y = [| 0., 0. |];
+    let y = b0 * x + b1 * X[0] + b2 * X[1] - a1 * Y[0] - a2 * Y[1];
+    X[1] := X[0];
+    X[0] := x;
+    Y[1] := Y[0];
+    Y[0] := y;
+    y
+  ;;
+;
+
+print "compiled module math biquad\n";

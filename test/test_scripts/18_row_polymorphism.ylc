@@ -1,0 +1,14 @@
+let test = module () ->
+  let f = fn x ->
+    x.field == 1
+  ;;
+  let test1 = f (field: 1,) == true ;
+  let test2 = f (field: 1, something_else: "hi") == true ;
+
+  let test_generic_record_access_resolves_index_per_specialization = (
+    let get_field = fn x -> x.field;;
+    let first = get_field (field: 1,);
+    let second = get_field (other: 9, field: 2);
+    first == 1 && second == 2
+  );
+;

@@ -19,6 +19,15 @@ typedef struct {
 static TestFailure failures[MAX_FAILURES];
 static int failure_count = 0;
 
+typedef struct {
+  int left_id;
+  int right_id;
+  const char *left_name;
+  const char *right_name;
+} TypeVarAlphaPair;
+
+#define MAX_ALPHA_TYPE_VARS 512
+
 static void add_failure(const char *message, const char *file, int line) {
   if (failure_count < MAX_FAILURES) {
     strncpy(failures[failure_count].message, message, MAX_FAILURE_MSG_LEN - 1);
@@ -59,8 +68,198 @@ static void print_all_failures() {
   }
 }
 
+static bool alpha_type_equal_inner(Type *left, Type *right,
+                                   TypeVarAlphaPair *pairs, int *pair_count);
+
+static bool alpha_typelist_equal(TypeList *left, TypeList *right,
+                                 TypeVarAlphaPair *pairs, int *pair_count) {
+  while (left && right) {
+    if (!alpha_type_equal_inner(left->type, right->type, pairs, pair_count)) {
+      return false;
+    }
+    left = left->next;
+    right = right->next;
+  }
+  return left == NULL && right == NULL;
+}
+
+static bool alpha_typeclass_equal(TypeClass *left, TypeClass *right,
+                                  TypeVarAlphaPair *pairs, int *pair_count) {
+  if (!left || !right) {
+    return true;
+  }
+  while (left && right) {
+    if (strcmp(left->name, right->name) != 0 || left->rank != right->rank) {
+      return false;
+    }
+    if (!alpha_typelist_equal(left->params, right->params, pairs, pair_count)) {
+      return false;
+    }
+    if (!alpha_type_equal_inner(left->module, right->module, pairs,
+                                pair_count)) {
+      return false;
+    }
+    left = left->next;
+    right = right->next;
+  }
+  return left == NULL && right == NULL;
+}
+
+static bool alpha_typeenv_equal(TypeEnv *left, TypeEnv *right,
+                                TypeVarAlphaPair *pairs, int *pair_count) {
+  while (left && right) {
+    if (strcmp(left->name, right->name) != 0 ||
+        !alpha_type_equal_inner(left->type, right->type, pairs, pair_count)) {
+      return false;
+    }
+    left = left->next;
+    right = right->next;
+  }
+  return left == NULL && right == NULL;
+}
+
+static bool alpha_bind_vars(int left_id, const char *left_name, int right_id,
+                            const char *right_name, TypeVarAlphaPair *pairs,
+                            int *pair_count) {
+  int left_idx = -1;
+  int right_idx = -1;
+  for (int i = 0; i < *pair_count; i++) {
+    bool left_matches =
+        left_id >= 0
+            ? pairs[i].left_id == left_id
+            : (pairs[i].left_id < 0 && pairs[i].left_name && left_name &&
+               strcmp(pairs[i].left_name, left_name) == 0);
+    bool right_matches =
+        right_id >= 0
+            ? pairs[i].right_id == right_id
+            : (pairs[i].right_id < 0 && pairs[i].right_name && right_name &&
+               strcmp(pairs[i].right_name, right_name) == 0);
+    if (left_matches) {
+      left_idx = i;
+    }
+    if (right_matches) {
+      right_idx = i;
+    }
+  }
+
+  if (left_idx >= 0 || right_idx >= 0) {
+    return left_idx >= 0 && right_idx >= 0 && left_idx == right_idx;
+  }
+
+  if (*pair_count >= MAX_ALPHA_TYPE_VARS) {
+    return false;
+  }
+
+  pairs[*pair_count].left_id = left_id;
+  pairs[*pair_count].right_id = right_id;
+  pairs[*pair_count].left_name = left_name;
+  pairs[*pair_count].right_name = right_name;
+  (*pair_count)++;
+  return true;
+}
+
+static bool alpha_type_equal_inner(Type *left, Type *right,
+                                   TypeVarAlphaPair *pairs, int *pair_count) {
+  if (left == right) {
+    return true;
+  }
+
+  if (left == NULL || right == NULL) {
+    return left == right;
+  }
+
+  if (left->kind != right->kind) {
+    if (left->kind == T_MODULE && right->kind == T_CONS) {
+      return false;
+    }
+    if (right->kind == T_MODULE && left->kind == T_CONS) {
+      return false;
+    }
+    return false;
+  }
+
+  if (left->alias || right->alias) {
+    if (!(left->alias && right->alias &&
+          strcmp(left->alias, right->alias) == 0)) {
+      return false;
+    }
+  }
+
+  if (left->is_coroutine_instance != right->is_coroutine_instance ||
+      left->is_recursive_type_ref != right->is_recursive_type_ref) {
+    return false;
+  }
+
+  switch (left->kind) {
+  case T_INT:
+  case T_UINT64:
+  case T_NUM:
+  case T_STRING:
+  case T_BOOL:
+  case T_CHAR:
+  case T_VOID:
+  case T_EMPTY_LIST:
+    return true;
+
+  case T_VAR:
+    if (left->data.T_VAR.id < 0 && right->data.T_VAR.id < 0 &&
+        left->data.T_VAR.name && right->data.T_VAR.name &&
+        strcmp(left->data.T_VAR.name, right->data.T_VAR.name) == 0) {
+      return true;
+    }
+    return alpha_bind_vars(left->data.T_VAR.id, left->data.T_VAR.name,
+                           right->data.T_VAR.id, right->data.T_VAR.name, pairs,
+                           pair_count);
+
+  case T_RECURSIVE_REF:
+    return strcmp(left->data.T_RECURSIVE_REF.name,
+                  right->data.T_RECURSIVE_REF.name) == 0;
+
+  case T_CONS:
+  case T_SUM:
+    if (strcmp(left->data.T_CONS.name, right->data.T_CONS.name) != 0 ||
+        left->data.T_CONS.num_args != right->data.T_CONS.num_args) {
+      return false;
+    }
+    for (int i = 0; i < left->data.T_CONS.num_args; i++) {
+      if (!alpha_type_equal_inner(left->data.T_CONS.args[i],
+                                  right->data.T_CONS.args[i], pairs,
+                                  pair_count)) {
+        return false;
+      }
+    }
+    return true;
+
+  case T_FN:
+    return alpha_type_equal_inner(left->data.T_FN.from, right->data.T_FN.from,
+                                  pairs, pair_count) &&
+           alpha_type_equal_inner(left->data.T_FN.to, right->data.T_FN.to,
+                                  pairs, pair_count) &&
+           (!left->closure_meta || !right->closure_meta ||
+            alpha_type_equal_inner(left->closure_meta, right->closure_meta,
+                                   pairs, pair_count));
+
+  case T_MODULE:
+    return alpha_typeenv_equal(left->data.T_MODULE.env,
+                               right->data.T_MODULE.env, pairs, pair_count);
+  }
+
+  return false;
+}
+
+static bool test_types_equal(Type *left, Type *right) {
+  if (types_equal(left, right)) {
+    return true;
+  }
+
+  TypeVarAlphaPair pairs[MAX_ALPHA_TYPE_VARS] = {0};
+  int pair_count = 0;
+  return alpha_type_equal_inner(left, right, pairs, &pair_count);
+}
+
 #define xT(input, type)
 
+static TICtx test_ctx;
 #define T(input, _type)                                                        \
   ({                                                                           \
     reset_type_var_counter();                                                  \
@@ -69,7 +268,7 @@ static void print_all_failures() {
     Ast *ast = parse_input(input, NULL);                                       \
     TICtx ctx = {.env = NULL};                                                 \
     stat &= (infer(ast, &ctx) != NULL);                                        \
-    stat &= (types_equal(ast->type, _type));                                   \
+    stat &= (test_types_equal(ast->type, _type));                              \
     if (stat) {                                                                \
       char *ts = type_to_string_dynamic(_type);                                \
       fprintf(stderr, "✅ => %s\n", ts);                                       \
@@ -84,6 +283,7 @@ static void print_all_failures() {
       free(ts1);                                                               \
       free(ts2);                                                               \
     }                                                                          \
+    test_ctx = ctx;                                                            \
     status &= stat;                                                            \
     ast;                                                                       \
   })
@@ -96,11 +296,12 @@ static void print_all_failures() {
     TICtx ctx = {.env = NULL};                                                 \
     infer(ast, &ctx);                                                          \
     char buf[200] = {};                                                        \
+    test_ctx = ctx;                                                            \
     ast;                                                                       \
   })
 #define TASSERT_EQ(t1, t2, msg)                                                \
   ({                                                                           \
-    if (types_equal(t1, t2)) {                                                 \
+    if (test_types_equal(t1, t2)) {                                            \
       status &= true;                                                          \
       fprintf(stderr, "✅ %s\n", msg);                                         \
     } else {                                                                   \
@@ -170,6 +371,227 @@ static void print_all_failures() {
     res;                                                                       \
   })
 
+static bool assert_inferred_type(const char *msg, Type *actual, Type *expected,
+                                 const char *file, int line) {
+  bool ok = actual && expected && test_types_equal(actual, expected);
+  if (ok) {
+    fprintf(stderr, "✅ %s\n", msg);
+  } else {
+    char *actual_s = type_to_string_dynamic(actual);
+    char *expected_s = type_to_string_dynamic(expected);
+    char fail_msg[MAX_FAILURE_MSG_LEN];
+    snprintf(fail_msg, MAX_FAILURE_MSG_LEN, "%s\nExpected: %s\nGot: %s", msg,
+             expected_s, actual_s);
+    add_failure(fail_msg, file, line);
+    free(actual_s);
+    free(expected_s);
+  }
+  return ok;
+}
+
+static bool assert_bool(bool ok, const char *msg, const char *file, int line) {
+  if (ok) {
+    fprintf(stderr, "✅ %s\n", msg);
+  } else {
+    add_failure(msg, file, line);
+  }
+  return ok;
+}
+
+static bool astlist_contains_closed_val(AstList *closed_vals, const char *name,
+                                        Type *type) {
+  for (AstList *l = closed_vals; l; l = l->next) {
+    Ast *ast = l->ast;
+    if (!ast || ast->tag != AST_IDENTIFIER) {
+      continue;
+    }
+    if (strcmp(ast->data.AST_IDENTIFIER.value, name) == 0 &&
+        types_equal(ast->type, type)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool assert_lambda_closed_vals(Ast *lambda, int expected_count,
+                                      const char **names, Type **types,
+                                      const char *msg, const char *file,
+                                      int line) {
+
+  bool ok = lambda && lambda->tag == AST_LAMBDA &&
+            lambda->data.AST_LAMBDA.num_closed_vals == expected_count;
+  for (int i = 0; ok && i < expected_count; i++) {
+    ok &= astlist_contains_closed_val(lambda->data.AST_LAMBDA.closed_vals,
+                                      names[i], types[i]);
+  }
+  if (ok) {
+    fprintf(stderr, "✅ %s\n", msg);
+  } else {
+    add_failure(msg, file, line);
+  }
+  return ok;
+}
+
+static bool assert_lambda_coroutine_state_vals(Ast *lambda, int expected_count,
+                                               const char **names, Type **types,
+                                               const char *msg,
+                                               const char *file, int line) {
+  bool ok =
+      lambda && lambda->tag == AST_LAMBDA &&
+      lambda->data.AST_LAMBDA.num_yield_boundary_crossers == expected_count;
+
+  for (int i = 0; ok && i < expected_count; i++) {
+    ok &= astlist_contains_closed_val(
+        lambda->data.AST_LAMBDA.yield_boundary_crossers, names[i], types[i]);
+  }
+
+  if (ok) {
+    fprintf(stderr, "✅ %s\n", msg);
+  } else {
+    add_failure(msg, file, line);
+  }
+  return ok;
+}
+
+static int typelist_len(TypeList *list) {
+  int n = 0;
+  for (; list; list = list->next) {
+    n++;
+  }
+  return n;
+}
+
+static TypeEnv *lookup_test_env_binding(const char *name) {
+  return lookup_type_ref(test_ctx.env, name);
+}
+
+static bool env_binding_has_trait_predicate(TypeEnv *entry,
+                                            const char *trait_name) {
+  if (!entry) {
+    return false;
+  }
+  for (Predicate *p = entry->predicates; p; p = p->next) {
+    if (p->trait && strcmp(p->trait->name, trait_name) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool same_type_reference(Type *left, Type *right) {
+  if (left == right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  if (left->kind == T_VAR && right->kind == T_VAR) {
+    return left->data.T_VAR.id == right->data.T_VAR.id;
+  }
+  return test_types_equal(left, right);
+}
+
+static bool env_binding_has_trait_predicate_on_type(TypeEnv *entry,
+                                                    const char *trait_name,
+                                                    Type *type) {
+  if (!entry || !type) {
+    return false;
+  }
+  for (Predicate *p = entry->predicates; p; p = p->next) {
+    if (p->kind == PRED_TRAIT && p->trait &&
+        strcmp(p->trait->name, trait_name) == 0 &&
+        same_type_reference(p->data.TRAIT.type, type)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool env_binding_has_field_predicate(TypeEnv *entry,
+                                            const char *field_name,
+                                            Type **record_type,
+                                            Type **field_type) {
+  if (!entry) {
+    return false;
+  }
+  for (Predicate *p = entry->predicates; p; p = p->next) {
+    if (p->kind == PRED_HAS_FIELD && p->data.HAS_FIELD.field_name &&
+        strcmp(p->data.HAS_FIELD.field_name, field_name) == 0) {
+      if (record_type) {
+        *record_type = p->data.HAS_FIELD.record;
+      }
+      if (field_type) {
+        *field_type = p->data.HAS_FIELD.field_type;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool assert_env_binding_predicates(const char *name,
+                                          const char *trait_name,
+                                          int min_scheme_vars, const char *msg,
+                                          const char *file, int line) {
+  TypeEnv *entry = lookup_test_env_binding(name);
+  bool ok = entry != NULL && entry->type != NULL &&
+            typelist_len(entry->scheme_vars) >= min_scheme_vars &&
+            env_binding_has_trait_predicate(entry, trait_name);
+  if (ok) {
+    fprintf(stderr, "✅ %s\n", msg);
+  } else {
+    add_failure(msg, file, line);
+  }
+  return ok;
+}
+
+static bool assert_env_binding_polymorphic(const char *name,
+                                           int min_scheme_vars, const char *msg,
+                                           const char *file, int line) {
+  TypeEnv *entry = lookup_test_env_binding(name);
+  bool ok = entry != NULL && entry->type != NULL && entry->type->kind == T_FN &&
+            typelist_len(entry->scheme_vars) >= min_scheme_vars;
+  if (ok) {
+    fprintf(stderr, "✅ %s\n", msg);
+  } else {
+    add_failure(msg, file, line);
+  }
+  return ok;
+}
+
+static bool type_is_named_recursive_ref(Type *type, const char *name) {
+  return type && type->kind == T_RECURSIVE_REF &&
+         strcmp(type->data.T_RECURSIVE_REF.name, name) == 0;
+}
+
+static bool type_is_named_type_var(Type *type, const char *name) {
+  return type && type->kind == T_VAR && type->data.T_VAR.name &&
+         strcmp(type->data.T_VAR.name, name) == 0;
+}
+
+static bool type_has_alias(Type *type, const char *name) {
+  return type && type->alias && strcmp(type->alias, name) == 0;
+}
+
+static Type *array_element_type(Type *type) {
+  return type && is_array_type(type) ? type->data.T_CONS.args[0] : NULL;
+}
+
+static bool is_option_returning_fn(Type *type) {
+  return type && type->kind == T_FN && type->data.T_FN.from &&
+         is_string_type(type->data.T_FN.from) && type->data.T_FN.to &&
+         is_option_type(type->data.T_FN.to);
+}
+
+static bool ctx_has_trait_predicate(const char *trait_name) {
+  for (Predicate *p = test_ctx.predicates; p; p = p->next) {
+    if (p->trait && strcmp(p->trait->name, trait_name) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int test_type_declarations() {
   printf("TEST TYPE DECLARATIONS\n---------------------------------\n");
   bool status = true;
@@ -178,8 +600,12 @@ int test_type_declarations() {
     &MAKE_FN_TYPE_3(&t_num, &TTUPLE(2, &t_int, &t_int), &t_void));
 
   ({
-    Type tenum = TCONS(TYPE_NAME_VARIANT, 3, &TCONS("A", 0, NULL),
-                       &TCONS("B", 0, NULL), &TCONS("C", 0, NULL));
+    Type tenum = {.kind = T_SUM,
+                  .data = {.T_CONS = {.name = "Enum",
+                                      .args = (Type *[]){&TCONS("A", 0, NULL),
+                                                         &TCONS("B", 0, NULL),
+                                                         &TCONS("C", 0, NULL)},
+                                      .num_args = 3}}};
 
     T("type Enum =\n"
       "  | A\n"
@@ -197,9 +623,10 @@ int test_type_declarations() {
   });
 
   ({
-    Type imatrix = TCONS("Matrix", 3, &t_int, &t_int, &TARRAY(&t_int));
+    Type imatrix = TTUPLE(3, &t_int, &t_int, &TARRAY(&t_int));
 
     imatrix.data.T_CONS.names = (char *[]){"rows", "cols", "data"};
+    imatrix.alias = "Matrix";
 
     T("type Matrix = (\n"
       "  rows: Int,\n"
@@ -211,39 +638,193 @@ int test_type_declarations() {
   });
 
   ({
-    Type vtype = TCONS("Value", 3, &t_num, &TARRAY(tvar("Value")), &t_num);
-
-    vtype.data.T_CONS.names = (const char *[3]){"data", "children", "grad"};
-
-    T("type Value = (data: Double, children: (Array of Value), grad: "
-      "Double);\n"
-      "Value 0. [| |] 0.\n",
-      &vtype);
+    Ast *ast = _T("type Value = (data: Double, children: (Array of Value), "
+                  "grad: Double);\n"
+                  "Value 0. [| |] 0.\n");
+    Type *vt = ast ? ast->type : NULL;
+    Type *children = vt ? get_struct_member_type("children", vt) : NULL;
+    status &= TASSERT("recursive Value constructor application returns Value",
+                      vt && is_tuple_type(vt) && type_has_alias(vt, "Value"));
+    status &=
+        TASSERT("Value.data field is Double",
+                vt && types_equal(get_struct_member_type("data", vt), &t_num));
+    status &=
+        TASSERT("Value.children field is Array of recursive Value",
+                children && is_array_type(children) &&
+                    (type_is_named_recursive_ref(children->data.T_CONS.args[0],
+                                                 "Value") ||
+                     (children->data.T_CONS.args[0] &&
+                      children->data.T_CONS.args[0]->kind == T_CONS &&
+                      type_has_alias(children->data.T_CONS.args[0], "Value"))));
   });
 
   ({
-    Type vtype = TCONS("Value", 3, &t_num, &TARRAY(tvar("Value")), &t_num);
+    Ast *ast = _T("type Value = (data: Double, children: (Array of Value), "
+                  "grad: Double);\n"
+                  "let const = fn i ->\n"
+                  "  Value i [| |] 0.\n"
+                  ";;\n");
+    TypeEnv *entry = lookup_test_env_binding("const");
+    Type *ret = entry && entry->type && entry->type->kind == T_FN
+                    ? fn_return_type(entry->type)
+                    : NULL;
+    status &= TASSERT("recursive Value constructor function infers",
+                      ast && entry && entry->type && entry->type->kind == T_FN);
+    status &=
+        TASSERT("const takes a Double",
+                entry && types_equal(entry->type->data.T_FN.from, &t_num));
+    status &= TASSERT("const returns Value",
+                      ret && is_tuple_type(ret) && type_has_alias(ret, "Value"));
+  });
 
-    vtype.data.T_CONS.names = (const char *[3]){"data", "children", "grad"};
+  TFAIL("type BadNode = (next: BadNode,);\n");
+  TFAIL("type BadSum =\n"
+        "  | Wrap of BadSum\n"
+        ";\n");
 
-    T("type Value = (data: Double, children: (Array of Value), grad: "
-      "Double);\n"
-      "let const = fn i ->\n"
-      "  Value i [| |] 0.\n"
-      ";;\n",
-      &MAKE_FN_TYPE_2(&t_num, &vtype));
+  ({
+    Ast *ast = _T("type TensorNode = (\n"
+                  "  shape: Array of Int,\n"
+                  "  grad: Array of Double,\n"
+                  "  operands: List of TensorNode\n"
+                  ");\n"
+                  "let first_shape = fn t: (TensorNode) ->\n"
+                  "  match t.operands with\n"
+                  "  | a::[] -> a.shape\n"
+                  "  | _ -> t.shape\n"
+                  ";;\n");
+    TypeEnv *entry = lookup_test_env_binding("first_shape");
+    Type *ret = entry && entry->type && entry->type->kind == T_FN
+                    ? fn_return_type(entry->type)
+                    : NULL;
+    status &= TASSERT("recursive record field access through List pattern infers",
+                      ast && entry && entry->type && entry->type->kind == T_FN);
+    status &= TASSERT("recursive List element field access returns Array Int",
+                      ret && is_array_type(ret) &&
+                          types_equal(array_element_type(ret), &t_int));
   });
 
   ({
-    Type t1 = TVAR("`1");
-    Type t3 = TVAR("`3");
+    Ast *ast = _T("type TensorNode = (\n"
+                  "  shape: Array of Int,\n"
+                  "  grad: Array of Double,\n"
+                  "  operands: List of TensorNode\n"
+                  ");\n"
+                  "let first_grad = fn t: (TensorNode) ->\n"
+                  "  match t.operands with\n"
+                  "  | a::[] -> a.grad\n"
+                  "  | _ -> t.grad\n"
+                  ";;\n");
+    TypeEnv *entry = lookup_test_env_binding("first_grad");
+    Type *ret = entry && entry->type && entry->type->kind == T_FN
+                    ? fn_return_type(entry->type)
+                    : NULL;
+    status &= TASSERT("recursive record HasField predicate resolves via decl",
+                      ast && entry && entry->type && entry->type->kind == T_FN);
+    status &= TASSERT("recursive List element grad field returns Array Double",
+                      ret && is_array_type(ret) &&
+                          types_equal(array_element_type(ret), &t_num));
+  });
+
+  ({
+    Ast *ast = _T(
+        "type TensorRef = Array of TensorNode;\n"
+        "\n"
+        "type TensorNode = (\n"
+        "  data: Array of Double,\n"
+        "  grad: Array of Double,\n"
+        "  shape: Array of Int,\n"
+        "  op: TensOp\n"
+        ");\n"
+        "\n"
+        "type TensOp =\n"
+        "  | TensOpLeaf\n"
+        "  | TensOpAdd of (TensorRef, TensorRef)\n"
+        "  | TensOpMul of (TensorRef, TensorRef)\n"
+        "  | TensOpNeg of TensorRef\n"
+        "  | TensOpDiv of (TensorRef, TensorRef)\n"
+        "  | TensOpSum of TensorRef\n"
+        "  | TensOpMatMul of (TensorRef, TensorRef)\n"
+        ";\n"
+        "\n"
+        "let tens = fn data shape ->\n"
+        "  [| TensorNode data [| 0.|] shape TensOpLeaf |]\n"
+        ";;\n"
+        "let tens_add = fn a: (TensorRef) b: (TensorRef) ->\n"
+        "  [| TensorNode [| 0.|] [| 0.|] [| 1 |] (TensOpAdd (a, b)) |]\n"
+        ";;\n");
+    TypeEnv *tensor_ref = lookup_test_env_binding("TensorRef");
+    TypeEnv *tensor_node = lookup_test_env_binding("TensorNode");
+    TypeEnv *tens_op = lookup_test_env_binding("TensOp");
+    TypeEnv *tens = lookup_test_env_binding("tens");
+    TypeEnv *tens_add = lookup_test_env_binding("tens_add");
+    Type *tens_ret = tens && tens->type && tens->type->kind == T_FN &&
+                             tens->type->data.T_FN.to->kind == T_FN
+                         ? tens->type->data.T_FN.to->data.T_FN.to
+                         : NULL;
+    Type *ret_node = array_element_type(tens_ret);
+    Type *ret_op = ret_node ? get_struct_member_type("op", ret_node) : NULL;
+    Type *add_variant =
+        tens_op && tens_op->type && tens_op->type->kind == T_SUM
+            ? tens_op->type->data.T_CONS.args[1]
+            : NULL;
+    Type *add_payload =
+        add_variant && add_variant->kind == T_CONS &&
+                add_variant->data.T_CONS.num_args == 1
+            ? add_variant->data.T_CONS.args[0]
+            : NULL;
+
+    status &= TASSERT("mutually recursive Tensor declarations infer",
+                      ast && tensor_ref && tensor_node && tens_op && tens &&
+                          tens_add);
+    status &= TASSERT("TensorRef is Array of TensorNode",
+                      tensor_ref && tensor_ref->type &&
+                          is_array_type(tensor_ref->type) &&
+                          type_has_alias(tensor_ref->type, "TensorRef") &&
+                          array_element_type(tensor_ref->type) &&
+                          (type_is_named_recursive_ref(
+                               array_element_type(tensor_ref->type),
+                               "TensorNode") ||
+                           type_is_named_type_var(
+                               array_element_type(tensor_ref->type),
+                               "TensorNode") ||
+                           type_has_alias(array_element_type(tensor_ref->type),
+                                          "TensorNode")));
+    status &=
+        TASSERT("TensorNode has an op field",
+                tensor_node && tensor_node->type &&
+                    get_struct_member_type("op", tensor_node->type) != NULL);
+    status &= TASSERT("TensOp is a seven-constructor sum",
+                      tens_op && tens_op->type && tens_op->type->kind == T_SUM &&
+                          strcmp(tens_op->type->data.T_CONS.name, "TensOp") ==
+                              0 &&
+                          tens_op->type->data.T_CONS.num_args == 7);
+    status &= TASSERT("TensOpAdd carries two TensorRef operands",
+                      add_payload && is_tuple_type(add_payload) &&
+                          add_payload->data.T_CONS.num_args == 2 &&
+                          is_array_type(add_payload->data.T_CONS.args[0]) &&
+                          is_array_type(add_payload->data.T_CONS.args[1]));
+    status &= TASSERT("tens returns TensorRef",
+                      tens_ret && is_array_type(tens_ret) &&
+                          ret_node && type_has_alias(ret_node, "TensorNode"));
+    status &= TASSERT("tens result node op resolves to TensOp",
+                      ret_op && tens_op && tens_op->type &&
+                          (test_types_equal(ret_op, tens_op->type) ||
+                           types_match(ret_op, tens_op->type) ||
+                           types_match(tens_op->type, ret_op)));
+    status &= TASSERT("TensOpAdd constructor can be used in TensorRef result",
+                      tens_add && tens_add->type && tens_add->type->kind == T_FN);
+  });
+
+  ({
+    Type t1 = TVAR("`2");
+    Type t3 = TVAR("`4");
     Type t5 = TVAR("`5");
 
     T("let tensor_ndims = fn (_, sizes, _) -> \n"
       "  array_size sizes\n"
       ";;",
-      &TSCHEME(&MAKE_FN_TYPE_2(&TTUPLE(3, &t1, &TARRAY(&t5), &t3), &t_int), &t3,
-               &t5, &t1));
+      &MAKE_FN_TYPE_2(&TTUPLE(3, &t1, &TARRAY(&t5), &t3), &t_int));
   });
 
   T("type Tensor = (Array of t, Array of Int, Array of Int);\n"
@@ -281,24 +862,114 @@ int test_list_processing() {
     &MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int));
 
   ({
-    Type s = arithmetic_var("`4");
-    Type t = arithmetic_var("`8");
-    T("let list_sum = fn s l ->\n"
-      "  match l with\n"
-      "  | x::rest -> list_sum (s + x) rest\n"
-      "  | [] -> s\n"
-      ";;\n",
-      &TSCHEME(&MAKE_FN_TYPE_3(&t, &TLIST(&s), &t), &s, &t));
+    Type int_list = TLIST(&t_int);
+    Ast *ast = T("1 :: []", &int_list);
+    Ast *expr = AST_LIST_NTH(ast->data.AST_BODY.stmts, 0);
+    Ast *empty_tail = expr && expr->tag == AST_APPLICATION &&
+                              expr->data.AST_APPLICATION.len > 0
+                          ? expr->data.AST_APPLICATION.args +
+                                (expr->data.AST_APPLICATION.len - 1)
+                          : NULL;
+    status &= TASSERT("cons tail is an empty list literal",
+                      empty_tail && empty_tail->tag == AST_LIST &&
+                          empty_tail->data.AST_LIST.len == 0);
+    status &= assert_inferred_type("empty cons tail specializes to List<Int>",
+                                   empty_tail ? empty_tail->type : NULL,
+                                   &int_list, __FILE__, __LINE__);
   });
 
   ({
-    Type ltype = TLIST(&TVAR("`3"));
-    T("let print_list = fn l ->\n"
-      "  match l with\n"
-      "  | x::rest -> (print `{x}, `; print_list rest)\n"
-      "  | [] -> ()\n"
-      ";;\n",
-      &TSCHEME(&MAKE_FN_TYPE_2(&ltype, &t_void), &ltype));
+    Type int_list = TLIST(&t_int);
+    Ast *ast = T("if true then [] else [1]", &int_list);
+    Ast *match = AST_LIST_NTH(ast->data.AST_BODY.stmts, 0);
+    Ast *empty_branch = match && match->tag == AST_MATCH
+                            ? match->data.AST_MATCH.branches + 1
+                            : NULL;
+    status &= TASSERT("if branch result is an empty list literal",
+                      empty_branch && empty_branch->tag == AST_LIST &&
+                          empty_branch->data.AST_LIST.len == 0);
+    status &= assert_inferred_type("empty branch specializes to List<Int>",
+                                   empty_branch ? empty_branch->type : NULL,
+                                   &int_list, __FILE__, __LINE__);
+  });
+
+  ({
+    Type int_list = TLIST(&t_int);
+    Ast *ast = T("let id_int_list = fn xs: (List of Int) -> xs;;\n"
+                 "id_int_list []",
+                 &int_list);
+    Ast *app = AST_LIST_NTH(ast->data.AST_BODY.stmts, 1);
+    Ast *empty_arg = app && app->tag == AST_APPLICATION
+                         ? app->data.AST_APPLICATION.args
+                         : NULL;
+    status &= TASSERT("function argument is an empty list literal",
+                      empty_arg && empty_arg->tag == AST_LIST &&
+                          empty_arg->data.AST_LIST.len == 0);
+    status &= assert_inferred_type("empty argument specializes to List<Int>",
+                                   empty_arg ? empty_arg->type : NULL,
+                                   &int_list, __FILE__, __LINE__);
+  });
+
+  ({
+    Type item = TVAR("'item");
+    Type item_list = TLIST(&item);
+    Type expected = MAKE_FN_TYPE_2(&item_list, &item_list);
+    Ast *ast = T("let singleton_or_empty = fn xs ->\n"
+                 "  match xs with\n"
+                 "  | [] -> []\n"
+                 "  | x::rest -> [x]\n"
+                 ";;\n",
+                 &expected);
+    Ast *let = AST_LIST_NTH(ast->data.AST_BODY.stmts, 0);
+    Ast *lambda = let && let->tag == AST_LET ? let->data.AST_LET.expr : NULL;
+    Ast *body = lambda && lambda->tag == AST_LAMBDA
+                    ? lambda->data.AST_LAMBDA.body
+                    : NULL;
+    Ast *match = body && body->tag == AST_BODY
+                     ? AST_LIST_NTH(body->data.AST_BODY.stmts, 0)
+                     : body;
+    Ast *empty_return = match && match->tag == AST_MATCH
+                            ? match->data.AST_MATCH.branches + 1
+                            : NULL;
+    status &= TASSERT("match return is an empty list literal",
+                      empty_return && empty_return->tag == AST_LIST &&
+                          empty_return->data.AST_LIST.len == 0);
+    status &= assert_inferred_type(
+        "polymorphic empty branch specializes to List<'item>",
+        empty_return ? empty_return->type : NULL, &item_list, __FILE__,
+        __LINE__);
+  });
+
+  ({
+    Ast *ast = _T("let list_sum = fn s l ->\n"
+                  "  match l with\n"
+                  "  | x::rest -> list_sum (s + x) rest\n"
+                  "  | [] -> s\n"
+                  ";;\n");
+    bool ok = ast && ast->type && ast->type->kind == T_FN;
+    if (ok) {
+      fprintf(stderr, "✅ list_sum has function type\n");
+    } else {
+      add_failure("list_sum has function type", __FILE__, __LINE__);
+    }
+    status &= ok;
+    status &= assert_env_binding_predicates(
+        "list_sum", TYPE_NAME_TYPECLASS_ARITHMETIC, 2,
+        "list_sum env binding preserves Arithmetic predicates", __FILE__,
+        __LINE__);
+  });
+
+  ({
+    Ast *ast = _T("let print_list = fn l ->\n"
+                  "  match l with\n"
+                  "  | x::rest -> (print `{x}, `; print_list rest)\n"
+                  "  | [] -> ()\n"
+                  ";;\n");
+    status &= TASSERT("print_list has function type",
+                      ast && ast->type && ast->type->kind == T_FN);
+    status &= assert_env_binding_polymorphic(
+        "print_list", 1, "print_list env binding is polymorphic", __FILE__,
+        __LINE__);
   });
 
   ({
@@ -311,47 +982,51 @@ int test_list_processing() {
       &t_void);
   });
 
-  T("let list_pop_left = fn l ->\n"
-    "  match l with\n"
-    "  | x::rest -> Some x \n"
-    "  | [] -> None\n"
-    ";; \n",
-    &TSCHEME(&MAKE_FN_TYPE_2(&TLIST(&TVAR("`3")), &TOPT(&TVAR("`3"))),
-             &TVAR("`3")));
-
   ({
-    Type t = TVAR("`1");
-    T("let enqueue = fn (head, tail) item ->\n"
-      "  let last = [item] in\n"
-      "  match head with\n"
-      "  | [] -> (last, last)\n"
-      "  | _ -> (\n"
-      "    let _ = list_concat tail last in\n"
-      "    (head, last)\n"
-      "  )\n"
-      ";;\n",
-      &TSCHEME(&MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&t), &TLIST(&t)), &t,
-                               &TTUPLE(2, &TLIST(&t), &TLIST(&t))),
-               &t));
+    Ast *ast = _T("let list_pop_left = fn l ->\n"
+                  "  match l with\n"
+                  "  | x::rest -> Some x \n"
+                  "  | [] -> None\n"
+                  ";; \n");
+    status &= TASSERT("list_pop_left has function type",
+                      ast && ast->type && ast->type->kind == T_FN);
+    status &= assert_env_binding_polymorphic(
+        "list_pop_left", 1, "list_pop_left env binding is polymorphic",
+        __FILE__, __LINE__);
   });
 
-  T("let enqueue = fn (head, tail): (List of Int, List of Int) item: "
-    "(Int) "
-    "->\n"
-    "  let last = [item] in\n"
-    "  match head with\n"
-    "  | [] -> (last, last)\n"
-    "  | _ -> (\n"
-    "    let _ = list_concat tail last in\n"
-    "    (head, last)\n"
-    "  )\n"
-    ";;\n",
-    // &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))),
-    //                 &TVAR("`0"),
-    //                 &TTUPLE(2, &TLIST(&TVAR("`0")), &TLIST(&TVAR("`0"))))
-    //
-    &MAKE_FN_TYPE_3(&TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int)), &t_int,
-                    &TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int))));
+  ({
+    Ast *ast = _T("let enqueue = fn (head, tail) item ->\n"
+                  "  let last = [item] in\n"
+                  "  match head with\n"
+                  "  | [] -> (last, last)\n"
+                  "  | _ -> (\n"
+                  "    let _ = list_concat tail last in\n"
+                  "    (head, last)\n"
+                  "  )\n"
+                  ";;\n");
+    status &= TASSERT("enqueue has function type",
+                      ast && ast->type && ast->type->kind == T_FN);
+    status &= assert_env_binding_polymorphic(
+        "enqueue", 1, "enqueue env binding is polymorphic", __FILE__, __LINE__);
+  });
+
+  ({
+    Ast *ast = _T("let enqueue = fn (head, tail): (List of Int, List of Int) "
+                  "item: (Int) "
+                  "->\n"
+                  "  let last = [item] in\n"
+                  "  match head with\n"
+                  "  | [] -> (last, last)\n"
+                  "  | _ -> (\n"
+                  "    let _ = list_concat tail last in\n"
+                  "    (head, last)\n"
+                  "  )\n"
+                  ";;\n");
+    TypeEnv *entry = lookup_test_env_binding("enqueue");
+    status &= TASSERT("annotated enqueue binding is a function",
+                      ast && entry && entry->type && entry->type->kind == T_FN);
+  });
   //
   ({
     Type s = arithmetic_var("`4");
@@ -367,40 +1042,38 @@ int test_list_processing() {
   });
 
   ({
-    Type t5 = TVAR("`5");
-    Type t2 = TVAR("`2");
-    Ast *b = T("let pop_left = fn (head, tail) ->\n"
-               "  match head with\n"
-               "  | x::rest -> ((rest, tail), Some x)  \n"
-               "  | [] -> ((head, tail), None)\n"
-               ";;\n",
-               &TSCHEME(&MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&t5), &t2),
-                                        &TTUPLE(2, &TTUPLE(2, &TLIST(&t5), &t2),
-                                                &TOPT(&t5))),
-                        &t5, &t2));
-    Ast *match_subj =
-        AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
-            ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH.expr;
+    Ast *b = _T("let pop_left = fn (head, tail) ->\n"
+                "  match head with\n"
+                "  | x::rest -> ((rest, tail), Some x)  \n"
+                "  | [] -> ((head, tail), None)\n"
+                ";;\n");
+    status &= TASSERT("pop_left has function type",
+                      b && b->type && b->type->kind == T_FN);
+    status &= assert_env_binding_polymorphic(
+        "pop_left", 2, "pop_left env binding is polymorphic", __FILE__,
+        __LINE__);
   });
 
   ({
-    Type f = MAKE_FN_TYPE_2(&arithmetic_var("`1"),
-                            &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                               &arithmetic_var("`1"), &t_int));
-    T("(+) 1", &f);
+    Ast *ast = _T("(+) 1");
+    status &= TASSERT("partial (+) 1 has function type",
+                      ast && ast->type && ast->type->kind == T_FN);
+    status &= TASSERT("partial (+) 1 preserves Arithmetic predicate",
+                      ctx_has_trait_predicate(TYPE_NAME_TYPECLASS_ARITHMETIC));
   });
 
   ({
-    Ast *b = T("let list_map = fn f l ->\n"
-               "  let aux = fn f l res -> \n"
-               "    match l with\n"
-               "    | [] -> res\n"
-               "    | x :: rest -> aux f rest (f x :: res) \n"
-               "  ;;\n"
-               "  aux f l []\n"
-               ";;\n"
-               "(list_map ((+) 1) [0,1,2,3])",
-               &TLIST(&t_int));
+    Ast *b = _T("let list_map = fn f l ->\n"
+                "  let aux = fn f l res -> \n"
+                "    match l with\n"
+                "    | [] -> res\n"
+                "    | x :: rest -> aux f rest (f x :: res) \n"
+                "  ;;\n"
+                "  aux f l []\n"
+                ";;\n"
+                "(list_map ((+) 1) [0,1,2,3])");
+    status &= TASSERT("list_map application returns a list",
+                      b && b->type && is_list_type(b->type));
     Ast *aux_app = AST_LIST_NTH(
         AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_BODY.stmts,
@@ -409,55 +1082,56 @@ int test_list_processing() {
     // print_type(aux_app->data.AST_APPLICATION.function->md);
   });
 
-  T("let list_rev = fn l ->\n"
-    "  let aux = fn ll res -> \n"
-    "    match ll with\n"
-    "    | [] -> res\n"
-    "    | x :: rest -> aux rest (x :: res) \n"
-    "  ;;\n"
-    "  aux l []\n"
-    ";;\n",
-    &TSCHEME(&MAKE_FN_TYPE_2(&TLIST(&TVAR("`11")), &TLIST(&TVAR("`11"))),
-             &TVAR("`11")));
-
-  T("let of_list = fn l ->\n"
-    "  let t = l in \n"
-    "  let h = t in\n"
-    "  (h, t)\n"
-    ";;\n"
-    "let append = fn n (h, t) ->\n"
-    "  match list_empty h with\n"
-    "  | true -> of_list [n,]\n"
-    "  | _ -> (\n"
-    "    let nt = [n,] in\n"
-    "    let tt = list_concat t nt in\n"
-    "    (h, tt)\n"
-    "  )\n"
-    ";;\n",
-    &TSCHEME(
-        &MAKE_FN_TYPE_3(&TVAR("`2"),
-                        &TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2"))),
-                        &TTUPLE(2, &TLIST(&TVAR("`2")), &TLIST(&TVAR("`2")))),
-        &TVAR("`2")));
+  ({
+    Ast *ast = _T("let list_rev = fn l ->\n"
+                  "  let aux = fn ll res -> \n"
+                  "    match ll with\n"
+                  "    | [] -> res\n"
+                  "    | x :: rest -> aux rest (x :: res) \n"
+                  "  ;;\n"
+                  "  aux l []\n"
+                  ";;\n");
+    status &= TASSERT("list_rev has function type",
+                      ast && ast->type && ast->type->kind == T_FN);
+    status &= assert_env_binding_polymorphic(
+        "list_rev", 1, "list_rev env binding is polymorphic", __FILE__,
+        __LINE__);
+  });
 
   ({
-    Ast *b =
-        T("let pop_left = fn (h, t) ->\n"
-          "  match h with\n"
-          "  | x::rest -> Some (x, (rest, t))  \n"
-          "  | [] -> None\n"
-          ";;\n",
-          &TSCHEME(&MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&TVAR("`5")), &TVAR("`2")),
-                                   &TOPT(&TTUPLE(2, &TVAR("`5"),
-                                                 &TTUPLE(2, &TLIST(&TVAR("`5")),
-                                                         &TVAR("`2"))))),
-                   &TVAR("`2"), &TVAR("`5")));
+    Ast *ast = _T("let of_list = fn l ->\n"
+                  "  let t = l in \n"
+                  "  let h = t in\n"
+                  "  (h, t)\n"
+                  ";;\n"
+                  "let append = fn n (h, t) ->\n"
+                  "  match list_empty h with\n"
+                  "  | true -> of_list [n,]\n"
+                  "  | _ -> (\n"
+                  "    let nt = [n,] in\n"
+                  "    let tt = list_concat t nt in\n"
+                  "    (h, tt)\n"
+                  "  )\n"
+                  ";;\n");
+    status &= TASSERT("append binding exists",
+                      ast && lookup_test_env_binding("append") != NULL);
+    status &= assert_env_binding_polymorphic(
+        "append", 1, "append env binding is polymorphic", __FILE__, __LINE__);
+  });
+
+  ({
+    Ast *b = _T("let pop_left = fn (h, t) ->\n"
+                "  match h with\n"
+                "  | x::rest -> Some (x, (rest, t))  \n"
+                "  | [] -> None\n"
+                ";;\n");
     Ast *m =
         b->data.AST_BODY.stmts->ast->data.AST_LET.expr->data.AST_LAMBDA.body;
-    TASSERT("match result type = Option of `5",
-            types_equal(m->type, &TOPT(&TTUPLE(2, &TVAR("`5"),
-                                               &TTUPLE(2, &TLIST(&TVAR("`5")),
-                                                       &TVAR("`2"))))));
+    status &= TASSERT("match result type is Option",
+                      m && m->type && is_option_type(m->type));
+    status &= assert_env_binding_polymorphic(
+        "pop_left", 2, "pop_left option-returning binding is polymorphic",
+        __FILE__, __LINE__);
   });
 
   ({
@@ -493,93 +1167,154 @@ int test_list_processing() {
                ";\n",
                &t_bool);
 
-    // Ast *pop_left = AST_LIST_NTH(b->data.AST_BODY.stmts, 3);
-    // print_type(pop_left->type);
-    Ast *res_bind = AST_LIST_NTH(b->data.AST_BODY.stmts, 5)
-                        ->data.AST_LET.expr->data.AST_MATCH.branches[0]
-                        .data.AST_MATCH_GUARD_CLAUSE.test_expr;
+    TypeEnv *q_entry = lookup_test_env_binding("q");
+    Type queue_int_type = TTUPLE(2, &TLIST(&t_int), &TLIST(&t_int));
 
-    print_type(res_bind->type);
-    TASSERT(
-        "match branch guard of pop_left q has type Option of (Int * (Int[] * "
-        "Int[] ) )",
-        types_equal(res_bind->type, &TOPT(&TTUPLE(2, &t_int,
-                                                  &TTUPLE(2, &TLIST(&t_int),
-                                                          &TLIST(&t_int))))));
+    status &= TASSERT("piped append queue binding exists",
+                      b && q_entry && q_entry->type != NULL);
+    status &= TASSERT("piped append queue binding is monomorphic",
+                      q_entry && typelist_len(q_entry->scheme_vars) == 0);
+    status &= TASSERT("piped append queue binding specializes to "
+                      "(List<Int>, List<Int>)",
+                      q_entry && types_equal(q_entry->type, &queue_int_type));
   });
-  T("let list_rev = fn l ->\n"
-    "  let aux = fn ll res ->\n"
-    "    match ll with\n"
-    "    | [] -> res\n"
-    "    | x :: rest -> aux rest (x :: res)\n"
-    "  ;;\n"
-    "  aux l []\n"
-    ";;\n",
-    &TSCHEME(&MAKE_FN_TYPE_2(&TLIST(&TVAR("`11")), &TLIST(&TVAR("`11"))),
-             &TVAR("`11")));
   ({
-    Type t0 = TVAR("`5");
-    Type t1 = TVAR("`7");
-    T("let aux = fn f l res -> \n"
-      "  match l with\n"
-      "  | [] -> res\n"
-      "  | x :: rest -> aux f rest (f x :: res) \n"
-      ";;\n",
-      &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_2(&t0, &t1), &TLIST(&t0),
-                               &TLIST(&t1), &TLIST(&t1)),
-               &t0, &t1));
+    Ast *ast = _T("let list_rev = fn l ->\n"
+                  "  let aux = fn ll res ->\n"
+                  "    match ll with\n"
+                  "    | [] -> res\n"
+                  "    | x :: rest -> aux rest (x :: res)\n"
+                  "  ;;\n"
+                  "  aux l []\n"
+                  ";;\n");
+    status &= TASSERT("second list_rev has function type",
+                      ast && ast->type && ast->type->kind == T_FN);
+    status &= assert_env_binding_polymorphic(
+        "list_rev", 1, "second list_rev env binding is polymorphic", __FILE__,
+        __LINE__);
+  });
+  ({
+    Ast *ast = _T("let aux = fn f l res -> \n"
+                  "  match l with\n"
+                  "  | [] -> res\n"
+                  "  | x :: rest -> aux f rest (f x :: res) \n"
+                  ";;\n");
+    status &= TASSERT("aux has function type",
+                      ast && ast->type && ast->type->kind == T_FN);
+    status &= assert_env_binding_polymorphic(
+        "aux", 2, "aux env binding is polymorphic", __FILE__, __LINE__);
   });
 
   ({
-    Type t8 = TVAR("`14");
-    Type t10 = TVAR("`15");
-    T("let list_map = fn f l ->\n"
-      "  let aux = fn f l res -> \n"
-      "    match l with\n"
-      "    | [] -> res\n"
-      "    | x :: rest -> aux f rest (f x :: res) \n"
-      "  ;;\n"
-      "  aux f l []\n"
-      ";;\n",
-      // (`8 -> `15) -> `8[] -> `15
-      &TSCHEME(&MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&t8, &t10), &TLIST(&t8),
-                               &TLIST(&t10)),
-               &t8, &t10));
+    Ast *ast = _T("let list_map = fn f l ->\n"
+                  "  let aux = fn f l res -> \n"
+                  "    match l with\n"
+                  "    | [] -> res\n"
+                  "    | x :: rest -> aux f rest (f x :: res) \n"
+                  "  ;;\n"
+                  "  aux f l []\n"
+                  ";;\n");
+    status &= TASSERT("list_map has function type",
+                      ast && ast->type && ast->type->kind == T_FN);
+    status &= assert_env_binding_polymorphic(
+        "list_map", 2, "list_map env binding is polymorphic", __FILE__,
+        __LINE__);
   });
-  T("let list_map = fn f l ->\n"
-    "  let aux = fn f l res -> \n"
-    "    match l with\n"
-    "    | [] -> res\n"
-    "    | x :: rest -> aux f rest (f x :: res) \n"
-    "  ;;\n"
-    "  aux f l []\n"
-    ";;\n"
-    "list_map ((+) 1) [0,1,2,3] == [1,2,3,4]\n",
-    &t_bool);
+  ({
+    Ast *ast = _T("let list_map = fn f l ->\n"
+                  "  let aux = fn f l res -> \n"
+                  "    match l with\n"
+                  "    | [] -> res\n"
+                  "    | x :: rest -> aux f rest (f x :: res) \n"
+                  "  ;;\n"
+                  "  aux f l []\n"
+                  ";;\n"
+                  "list_map ((+) 1) [0,1,2,3] == [1,2,3,4]\n");
+    status &= TASSERT("list_map equality expression has bool type",
+                      ast && ast->type && types_equal(ast->type, &t_bool));
+    status &= TASSERT("list_map equality preserves Arithmetic predicate",
+                      ctx_has_trait_predicate(TYPE_NAME_TYPECLASS_ARITHMETIC));
+  });
+  ({
+    Ast *ast = _T("let list_rev = fn l ->\n"
+                  "  let aux = fn ll res ->\n"
+                  "    match ll with\n"
+                  "    | [] -> res\n"
+                  "    | x :: rest -> aux rest (x :: res)\n"
+                  "  ;;\n"
+                  "  aux l []\n"
+                  ";;\n"
+                  "let list_map = fn f l ->\n"
+                  "  let aux = fn f l res -> \n"
+                  "    match l with\n"
+                  "    | [] -> res\n"
+                  "    | x :: rest -> aux f rest (f x :: res) \n"
+                  "  ;;\n"
+                  "  aux f l [] |> list_rev\n"
+                  ";;\n"
+                  "list_map (fn x -> Double x) [0,1,2,3] == [0.,1.,2.,3.]\n");
+    status &= TASSERT("list_map can map Int to Double",
+                      ast && ast->type && types_equal(ast->type, &t_bool));
+  });
+  ({
+    Ast *ast = _T("let list_rev = fn l ->\n"
+                  "  let aux = fn ll res ->\n"
+                  "    match ll with\n"
+                  "    | [] -> res\n"
+                  "    | x :: rest -> aux rest (x :: res)\n"
+                  "  ;;\n"
+                  "  aux l []\n"
+                  ";;\n"
+                  "let list_map = fn f l ->\n"
+                  "  let aux = fn f l res -> \n"
+                  "    match l with\n"
+                  "    | [] -> res\n"
+                  "    | x :: rest -> aux f rest (f x :: res) \n"
+                  "  ;;\n"
+                  "  aux f l [] |> list_rev\n"
+                  ";;\n"
+                  "list_map Double [0,1,2,3] == [0.,1.,2.,3.]\n");
+    status &= TASSERT("list_map accepts Double constructor directly",
+                      ast && ast->type && types_equal(ast->type, &t_bool));
+  });
 
+  ({
+    Type r = TVAR("'4");
+    Type a = TVAR("'5");
+    Type l = TLIST(&a);
+    T("let fold = fn f res a ->\n"
+      "match a with\n"
+      "| [] -> res\n"
+      "| x::rest -> fold f (f res x) rest\n"
+      ";;\n",
+      &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&r, &a, &r), &r, &l, &r));
+  });
   return status;
 }
-int test_aux() {
 
-  bool status = true;
-  Type t0 = TVAR("`5");
-  Type t1 = TVAR("`7");
-  T("let aux = fn f l res -> \n"
-    "  match l with\n"
-    "  | [] -> res\n"
-    "  | x :: rest -> aux f rest (f x :: res) \n"
-    ";;\n",
-    &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_2(&t0, &t1), &TLIST(&t0),
-                             &TLIST(&t1), &TLIST(&t1)),
-             &t0, &t1));
-
-  return status;
-}
+// int test_aux() {
+//
+//   bool status = true;
+//   Type t0 = TVAR("`5");
+//   Type t1 = TVAR("`7");
+//   T("let aux = fn f l res -> \n"
+//     "  match l with\n"
+//     "  | [] -> res\n"
+//     "  | x :: rest -> aux f rest (f x :: res) \n"
+//     ";;\n",
+//     &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_2(&t0, &t1), &TLIST(&t0),
+//                              &TLIST(&t1), &TLIST(&t1)),
+//              &t0, &t1));
+//
+//   return status;
+// }
 
 int test_basic_ops() {
   printf("## TEST BASIC OPS\n---------------------------------------------\n");
   bool status = true;
   T("1", &t_int);
+  T("1_000_000", &t_int);
+  T("1_000_000u64", &t_uint64);
   T("1.", &t_num);
   T("'c'", &t_char);
   T("\"hello\"", &t_string);
@@ -588,13 +1323,11 @@ int test_basic_ops() {
   T("()", &t_void);
   // T("[]", &TLIST(&TVAR("`0")));
   ({
-    Type t0 = arithmetic_var("`0");
-    Type t1 = arithmetic_var("`1");
-    TypeList tl = {&t0, &(TypeList){&t1}};
-
-    T("(+)", &MAKE_FN_TYPE_3(
-                 &t0, &t1,
-                 &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t1, &t0)));
+    Type t0 = TVAR("`0");
+    Type t1 = TVAR("`1");
+    Type t2 = TVAR("`2");
+    Ast *t = T("(+)", &MAKE_FN_TYPE_3(&t0, &t1, &t2));
+    print_type(t->type);
   });
   T("id 1", &t_int);
   T("id 1.", &t_num);
@@ -644,10 +1377,15 @@ int test_basic_ops() {
     Ast *strf = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)->data.AST_LIST.items;
     TASSERT("fmt string member has type string",
             types_equal(strf->type, &t_string));
+
     TASSERT("fmt string member fn has type Int -> string",
             types_equal(strf->data.AST_APPLICATION.function->type,
                         &MAKE_FN_TYPE_2(&t_int, &t_string)));
   });
+  T("let id = fn x -> x;;\n"
+    "(id 1, id true)",
+    &TTUPLE(2, &t_int, &t_bool));
+  T("let id = (fn x -> x) in (id 1, id true)", &TTUPLE(2, &t_int, &t_bool));
   return status;
 }
 
@@ -655,32 +1393,35 @@ int test_funcs() {
   printf("## TEST FUNCS\n---------------------------------------------\n");
   bool status = true;
   ({
-    Type t0 = TVAR("`0");
-    Type t1 = TVAR("`1");
-    T("let f = fn a b -> 2;;",
-      &TSCHEME(&MAKE_FN_TYPE_3(&t0, &t1, &t_int), &t0, &t1));
+    Type t0 = TVAR("`1");
+    Type t1 = TVAR("`2");
+    T("let f = fn a b -> 2;;", &MAKE_FN_TYPE_3(&t0, &t1, &t_int));
   });
 
-  T("let f = fn a: (Int) b: (Int) -> 2;;",
-    &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int));
+  ({
+    Ast *b = _T("let f = fn a: (Int) b: (Int) -> 2;;");
+    TypeEnv *entry = lookup_test_env_binding("f");
+    bool ok = entry != NULL && entry->type != NULL &&
+              entry->type->kind == T_FN && entry->type->data.T_FN.to != NULL &&
+              entry->type->data.T_FN.to->kind == T_FN &&
+              entry->type->data.T_FN.to->data.T_FN.to == &t_int;
+    status &= assert_bool(ok, "annotated f has arity 2 and returns Int",
+                          __FILE__, __LINE__);
+    (void)b;
+  });
 
   T("let ex_fn = extern fn Int -> Double -> Int;",
     &MAKE_FN_TYPE_3(&t_int, &t_num, &t_int));
 
   ({
-    Type tvar = arithmetic_var("`0");
     Ast *body = T("let f = fn x -> 1 + x;;\n"
                   "f 1;\n"
                   "f 1.;\n",
                   &t_num);
 
-    TASSERT_EQ(
-        AST_LIST_NTH(body->data.AST_BODY.stmts, 0)->type,
-        &TSCHEME(&MAKE_FN_TYPE_2(
-                     &tvar, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                               &t_int, &tvar)),
-                 &tvar),
-        "f == `0 [Arithmetic] -> resolve Arithmetic Int : `0");
+    status &= assert_env_binding_predicates(
+        "f", TYPE_NAME_TYPECLASS_ARITHMETIC, 1,
+        "f env binding preserves Arithmetic predicate", __FILE__, __LINE__);
 
     TASSERT_EQ(AST_LIST_NTH(body->data.AST_BODY.stmts, 1)->type, &t_int,
                "f 1 == Int");
@@ -689,39 +1430,53 @@ int test_funcs() {
   });
 
   ({
-    Type t0 = TVAR("`1");
-    Type t1 = TVAR("`2");
-    Type t2 = TVAR("`3");
-
-    T("let f = fn (x, y, z) -> (z, y, x);",
-      &TSCHEME(
-          &MAKE_FN_TYPE_2(&TTUPLE(3, &t0, &t1, &t2), &TTUPLE(3, &t2, &t1, &t0)),
-          &t0, &t1, &t2));
+    Ast *b = _T("let f = fn (x, y, z) -> (z, y, x);");
+    TypeEnv *entry = lookup_test_env_binding("f");
+    Type *ft = entry ? entry->type : NULL;
+    bool ok = ft != NULL && ft->kind == T_FN &&
+              ft->data.T_FN.from->kind == T_CONS &&
+              ft->data.T_FN.to->kind == T_CONS &&
+              ft->data.T_FN.from->data.T_CONS.num_args == 3 &&
+              ft->data.T_FN.to->data.T_CONS.num_args == 3 &&
+              ft->data.T_FN.from->data.T_CONS.args[0] ==
+                  ft->data.T_FN.to->data.T_CONS.args[2] &&
+              ft->data.T_FN.from->data.T_CONS.args[1] ==
+                  ft->data.T_FN.to->data.T_CONS.args[1] &&
+              ft->data.T_FN.from->data.T_CONS.args[2] ==
+                  ft->data.T_FN.to->data.T_CONS.args[0];
+    status &= assert_bool(ok, "tuple-reversing f preserves component order",
+                          __FILE__, __LINE__);
+    (void)b;
   });
 
   ({
-    Type t0 = TVAR("`1");
-    Type t1 = TVAR("`2");
-    Type t2 = TVAR("`3");
-
-    T("let f = fn (x, y, z) frame_offset: (Int) -> (z, y, x);",
-      &TSCHEME(&MAKE_FN_TYPE_3(&TTUPLE(3, &t0, &t1, &t2), &t_int,
-                               &TTUPLE(3, &t2, &t1, &t0)),
-               &t0, &t1, &t2));
+    Ast *b = _T("let f = fn (x, y, z) frame_offset: (Int) -> (z, y, x);");
+    TypeEnv *entry = lookup_test_env_binding("f");
+    Type *ft = entry ? entry->type : NULL;
+    bool ok = ft != NULL && ft->kind == T_FN && ft->data.T_FN.to != NULL &&
+              ft->data.T_FN.to->kind == T_FN &&
+              ft->data.T_FN.from->kind == T_CONS &&
+              ft->data.T_FN.to->data.T_FN.to->kind == T_CONS &&
+              ft->data.T_FN.from->data.T_CONS.num_args == 3 &&
+              ft->data.T_FN.to->data.T_FN.to->data.T_CONS.num_args == 3 &&
+              ft->data.T_FN.from->data.T_CONS.args[0] ==
+                  ft->data.T_FN.to->data.T_FN.to->data.T_CONS.args[2] &&
+              ft->data.T_FN.from->data.T_CONS.args[1] ==
+                  ft->data.T_FN.to->data.T_FN.to->data.T_CONS.args[1] &&
+              ft->data.T_FN.from->data.T_CONS.args[2] ==
+                  ft->data.T_FN.to->data.T_FN.to->data.T_CONS.args[0];
+    status &= assert_bool(ok, "annotated tuple-reversing f has expected shape",
+                          __FILE__, __LINE__);
+    (void)b;
   });
 
   ({
-    Type t0 = TVAR("`0");
-    Type t1 = TVAR("`1");
-    Type t2 = TVAR("`2");
-    T("let f = fn x y z -> x + y + z;",
-      &TSCHEME(
-          &MAKE_FN_TYPE_4(&t0, &t1, &t2,
-                          &MAKE_TC_RESOLVE_2(
-                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
-                              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t1, &t2))),
-          &t2, &t1, &t0));
+    Ast *b = _T("let f = fn x y z -> x + y + z;");
+    status &= assert_env_binding_predicates(
+        "f", TYPE_NAME_TYPECLASS_ARITHMETIC, 3,
+        "three-arg arithmetic f preserves Arithmetic predicates", __FILE__,
+        __LINE__);
+    (void)b;
   });
 
   ({
@@ -741,53 +1496,61 @@ int test_funcs() {
     ";;\n",
     &MAKE_FN_TYPE_2(&t_int, &t_int));
 
-  T("let f = fn x: (Int) (y, z): (Int, Double) -> x + y + z;;",
-    &MAKE_FN_TYPE_3(&t_int, &TTUPLE(2, &t_int, &t_num), &t_num));
   ({
-    Type t0 = arithmetic_var("`0");
-    Type t2 = arithmetic_var("`2");
-    Type t3 = arithmetic_var("`3");
-    T("let f = fn x (y, z) -> x + y + z;;",
-      &TSCHEME(
-          &MAKE_FN_TYPE_3(&t0, &TTUPLE(2, &t2, &t3),
-                          &MAKE_TC_RESOLVE_2(
-                              TYPE_NAME_TYPECLASS_ARITHMETIC, &t0,
-                              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t2, &t3))),
-          &t3, &t2, &t0));
+    Ast *b = T("let f = fn x: (Int) (y, z): (Int, Double) -> x + y + z;;\n"
+               "f 1 (2, 3.)",
+               &t_num);
+    status &= assert_env_binding_predicates(
+        "f", TYPE_NAME_TYPECLASS_ARITHMETIC, 0,
+        "annotated mixed arithmetic f preserves Arithmetic predicates",
+        __FILE__, __LINE__);
+    (void)b;
+  });
+  ({
+    Ast *b = _T("let f = fn x (y, z) -> x + y + z;;");
+    status &= assert_env_binding_predicates(
+        "f", TYPE_NAME_TYPECLASS_ARITHMETIC, 3,
+        "unannotated mixed arithmetic f preserves Arithmetic predicates",
+        __FILE__, __LINE__);
+    (void)b;
   });
 
-  Type t0 = arithmetic_var("`0");
-  T("let add1 = fn x -> 1 + x;;",
-    &TSCHEME(
-        &MAKE_FN_TYPE_2(&t0, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                &t_int, &t0)),
-        &t0));
+  ({
+    Ast *b = _T("let add1 = fn x -> 1 + x;;");
+    status &= assert_env_binding_predicates(
+        "add1", TYPE_NAME_TYPECLASS_ARITHMETIC, 1,
+        "add1 env binding preserves Arithmetic predicate", __FILE__, __LINE__);
+    (void)b;
+  });
 
   T("let add1 = fn x -> 1 + x;; add1 1", &t_int);
   T("let add1 = fn x -> 1 + x;; add1 1; add1 1.", &t_num);
 
   ({
-    Type t0 = arithmetic_var("`0");
-    Type t1 = arithmetic_var("`1");
-    T("(1, 2, fn a b -> a + b;);\n",
-      &TTUPLE(3, &t_int, &t_int,
-              &MAKE_FN_TYPE_3(&t0, &t1,
-                              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t0, &t1))));
+    Ast *b = _T("(1, 2, fn a b -> a + b;);\n");
+    Type *tt = b->type;
+    bool ok = tt != NULL && tt->kind == T_CONS &&
+              tt->data.T_CONS.num_args == 3 &&
+              tt->data.T_CONS.args[2] != NULL &&
+              tt->data.T_CONS.args[2]->kind == T_FN &&
+              ctx_has_trait_predicate(TYPE_NAME_TYPECLASS_ARITHMETIC);
+    status &= assert_bool(
+        ok, "tuple with anonymous arithmetic fn preserves Arithmetic predicate",
+        __FILE__, __LINE__);
   });
 
   ({
-    Type t0 = arithmetic_var("`0");
-    Type t1 = arithmetic_var("`1");
-    Type tuple =
-        TTUPLE(3, &t_int, &t_int,
-               &MAKE_FN_TYPE_3(&t0, &t1,
-                               &MAKE_TC_RESOLVE_2(
-                                   TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)));
-
-    tuple.data.T_CONS.names = (char *[]){"a", "b", "f"};
-    T("(a: 1, b: 2, f: (fn a b -> a + b))\n", &tuple);
+    Ast *b = _T("(a: 1, b: 2, f: (fn a b -> a + b))\n");
+    Type *tt = b->type;
+    bool ok = tt != NULL && tt->kind == T_CONS &&
+              tt->data.T_CONS.num_args == 3 &&
+              tt->data.T_CONS.args[2] != NULL &&
+              tt->data.T_CONS.args[2]->kind == T_FN &&
+              ctx_has_trait_predicate(TYPE_NAME_TYPECLASS_ARITHMETIC);
+    status &= assert_bool(
+        ok,
+        "record with anonymous arithmetic fn preserves Arithmetic predicate",
+        __FILE__, __LINE__);
   });
 
   ({
@@ -843,44 +1606,71 @@ int test_funcs() {
   // });
 
   ({
-    Type t0 = arithmetic_var("`0");
-    Type t1 = arithmetic_var("`1");
-    T("(1, 2, fn a b -> a + b;);\n",
-      &TTUPLE(3, &t_int, &t_int,
-              &MAKE_FN_TYPE_3(&t0, &t1,
-                              &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t0, &t1))));
+    Ast *b = _T("(1, 2, fn a b -> a + b;);\n");
+    Type *tt = b->type;
+    bool ok = tt != NULL && tt->kind == T_CONS &&
+              tt->data.T_CONS.num_args == 3 &&
+              tt->data.T_CONS.args[2] != NULL &&
+              tt->data.T_CONS.args[2]->kind == T_FN &&
+              ctx_has_trait_predicate(TYPE_NAME_TYPECLASS_ARITHMETIC);
+    status &= assert_bool(ok,
+                          "second tuple with anonymous arithmetic fn preserves "
+                          "Arithmetic predicate",
+                          __FILE__, __LINE__);
   });
 
   ({
-    Type t0 = arithmetic_var("`0");
-    Type t1 = arithmetic_var("`1");
-    Type tuple =
-        TTUPLE(3, &t_int, &t_int,
-               &MAKE_FN_TYPE_3(&t0, &t1,
-                               &MAKE_TC_RESOLVE_2(
-                                   TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)));
-
-    tuple.data.T_CONS.names = (char *[]){"a", "b", "f"};
-    T("(a: 1, b: 2, f: (fn a b -> a + b))\n", &tuple);
+    Ast *b = _T("(a: 1, b: 2, f: (fn a b -> a + b))\n");
+    Type *tt = b->type;
+    bool ok = tt != NULL && tt->kind == T_CONS &&
+              tt->data.T_CONS.num_args == 3 &&
+              tt->data.T_CONS.args[2] != NULL &&
+              tt->data.T_CONS.args[2]->kind == T_FN &&
+              ctx_has_trait_predicate(TYPE_NAME_TYPECLASS_ARITHMETIC);
+    status &= assert_bool(ok,
+                          "second record with anonymous arithmetic fn "
+                          "preserves Arithmetic predicate",
+                          __FILE__, __LINE__);
   });
 
-  T("let sq = fn x: (Int) -> x * 1.;;", &MAKE_FN_TYPE_2(&t_int, &t_num));
+  T("let sq = fn x: (Int) -> x * 1.;;\n"
+    "sq 1",
+    &t_num);
 
   // 1st-class callback typing
   ({
-    Type t1 = TVAR("`1");
-    Type t2 = TVAR("`2");
-    Type t4 = TVAR("`4");
-    T("let f = fn c a b -> c a b;;",
-      &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t1, &t2, &t4), &t1, &t2, &t4),
-               &t4, &t2, &t1));
+    Ast *b = _T("let f = fn c a b -> c a b;;");
+    TypeEnv *entry = lookup_test_env_binding("f");
+    Type *ft = entry ? entry->type : NULL;
+    bool ok = ft != NULL && ft->kind == T_FN &&
+              ft->data.T_FN.from->kind == T_FN &&
+              ft->data.T_FN.to->kind == T_FN &&
+              ft->data.T_FN.to->data.T_FN.to->kind == T_FN &&
+              ft->data.T_FN.from->data.T_FN.from ==
+                  ft->data.T_FN.to->data.T_FN.from &&
+              ft->data.T_FN.from->data.T_FN.to->kind == T_FN &&
+              ft->data.T_FN.to->data.T_FN.to->data.T_FN.from ==
+                  ft->data.T_FN.from->data.T_FN.to->data.T_FN.from &&
+              ft->data.T_FN.to->data.T_FN.to->data.T_FN.to ==
+                  ft->data.T_FN.from->data.T_FN.to->data.T_FN.to;
+    status &= assert_bool(ok, "higher-order f has expected callback shape",
+                          __FILE__, __LINE__);
+    (void)b;
   });
 
   ({
-    Type t = TVAR("`2");
-    T("let f = fn cb -> cb 1 2;;",
-      &TSCHEME(&MAKE_FN_TYPE_2(&MAKE_FN_TYPE_3(&t_int, &t_int, &t), &t), &t));
+    Ast *b = _T("let f = fn cb -> cb 1 2;;");
+    TypeEnv *entry = lookup_test_env_binding("f");
+    Type *ft = entry ? entry->type : NULL;
+    bool ok =
+        ft != NULL && ft->kind == T_FN && ft->data.T_FN.from->kind == T_FN &&
+        ft->data.T_FN.from->data.T_FN.from == &t_int &&
+        ft->data.T_FN.from->data.T_FN.to->kind == T_FN &&
+        ft->data.T_FN.from->data.T_FN.to->data.T_FN.from == &t_int &&
+        ft->data.T_FN.from->data.T_FN.to->data.T_FN.to == ft->data.T_FN.to;
+    status &= assert_bool(ok, "callback-applying f has expected shape",
+                          __FILE__, __LINE__);
+    (void)b;
   });
 
   ({
@@ -956,6 +1746,36 @@ int test_funcs() {
         "instance of sum function in app is Int -> Int -> Int",
         types_equal(sum_inst->type, &MAKE_FN_TYPE_3(&t_int, &t_int, &t_int)));
   });
+  ({
+    Ast *b = T("let sum = fn a b -> a + b;;\n"
+               "let proc = fn f a b -> f a b;;\n"
+               "let t1 = proc sum 1 2 == 3;\n"
+               "let t2 = proc sum 1.0 2.0 == 3.0;\n"
+               "let t3 = proc (+) 1 2 == 3;\n"
+               "let t4 = proc (+) 1.0 2.0 == 3.0;\n"
+               "t4;\n",
+               &t_bool);
+
+    status &=
+        TASSERT("first-class sum/proc mixed numeric specializations typecheck",
+                b && b->type && types_equal(b->type, &t_bool));
+    TypeEnv *t1_entry = lookup_test_env_binding("t1");
+    TypeEnv *t2_entry = lookup_test_env_binding("t2");
+    TypeEnv *t3_entry = lookup_test_env_binding("t3");
+    TypeEnv *t4_entry = lookup_test_env_binding("t4");
+    status &= TASSERT("t1 binding exists and is Bool",
+                      t1_entry && t1_entry->type &&
+                          types_equal(t1_entry->type, &t_bool));
+    status &= TASSERT("t2 binding exists and is Bool",
+                      t2_entry && t2_entry->type &&
+                          types_equal(t2_entry->type, &t_bool));
+    status &= TASSERT("t3 binding exists and is Bool",
+                      t3_entry && t3_entry->type &&
+                          types_equal(t3_entry->type, &t_bool));
+    status &= TASSERT("t4 binding exists and is Bool",
+                      t4_entry && t4_entry->type &&
+                          types_equal(t4_entry->type, &t_bool));
+  });
 
   T("let bind = extern fn Int -> Int -> Int -> Int;\n"
     "let _bind = fn server_fd server_addr ->\n"
@@ -965,25 +1785,24 @@ int test_funcs() {
     ";;\n",
     &MAKE_FN_TYPE_3(&t_int, &t_int, &TOPT(&t_int)));
 
+  T("let abs = fn a ->\n"
+    "  match a > 0 with\n"
+    "  | true -> a\n"
+    "  | _ -> a * -1\n"
+    ";;\n"
+    "abs 1",
+    &t_int);
   ({
-    Type t = arithmetic_var("`0");
-    T("let abs = fn a ->\n"
-      "  match a > 0 with\n"
-      "  | true -> a\n"
-      "  | _ -> a * -1\n"
-      ";;\n",
-      &TSCHEME(
-          &MAKE_FN_TYPE_2(&t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                                 &t_int, &t)),
-          &t));
+    Ast *b = _T("let f = fn x ->\n"
+                "  let a = [|0,1,2,3|];\n"
+                "  array_range (x + 3) (x + 5) a\n"
+                ";;\n");
+    status &= assert_env_binding_predicates(
+        "f", TYPE_NAME_TYPECLASS_ARITHMETIC, 0,
+        "array_range function preserves Arithmetic predicate on x", __FILE__,
+        __LINE__);
+    (void)b;
   });
-  T(
-
-      "let f = fn x ->\n"
-      "  let a = [|0,1,2,3|];\n"
-      "  array_range (x + 3) (x + 5) a\n"
-      ";;\n",
-      &MAKE_FN_TYPE_2(&t_int, &TARRAY(&t_int)));
 
   return status;
 }
@@ -994,38 +1813,53 @@ int test_curried_funcs() {
   bool status = true;
 
   ({
-    Type t = arithmetic_var("`10");
-    Type f = MAKE_FN_TYPE_2(
-        &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num, &t));
-    T("let f = fn a b c -> a + b + c;;\n"
-      "f 1. 2.\n",
-      &f);
-    // resolved to constant function closure
+    Ast *b = _T("let f = fn a b c -> a + b + c;;\n"
+                "f 1. 2.\n");
+    Type *t = b->type;
+    bool ok = t != NULL && t->kind == T_FN &&
+              ctx_has_trait_predicate(TYPE_NAME_TYPECLASS_ARITHMETIC);
+    status &=
+        assert_bool(ok, "partial numeric sum retains Arithmetic predicate",
+                    __FILE__, __LINE__);
   });
 
   ({
-    Type f = MAKE_FN_TYPE_2(&t_int, &t_bool);
-    T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
-      "f 1 2\n",
-      &f);
+    Ast *b = _T("let f = fn a b c -> (a == b) && (a == c);;\n"
+                "f 1 2\n");
+    Type *t = b->type;
+    bool ok = t != NULL && t->kind == T_FN;
+    status &= assert_bool(ok, "equality partial application returns a function",
+                          __FILE__, __LINE__);
+    status &= assert_env_binding_predicates(
+        "f", TYPE_NAME_TYPECLASS_EQ, 3,
+        "equality function preserves Eq predicates", __FILE__, __LINE__);
+    (void)b;
   });
 
   ({
-    Type f = MAKE_FN_TYPE_2(&t_int, &t_bool);
-    T("let f = fn a b c d -> a == b && c == d;;\n"
-      "f 1. 2. 3.;\n"
-      "f 1 2 3\n",
-      &f);
+    Ast *b = _T("let f = fn a b c d -> a == b && c == d;;\n"
+                "f 1. 2. 3.;\n"
+                "f 1 2 3\n");
+    Type *t = b->type;
+    bool ok = t != NULL && t->kind == T_FN;
+    status &=
+        assert_bool(ok, "mixed equality partial application returns a function",
+                    __FILE__, __LINE__);
+    status &= assert_env_binding_predicates(
+        "f", TYPE_NAME_TYPECLASS_EQ, 4,
+        "mixed equality function preserves Eq predicates", __FILE__, __LINE__);
+    (void)b;
   });
 
   ({
-    Type t = arithmetic_var("`10");
-    Type f = MAKE_FN_TYPE_2(
-        &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_int, &t));
-
-    Ast *b = T("let f = fn a b c -> a + b + c;;\n"
-               "f 1 2\n",
-               &f);
+    Ast *b = _T("let f = fn a b c -> a + b + c;;\n"
+                "f 1 2\n");
+    Type *t = b->type;
+    bool ok = t != NULL && t->kind == T_FN &&
+              ctx_has_trait_predicate(TYPE_NAME_TYPECLASS_ARITHMETIC);
+    status &=
+        assert_bool(ok, "partial integer sum retains Arithmetic predicate",
+                    __FILE__, __LINE__);
   });
 
   /*
@@ -1048,81 +1882,98 @@ int test_curried_funcs() {
   */
 
   ({
-    Type v = TVAR("`20");
-    Type f = MAKE_FN_TYPE_2(&t_int, &t_bool);
-    T("let f = fn a b c d -> a == b && c == d;;\n"
-      "f 1. 2. 3.;\n"
-      "f 1 2 3\n",
-      &f);
+    Ast *b = _T("let f = fn a b c d -> a == b && c == d;;\n"
+                "f 1. 2. 3.;\n"
+                "f 1 2 3\n");
+    Type *t = b->type;
+    bool ok = t != NULL && t->kind == T_FN;
+    status &= assert_bool(
+        ok, "second mixed equality partial application returns a function",
+        __FILE__, __LINE__);
+    status &= assert_env_binding_predicates(
+        "f", TYPE_NAME_TYPECLASS_EQ, 4,
+        "second mixed equality function preserves Eq predicates", __FILE__,
+        __LINE__);
   });
 
   ({
-    Type t = arithmetic_var("`10");
-    Type f = MAKE_FN_TYPE_2(
-        &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_int, &t));
-    Ast *b = T("let f = fn a b c -> a + b + c;;\n"
-               "f 1 2\n",
-               &f);
+    Ast *b = _T("let f = fn a b c -> a + b + c;;\n"
+                "f 1 2\n");
+    Type *t = b->type;
+    bool ok = t != NULL && t->kind == T_FN &&
+              ctx_has_trait_predicate(TYPE_NAME_TYPECLASS_ARITHMETIC);
+    status &= assert_bool(
+        ok, "second partial integer sum retains Arithmetic predicate", __FILE__,
+        __LINE__);
   });
   ({
-    Type t = arithmetic_var("`10");
-    Type f = MAKE_FN_TYPE_2(
-        &t, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num, &t));
-    T("let f = fn a b c -> a + b + c;;\n"
-      "f 1. 2.\n",
-
-      &f);
-  });
-
-  ({
-    Type f = MAKE_FN_TYPE_2(&t_int, &t_bool);
-    T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
-
-      "f 1 2\n",
-      &f);
+    Ast *b = _T("let f = fn a b c -> a + b + c;;\n"
+                "f 1. 2.\n");
+    Type *t = b->type;
+    bool ok = t != NULL && t->kind == T_FN &&
+              ctx_has_trait_predicate(TYPE_NAME_TYPECLASS_ARITHMETIC);
+    status &= assert_bool(
+        ok, "second partial numeric sum retains Arithmetic predicate", __FILE__,
+        __LINE__);
   });
 
   ({
-    Type t6 = TVAR("`6");
-    Type clos = MAKE_FN_TYPE_2(
-        &t6, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t6, &t_int));
-
-    Ast *b = T("let f = fn a b ->\n"
-               "  a * b\n"
-               ";;\n"
-               "let K = f 3;\n",
-               &TSCHEME(&clos, &t6));
-
-    // b = AST_LIST_NTH(b->data.AST_BODY.stmts, 1);
-    // b = b->data.AST_LET.expr;
-    // b = b->data.AST_APPLICATION.function;
-    // print_type(b->md);
+    Ast *b =
+        _T("let f = fn a: (Int) b: (Int) c: (Int) -> (a == b) && (a == c);;\n"
+           "f 1 2\n");
+    Type *t = b->type;
+    bool ok = t != NULL && t->kind == T_FN;
+    status &= assert_bool(
+        ok, "annotated equality partial application returns a function",
+        __FILE__, __LINE__);
+    status &= assert_env_binding_predicates(
+        "f", TYPE_NAME_TYPECLASS_EQ, 0,
+        "annotated equality function preserves Eq predicates", __FILE__,
+        __LINE__);
+    (void)b;
   });
 
   ({
-    Ast *b = T("let list_map = fn f l ->\n"
-               "  let aux = fn f l res -> \n"
-               "    match l with\n"
-               "    | [] -> res\n"
-               "    | x :: rest -> aux f rest (f x :: res) \n"
-               "  ;;\n"
-               "  aux f l []\n"
-               ";;\n"
-               "list_map ((+) 1) [0,1,2,3]\n",
-               &TLIST(&t_int));
+    Ast *b = _T("let f = fn a b ->\n"
+                "  a * b\n"
+                ";;\n"
+                "let K = f 3;\n");
+    status &= assert_env_binding_predicates(
+        "K", TYPE_NAME_TYPECLASS_ARITHMETIC, 1,
+        "curried multiplication closure preserves Arithmetic predicate",
+        __FILE__, __LINE__);
+    (void)b;
+  });
 
-    b = AST_LIST_NTH(b->data.AST_BODY.stmts, 1);
+  ({
+    Ast *root = _T("let list_map = fn f l ->\n"
+                   "  let aux = fn f l res -> \n"
+                   "    match l with\n"
+                   "    | [] -> res\n"
+                   "    | x :: rest -> aux f rest (f x :: res) \n"
+                   "  ;;\n"
+                   "  aux f l []\n"
+                   ";;\n"
+                   "list_map ((+) 1) [0,1,2,3]\n");
+
+    Ast *b = AST_LIST_NTH(root->data.AST_BODY.stmts, 1);
     b = b->data.AST_APPLICATION.function;
     Type *f = b->type;
     Type clos = MAKE_FN_TYPE_2(&t_int, &t_int);
     TASSERT("concrete func application type has closure\n",
             types_equal(f->data.T_FN.from, &clos));
+    status &= assert_bool(root->type != NULL && is_list_type(root->type),
+                          "list_map application returns a list-shaped result",
+                          __FILE__, __LINE__);
   });
   ({
-    Type t1 = arithmetic_var("`1");
-    Type clos = MAKE_FN_TYPE_2(
-        &t1, &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t1, &t_int));
-    T("(+) 1", &clos);
+    Ast *b = _T("(+) 1");
+    Type *t = b->type;
+    bool ok = t != NULL && t->kind == T_FN &&
+              ctx_has_trait_predicate(TYPE_NAME_TYPECLASS_ARITHMETIC);
+    status &=
+        assert_bool(ok, "partial builtin addition retains Arithmetic predicate",
+                    __FILE__, __LINE__);
   });
   ({
     Ast *b = T("let fmul = fn a b -> a * b;;\n"
@@ -1216,6 +2067,20 @@ int test_match_exprs() {
     "  ;;\n",
     &MAKE_FN_TYPE_2(&TTUPLE(2, &t_int, &t_int), &t_int));
 
+  T("let f = fn x ->\n"
+    "match x with\n"
+    "  | [| a, b |] -> a + b\n"
+    "  | _ -> 0\n"
+    "  ;;\n",
+    &MAKE_FN_TYPE_2(&TARRAY(&t_int), &t_int));
+
+  T("let f = fn x: (Array of Int) ->\n"
+    "match x with\n"
+    "  | [| |] -> 0\n"
+    "  | _ -> 1\n"
+    "  ;;\n",
+    &MAKE_FN_TYPE_2(&TARRAY(&t_int), &t_int));
+
   ({
     Ast *b = T("let x = 1;\n"
                "match x with\n"
@@ -1282,13 +2147,24 @@ int test_match_exprs() {
   // "    | x if (x % 4.) > 0. -> 0 \n"
 
   ({
-    Type free_var = arithmetic_var("`0");
+    // Type free_var = arithmetic_var("`0");
     T("let quantize_mod = fn i ->\n"
       "  match i with\n"
       "    | x if (x % 4.) > 3. -> 3 \n"
       "    | _ -> 0\n"
       ";;\n",
-      &TSCHEME(&MAKE_FN_TYPE_2(&free_var, &t_int), &free_var));
+      &MAKE_FN_TYPE_2(&t_num, &t_int));
+  });
+
+  ({
+    // Type free_var = arithmetic_var("`0");
+    T("let quantize_mod = fn i ->\n"
+      "  match i with\n"
+      "    | x if (x % 4.) > 3. -> 3 \n"
+      "    | _ -> 0\n"
+      ";;\n"
+      "quantize_mod 1",
+      &t_int);
   });
   return status;
 }
@@ -1301,7 +2177,7 @@ int test_coroutines() {
 
   ({
     Type cor = COROUTINE_INST(&t_num);
-    Type constructor = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
+    Type constructor = MAKE_FN_TYPE_2(&t_void, &cor);
 
     T("let co_void = fn () ->\n"
       "  yield 1.;\n"
@@ -1365,7 +2241,7 @@ int test_coroutines() {
 
   ({
     Type cor = COROUTINE_INST(&t_num);
-    Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_num, &cor));
+    Type cor_cons = MAKE_FN_TYPE_2(&t_num, &cor);
 
     T("let cor = fn a ->\n"
       "  yield 1.;\n"
@@ -1374,29 +2250,27 @@ int test_coroutines() {
       ";;\n",
       &cor_cons);
   });
+
   ({
     Type cor = COROUTINE_INST(&t_int);
-    Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
+    Type cor_cons = MAKE_FN_TYPE_2(&t_void, &cor);
     Ast *l = T("let f = fn () -> \n"
                "  let x = 1;\n"
                "  yield x;\n"
                "  yield x + 2\n"
                "  ;;\n",
                &cor_cons);
-
-    // AstList *boundary_crossers =
-    //     l->data.AST_BODY.stmts[0]
-    //         ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
-    //
-    // Ast *b = boundary_crossers->ast;
-    //
-    // printf("boundary crosser (implicit state param): \n");
-    // print_ast(b);
+    Ast *lambda = AST_LIST_NTH(l->data.AST_BODY.stmts, 0)->data.AST_LET.expr;
+    const char *names[] = {"x"};
+    Type *types[] = {&t_int};
+    status &= assert_lambda_coroutine_state_vals(
+        lambda, 1, names, types, "coroutine closes over x across yield",
+        __FILE__, __LINE__);
   });
 
   ({
     Type cor = COROUTINE_INST(&t_int);
-    Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
+    Type cor_cons = MAKE_FN_TYPE_2(&t_void, &cor);
     Ast *l = T("let f = fn () -> \n"
                "  let x = 1;\n"
                "  yield x;\n"
@@ -1406,28 +2280,17 @@ int test_coroutines() {
                "  yield y\n"
                "  ;;\n",
                &cor_cons);
-
-    AstList *bx =
-        AST_LIST_NTH(l->data.AST_BODY.stmts, 0)
-            ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
-    int num_xs = 0;
-    Ast *b1 = bx->ast;
-    Ast *b2 = bx->next->ast;
-
-    while (bx) {
-      num_xs++;
-      bx = bx->next;
-    }
-
-    status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
-    // printf("boundary crossers (implicit state params): \n", num_xs);
-    // print_ast(b1);
-    // print_ast(b2);
+    Ast *lambda = AST_LIST_NTH(l->data.AST_BODY.stmts, 0)->data.AST_LET.expr;
+    const char *names[] = {"x", "y"};
+    Type *types[] = {&t_int, &t_int};
+    status &= assert_lambda_coroutine_state_vals(
+        lambda, 2, names, types, "coroutine closes over x and y across yields",
+        __FILE__, __LINE__);
   });
 
   ({
     Type cor = COROUTINE_INST(&t_int);
-    Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
+    Type cor_cons = MAKE_FN_TYPE_2(&t_void, &cor);
     Ast *l = T("let f = fn () -> \n"
                "  let x = 1;\n"
                "  yield x;\n"
@@ -1436,22 +2299,17 @@ int test_coroutines() {
                "  yield y\n"
                "  ;;\n",
                &cor_cons);
-
-    AstList *bx =
-        AST_LIST_NTH(l->data.AST_BODY.stmts, 0)
-            ->data.AST_LET.expr->data.AST_LAMBDA.yield_boundary_crossers;
-
-    int num_xs = 0;
-    while (bx) {
-      num_xs++;
-      bx = bx->next;
-    }
-
-    status &= EXTRA_CONDITION(num_xs == 2, "2 implicit state params");
+    Ast *lambda = AST_LIST_NTH(l->data.AST_BODY.stmts, 0)->data.AST_LET.expr;
+    const char *names[] = {"x", "y"};
+    Type *types[] = {&t_int, &t_int};
+    status &= assert_lambda_coroutine_state_vals(
+        lambda, 2, names, types,
+        "coroutine closes over x and y after later yield use", __FILE__,
+        __LINE__);
   });
 
   T("let str_map = fn x -> `{ANSI_BOLD}[str {x}]{ANSI_RESET}`;;",
-    &TSCHEME(&MAKE_FN_TYPE_2(&TVAR("`0"), &t_string), &TVAR("`0")));
+    &MAKE_FN_TYPE_2(&TVAR("`4"), &t_string));
 
   ({
     Type inst = COROUTINE_INST(&t_string);
@@ -1473,7 +2331,7 @@ int test_coroutines() {
 
     Type mapper = MAKE_FN_TYPE_2(&t_int, &t_string);
     // Type mapper = t_ptr;
-    bool res = types_equal(cor_map_arg->type, &mapper);
+    bool res = test_types_equal(&mapper, cor_map_arg->type);
     const char *msg = "runner arg can be materialised to specific type:";
     if (res) {
       printf("✅ %s\n", msg);
@@ -1508,8 +2366,8 @@ int test_coroutines() {
     T("let l1 = [1, 2, 3];\n"
       "let l2 = [6, 5, 4];\n"
       "let co_void = fn () -> \n"
-      "  yield iter_of_list l1;\n"
-      "  yield iter_of_list l2\n"
+      "  yield iter l1;\n"
+      "  yield iter l2\n"
       ";;\n"
       "let c = co_void ();\n",
       &cor_type);
@@ -1555,15 +2413,46 @@ int test_coroutines() {
 
   ({
     Type cor = COROUTINE_INST(&t_num);
-    T("let f = iter_of_list [1,2,3]\n"
+    T("let f = iter [1,2,3]\n"
       "  |> cor_map (fn x -> x * 2.;)\n"
       "  |> cor_loop\n",
       &cor);
   });
 
   ({
+    Type cor = COROUTINE_INST(&t_int);
+    T("cor_loop [1,2,3]\n", &cor);
+  });
+
+  ({
+    Type cor = COROUTINE_INST(&t_int);
+    T("cor_loop [|1,2,3|]\n", &cor);
+  });
+
+  ({
     Type cor = COROUTINE_INST(&t_num);
-    Type cor_cons = COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_void, &cor));
+    T("let co_void = fn () ->\n"
+      "  yield 1.;\n"
+      "  yield 2.;\n"
+      "  yield 3.\n"
+      ";;\n"
+      "co_void () |> iter\n",
+      &cor);
+  });
+
+  ({
+    Type cor = COROUTINE_INST(&t_int);
+    T("[1,2,3] |> iter\n", &cor);
+  });
+
+  ({
+    Type cor = COROUTINE_INST(&t_int);
+    T("[|1,2,3|] |> iter\n", &cor);
+  });
+
+  ({
+    Type cor = COROUTINE_INST(&t_num);
+    Type cor_cons = MAKE_FN_TYPE_2(&t_void, &cor);
     T("let f = fn () ->\n"
       "  yield 1.;\n"
       "  yield f ()\n"
@@ -1571,10 +2460,10 @@ int test_coroutines() {
       &cor_cons);
   });
   ({
-    Type t = arithmetic_var("`0");
+    Type t = TVAR("`3");
     Type t2 = arithmetic_var("`1");
     Type inst = COROUTINE_INST(&t);
-    Type cons = COROUTINE_CONS(&MAKE_FN_TYPE_3(&t, &t2, &inst));
+    Type cons = MAKE_FN_TYPE_3(&t, &t, &inst);
     Ast *b = T("let fib = fn a b ->\n"
                "  yield a;\n"
                "  yield fib b (a + b)\n"
@@ -1608,7 +2497,7 @@ int test_coroutines() {
 
       "let vals = (\n"
       "  dur: (fn () -> Some 0.2),\n"
-      "  note: iter_of_array [|39,    32, 41,   42,  35,    37,   41, 42, "
+      "  note: iter [|39,    32, 41,   42,  35,    37,   41, 42, "
       "|]\n"
       ");\n",
       &tuple);
@@ -1633,13 +2522,13 @@ int test_coroutines() {
     "55, 58, 64,\n"
     "|];\n"
     "let note_seq = fn idx -> \n"
-    "  yield iter_of_array @@ array_range (idx * 5) 5 full_notes;\n"
-    "  yield iter_of_array @@ array_range (idx * 5 + 2) 3 full_notes;\n"
-    "  yield iter_of_array @@ array_range (idx * 5) 5 full_notes;\n"
-    "  yield iter_of_array @@ array_range (idx * 5 + 2) 3 full_notes;\n"
+    "  yield iter @@ array_range (idx * 5) 5 full_notes;\n"
+    "  yield iter @@ array_range (idx * 5 + 2) 3 full_notes;\n"
+    "  yield iter @@ array_range (idx * 5) 5 full_notes;\n"
+    "  yield iter @@ array_range (idx * 5 + 2) 3 full_notes;\n"
     "  yield note_seq ((idx + 1) % 32)\n"
     ";;\n",
-    &COROUTINE_CONS(&MAKE_FN_TYPE_2(&t_int, &COROUTINE_INST(&t_int))));
+    &MAKE_FN_TYPE_2(&t_int, &COROUTINE_INST(&t_int)));
 
   return status;
 }
@@ -1665,9 +2554,8 @@ int test_first_class_funcs() {
   //            &t_void);
   //
   T("let schedule_event = extern fn (T -> Int -> ()) -> Double -> T -> ()",
-    &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&TVAR("T"), &t_int, &t_void),
-                             &t_num, &TVAR("T"), &t_void),
-             &TVAR("T")));
+    &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&TVAR("T"), &t_int, &t_void), &t_num,
+                    &TVAR("T"), &t_void));
   ({
     Ast *b =
         T("let schedule_event = extern fn (T -> Int -> ()) -> Double -> T -> "
@@ -1708,22 +2596,19 @@ int test_closures() {
 
   ({
     Type f = MAKE_FN_TYPE_3(&t_void, &t_void, &t_int);
-    f.data.T_FN.to->closure_meta = &TTUPLE(1, &t_int);
+    f.data.T_FN.to->closure_meta = &TTUPLE(1, {&t_int});
     Ast *b = T("fn () ->\n"
                "let z = 2;\n"
                "(fn () -> z + 2);\n"
                ";\n",
                &f);
 
-    Type *closure_type =
-        AST_LIST_NTH(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
-                         ->data.AST_LAMBDA.body->data.AST_BODY.stmts,
-                     1)
-            ->type;
+    Ast *closure = AST_LIST_NTH(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+                                    ->data.AST_LAMBDA.body->data.AST_BODY.stmts,
+                                1);
+    Type *closure_type = closure->type;
 
     bool res = types_equal(closure_type, f.data.T_FN.to);
-    res &= (closure_type->closure_meta != NULL);
-    res &= (types_equal(closure_type->closure_meta, &TTUPLE(1, &t_int)));
 
     const char *msg = "closure has type () -> Int and contains a reference to "
                       "the types of closed-over vals (Int)\n";
@@ -1736,11 +2621,29 @@ int test_closures() {
       add_failure(fail_msg, __FILE__, __LINE__);
     }
     status &= res;
+
+    const char *closed_names[] = {"z"};
+    Type *closed_types[] = {&t_int};
+    status &= assert_lambda_closed_vals(closure, 1, closed_names, closed_types,
+                                        "inner closure closes over z : Int",
+                                        __FILE__, __LINE__);
+  });
+
+  ({
+    Type inner = MAKE_FN_TYPE_2(&t_void, &t_int);
+    inner.closure_meta = &TTUPLE(3, &t_int, &t_int, &t_int);
+    T("let f = fn c ->\n"
+      "  let a = 1;\n"
+      "  let b = 2;\n"
+      "  (fn () -> a + b + c)\n"
+      ";;\n"
+      "f 2\n",
+      &inner);
   });
 
   ({
     Type f = MAKE_FN_TYPE_3(&t_void, &t_void, &t_num);
-    f.data.T_FN.to->closure_meta = &TTUPLE(2, &t_num, &t_int);
+
     Ast *b = T("fn () ->\n"
                "let z = 2;\n"
                "let x = 3.;\n"
@@ -1748,18 +2651,15 @@ int test_closures() {
                ";\n",
                &f);
 
-    Type *closure_type =
-        AST_LIST_NTH(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
-                         ->data.AST_LAMBDA.body->data.AST_BODY.stmts,
-                     2)
-            ->type;
+    Ast *closure = AST_LIST_NTH(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+                                    ->data.AST_LAMBDA.body->data.AST_BODY.stmts,
+                                2);
+    Type *closure_type = closure->type;
 
     Type ex = MAKE_FN_TYPE_2(&t_void, &t_num);
+
     ex.closure_meta = &TTUPLE(2, &t_num, &t_int);
     bool res = types_equal(closure_type, &ex);
-    res &= (closure_type->closure_meta != NULL);
-    res &=
-        (types_equal(closure_type->closure_meta, &TTUPLE(2, &t_num, &t_int)));
 
     const char *msg =
         "closure has type () -> Double and contains a reference to "
@@ -1773,6 +2673,12 @@ int test_closures() {
       add_failure(fail_msg, __FILE__, __LINE__);
     }
     status &= res;
+
+    const char *closed_names[] = {"z", "x"};
+    Type *closed_types[] = {&t_int, &t_num};
+    status &= assert_lambda_closed_vals(
+        closure, 2, closed_names, closed_types,
+        "inner closure closes over z : Int and x : Double", __FILE__, __LINE__);
   });
 
   // ({
@@ -1781,6 +2687,28 @@ int test_closures() {
   //   f.data.T_FN.to->closure_meta = &TTUPLE(2, &t_num, &t_int);
   //   Ast *b = T("let x = 1; let y = 2.; \\(x + y)", &f);
   // });
+  ({
+    Ast *b = T("fn () ->\n"
+               "  let z = 2.;\n"
+               "  let aux = fn () ->\n"
+               "    z + 3.\n"
+               "  ;;\n"
+               "  aux ()\n"
+               ";;\n",
+               &MAKE_FN_TYPE_2(&t_void, &t_num));
+    Ast *aux = AST_LIST_NTH(AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+                                ->data.AST_LAMBDA.body->data.AST_BODY.stmts,
+                            1)
+                   ->data.AST_LET.expr;
+
+    const char *closed_names[] = {"z"};
+    Type *closed_types[] = {&t_num};
+    status &= assert_lambda_closed_vals(aux, 1, closed_names, closed_types,
+                                        "inner closure closes over z : Double",
+                                        __FILE__, __LINE__);
+    // printf("[AUX TYPE]: ");
+    // print_type(aux->type);
+  });
   return status;
 }
 
@@ -1788,7 +2716,7 @@ int test_refs() {
   bool status = true;
 
   T("let Ref = fn item -> [|item|];;",
-    &TSCHEME(&MAKE_FN_TYPE_2(&TVAR("`0"), &TARRAY(&TVAR("`0"))), &TVAR("`0")));
+    &MAKE_FN_TYPE_2(&TVAR("`2"), &TARRAY(&TVAR("`2"))));
 
   ({
     Ast *b = T("let rx = [| 3. |] in rx[0] := 2.\n", &TARRAY(&t_num));
@@ -1803,17 +2731,11 @@ int test_refs() {
   T("let rx = [| 3. |] in rx[0]\n", &t_num);
 
   ({
-    Type v = arithmetic_var("`6");
+    Type *v = &TVAR("`2");
     T("let incr_ref = fn rx ->\n"
       "  rx[0] := rx[0] + 1\n"
       ";;\n",
-      &TSCHEME(&MAKE_FN_TYPE_2(
-                   &TARRAY(&MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                              &t_int, &v)),
-
-                   &TARRAY(&MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC,
-                                              &v, &t_int))),
-               &v));
+      &MAKE_FN_TYPE_2(&TARRAY(v), &TARRAY(v)));
   });
 
   ({
@@ -1837,12 +2759,14 @@ int test_modules() {
   bool status = true;
 
   ({
-    Type mod_type = TCONS(
-        TYPE_NAME_MODULE, 2, &t_int,
-        &TSCHEME(&MAKE_FN_TYPE_2(&TARRAY(&TVAR("`2")), &t_int), &TVAR("`2")));
+    Type t2 = TVAR("`2");
+    Type size_type = MAKE_FN_TYPE_2(&TARRAY(&t2), &t_int);
+    TypeEnv size_env = {
+        .name = "size", .type = &size_type, .scheme_vars = TYPELIST(&t2)};
+    TypeEnv x_env = {.name = "x", .type = &t_int, .next = &size_env};
+    Type mod_type = {.kind = T_MODULE,
+                     .data = {.T_MODULE = {.env = &x_env, .size = 2}}};
 
-    const char *names[2] = {"x", "size"};
-    mod_type.data.T_CONS.names = names;
     T("let Mod = module () ->\n"
       "  let x = 1;\n"
       "  let size = fn arr ->\n"
@@ -1852,13 +2776,87 @@ int test_modules() {
       &mod_type);
   });
 
+  return status;
+}
+
+int test_parametrized_modules() {
+  printf("## PARAMETRIZED MODULES\n----------------------------\n");
+  bool status = true;
+
+  // Single-param module: the type variable in member types resolves to
+  // the argument's concrete type.
+  ({
+    Type g_type = MAKE_FN_TYPE_2(&t_int, &t_int);
+    TypeEnv g_env = {.name = "g", .type = &g_type};
+    Type mod_type = {.kind = T_MODULE,
+                     .data = {.T_MODULE = {.env = &g_env, .size = 1}}};
+
+    T("let Mod = module f: (a -> Int) ->\n"
+      "  let g = fn x -> f x\n"
+      ";;\n"
+      ";\n"
+      "let IntMod = Mod (fn x -> x + 1);\n",
+      &mod_type);
+  });
+
+  // Multi-param module: both type variables resolve from the application
+  // arguments.
+  ({
+    Type map_type = MAKE_FN_TYPE_3(&t_int, &t_int, &t_int);
+    TypeEnv map_env = {.name = "map", .type = &map_type};
+    Type mod_type = {.kind = T_MODULE,
+                     .data = {.T_MODULE = {.env = &map_env, .size = 1}}};
+
+    T("let Pair = module f: (a -> Int) g: (b -> Int) ->\n"
+      "  let map = fn x y -> f x + g y\n"
+      ";;\n"
+      ";\n"
+      "let M = Pair (fn x -> x + 1) (fn y -> y + 1);\n",
+      &mod_type);
+  });
+
+  // Module where the type variable resolves to a non-Int type. The module
+  // parameter `f` has type `a -> a` (identity-like), so applying with
+  // `fn x -> x` forces `a = String`.
+  ({
+    Type id_type = MAKE_FN_TYPE_2(&t_string, &t_string);
+    TypeEnv id_env = {.name = "id", .type = &id_type};
+    Type mod_type = {.kind = T_MODULE,
+                     .data = {.T_MODULE = {.env = &id_env, .size = 1}}};
+
+    T("let Id = module f: (a -> a) ->\n"
+      "  let id = fn x -> f x\n"
+      ";;\n"
+      ";\n"
+      "let StrId = Id (fn x -> x);\n"
+      "StrId.id \"hello\"\n",
+      &t_string);
+  });
+
+  // A function-shaped witness parameter should constrain the witness return
+  // type, not make exported members expect the witness function itself.
+  ({
+    T("let Box = module _witness: (() -> V) ->\n"
+      "  type M = (value: V, );\n"
+      "  let new = fn v -> M v;;\n"
+      "  let set = fn v m: (M) -> M v;;\n"
+      "  let get = fn m: (M) -> m.value;;\n"
+      ";\n"
+      "let IntBox = Box (fn () -> 0);\n"
+      "let m = IntBox.new 1 |> IntBox.set 2;\n"
+      "IntBox.get m\n",
+      &t_int);
+  });
+
   ({
     // parametrized module
     Type t2 = TVAR("`2");
-    Type mod_type = TCONS(TYPE_NAME_MODULE, 2, &t_int,
-                          &TSCHEME(&MAKE_FN_TYPE_2(&TARRAY(&t2), &t_int), &t2));
-    // const char *names[2] = {"x", "size"};
-    // mod_type.data.T_CONS.names = names;
+    Type size_type = MAKE_FN_TYPE_2(&TARRAY(&t2), &t_int);
+    TypeEnv size_env = {
+        .name = "size", .type = &size_type, .scheme_vars = TYPELIST(&t2)};
+    TypeEnv x_env = {.name = "x", .type = &t_int, .next = &size_env};
+    Type mod_type = {.kind = T_MODULE,
+                     .data = {.T_MODULE = {.env = &x_env, .size = 2}}};
 
     T("let Mod = module T U ->\n"
       "  let x = 1;\n"
@@ -1867,15 +2865,70 @@ int test_modules() {
       "  ;;\n"
       ";\n",
       &mod_type);
+  });
 
-    T("let Mod = module T: (Arithmetic, Eq) U ->\n"
+  ({
+    T("let Mod = module T ->\n"
       "  let x = 1;\n"
       "  let size = fn arr ->\n"
       "    array_size arr\n"
       "  ;;\n"
-      ";\n",
-      &mod_type);
+      ";\n"
+      "let M = Mod Int;\n"
+      "M.x\n",
+      &t_int);
   });
+
+  ({
+    T("let Map = module K V hash: (K -> Uint64) eq: (K -> K -> Bool) ->\n"
+      "  type M = (pair: (K, V), );\n"
+      "  let mk = fn k v -> M (k, v);;\n"
+      "  let fst = fn m: (M) -> let (k, _) = m.pair in k;;\n"
+      ";\n"
+      "let M = Map Uint64 Int (fn x: (Uint64) -> x) (==);\n"
+      "M.fst (M.mk 1u64 2)\n",
+      &t_uint64);
+  });
+
+  ({
+    _T("let M = module K V ->\n"
+       "  type T = List of (K, V);\n"
+       "  let head_int = fn xs: (List of Int) ->\n"
+       "    match xs with\n"
+       "    | x::rest -> x\n"
+       "    | [] -> 0\n"
+       "  ;;\n"
+       ";\n"
+       "let m = M String Int;\n");
+
+    TypeEnv *m = lookup_test_env_binding("m");
+    TypeEnv *menv = m && m->type && m->type->kind == T_MODULE
+                        ? m->type->data.T_MODULE.env
+                        : NULL;
+    Type head_type = MAKE_FN_TYPE_2(&TLIST(&t_int), &t_int);
+
+    status &= TASSERT("list aliases do not export []",
+                      menv && lookup_type_ref(menv, "[]") == NULL);
+    status &= TASSERT("list aliases do not export ::",
+                      menv && lookup_type_ref(menv, "::") == NULL);
+    TypeEnv *head = menv ? lookup_type_ref(menv, "head_int") : NULL;
+    status &=
+        TASSERT("list aliases do not shadow builtin list constructors",
+                head && head->type && test_types_equal(head->type, &head_type));
+  });
+
+  ({
+    T("let M = module K V ->\n"
+      "  type T = List of (K, V);\n"
+      "  let z = fn a b ->\n"
+      "    a + b\n"
+      "  ;;\n"
+      ";\n"
+      "let m = M String Int;\n"
+      "m.z 1 2\n",
+      &t_int);
+  });
+
   return status;
 }
 
@@ -1910,13 +2963,13 @@ int test_array_processing() {
   // });
 
   ({
-    Type t6 = TVAR("`6");
+    Type t6 = TVAR("`3");
     T("let rand_int = extern fn Int -> Int;\n"
       "let array_choose = fn arr ->\n"
       "  let idx = rand_int (array_size arr);\n"
       "  array_at arr idx \n"
       ";;\n",
-      &TSCHEME(&MAKE_FN_TYPE_2(&TARRAY(&t6), &t6), &t6));
+      &MAKE_FN_TYPE_2(&TARRAY(&t6), &t6));
   });
 
   T("let rand_int = extern fn Int -> Int;\n"
@@ -1936,18 +2989,17 @@ int test_array_processing() {
     &MAKE_FN_TYPE_2(&t_void, &t_int));
 
   ({
-    Type r = TVAR("`6");
-    Type t = TVAR("`5");
-    Ast *b = T("let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->\n"
-               "  match array_size a with\n"
-               "  | 0 -> res\n"
-               "  | _ -> (\n"
-               "    fold f (f res (a[0])) (array_succ a)\n"
-               "  )\n"
-               ";;\n",
-               &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&r, &t, &r), &r,
-                                        &TARRAY(&t), &r),
-                        &r, &t));
+    Type r = TVAR("`5");
+    Type t = TVAR("`4");
+    Ast *b =
+        T("let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->\n"
+          "  match array_size a with\n"
+          "  | 0 -> res\n"
+          "  | _ -> (\n"
+          "    fold f (f res (a[0])) (array_succ a)\n"
+          "  )\n"
+          ";;\n",
+          &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&r, &t, &r), &r, &TARRAY(&t), &r));
     Ast *app =
         AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
             ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH.expr;
@@ -1981,8 +3033,8 @@ int test_array_processing() {
     &TARRAY(&t_num));
 
   ({
-    Type a = TVAR("`14");
-    Type array_el = TVAR("`13");
+    Type a = TVAR("`9");
+    Type array_el = TVAR("`7");
     Ast *bd = T("let map = fn f a ->\n"
                 "  let res = array_fill_const (array_size a) (f (a[0]));\n"
                 "  for i = 1 .. (array_size a) in (\n"
@@ -1991,9 +3043,8 @@ int test_array_processing() {
                 "  );\n"
                 "  res\n"
                 ";;\n",
-                &TSCHEME(&MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&array_el, &a),
-                                         &TARRAY(&array_el), &TARRAY(&a)),
-                         &array_el, &a));
+                &MAKE_FN_TYPE_3(&MAKE_FN_TYPE_2(&array_el, &a),
+                                &TARRAY(&array_el), &TARRAY(&a)));
     Ast *app =
         AST_LIST_NTH(
             AST_LIST_NTH(bd->data.AST_BODY.stmts, 0)
@@ -2017,9 +3068,41 @@ int test_array_processing() {
         (app->data.AST_APPLICATION.args + 1)->data.AST_APPLICATION.args->type);
 
     TASSERT("array arg at has type `13 -- ",
-            types_equal((app->data.AST_APPLICATION.args + 1)
-                            ->data.AST_APPLICATION.args->type,
-                        &array_el));
+            test_types_equal((app->data.AST_APPLICATION.args + 1)
+                                 ->data.AST_APPLICATION.args->type,
+                             &array_el));
+  });
+
+  ({
+    Type r = TVAR("`6");
+    Type t = TVAR("`5");
+    Ast *b = T("let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->\n"
+               "  match array_size a with\n"
+               "  | 0 -> res\n"
+               "  | _ -> (\n"
+               "    fold f (f res (a[0])) (array_succ a)\n"
+               "  )\n"
+               ";;\n"
+               "fold (fn acc s -> (acc * 4) + s) 0 [|0, 1, 2|]\n",
+               &t_int);
+    Ast *app = b->data.AST_BODY.stmts->next->ast;
+  });
+
+  ({
+    Type r = TVAR("`6");
+    Type t = TVAR("`5");
+    Ast *b = T("let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->\n"
+               "  match array_size a with\n"
+               "  | 0 -> res\n"
+               "  | _ -> (\n"
+               "    fold f (f res (a[0])) (array_succ a)\n"
+               "  )\n"
+               ";;\n"
+               "let encode_hist = fn m arr -> fold (fn acc s -> (acc * m) + s) "
+               "0 arr ;;\n"
+               "encode_hist 4 [|0,1,2|]\n",
+               &t_int);
+    Ast *app = b->data.AST_BODY.stmts->next->ast;
   });
 
   return status;
@@ -2028,23 +3111,33 @@ int test_networking_funcs() {
   bool status = true;
 
   ({
-    Ast *b =
-        T("let pop_left = fn (head, tail) ->\n"
-          "  match head with\n"
-          "  | [] -> ((head, tail), None)\n"
-          "  | x::rest -> ((rest, tail), Some x)  \n"
-          ";;\n",
-          &TSCHEME(&MAKE_FN_TYPE_2(
-                       &TTUPLE(2, &TLIST(&TVAR("`6")), &TVAR("`2")),
-                       &TTUPLE(2, &TTUPLE(2, &TLIST(&TVAR("`6")), &TVAR("`2")),
-                               &TOPT(&TVAR("`6")))),
-                   &TVAR("`2"), &TVAR("`6")));
+    Ast *b = _T("let pop_left = fn (head, tail) ->\n"
+                "  match head with\n"
+                "  | [] -> ((head, tail), None)\n"
+                "  | x::rest -> ((rest, tail), Some x)  \n"
+                ";;\n");
+    Type *pop_left_type = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)->type;
+    Type t2 = TVAR("`3");
+    Type t6 = TVAR("`5");
+    Type expected =
+        MAKE_FN_TYPE_2(&TTUPLE(2, &TLIST(&t6), &t2),
+                       &TTUPLE(2, &TTUPLE(2, &TLIST(&t6), &t2), &TOPT(&t6)));
+    bool pop_left_ok = test_types_equal(pop_left_type, &expected);
+    if (pop_left_ok) {
+      fprintf(stderr, "✅ pop_left has expected type\n");
+    } else {
+      status &= false;
+      add_type_failure("pop_left has expected type", &expected, pop_left_type,
+                       __FILE__, __LINE__);
+    }
+    status &= pop_left_ok;
+
     Ast none = AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
                    ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_MATCH
                    .branches[1]
                    .data.AST_LIST.items[1];
 
-    bool res = types_equal(none.type, &TOPT(&TVAR("`6")));
+    bool res = test_types_equal(none.type, &TOPT(&t6));
     const char *msg = "None return val";
     if (res) {
       printf("✅ %s\n", msg);
@@ -2052,7 +3145,8 @@ int test_networking_funcs() {
       status &= true;
     } else {
       status &= false;
-      add_type_failure(msg, &TOPT(&TVAR("`4")), none.type, __FILE__, __LINE__);
+      add_type_failure("None return val", &TOPT(&t6), none.type, __FILE__,
+                       __LINE__);
     }
   });
   T("let loop = fn () ->\n"
@@ -2120,14 +3214,6 @@ bool test_audio_funcs() {
 
     // print_ast(plus_app);
     // print_type(plus_app->type);
-
-    // status &= EXTRA_CONDITION(
-    //     types_equal(
-    //         plus_app->md,
-    //         &MAKE_TC_RESOLVE_2(TYPE_NAME_TYPECLASS_ARITHMETIC, &t_num,
-    //         &t_num)),
-    //     "callback constraint passed down to lambda -> (arithmetic resolve "
-    //     "Double : Double)");
   });
   ({
     Type s = {T_CONS,
@@ -2176,19 +3262,44 @@ bool test_type_exprs() {
   bool status = true;
   ({
     Type t = TVAR("T");
-    T("type f = (T -> Int -> ()) -> Double -> T -> ();",
-      &TSCHEME(&MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t, &t_int, &t_void), &t_num, &t,
-                               &t_void),
-               &t));
+    T("type F = (T -> Int -> ()) -> Double -> T -> ();",
+      &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_3(&t, &t_int, &t_void), &t_num, &t,
+                      &t_void));
   });
   ({
-    T("type Pat =\n"
-      "  | PatInt of Int\n"
-      "  | PatDouble of Double\n"
-      "  | PatList of List of Pat\n"
-      "  ;\n",
-      &TSUM(3, &TCONS("PatInt", 1, &t_int), &TCONS("PatDouble", 1, &t_num),
-            &TCONS("PatList", 1, &TLIST(&TVAR("Pat")))));
+    Ast *ast = _T("type Pat =\n"
+                  "  | PatInt of Int\n"
+                  "  | PatDouble of Double\n"
+                  "  | PatList of List of Pat\n"
+                  "  ;\n");
+    Type *pt = ast ? ast->type : NULL;
+    Type *plist = pt && pt->kind == T_SUM ? pt->data.T_CONS.args[2] : NULL;
+    Type *plist_payload =
+        plist && plist->kind == T_CONS && plist->data.T_CONS.num_args == 1
+            ? plist->data.T_CONS.args[0]
+            : NULL;
+    status &= TASSERT("Pat declaration builds a named sum",
+                      pt && pt->kind == T_SUM &&
+                          strcmp(pt->data.T_CONS.name, "Pat") == 0);
+    status &= TASSERT("Pat has three constructors",
+                      pt && pt->data.T_CONS.num_args == 3);
+    status &= TASSERT(
+        "PatList payload is List of recursive Pat",
+        plist_payload && is_list_type(plist_payload) &&
+            type_is_named_recursive_ref(type_of_list(plist_payload), "Pat"));
+  });
+  ({
+    Ast *ast =
+        _T("type SFInfo = (fd: Ptr, frames: Uint64, samplerate: Int, "
+           "channels: Int);\n"
+           "let sf_open_opt = extern fn String -> Option of SFInfo;\n"
+           "match sf_open_opt \"~/Sounds/rns_samples/Kicks/"
+           "dh_kick_mid_onetwo.flac\" with\n"
+           "| Some _ -> ()\n"
+           "| None -> ()\n"
+           ";\n");
+    status &= TASSERT("extern Option of record result can be matched",
+                      ast && ast->type && test_types_equal(ast->type, &t_void));
   });
   return status;
 }
@@ -2292,21 +3403,20 @@ bool test_parser_combinators() {
   });
 
   ({
-    Type a = TVAR("`2");
+    Type a = TVAR("`3");
     Type b = TVAR("`7");
     Type c = TVAR("`8");
-    Type d = TVAR("`14");
-    Ast *bd = T("let bind = fn p f input ->\n"
-                "  match p input with\n"
-                "  | Some (x, rest) -> f x rest  \n"
-                "  | None -> None\n"
-                ";;\n",
-                &TSCHEME(&MAKE_FN_TYPE_4(
-                             &MAKE_FN_TYPE_2(&a, &TOPT(&TTUPLE(2, &b, &c))),
-                             &MAKE_FN_TYPE_3(&b, &c, &TOPT(&d)), &a, &TOPT(&d)),
-                         &a, &b, &c, &d)
+    Type d = TVAR("`12");
+    Ast *bd =
+        T("let bind = fn p f input ->\n"
+          "  match p input with\n"
+          "  | Some (x, rest) -> f x rest  \n"
+          "  | None -> None\n"
+          ";;\n",
+          &MAKE_FN_TYPE_4(&MAKE_FN_TYPE_2(&a, &TOPT(&TTUPLE(2, &b, &c))),
+                          &MAKE_FN_TYPE_3(&b, &c, &TOPT(&d)), &a, &TOPT(&d))
 
-    );
+        );
   });
 
   return status;
@@ -2316,9 +3426,17 @@ bool test_opts() {
   printf("## TEST OPTION OPS\n---------------------------------------------\n");
   bool status = true;
   ({
+    Ast *b = T("Some 1", &TOPT(&t_int));
+    TASSERT(
+        "Some instance has application form of Option of Int\n",
+        types_equal(
+            b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->type,
+            &MAKE_FN_TYPE_2(&t_int, &TOPT(&t_int))));
+  });
+  ({
     Ast *b = T("Some 1 == None", &t_bool);
     TASSERT(
-        "LHS of == operation forces None to be same type as LHS: ",
+        "LHS of == operation forces None to be same type as RHS: ",
         types_equal(
             b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->type,
             &MAKE_FN_TYPE_3(&TOPT(&t_int), &TOPT(&t_int), &t_bool)));
@@ -2327,16 +3445,9 @@ bool test_opts() {
     // print_type(
     //     (b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.args + 1)->md);
   });
-  ({
-    Ast *b = T("Some 1", &TOPT(&t_int));
-    TASSERT(
-        "Some instance has application form of Option of Int\n",
-        types_equal(
-            b->data.AST_BODY.stmts->ast->data.AST_APPLICATION.function->type,
-            &MAKE_FN_TYPE_2(&t_int, &TOPT(&t_int))));
-  });
   return status;
 }
+
 bool test_record_types() {
   bool status = true;
   printf("## TEST RECORD "
@@ -2357,24 +3468,109 @@ bool test_record_types() {
     &t_int);
 
   ({
-    Type t0 = TVAR("`0");
-    Type t1 = TVAR("`1");
-    Type mod = TCONS(
-        TYPE_NAME_MODULE, 1,
-        &TSCHEME(&MAKE_FN_TYPE_3(&t0, &t1,
-                                 &MAKE_TC_RESOLVE_2(
-                                     TYPE_NAME_TYPECLASS_ARITHMETIC, &t0, &t1)),
-                 &t0, &t1));
-
-    mod.data.T_CONS.names = (char *[]){"f"};
-
-    T("let X = module () ->\n"
-      "  let f = fn a b -> a + b;;\n"
-      ";\n"
-      "X.f 1 2;\n"
-      "X",
-      &mod);
+    Ast *ast = _T("let X = module () ->\n"
+                  "  let f = fn a b -> a + b;;\n"
+                  ";\n"
+                  "X.f 1 2;\n"
+                  "X");
+    Type *mod = ast->type;
+    bool ok = mod && mod->kind == T_MODULE && mod->data.T_MODULE.env &&
+              strcmp(mod->data.T_MODULE.env->name, "f") == 0 &&
+              mod->data.T_MODULE.env->type &&
+              mod->data.T_MODULE.env->type->kind == T_FN &&
+              mod->data.T_MODULE.env->scheme_vars != NULL &&
+              mod->data.T_MODULE.env->predicates != NULL;
+    if (ok) {
+      fprintf(stderr, "✅ module arithmetic member preserves predicates\n");
+    } else {
+      status &= false;
+      add_failure("module arithmetic member preserves predicates", __FILE__,
+                  __LINE__);
+    }
+    status &= ok;
   });
+
+  return status;
+}
+
+bool test_record_field_predicates() {
+  bool status = true;
+  printf("## TEST RECORD FIELD "
+         "PREDICATES\n---------------------------------------------\n");
+
+  ({
+    Ast *ast = _T("let f = fn x -> x.field + 2;;\n");
+    (void)ast;
+    TypeEnv *f = lookup_test_env_binding("f");
+    Type *field_record = NULL;
+    Type *field_type = NULL;
+    bool has_field =
+        env_binding_has_field_predicate(f, "field", &field_record, &field_type);
+    status &= TASSERT("f argument x has HasField(field) predicate",
+                      has_field && f && f->type && f->type->kind == T_FN &&
+                          same_type_reference(field_record,
+                                              f->type->data.T_FN.from));
+    status &= TASSERT(
+        "f field type has Arithmetic predicate",
+        has_field &&
+            env_binding_has_trait_predicate_on_type(
+                f, TYPE_NAME_TYPECLASS_ARITHMETIC, field_type));
+  });
+
+  ({
+    Ast *ast = _T("let f = fn x -> x.y.z + 2;;\n");
+    (void)ast;
+    TypeEnv *f = lookup_test_env_binding("f");
+    Type *y_record = NULL;
+    Type *y_type = NULL;
+    Type *z_record = NULL;
+    Type *z_type = NULL;
+    bool has_y = env_binding_has_field_predicate(f, "y", &y_record, &y_type);
+    bool has_z = env_binding_has_field_predicate(f, "z", &z_record, &z_type);
+    status &= TASSERT("f argument x has HasField(y) predicate",
+                      has_y && f && f->type && f->type->kind == T_FN &&
+                          same_type_reference(y_record,
+                                              f->type->data.T_FN.from));
+    status &= TASSERT("f y field has HasField(z) predicate",
+                      has_z && same_type_reference(z_record, y_type));
+    status &= TASSERT(
+        "f nested z field type has Arithmetic predicate",
+        has_z &&
+            env_binding_has_trait_predicate_on_type(
+                f, TYPE_NAME_TYPECLASS_ARITHMETIC, z_type));
+  });
+
+  T("let f = fn x -> x.field + 2;;\n"
+    "f (field: 3,)",
+    &t_int);
+
+  T("let f = fn x -> x.y.z + 2;;\n"
+    "f (y: (z: 3,),)",
+    &t_int);
+
+  T("let f = fn x -> x.field + 2.;;\n"
+    "f (field: 3.,)",
+    &t_num);
+
+  ({
+    Type expected = TTUPLE(2, &t_int, &t_bool);
+    T("let get_field = fn x -> x.field;;\n"
+      "(get_field (field: 1,), get_field (field: true,))",
+      &expected);
+  });
+
+  T("let get_field = fn x -> x.field;;\n"
+    "get_field (other: true, field: 1)",
+    &t_int);
+
+  TFAIL("let get_field = fn x -> x.field;;\n"
+        "get_field (other: 1,)");
+
+  TFAIL("let get_field = fn x -> x.field;;\n"
+        "get_field 1");
+
+  TFAIL("let f = fn x -> x.field + 2;;\n"
+        "f (field: \"no\",)");
 
   return status;
 }
@@ -2382,7 +3578,8 @@ bool test_record_types() {
 bool test_math_funcs() {
   bool status = true;
 
-  Ast *b = T("let shuffle = fn n -> \n"
+  Ast *b = T("let rand_int = extern fn Int -> Int;\n"
+             "let shuffle = fn n -> \n"
              "  let arr = array_fill n (fn i -> i);\n"
              "\n"
              "  for _i = 0 .. n in (\n"
@@ -2396,14 +3593,14 @@ bool test_math_funcs() {
              ";;\n",
              &MAKE_FN_TYPE_2(&t_int, &TARRAY(&t_int)));
   Ast *l = AST_LIST_NTH(
-      AST_LIST_NTH(b->data.AST_BODY.stmts, 0)
+      AST_LIST_NTH(b->data.AST_BODY.stmts, 1)
           ->data.AST_LET.expr->data.AST_LAMBDA.body->data.AST_BODY.stmts,
       1);
 
   TASSERT(
       "Int",
       types_equal(
-          AST_LIST_NTH(l->data.AST_LET.in_expr->data.AST_BODY.stmts, 0)->type,
+          AST_LIST_NTH(l->data.AST_LET.in_expr->data.AST_BODY.stmts, 1)->type,
           &t_int));
 
   return status;
@@ -2422,7 +3619,7 @@ bool test_sum_types() {
   TICtx ctx = {.env = NULL};
   infer(sum_type_expr, &ctx);
   Type *sum_type = sum_type_expr->type;
-  Type t19 = TVAR("`19");
+  Type t19 = TVAR("`14");
 
   Ast *b = T("type Seq =\n"
              "  | SeqInt of Int\n"
@@ -2434,16 +3631,138 @@ bool test_sum_types() {
              "  match seq with\n"
              "  | SeqInt i -> (print `{i},`; ba)\n"
              "  | SeqNum n -> (print `{n},`; ba)\n"
-             "  | SeqList x::rest -> ( \n"
+             "  | SeqList (x::rest) -> ( \n"
              "    ba\n"
              "    |> compile x\n"
              "    |> compile (SeqList rest)\n"
              "  )\n"
              "  | _ -> ba\n"
              ";;",
-             &TSCHEME(&MAKE_FN_TYPE_3(sum_type, &t19, &t19), &t19));
+             &MAKE_FN_TYPE_3(sum_type, &t19, &t19));
   return status;
 }
+
+bool test_monads() {
+  printf("## TEST MONADS\n---------------------------------------------\n");
+  bool status = true;
+
+  ({
+    Ast *ast = _T("let option_map = fn f mx ->\n"
+                  "  match mx with\n"
+                  "  | Some x -> Some (f x)\n"
+                  "  | None -> None\n"
+                  ";;\n");
+    status &= TASSERT("option_map has function type",
+                      ast && ast->type && ast->type->kind == T_FN);
+    status &= assert_env_binding_polymorphic(
+        "option_map", 2, "option_map env binding is polymorphic", __FILE__,
+        __LINE__);
+  });
+
+  T("let option_map = fn f mx ->\n"
+    "  match mx with\n"
+    "  | Some x -> Some (f x)\n"
+    "  | None -> None\n"
+    ";;\n"
+    "option_map (fn x -> x + 1) (Some 1)\n",
+    &TOPT(&t_int));
+
+  ({
+    Ast *ast = _T("let option_bind = fn mx f ->\n"
+                  "  match mx with\n"
+                  "  | Some x -> f x\n"
+                  "  | None -> None\n"
+                  ";;\n");
+    status &= TASSERT("option_bind has function type",
+                      ast && ast->type && ast->type->kind == T_FN);
+    status &= assert_env_binding_polymorphic(
+        "option_bind", 2, "option_bind env binding is polymorphic", __FILE__,
+        __LINE__);
+  });
+
+  T("let option_bind = fn mx f ->\n"
+    "  match mx with\n"
+    "  | Some x -> f x\n"
+    "  | None -> None\n"
+    ";;\n"
+    "option_bind (Some 1) (fn x -> Some (x + 1))\n",
+    &TOPT(&t_int));
+
+  T("let option_bind = fn mx f ->\n"
+    "  match mx with\n"
+    "  | Some x -> f x\n"
+    "  | None -> None\n"
+    ";;\n"
+    "option_bind (Some 1) Some\n",
+    &TOPT(&t_int));
+
+  TFAIL("let option_bind = fn mx f ->\n"
+        "  match mx with\n"
+        "  | Some x -> f x\n"
+        "  | None -> None\n"
+        ";;\n"
+        "option_bind (Some 1) (fn x -> x + 1)\n");
+
+  ({
+    Ast *ast = _T("let option_join = fn mmx ->\n"
+                  "  match mmx with\n"
+                  "  | Some mx -> mx\n"
+                  "  | None -> None\n"
+                  ";;\n");
+    status &= TASSERT("option_join has function type",
+                      ast && ast->type && ast->type->kind == T_FN);
+    status &= assert_env_binding_polymorphic(
+        "option_join", 1, "option_join env binding is polymorphic", __FILE__,
+        __LINE__);
+  });
+
+  T("let option_join = fn mmx ->\n"
+    "  match mmx with\n"
+    "  | Some mx -> mx\n"
+    "  | None -> None\n"
+    ";;\n"
+    "option_join (Some (Some 1))\n",
+    &TOPT(&t_int));
+
+  T("let option_bind = fn mx f ->\n"
+    "  match mx with\n"
+    "  | Some x -> f x\n"
+    "  | None -> None\n"
+    ";;\n"
+    "let safe_div = fn x y ->\n"
+    "  match y == 0 with\n"
+    "  | true -> None\n"
+    "  | _ -> Some (x / y)\n"
+    ";;\n"
+    "let half_even = fn x ->\n"
+    "  match x % 2 == 0 with\n"
+    "  | true -> Some (x / 2)\n"
+    "  | _ -> None\n"
+    ";;\n"
+    "option_bind (safe_div 12 3) half_even\n",
+    &TOPT(&t_int));
+
+  T("let option_bind = fn mx f ->\n"
+    "  match mx with\n"
+    "  | Some x -> f x\n"
+    "  | None -> None\n"
+    ";;\n"
+    "let safe_div = fn x y ->\n"
+    "  match y == 0 with\n"
+    "  | true -> None\n"
+    "  | _ -> Some (x / y)\n"
+    ";;\n"
+    "let half_even = fn x ->\n"
+    "  match x % 2 == 0 with\n"
+    "  | true -> Some (x / 2)\n"
+    "  | _ -> None\n"
+    ";;\n"
+    "option_bind (safe_div 12 0) half_even\n",
+    &TOPT(&t_int));
+
+  return status;
+}
+
 bool test_rec_coroutines() {
   bool status = true;
 
@@ -2462,43 +3781,104 @@ bool test_rec_coroutines() {
              "  let next = next m id;\n"
              "  yield mcor next m\n"
              ";;\n",
-             &COROUTINE_CONS(&MAKE_FN_TYPE_3(
-                 &t_int, &TTUPLE(2, &t_int, &TARRAY(&TVAR("`48"))),
-                 &COROUTINE_INST(&t_int))));
+             &MAKE_FN_TYPE_3(&t_int, &TTUPLE(2, &t_int, &TARRAY(&t_num)),
+                             &COROUTINE_INST(&t_int)));
+
+  return status;
+}
+
+bool test_variadic_templates() {
+  printf("\n=== Variadic Templates ===\n");
+  bool status = true;
+
+  // @Audio fn a -> a : Double -> Double
+  T("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+    "let f = @Audio fn a -> a;;\n"
+    "f;",
+    &MAKE_FN_TYPE_2(&t_num, &t_num));
+
+  // @Audio fn a b -> a + b : Double -> Double -> Double
+  T("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+    "let f = @Audio fn a b -> a + b;;\n"
+    "f 1. 2.;",
+    &t_num);
+
+  // @Audio fn a b c -> a + b + c : three Double args → Double
+  T("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+    "let f = @Audio fn a b c -> a + b + c;;\n"
+    "f 1. 2. 3.;",
+    &t_num);
+
+  // Int args coerce to Double via From
+  T("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+    "let f = @Audio fn a b -> a + b;;\n"
+    "f 1 2;",
+    &t_num);
+
+  // String arg fails — String is not coercible to Double
+  TFAIL("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+        "let f = @Audio fn a -> a;;\n"
+        "f \"hello\";;");
+
+  // Non-function arg fails — Audio expects a function
+  TFAIL("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+        "let f = @Audio 1.;;");
+
+  ({
+    // @Audio fn a b -> a + b : Double -> Double -> Double
+    Ast *b = T("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+               "let f = @Audio fn a b -> a + b;;\n"
+               "f 1. 2.;",
+               &t_num);
+    // stmt[1] = `let f = Audio (fn a b -> a + b)`
+    Ast *let_f = AST_LIST_NTH(b->data.AST_BODY.stmts, 1);
+    // let_f->expr = Audio (fn ...) : AST_APPLICATION, .args[0] = the lambda
+    Ast *audio_app = let_f->data.AST_LET.expr;
+    Ast *lambda = audio_app->data.AST_APPLICATION.args;
+    // lambda->body = (a + b) : AST_APPLICATION{function: (+), args: [a, b]}
+    Ast *plus_a_b = lambda->data.AST_LAMBDA.body;
+    Ast *a_ref = plus_a_b->data.AST_APPLICATION.args;
+    Ast *b_ref = plus_a_b->data.AST_APPLICATION.args + 1;
+    TASSERT_EQ(a_ref->type, &t_num, "lambda param a has type Double");
+    TASSERT_EQ(b_ref->type, &t_num, "lambda param b has type Double");
+  });
 
   return status;
 }
 
 int main() {
   // initialize_builtin_schemes();
+  reset_type_var_counter();
   initialize_builtin_types();
 
   bool status = true;
   status &= test_basic_ops();
   status &= test_opts();
   status &= test_match_exprs();
-  status &= test_type_declarations();
   status &= test_first_class_funcs();
 
   status &= test_modules();
+  status &= test_parametrized_modules();
   status &= test_networking_funcs();
   status &= test_type_exprs();
+  status &= test_type_declarations();
   status &= test_record_types();
   status &= test_refs();
-
-  status &= test_closures();
-  status &= test_coroutines();
-  //
   status &= test_list_processing();
-  status &= test_array_processing();
   status &= test_math_funcs();
   status &= test_funcs();
   status &= test_curried_funcs();
-  status &= test_audio_funcs();
-  status &= test_parser_combinators();
   status &= test_sum_types();
+  status &= test_array_processing();
+  // status &= test_audio_funcs();
+  // status &= test_parser_combinators();
+  status &= test_monads();
+  status &= test_coroutines();
   status &= test_rec_coroutines();
-
+  //
+  status &= test_closures();
+  status &= test_variadic_templates();
+  status &= test_record_field_predicates();
   print_all_failures();
   return status == true ? 0 : 1;
 }

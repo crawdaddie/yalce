@@ -8,6 +8,7 @@ let rand_double = extern fn () -> Double ;
 
 # uniformly distributed double between min and max
 let rand_double_range = extern fn Double -> Double -> Double ;
+let rrand = rand_double_range;
 
 let amp_db = extern fn Double -> Double;
 let db_amp = extern fn Double -> Double;
@@ -47,6 +48,7 @@ let min = fn a b ->
   | true -> a 
   | _ -> b
   ;;
+
 let clamp = fn mn mx v -> v |> min mx |> max mn ;;
 
 let abs = fn a ->
@@ -74,7 +76,7 @@ let chance2 = fn thresh f g ->
 ;;
 
 
-let shuffle = fn n: (Int) -> 
+let shuffle = fn n -> 
   # `
   # Fisher-Yates shuffle
   # return an array of numbers 0 to n-1 shuffled in random order
@@ -132,7 +134,7 @@ let ilog10 = fn a ->
   let aux = fn d x -> 
     let x2 = x / 10;
     match x2 > 0 with
-    | true -> aux (d+1) x2 
+    | true -> aux (d + 1) x2 
     | _ -> d
   ;;
   aux 0 a

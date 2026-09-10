@@ -12,6 +12,9 @@ int scheduler_event_loop();
 
 void *schedule_event(uint64_t now, double delay_seconds,
                      SchedulerCallback callback, void *userdata);
+void *ylc_schedule_current_task_event(uint64_t now, double delay_seconds);
+void ylc_complete_current_task(void);
+void cancel_task(void *handle);
 
 int get_tl_frame_offset();
 extern atomic_ullong global_sample_position;
@@ -23,4 +26,7 @@ uint64_t get_sched_tick();
 void defer_quant(double quant, DeferQuantCallback callback);
 void defer_quant_offset(double quant, double offset,
                         DeferQuantCallback callback);
+
+void *ylc_play_pattern_start(double quant, SchedulerCallback callback,
+                             void *handle);
 #endif

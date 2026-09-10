@@ -1,0 +1,40 @@
+import libs/Gnuplot/Gnuplot;
+import std/Math;
+
+type SF = (data: Array of Double, channels: Int, samplerate: Int);
+
+let make_synthetic_sf = fn seconds samplerate ->
+  let n = seconds * samplerate;
+  let data = array_fill_const n 0.;
+  for i = 0 .. n in (
+    let t = (Double i) / (Double samplerate);
+    let tone = Math.sin (2.0 * Math.PI * 110.0 * t);
+    let overtone = 0.35 * Math.sin (2.0 * Math.PI * 330.0 * t);
+    let wobble = 0.55 + 0.45 * Math.sin (2.0 * Math.PI * 2.5 * t);
+    let noise = Math.rand_double_range -0.04 0.04;
+    data[i] := (tone + overtone) * wobble + noise
+  );
+  SF data 1 samplerate
+;;
+
+let double_lt = fn a: (Double) b: (Double) -> a < b;;
+
+let plot_soundfile_png = fn sf max_points filename ->
+  let duration = (Double (array_size sf.data)) / (Double sf.samplerate);
+  Gnuplot.start ()
+    |> Gnuplot.terminal_kitty 1000 450
+    |> Gnuplot.title "Synthetic SF min/max"
+    |> Gnuplot.xlabel "time (s)"
+    |> Gnuplot.ylabel "amplitude"
+    |> Gnuplot.grid
+    |> Gnuplot.zeroaxis
+    |> Gnuplot.xrange 0. duration
+    |> Gnuplot.plot1 (Gnuplot.minmax_vectors "chunk min/max")
+    |> Gnuplot.emit_minmax_chunks double_lt sf.data sf.samplerate max_points
+    |> Gnuplot.finish
+;;
+
+let sf = make_synthetic_sf 2 48000;
+plot_soundfile_png sf 1200 "/tmp/yalce_synthetic_sf.png";
+
+print "Wrote /tmp/yalce_synthetic_sf.png\n";

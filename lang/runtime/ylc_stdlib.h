@@ -10,6 +10,14 @@ void str_copy(char *dest, char *src, int len);
 void print(_String str);
 void printc(char c);
 
+typedef struct YlcRcHeader {
+  uint32_t rc;
+  uint32_t tag_or_size_class;
+} YlcRcHeader;
+
+void __ylc_dup(void *ptr);
+void __ylc_drop(void *ptr);
+
 int rand_int(int range);
 
 // uniformly distributed double between 0 and 1.0
@@ -83,6 +91,7 @@ typedef struct ReadLinesResult {
 ReadLinesResult read_lines(FILE *fd);
 
 struct _OptFile open_file(_String path, _String mode);
+int read_line(_String buf, FILE *fd);
 
 void _scanf(const char *fmt_string, const char *input_string, int size,
             void **pointers);
@@ -99,6 +108,10 @@ typedef struct DM {
 } DM;
 
 DArr matrix_vec_mul(DM *matrix, DArr vector);
+
+_DoubleArray matrix_vec_mul_double(int rows, int cols, _DoubleArray matrix,
+                                   _DoubleArray vec, _DoubleArray out);
+double vec_dot_double(_DoubleArray a, _DoubleArray b);
 
 void _matrix_vec_mul(int rows, int cols, double *matrix_data, double *vec_data);
 

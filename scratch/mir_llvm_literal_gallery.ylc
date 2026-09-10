@@ -1,0 +1,28 @@
+#! ylc --dump-mir
+# MIR-to-LLVM literal lowering gallery.
+# Run from the repo root with:
+#   ./build/ylc --dump-mir --debug-ir-pre --verify-ir scratch/mir_llvm_literal_gallery.ylc
+
+# From /tmp/mir_llvm_array_literal.ylc
+let mir_llvm_array_literal = fn () ->
+  [| 1, 2 |]
+;;
+
+# From /tmp/mir_llvm_array_stack.ylc
+let mir_llvm_array_stack = fn () ->
+  let a = [| 1, 2 |];
+  1
+;;
+
+# From /tmp/mir_llvm_list_literal.ylc
+let mir_llvm_list_literal = fn () ->
+  [1, 2, ]
+;;
+
+# From /tmp/mir_llvm_list_stack.ylc
+let mir_llvm_list_stack = fn () ->
+  let xs = [1, 2, ];
+  1
+;;
+
+mir_llvm_array_literal

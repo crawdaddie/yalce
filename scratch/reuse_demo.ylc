@@ -1,0 +1,12 @@
+let rev = fn l ->
+  let aux = fn l acc ->
+    match l with
+    | [] -> acc
+    | x::xs -> aux xs (x::acc)
+  ;;
+  aux l []
+;;
+
+let test = module () ->
+  let test_rev = (rev [1, 2, 3, 4, 5]) == [5, 4, 3, 2, 1]
+;

@@ -35,12 +35,14 @@ extern char *yytext;
     ObjString vident;           /* identifier */
     ObjString vstr;             /* string */
     int vint;                   /* int val */
+    uint64_t vint64;                   /* int val */
     double vdouble;
     float vfloat;
     char vchar;
 };
 
 %token <vint>    INTEGER
+%token <vint64>  UINT64
 %token <vdouble> DOUBLE 
 %token <vfloat>  FLOAT
 %token <vident>  IDENTIFIER
@@ -51,6 +53,7 @@ extern char *yytext;
 %token TRUE FALSE
 %token PIPE
 %token EXTERN
+%token TRIPLE_DOT
 %token DOUBLE_DOT
 %token LET
 %token FN
@@ -99,6 +102,7 @@ extern char *yytext;
 %right '.' 
 
 %nonassoc UMINUS
+%nonassoc BANG
 
 %type <ast_node_ptr>
   expr
@@ -163,6 +167,7 @@ expr:
   | match_expr                        { $$ = $1; }
   | type_decl                         { $$ = $1; }
   | THUNK expr                        { $$ = ast_thunk_expr($2); }
+  | BANG expr %prec UMINUS             { $$ = ast_application(ast_identifier((ObjString){"!", 1}), $2); }
   // | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
   | IDENTIFIER_LIST                   { $$ = ast_typed_empty_list($1); }
   | FOR IDENTIFIER '=' expr IN expr   {
@@ -179,11 +184,17 @@ expr:
 
 atom_expr:
     simple_expr
-  | atom_expr '.' IDENTIFIER          { $$ = ast_record_access($1, ast_identifier($3)); }
+  | atom_expr '.' IDENTIFIER          {
+                                        Ast *member = ast_identifier($3);
+                                        SET_AST_LOC(member, @3);
+                                        $$ = ast_record_access($1, member);
+                                        SET_AST_LOC($$, @$);
+                                      }
   ;
 
 simple_expr:
     INTEGER               { $$ = AST_CONST(AST_INT, $1); SET_AST_LOC($$, @$); }
+  | UINT64                { $$ = AST_CONST(AST_UINT64, $1); SET_AST_LOC($$, @$); }
   | DOUBLE                { $$ = AST_CONST(AST_DOUBLE, $1); SET_AST_LOC($$, @$); }
   | FLOAT                 { $$ = AST_CONST(AST_FLOAT, $1); SET_AST_LOC($$, @$); }
   | TOK_STRING            { $$ = ast_string($1); SET_AST_LOC($$, @$); }
@@ -279,8 +290,11 @@ let_binding:
   | OPEN PATH_IDENTIFIER              { $$ = ast_import_stmt($2, true); SET_AST_LOC($$, @$); }
   | IMPORT IDENTIFIER                 { $$ = ast_import_stmt($2, false); SET_AST_LOC($$, @$); }
   | OPEN IDENTIFIER                   { $$ = ast_import_stmt($2, true); SET_AST_LOC($$, @$); }
+  | IMPORT TOK_STRING                       { $$ = ast_import_from_uri($2, false); SET_AST_LOC($$, @$); }
+  | OPEN TOK_STRING                          { $$ = ast_import_from_uri($2, true); SET_AST_LOC($$, @$); }
   | LET IDENTIFIER ':' IDENTIFIER '=' lambda_expr { $$ = ast_trait_impl($4, $2, $6); SET_AST_LOC($$, @$); }
-  | LET IDENTIFIER '=' AT IDENTIFIER lambda_expr  { $$ = ast_decorated_lambda($5, $2, $6); }
+  | LET IDENTIFIER '=' AT IDENTIFIER lambda_expr  { $$ = ast_decorated_lambda($5, $2, $6); SET_AST_LOC($$, @$); }
+  | LET IDENTIFIER '=' AT IDENTIFIER EXTERN FN fn_signature  { $$ = ast_decorated_signature($5, $2, $8); SET_AST_LOC($$, @$); }
   ;
 
 
@@ -422,6 +436,7 @@ type_expr_no_tuple:
   | '|' type_atom                   { $$ = ast_list($2); }
   | type_expr_no_tuple '|' type_atom { $$ = ast_list_push($1, $3); }
   | fn_signature                    { $$ = ast_fn_signature_of_list($1); }
+  | type_atom TRIPLE_DOT            { $$ = ast_variadic_expr($1); }
   ;
 
 type_atom:
@@ -433,12 +448,21 @@ type_atom:
   | '(' type_expr_no_tuple ',' ')' { $$ = ast_tuple_type_single($2); }
   | '(' tuple_type ',' ')'    { $$ = $2; }
   | TOK_VOID                  { $$ = ast_void(); }
-  | IDENTIFIER '.' IDENTIFIER { $$ = ast_record_access(ast_identifier($1), ast_identifier($3)); }
+  | IDENTIFIER '.' IDENTIFIER {
+                                Ast *record = ast_identifier($1);
+                                Ast *member = ast_identifier($3);
+                                SET_AST_LOC(record, @1);
+                                SET_AST_LOC(member, @3);
+                                $$ = ast_record_access(record, member);
+                                SET_AST_LOC($$, @$);
+                              }
   ;
 %%
 
 
 void yyerror(const char *s) {
+  parse_record_error(s, yylineno, yycolumn, yyabsoluteoffset, yytext,
+                     pctx.cur_script);
   fprintf(stderr, "Error: %s at %d:%d near '%s' in %s\n", s, yylineno, yycolumn, yytext, pctx.cur_script);
 }
 #endif _LANG_TAB_H

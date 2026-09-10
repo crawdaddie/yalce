@@ -1,0 +1,8 @@
+open autograd3;
+
+let w = tensor_rand [|2, 1|] 0.5;
+let b = tensor_zeroes [|1, 1|];
+let x = tensor [|1, 2|] [|0., 1.|];
+let y = linear w b x;
+
+print "";

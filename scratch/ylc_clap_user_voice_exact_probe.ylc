@@ -1,0 +1,34 @@
+open libs/ylc_clap/DSP;
+
+let ac = @Audio fn f t ->
+  # let t = trig 0;
+  # sin_osc f * (rect 0.2 t |> kill_on_end)
+  let fr = (f |> lag 0.1);
+  let fcenv = decay 0.2 t |> scale 200. 2000.;
+  sq_osc fr * (~[|1., 1.01|])
+  |> Filter.lpf fcenv 10.
+  |> (*) (adsr 0.02 0.1 0.8 0.3)
+;;
+
+let voices = alloc_voices 1 ac;
+voices[0] := ac 100. 0. |> play_voice;
+# let vactive = [|false|];
+
+let vtrig = fn note ->
+  let v = voices[0];
+  v |> set_voice_input 0 (midi_to_freq note);
+  v |> set_voice_input 1 1.;
+  ()
+;;
+
+let vend = fn note ->
+  let v = voices[0];
+  v |> set_voice_input 1 0.;
+  ()
+;;
+
+let _ = @MidiIn fn chan ev_type note vel ->
+  match ev_type with
+  | NoteOn -> (vtrig note; ())
+  | NoteOff -> (vend note; ())
+;;

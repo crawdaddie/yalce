@@ -1,0 +1,8 @@
+open libs/ylc_clap/DSP;
+
+let ac = @Audio fn f gate ->
+  sin_osc f * (~[|1., 0.25|]) * gate
+;;
+
+let voices = alloc_voices 1 ac;
+voices[0] := ac 220. 1. |> play_voice;

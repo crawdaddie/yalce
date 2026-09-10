@@ -2,9 +2,11 @@
 #include "../types/builtins.h"
 #include "codegen.h"
 #include "config.h"
+#include "function.h"
 #include "jit.h"
 #include "serde.h"
 #include "symbols.h"
+#include "types.h"
 #include "llvm-c/Core.h"
 #include "llvm-c/ExecutionEngine.h"
 #include <stdlib.h>
@@ -149,6 +151,23 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
 
         JITSymbol *sym = find_in_ctx(key, strlen(key),
                                      test_module->symbol_data.STYPE_MODULE.ctx);
+        LLVMValueRef test_fn = NULL;
+
+        if (sym && sym->type == STYPE_GENERIC_FUNCTION) {
+          Type *expected_type =
+              specialize_type_for_codegen(stmt->data.AST_LET.expr->type, ctx);
+          test_fn = get_specific_callable(
+              sym, expected_type, test_module->symbol_data.STYPE_MODULE.ctx,
+              module, builder);
+        } else if (sym) {
+          test_fn = sym->val;
+        }
+
+        if (!test_fn) {
+          fprintf(stderr, "Error: test function %s was not compiled\n", key);
+          LLVMDeleteFunction(func);
+          return NULL;
+        }
 
         // Increment num_tests
         num_tests =
@@ -157,23 +176,28 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
 
         // Call the test function
         LLVMValueRef test_call = LLVMBuildCall2(builder, test_func_type,
-                                                sym->val, NULL, 0, "test_call");
+                                                test_fn, NULL, 0, "test_call");
+
+        // Freeze once so counting and reporting observe the same boolean even
+        // if upstream codegen produced undef.
+        LLVMValueRef stable_test_call =
+            LLVMBuildFreeze(builder, test_call, "stable_test_call");
 
         // Increment num_passes if test passed
         LLVMValueRef should_increment = LLVMBuildZExt(
-            builder, test_call, LLVMInt32Type(), "should_increment");
+            builder, stable_test_call, LLVMInt32Type(), "should_increment");
 
         num_passes =
             LLVMBuildAdd(builder, num_passes, should_increment, "num_passes");
 
         LLVMValueRef name_str = create_string_constant(builder, module, key);
 
-        LLVMValueRef report_args[] = {name_str, test_call};
+        LLVMValueRef report_args[] = {name_str, stable_test_call};
         LLVMBuildCall2(builder, LLVMGlobalGetValueType(report_func),
                        report_func, report_args, 2, "");
 
         test_result =
-            LLVMBuildAnd(builder, test_result, test_call, "test_result");
+            LLVMBuildAnd(builder, test_result, stable_test_call, "test_result");
       } else if (types_equal(stmt->data.AST_LET.expr->type, &t_bool)) {
         const char *key = stmt->data.AST_LET.binding->data.AST_IDENTIFIER.value;
 
@@ -188,16 +212,19 @@ LLVMValueRef codegen_test_module(Ast *ast, JITLangCtx *ctx,
         // Call the test function
         LLVMValueRef val = sym->val;
 
+        LLVMValueRef stable_val =
+            LLVMBuildFreeze(builder, val, "stable_test_value");
+
         // Increment num_passes if test passed
-        LLVMValueRef should_increment =
-            LLVMBuildZExt(builder, val, LLVMInt32Type(), "should_increment");
+        LLVMValueRef should_increment = LLVMBuildZExt(
+            builder, stable_val, LLVMInt32Type(), "should_increment");
 
         num_passes =
             LLVMBuildAdd(builder, num_passes, should_increment, "num_passes");
 
         LLVMValueRef name_str = create_string_constant(builder, module, key);
 
-        LLVMValueRef report_args[] = {name_str, val};
+        LLVMValueRef report_args[] = {name_str, stable_val};
         LLVMBuildCall2(builder, LLVMGlobalGetValueType(report_func),
                        report_func, report_args, 2, "");
       }
@@ -220,7 +247,7 @@ int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     return 0;
   }
 
-  if (ylc_config.debug_ir_pre) {
+  if (ylc_config.dump_ir_pre) {
     LLVMDumpModule(module);
   }
 
@@ -238,7 +265,7 @@ int test_module(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMGetNamedFunction(module, "_report_test_totals"),
                        (void *)_report_test_totals);
 
-  if (ylc_config.debug_ir) {
+  if (ylc_config.dump_ir) {
     LLVMDumpModule(module);
   }
 

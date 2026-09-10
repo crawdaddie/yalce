@@ -1,0 +1,41 @@
+import libs/Gnuplot/Gnuplot;
+import std/Math;
+
+let samplerate = 48000;
+let seconds = 2;
+let n = samplerate * seconds;
+
+let audio = array_fill n (fn i ->
+  Math.sin (2.0 * Math.PI * 220.0 * ((Double i) / (Double samplerate))) * (0.65 + 0.35 * Math.sin (2.0 * Math.PI * 3.0 * ((Double i) / (Double samplerate))))
+  )
+  ;
+
+Gnuplot.start ()
+  |> Gnuplot.terminal_png "/tmp/yalce_soundfile_minmax.png" 1000 450
+  |> Gnuplot.title "Synthetic soundfile min/max"
+  |> Gnuplot.xlabel "time (s)"
+  |> Gnuplot.ylabel "amplitude"
+  |> Gnuplot.grid
+  |> Gnuplot.zeroaxis
+  |> Gnuplot.xrange 0. (Double seconds)
+  |> Gnuplot.plot1 (Gnuplot.minmax_vectors "chunk min/max")
+  |> Gnuplot.emit_minmax_chunks (<) audio samplerate 1200
+  |> Gnuplot.finish
+;
+
+let epochs = 80;
+let losses = array_fill (epochs + 1) (fn epoch -> 0.08 + Math.exp (-1.0 * ((Double epoch) / 14.0)) + 0.035 * Math.sin (0.7 * (Double epoch)));
+
+Gnuplot.start ()
+  |> Gnuplot.terminal_png "/tmp/yalce_loss_curve.png" 900 500
+  |> Gnuplot.title "Synthetic training loss"
+  |> Gnuplot.xlabel "epoch"
+  |> Gnuplot.ylabel "loss"
+  |> Gnuplot.grid
+  |> Gnuplot.plot1 (Gnuplot.lines_lw 2 "loss")
+  |> Gnuplot.emit_y losses
+  |> Gnuplot.finish
+;
+
+print "Wrote /tmp/yalce_soundfile_minmax.png\n";
+print "Wrote /tmp/yalce_loss_curve.png\n";

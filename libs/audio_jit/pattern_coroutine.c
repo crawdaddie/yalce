@@ -2787,6 +2787,8 @@ LLVMValueRef play_pattern(Ast *binding, Ast *quant, JITLangCtx *ctx,
 LLVMValueRef play_pattern_handler(Ast *ast, JITLangCtx *ctx,
                                   LLVMModuleRef module,
                                   LLVMBuilderRef builder) {
+  printf("play Pattern(s) handler\n");
+  print_ast(ast);
 
   Ast *quant_arg = ast->data.AST_APPLICATION.args;
   Ast *offset_arg = NULL;
@@ -2829,5 +2831,14 @@ LLVMValueRef play_pattern_handler(Ast *ast, JITLangCtx *ctx,
   fprintf(stderr, "Error: pattern binding type not implemented %d\n",
           pattern_record->tag);
   print_ast_err(pattern_record);
+  return NULL;
+}
+
+LLVMValueRef named_pattern_handler(Ast *ast, JITLangCtx *ctx,
+                                   LLVMModuleRef module,
+                                   LLVMBuilderRef builder) {
+
+  printf("named pattern handler\n");
+  print_ast(ast);
   return NULL;
 }

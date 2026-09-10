@@ -1,0 +1,34 @@
+let add = fn a b -> a + b;;
+
+let tuple_shape = fn n ->
+  let pair = (n, n + 1);
+  let left, right = pair;
+  left + right
+;;
+
+let variant_shape = fn flag n ->
+  let opt = if flag then Some n else None;
+  match opt with
+    | Some x -> x
+    | None -> 0
+;;
+
+let list_shape = fn n ->
+  let xs = [n, n + 1, ];
+  match xs with
+    | h :: rest -> h
+    | [] -> 0
+;;
+
+let closure_shape = fn n ->
+  let addn = add n in
+  addn 1
+;;
+
+let array_shape = fn n ->
+  let xs = [| n, n + 1 |];
+  xs[0] := n + 2;
+  xs[0]
+;;
+
+tuple_shape 1 + variant_shape true 2 + list_shape 3 + closure_shape 4 + array_shape 5

@@ -1,16 +1,7 @@
-#ifndef _LANG_TYPE_INFER_LAMBDA_H
-#define _LANG_TYPE_INFER_LAMBDA_H
-#include "../parse.h"
-#include "./inference.h"
+#ifndef _LANG_TYPES_INFER_LAMBDA_H
+#define _LANG_TYPES_INFER_LAMBDA_H
+
+#include "types/inference.h"
+#include "types/type.h"
 Type *infer_lambda(Ast *ast, TICtx *ctx);
-
-Type *create_coroutine_inst(Type *ret_type);
-
-Type *lower_recursive_cons_ref(Type *t, TypeEnv *env);
-
-Type *lower_recursive_ref(Type *t, TypeEnv *env);
-
-bool is_recursive_ref_container(Type *t);
-
-Type *hydrate_recursive_ref(Type *t, TypeEnv *env);
 #endif

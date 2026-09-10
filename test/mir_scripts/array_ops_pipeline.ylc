@@ -1,0 +1,28 @@
+let returned_array = fn n ->
+  [| n, n + 1, n + 2 |]
+;;
+
+let array_fill_const_ints = fn n ->
+  array_fill_const 3 n
+;;
+
+let array_fill_ints = fn n ->
+  array_fill 3 (fn i -> n + i)
+;;
+
+let array_range_borrow = fn n ->
+  let xs = returned_array n;
+  array_range 1 2 xs
+;;
+
+let array_offset_borrow = fn n ->
+  let xs = returned_array n;
+  array_offset 1 xs
+;;
+
+let array_succ_borrow = fn n ->
+  let xs = returned_array n;
+  array_succ xs
+;;
+
+0

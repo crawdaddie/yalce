@@ -1,9 +1,6 @@
 include ../.env
 # gui/Makefile
 
-# VST Library path
-# VST_LIB_PATH := ${VST_LIB_PATH}
-# VST_BUILD_PATH := $(VST_LIB_PATH)/build
 CC ?= clang
 CFLAGS += -g
 CFLAGS += -DYLC_LANG_DYN_LIB
@@ -13,7 +10,6 @@ CFLAGS := -Wall -Wextra -fPIC -I. \
 					-I${SDL2_TTF_PATH}/include \
 					-I${SDL2_GFX_PATH}/include \
 					-I../lang
-					# -I$(VST_LIB_PATH)/src \
 
 ifeq ($(shell uname -s),Darwin)
     LDFLAGS := -L$(shell brew --prefix sdl2)/lib -lSDL2 \

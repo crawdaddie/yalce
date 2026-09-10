@@ -1,0 +1,5 @@
+let Inner = module () ->
+  let add = fn x: (Int) y: (Int) ->
+    x + y
+  ;;
+;

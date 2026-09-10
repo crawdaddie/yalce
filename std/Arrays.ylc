@@ -2,7 +2,7 @@
 #   let idx = rand_int (array_size arr); arr @ idx 
 # ;;
 
-let print_arr = fn a: (Array of T) ->
+let print_arr = fn a ->
   print "[|"; 
   for i = 0 .. array_size a in (
     print `{a[i]}, `
@@ -10,7 +10,7 @@ let print_arr = fn a: (Array of T) ->
   print "|]\n" 
 ;;
 
-let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->
+let fold = fn f res a ->
   match array_size a with
   | 0 -> res
   | _ -> (
@@ -18,7 +18,7 @@ let fold = fn f: (R -> T -> R) res: (R) a: (Array of T) ->
   )
 ;;
 
-let foldi__ = fn idx: (Int) f: (Int -> R -> T -> R) res: (R) a: (Array of T) ->
+let foldi__ = fn idx f res a ->
   match array_size a with
   | 0 -> res
   | _ -> (
@@ -37,6 +37,15 @@ let map = fn f a ->
   );
   res
 ;;
+
+let map2 = fn f xs ys ->
+  let res = array_fill_const (array_size xs) (f (xs[0]) (ys[0]));
+  for i = 1 .. array_size xs in (
+    res[i] := f (xs[i]) (ys[i])
+  );
+  res
+;;
+
 
 let mapi = fn f a ->
   let res = array_fill_const (array_size a) (f 0 (a[0]));
@@ -77,64 +86,12 @@ let filter = fn f a ->
   list_to_arr (l[0]) res (s[0] - 1)
 ;;
 
-# let filter = fn f: (T -> Bool) a: (Array of T) ->
-#   let val0 = a[0];
-#
-#   let arr_to_list = fn s l arr ->
-#     match array_size arr with
-#     | 0 -> (l, s)
-#     | _ -> (
-#
-#       let v = arr[0];
-#       let passes = f v;
-#
-#       let x = if passes then (
-#         v::l
-#       ) else (
-#         l 
-#       );
-#
-#       arr_to_list (s + (Int passes)) x (array_offset 1 arr) 
-#     )
-#   ;;
-#   let l, s = arr_to_list 0 [val0, ] a;
-#
-#
-#
-#   let res = array_fill_const s val0;
-#
-#   let list_to_arr = fn l res i ->
-#     match i with 
-#     | 0 -> (
-#       let x::rest = l;
-#       res[i] := x;
-#       res
-#     )
-#     | _ -> (
-#       let x::rest = l;
-#       res[i] := x;
-#       list_to_arr rest res (i - 1)
-#     )
-#   ;;
-#   list_to_arr l res (s - 1)
-# ;;
-#
 
 
-let last = fn x: (Array of T) ->
+let last = fn x ->
   let len = array_size x in
   x [len - 1]
 ;;
-
-import std/Lists;
-let of_list = fn len l ->
-  let h::rest = l;
-  let arr = array_fill_const len h;
-
-  let (_, res) = Lists.fold (fn (i, r) x -> (r[i] := x; (i + 1, r))) (1, arr) rest;
-  res
-;;
-  
 
 let test = module () ->
   let test_sum_doubles = fold (+) 0. [|1., 2., 3.|] == 6.;
@@ -152,8 +109,10 @@ let test = module () ->
     s == [| 4., 5., 6.|]
   ;
 
-  let test_of_list = (of_list 3 [1,2,3]) == [|1,2,3|];
+  # let test_of_list = (of_list 3 [1,2,3]) == [|1,2,3|];
 
-  # let test_sum_foldi = (foldi (fn i r x -> r + i) [|1, 2, 3|]) == 6;
-  # let test_polynomial = fold (fn acc s -> acc * 4 + s) 0 [|0,1,2|] == 6;
+  # let test_sum_foldi = foldi (fn i r x -> r + i) [|1, 2, 3|] == 6;
+  # polynomial x [| a0, a1, ... an |] = a0x^n + a1x^n-1 + ... +an
+  let test_polynomial = fold (fn acc s -> acc * 4 + s) 0 [|0,1,2|] == 6;
+  let test_map2 = map2 (+) [|1., 2., 3.|] [| 3., 2., 1.|] == [|4., 4., 4.|]
 ;

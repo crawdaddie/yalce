@@ -1,0 +1,112 @@
+let consume_array = fn xs -> 0;;
+
+let returned_array = fn n ->
+  [| n, n + 1 |]
+;;
+
+let moved_call_arg = fn n ->
+  let xs = [| n, n + 1 |];
+  consume_array xs
+;;
+
+let duplicated_array = fn n ->
+  let xs = [| n, n + 1 |];
+  (xs, xs)
+;;
+
+let borrowed_array_size = fn n ->
+  let xs = [| n, n + 1 |];
+  let len = array_size xs;
+  (xs, len)
+;;
+
+let branch_drop_returned_array = fn flag n ->
+  let xs = returned_array n;
+  if flag then consume_array xs else 0
+;;
+
+let branch_consume_array = fn flag n ->
+  let xs = returned_array n;
+  if flag then consume_array xs else consume_array xs
+;;
+
+let branch_return_array = fn flag n ->
+  let m = n + 1;
+  if flag then returned_array n else returned_array m
+;;
+
+let phi_select_preexisting_array_consume = fn flag n ->
+  let left = returned_array n;
+  let right = returned_array (n + 1);
+  let xs = if flag then left else right;
+  consume_array xs
+;;
+
+let phi_select_preexisting_array_duplicate = fn flag n ->
+  let left = returned_array n;
+  let right = returned_array (n + 1);
+  let xs = if flag then left else right;
+  (xs, xs)
+;;
+
+let phi_select_preexisting_array_borrow_return = fn flag n ->
+  let left = returned_array n;
+  let right = returned_array (n + 1);
+  let xs = if flag then left else right;
+  array_size xs;
+  xs
+;;
+
+let match_unused_heap_result = fn flag n ->
+  let m = n + 1;
+  let xs = if flag then returned_array n else returned_array m;
+  0
+;;
+
+let tail_return_array = fn keep n xs ->
+  if keep then tail_return_array false n xs else xs
+;;
+
+let tail_return_array_entry = fn n ->
+  tail_return_array true n (returned_array n)
+;;
+
+let consume_list = fn xs -> 0;;
+
+let projected_list = fn n ->
+  let xs = [n, n + 1, ];
+  let box = [| xs |];
+  consume_list (box[0])
+;;
+
+let range_loop_borrow_array = fn n ->
+  let xs = returned_array n;
+  for i = 0 .. 3 in (
+    array_size xs
+  );
+  xs
+;;
+
+let range_loop_replace_array_cell = fn n ->
+  let cell = [| returned_array n |];
+  for i = 0 .. 3 in (
+    let xs = returned_array (n + i);
+    cell[0] := xs
+  );
+  cell[0]
+;;
+
+moved_call_arg 2;
+borrowed_array_size 2;
+branch_drop_returned_array true 2;
+branch_consume_array true 2;
+branch_return_array true 2;
+phi_select_preexisting_array_consume true 2;
+phi_select_preexisting_array_duplicate true 2;
+phi_select_preexisting_array_borrow_return true 2;
+match_unused_heap_result true 2;
+projected_list 2;
+range_loop_replace_array_cell 2;
+range_loop_borrow_array 2;
+tail_return_array_entry 2;
+duplicated_array 2;

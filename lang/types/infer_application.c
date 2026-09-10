@@ -1,433 +1,367 @@
 #include "./infer_application.h"
-#include "./builtins.h"
-#include "common.h"
 #include "serde.h"
-#include "types/type.h"
-#include "types/type_ser.h"
+#include "type_ser.h"
+#include "types/builtins.h"
 #include <string.h>
 
-Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx);
-
-Type *create_fn_from_cons(Type *res, Type *cons) {
-  Type *f = res;
-  for (int i = cons->data.T_CONS.num_args - 1; i >= 0; i--) {
-    // if (is_tuple_type(cons->data.T_CONS.args[i])) {
-    //   Type *t = cons->data.T_CONS.args[i];
-    //   for (int j = t->data.T_CONS.num_args - 1; j >= 0; j--) {
-    //
-    //     f = type_fn(t->data.T_CONS.args[j], f);
-    //   }
-    //
-    // } else {
-    //   f = type_fn(cons->data.T_CONS.args[i], f);
-    // }
-    //
-    f = type_fn(cons->data.T_CONS.args[i], f);
+static ModuleTypeMeta *get_module_type_meta(Type *type) {
+  if (!type) {
+    return NULL;
   }
-  return f;
-}
-
-Type *infer_cons_application(Type *cons, Ast *ast, TICtx *ctx) {
-
-  Type *f;
-  if (is_sum_type(cons)) {
-    Type *mem =
-        extract_member_from_sum_type(cons, ast->data.AST_APPLICATION.function);
-
-    if (!mem) {
-      fprintf(stderr, "Error: could not find member in sum type");
-      print_ast_err(ast->data.AST_APPLICATION.function);
-
-      return NULL;
-    }
-
-    f = create_fn_from_cons(cons, mem);
-
-  } else {
-    f = create_fn_from_cons(cons, cons);
+  Type *cur = type;
+  while (cur && cur->kind == T_FN) {
+    cur = cur->data.T_FN.to;
   }
-
-  Type *r = infer_fn_application(f, ast, ctx);
-
-  return r;
-}
-
-bool match_arg_lists(int len, Type **a, Type **b) {
-  for (int i = 0; i < len; i++) {
-    if (!types_match(a[i], b[i])) {
-      return false;
-    }
+  if (cur && cur->kind == T_MODULE) {
+    return (ModuleTypeMeta *)cur->meta;
   }
-  return true;
-}
-
-const char *find_constructor_method(Type *cons_mod, int len, Type **inputs,
-                                    int *index, Type **method) {
-
-  for (int i = 0; i < cons_mod->data.T_CONS.num_args; i++) {
-    Type *t = cons_mod->data.T_CONS.args[i];
-    if (t->kind == T_SCHEME) {
-      t = t->data.T_SCHEME.type;
-    }
-    int l = fn_type_args_len(t);
-    Type *cons_fn_types[l];
-    int j = 0;
-    for (Type *tt = t; tt->kind == T_FN; tt = tt->data.T_FN.to, j++) {
-      cons_fn_types[j] = tt->data.T_FN.from;
-    }
-
-    if (match_arg_lists(len, cons_fn_types, inputs)) {
-      *index = i;
-      *method = cons_mod->data.T_CONS.args[i];
-      return cons_mod->data.T_CONS.names[i];
-    }
-  }
-
   return NULL;
 }
-bool is_ident(Ast *ast, const char *name) {
-  return ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
-         CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-                  name);
-}
 
-Type *infer_constructor_application(TypeClass *constructor_tc, Type *cons,
-                                    Ast *ast, TICtx *ctx) {
-
-  if (!constructor_tc) {
-    return NULL;
+static Type *infer_module_type_arg(Ast *arg_ast, TICtx *ctx) {
+  if (!arg_ast || arg_ast->tag != AST_IDENTIFIER) {
+    return type_error(arg_ast, "Expected a type identifier as module type argument");
   }
 
-  int len = ast->data.AST_APPLICATION.len;
-  Type *fn_types[len];
+  const char *name = arg_ast->data.AST_IDENTIFIER.value;
+  Type *builtin = lookup_builtin_type(name);
+  if (builtin) {
+    return builtin;
+  }
 
+  TypeEnv *ref = lookup_type_ref(ctx->env, name);
+  if (ref && ref->md.type == BT_TYPE_DECL) {
+    return ref->type;
+  }
+
+  return type_error(arg_ast, "Unknown type argument '%s'", name);
+}
+
+static bool is_identifier_named(Ast *ast, const char *name) {
+  return ast && ast->tag == AST_IDENTIFIER &&
+         strcmp(ast->data.AST_IDENTIFIER.value, name) == 0;
+}
+
+static bool is_void_arg_function_type(Type *type) {
+  return type && type->kind == T_FN && type->data.T_FN.from &&
+         type->data.T_FN.from->kind == T_VOID;
+}
+
+static Type *cor_zip_struct_field_type(Type *field_type) {
+  if (!field_type) {
+    return NULL;
+  }
+  if (is_coroutine_type(field_type)) {
+    return field_type->data.T_CONS.args[0];
+  }
+  if (is_void_arg_function_type(field_type)) {
+    return fn_return_type(field_type);
+  }
+  return field_type;
+}
+
+static Type *infer_cor_zip_struct_application(Ast *ast, TICtx *ctx) {
+  if (ast->data.AST_APPLICATION.len != 1) {
+    return type_error(ast, "cor_zip_struct expects one tuple/record argument");
+  }
+
+  Ast *struct_ast = ast->data.AST_APPLICATION.args;
+  Type *struct_type = infer_expr(struct_ast, ctx);
+  if (!struct_type) {
+    return NULL;
+  }
+  if (struct_type->kind != T_CONS) {
+    return type_error(struct_ast,
+                      "cor_zip_struct expects a tuple/record argument");
+  }
+
+  int len = struct_type->data.T_CONS.num_args;
+  Type **yield_fields = t_alloc(sizeof(Type *) * len);
   for (int i = 0; i < len; i++) {
-    Ast *arg = ast->data.AST_APPLICATION.args + i;
-    fn_types[i] = infer(arg, ctx);
-  }
-
-  Type *cons_mod = constructor_tc->module;
-  Type *constructor_method_tscheme = NULL;
-
-  int index;
-  char *cons_method_name = find_constructor_method(
-      cons_mod, len, fn_types, &index, &constructor_method_tscheme);
-
-  // for (int i = 0; i < cons_mod->data.T_CONS.num_args; i++) {
-  //   Type *t = cons_mod->data.T_CONS.args[i];
-  //   if (t->kind == T_SCHEME) {
-  //     t = t->data.T_SCHEME.type;
-  //   }
-  //   int l = fn_type_args_len(t);
-  //   Type *cons_fn_types[l];
-  //   int j = 0;
-  //   for (Type *tt = t; tt->kind == T_FN; tt = tt->data.T_FN.to, j++) {
-  //     cons_fn_types[j] = tt->data.T_FN.from;
-  //   }
-  //
-  //   if (match_arg_lists(len, cons_fn_types, fn_types)) {
-  //     constructor_method_tscheme = cons_mod->data.T_CONS.args[i];
-  //     cons_method_name = cons_mod->data.T_CONS.names[i];
-  //     break;
-  //   }
-  // }
-
-  if (!cons_method_name) {
-    return NULL;
-  }
-  if (!constructor_method_tscheme) {
-    return NULL;
-  }
-
-  if (constructor_method_tscheme->kind == T_SCHEME) {
-    constructor_method_tscheme = instantiate(constructor_method_tscheme, ctx);
-  }
-
-  Type *res = infer_fn_application(constructor_method_tscheme, ast, ctx);
-  Type *expected_type = ast->data.AST_APPLICATION.function->type;
-
-  ast->data.AST_APPLICATION.function = ast_record_access(
-      ast->data.AST_APPLICATION.function,
-      ast_identifier((ObjString){.chars = cons_method_name,
-                                 .length = strlen(cons_method_name)}));
-
-  ast->data.AST_APPLICATION.function->data.AST_RECORD_ACCESS.record->type =
-      cons_mod;
-  ast->data.AST_APPLICATION.function->type = expected_type;
-  return res;
-}
-Type *transform_struct_of_coroutines(Type *a) {
-  if (a->kind != T_CONS) {
-    return NULL;
-  }
-  int num_fields = a->data.T_CONS.num_args;
-  Type **contained = t_alloc(sizeof(Type *) * num_fields);
-
-  bool has_names = a->data.T_CONS.names != NULL;
-  const char **names;
-  if (has_names) {
-    names = t_alloc(sizeof(char *) * num_fields);
-  }
-
-  for (int i = 0; i < num_fields; i++) {
-    // print_type(a->data.T_CONS.args[i]);
-    Type *field_type = a->data.T_CONS.args[i];
-    if (is_coroutine_type(field_type)) {
-      contained[i] = field_type->data.T_CONS.args[0];
-    } else if (field_type->kind == T_FN &&
-               types_equal(field_type->data.T_FN.from, &t_void)) {
-      contained[i] = field_type->data.T_FN.to;
-    } else {
-      contained[i] = field_type;
-    }
-    if (has_names) {
-      names[i] = a->data.T_CONS.names[i];
-    }
-  }
-  Type *res_struct = create_tuple_type(num_fields, contained);
-  res_struct->data.T_CONS.names = names;
-
-  return create_coroutine_instance_type(res_struct);
-}
-
-// T-App: Γ ⊢ e₁ : τ₁    Γ ⊢ e₂ : τ₂    α fresh    S = unify(τ₁, τ₂ → α)
-//        ──────────────────────────────────────────────────────────────
-//                            Γ ⊢ e₁ e₂ : S(α)
-Type *infer_application(Ast *ast, TICtx *ctx) {
-
-  Ast *func = ast->data.AST_APPLICATION.function;
-
-  // Step 1: Infer function type
-  Type *func_type = infer(func, ctx);
-
-  if (!func_type) {
-    print_ast_err(ast);
-    return type_error(ast, "Cannot infer type of applicable");
-  }
-
-  // if (ast->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
-  //     CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-  //              "iter")) {
-  if (is_ident(ast, "iter")) {
-    Type *iterable = infer(ast->data.AST_APPLICATION.args, ctx);
-
-    // TODO: replace with "implements trait 'iter' ? "
-    if (is_list_type(iterable) || is_array_type(iterable)) {
-      Type *opt = iterable->data.T_CONS.args[0];
-      ast->data.AST_APPLICATION.function->type =
-          create_coroutine_instance_type(iterable->data.T_CONS.args[0]);
-      return opt;
-    }
-
-    fprintf(stderr, "Error: ");
-    print_type_err(iterable);
-    fprintf(stderr, "does not implement Iter");
-    print_ast_err(ast->data.AST_APPLICATION.args);
-    return NULL;
-  }
-
-  if (is_ident(ast, "cor_zip")) {
-    Type *cor_a = infer(ast->data.AST_APPLICATION.args, ctx);
-    Type *cor_b = infer(ast->data.AST_APPLICATION.args + 1, ctx);
-
-    // printf("handle zip tuple flattening???\n");
-    //
-    // print_ast(ast);
-    // print_type(cor_a->data.T_CONS.args[0]);
-    // print_type(cor_b->data.T_CONS.args[0]);
-
-    Type *res = create_coroutine_instance_type(
-        concat_tuples(cor_a->data.T_CONS.args[0], cor_b->data.T_CONS.args[0]));
-    return res;
-  }
-
-  if (is_ident(ast, "cor_zip_struct")) {
-    Type *str = infer(ast->data.AST_APPLICATION.args, ctx);
-
-    Type *res = transform_struct_of_coroutines(str);
-    if (!res) {
-      fprintf(
-          stderr,
-          "Error: could not zip struct fields into single coroutine type\n");
+    yield_fields[i] =
+        cor_zip_struct_field_type(struct_type->data.T_CONS.args[i]);
+    if (!yield_fields[i]) {
       return NULL;
     }
-
-    return res;
-
-    // printf("handle zip tuple flattening???\n");
-    //
-    // print_ast(ast);
-    // print_type(cor_a->data.T_CONS.args[0]);
-    // print_type(cor_b->data.T_CONS.args[0]);
   }
 
-  if (is_coroutine_type(func_type) &&
-      ast->data.AST_APPLICATION.args->tag == AST_VOID) {
-
-    Type f = MAKE_FN_TYPE_2(&t_void,
-                            create_option_type(func_type->data.T_CONS.args[0]));
-    return infer_fn_application(&f, ast, ctx);
-  }
-
-  TypeClass *cons_tc = get_typeclass_by_name(func_type, "Constructor");
-  if (cons_tc) {
-    return infer_constructor_application(cons_tc, func_type, ast, ctx);
-  }
-
-  if (is_coroutine_constructor_type(func_type)) {
-    func_type = func_type->data.T_CONS.args[0];
-
-    // print_ast(ast);
-    // print_type(func_type);
-    Type *t = infer_fn_application(func_type, ast, ctx);
-    if (is_coroutine_type(t->data.T_CONS.args[0])) {
-      t = t->data.T_CONS.args[0];
-    }
-    return t;
-  }
-
-  if (func_type->kind == T_CONS) {
-    return infer_cons_application(func_type, ast, ctx);
-  }
-  if (IS_PRIMITIVE_TYPE(func_type)) {
-    infer(ast->data.AST_APPLICATION.args, ctx);
-    return func_type;
-  }
-
-  Type *x = infer_fn_application(func_type, ast, ctx);
-
-  if (is_ident(ast, "array_fill_const")) {
-
-    if (has_attr(ast->data.AST_APPLICATION.args->type->attr,
-                 ATTR_COMPILE_TIME_CONST)) {
-      x->attr = set_attr(x->attr, ATTR_COMPILE_TIME_CONST);
-    }
-  }
-
-  if (is_ident(ast, "array_size")) {
-    if (has_attr(ast->data.AST_APPLICATION.args->type->attr,
-                 ATTR_COMPILE_TIME_CONST)) {
-      x->attr = set_attr(x->attr, ATTR_COMPILE_TIME_CONST);
-      x->meta = ast->data.AST_APPLICATION.args->type->meta;
-    }
-  }
-
-  return x;
+  Type *yield_tuple = create_tuple_type(len, yield_fields);
+  yield_tuple->data.T_CONS.names = struct_type->data.T_CONS.names;
+  return create_coroutine_instance_type(yield_tuple);
 }
 
-bool has_const_args(Type *fn_type, Ast *args, int len) {
-  for (int i = 0; i < len; i++) {
-    if (!has_attr(args[i].type->attr, ATTR_COMPILE_TIME_CONST)) {
-      return false;
-    }
+Type *callable_view(Type *type) {
+  if (type && is_coroutine_type(type)) {
+    return type_fn(&t_void, create_option_type(type->data.T_CONS.args[0]));
   }
-
-  if (is_closure(fn_type)) {
-    Type *cl_meta = fn_type->closure_meta;
-    for (int i = 0; i < cl_meta->data.T_CONS.num_args; i++) {
-
-      Type **cl_args = cl_meta->data.T_CONS.args;
-      if (!has_attr(cl_args[i]->attr, ATTR_COMPILE_TIME_CONST)) {
-        return false;
-      }
-    }
-  }
-  return true;
+  return type;
 }
 
-Type *infer_fn_application(Type *func_type, Ast *ast, TICtx *ctx) {
+// Expand a Variadic template to match a target function type's arity.
+// variadic = Variadic(Double -> Double), target = a -> b -> R (arity 2)
+// → produces Double -> Double -> Double (repeating the last param).
+static Type *extend_variadic_template(Type *variadic, Type *target) {
+  Type *variadic_fn = variadic->data.T_CONS.args[0];
+  int target_arity = fn_type_args_len(target);
+  int template_arity = fn_type_args_len(variadic_fn);
 
-  Ast *func = ast->data.AST_APPLICATION.function;
-
-  int expected_args_len = fn_type_args_len(func_type);
-
-  Ast *args = ast->data.AST_APPLICATION.args;
-  int num_args = ast->data.AST_APPLICATION.len;
-
-  // Step 2: Infer argument types
-  Type **arg_types = t_alloc(sizeof(Type *) * num_args);
-
-  for (int i = 0; i < num_args; i++) {
-
-    arg_types[i] = infer(args + i, ctx);
-
-    if (!arg_types[i]) {
-      return type_error(ast, "Cannot infer argument %d type", i + 1);
-    }
-  }
-
-  // Step 3: Create expected function type
-  Type *result_type = next_tvar();
-  Type *expected_type = result_type;
-
-  // Build expected type: arg1 -> arg2 -> ... -> result
-  for (int i = num_args - 1; i >= 0; i--) {
-    expected_type = type_fn(arg_types[i], expected_type);
-    // printf("%d: ", i);
-    // print_ast(args + i);
-    // print_type(arg_types[i]);
-  }
-
-  // Step 4: Unify function type with expected type
-  TICtx unify_ctx = {};
-  if (unify(func_type, expected_type, &unify_ctx)) {
-    type_error(ast, "Function application type mismatch : ");
-    print_type_err(func_type);
-    fprintf(stderr, "  != \n");
-    print_type_err(expected_type);
+  if (!variadic_fn || variadic_fn->kind != T_FN || target->kind != T_FN ||
+      template_arity <= 0 || target_arity < template_arity) {
     return NULL;
   }
 
-  ctx->constraints = merge_constraints(ctx->constraints, unify_ctx.constraints);
+  Type **param_types = t_alloc(sizeof(Type *) * target_arity);
+  Type *last_param_type = NULL;
+  int fixed_prefix_arity = template_arity - 1;
+  int i = 0;
 
-  // Step 5: Solve constraints and apply substitutions
-  Subst *solution = solve_constraints(unify_ctx.constraints);
-
-  ctx->subst = compose_subst(solution, ctx->subst);
-
-  if (is_closure(func_type)) {
-    expected_type->closure_meta = deep_copy_type(func_type->closure_meta);
-  }
-
-  expected_type = apply_substitution(solution, expected_type);
-  for (int i = 0; i < num_args; i++) {
-    Ast *arg_ast = args + i;
-    if (arg_ast->tag == AST_LAMBDA ||
-        arg_ast->tag == AST_APPLICATION && arg_ast->type->kind == T_FN) {
-      apply_substitution_to_lambda_body(arg_ast, solution);
+  for (Type *v = variadic_fn; v && v->kind == T_FN; v = v->data.T_FN.to, i++) {
+    last_param_type = v->data.T_FN.from;
+    if (i < fixed_prefix_arity) {
+      param_types[i] = deep_copy_type(v->data.T_FN.from);
     }
   }
 
-  // if
-  // (CHARS_EQ(ast->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
-  //              ">")) {
-  //   print_ast(ast);
-  //   print_type(expected_type);
-  //   print_constraints(unify_ctx.constraints);
-  // }
-
-  expected_type->data.T_FN.attributes = func_type->data.T_FN.attributes;
-  ast->data.AST_APPLICATION.function->type = expected_type;
-
-  Type *res = expected_type;
-
-  for (int n = num_args; n; n--) {
-    res = res->data.T_FN.to;
+  for (i = fixed_prefix_arity; i < target_arity; i++) {
+    param_types[i] = deep_copy_type(last_param_type);
   }
 
-  if (expected_args_len > num_args) {
-    res = deep_copy_type(res);
-    // printf("curried???\n");
-    // print_type(func_type);
-    Type **_arg_types = t_alloc(sizeof(Type *) * num_args);
-    memcpy(_arg_types, arg_types, sizeof(Type *) * num_args);
-    Type *closure_meta = create_tuple_type(num_args, _arg_types);
-    res->closure_meta = closure_meta;
+  return create_type_multi_param_fn(
+      target_arity, param_types, deep_copy_type(fn_return_type(variadic_fn)));
+}
+
+// Like extend_variadic_template, but for a target whose first parameter is a
+// unit (void) argument — `fn () -> R`. Such a lambda has no real signal
+// argument, so matching `Variadic(Double ... -> Double)` should yield `() ->
+// R` (the void param preserved) rather than forcing the void arg to the
+// template's repeated Double.
+static Type *extend_variadic_template_void(Type *variadic, Type *target) {
+  Type *variadic_fn = variadic->data.T_CONS.args[0];
+  if (!variadic_fn || variadic_fn->kind != T_FN || target->kind != T_FN) {
+    return NULL;
+  }
+  // `() -> R`: one void param, result is the target's return type.
+  return type_fn(&t_void, deep_copy_type(fn_return_type(variadic_fn)));
+}
+
+// Check if a type carries a Variadic constraint (stored on meta).
+// Returns the Variadic T_CONS if present, NULL otherwise.
+static Type *get_variadic_constraint(Type *t) {
+  if (t && t->meta) {
+    Type *constraint = (Type *)t->meta;
+    if (constraint->kind == T_CONS &&
+        strcmp(constraint->data.T_CONS.name, "Variadic") == 0) {
+      return constraint;
+    }
+  }
+  return NULL;
+}
+
+static bool types_compatible_ignoring_closure_meta(Type *param_type,
+                                                   Type *arg_type) {
+  if (!param_type || !arg_type) {
+    return false;
   }
 
-  if (has_attr(expected_type->data.T_FN.attributes, FN_ATTR_PURE) &&
-      has_const_args(expected_type, args, num_args)) {
-    res->attr = set_attr(res->attr, ATTR_COMPILE_TIME_CONST);
+  if (param_type->kind == T_FN && arg_type->kind == T_FN) {
+    return types_compatible_ignoring_closure_meta(param_type->data.T_FN.from,
+                                                 arg_type->data.T_FN.from) &&
+           types_compatible_ignoring_closure_meta(param_type->data.T_FN.to,
+                                                 arg_type->data.T_FN.to) &&
+           param_type->is_coroutine_instance == arg_type->is_coroutine_instance;
   }
-  return res;
+
+  return types_match(param_type, arg_type) || types_match(arg_type, param_type);
+}
+
+static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
+                                             Type *param_type, Ast *arg_ast) {
+  // Variadic structural constraint: if the parameter type carries a Variadic
+  // template (stored on meta), expand it to match the argument's arity and
+  // add a constraint.  This constrains each lambda arg to the template's last
+  // param type (e.g. Double) and the result to the template's return type.
+  Type *variadic = get_variadic_constraint(param_type);
+  if (variadic && arg_type && arg_type->kind == T_FN) {
+    // A lambda with a unit parameter — `fn () -> ...` — has no real signal
+    // argument. Match it against `Variadic(Double ... -> Double)` as `() ->
+    // R` (the void param preserved) rather than forcing the void arg to the
+    // template's repeated Double. The param is still a fresh tvar here (it is
+    // only constrained to void later), so detect it from the lambda's AST.
+    bool arg_has_void_param =
+        arg_ast && arg_ast->tag == AST_LAMBDA &&
+        arg_ast->data.AST_LAMBDA.params &&
+        arg_ast->data.AST_LAMBDA.params->ast->tag == AST_VOID;
+    Type *expanded = arg_has_void_param
+                         ? extend_variadic_template_void(variadic, arg_type)
+                         : extend_variadic_template(variadic, arg_type);
+    if (expanded) {
+      // Link the parameter (a tvar carrying the Variadic meta) to the
+      // argument so the function's result type tracks the argument. Then
+      // structurally constrain the argument to the expanded template, which
+      // fixes each lambda parameter and the result to the template's types.
+      add_constraint(ctx, param_type, arg_type);
+      add_constraint(ctx, arg_type, expanded);
+      return;
+    }
+  }
+
+  bool structurally_compatible =
+      types_match(param_type, arg_type) || types_match(arg_type, param_type) ||
+      types_compatible_ignoring_closure_meta(param_type, arg_type);
+  bool closure_callable_compatible =
+      param_type && arg_type && param_type->kind == T_FN &&
+      arg_type->kind == T_FN &&
+      types_compatible_ignoring_closure_meta(param_type, arg_type);
+
+  if (types_equal(arg_type, param_type) ||
+      closure_callable_compatible ||
+      structurally_compatible) {
+    add_constraint(ctx, arg_type, param_type);
+    return;
+  }
+
+  if (is_coroutine_type(param_type)) {
+    Type *yielded = param_type->data.T_CONS.args[0];
+    if (is_list_type(arg_type)) {
+      Type *elem = type_of_list(arg_type);
+      if (elem) {
+        add_constraint(ctx, yielded, elem);
+      }
+    } else if (is_array_type(arg_type)) {
+      add_constraint(ctx, yielded, arg_type->data.T_CONS.args[0]);
+    }
+  }
+
+  if (is_array_type(param_type) && is_list_type(arg_type)) {
+    Type *elem = type_of_list(arg_type);
+    if (elem) {
+      add_constraint(ctx, param_type->data.T_CONS.args[0], elem);
+    }
+  }
+
+  TypeList *from_params = t_alloc(sizeof(TypeList));
+  from_params->type = arg_type;
+  from_params->next = NULL;
+  ctx->predicates = predicate_append_applied(ctx->predicates, GenericFrom,
+                                             param_type, from_params);
+}
+Type *handle_closure_constants(Ast *ast, Type *type, TICtx *ctx) {
+  if (!is_constant_expr(ast, ctx)) {
+    return type;
+  }
+
+  int i = 0;
+  Type *f = ast->data.AST_APPLICATION.function->type;
+  for (; f->kind == T_FN && !is_closure(f); f = f->data.T_FN.to) {
+    i++;
+  }
+
+  if (ast->data.AST_APPLICATION.len == i) {
+    return type;
+  }
+
+  // The remaining callable after consuming the constant arguments is itself a
+  // closure. We cannot turn it into a plain curried function because it still
+  // needs its closure environment at runtime.
+  if (is_closure(f)) {
+    return type;
+  }
+
+  ast->data.AST_APPLICATION.is_curried_with_constants = true;
+  Type *result = deep_copy_type(type);
+  result->closure_meta = NULL;
+  return result;
+}
+
+Type *infer_application(Ast *ast, TICtx *ctx) {
+  Ast *fn_ast = ast->data.AST_APPLICATION.function;
+  size_t nargs = ast->data.AST_APPLICATION.len;
+
+  Type *fn_type = infer_expr(fn_ast, ctx);
+
+  if (!fn_type) {
+    return NULL;
+  }
+
+  if (is_identifier_named(fn_ast, "cor_zip_struct")) {
+    return infer_cor_zip_struct_application(ast, ctx);
+  }
+
+  size_t module_type_arg_count = 0;
+  Type *current = fn_type;
+  ModuleTypeMeta *module_meta = get_module_type_meta(fn_type);
+  if (module_meta && module_meta->num_type_params > 0) {
+    module_type_arg_count = (size_t)module_meta->num_type_params;
+    if (nargs < module_type_arg_count) {
+      return type_error(ast, "Not enough module type arguments");
+    }
+
+    Subst *module_subst = NULL;
+    for (size_t i = 0; i < module_type_arg_count; i++) {
+      Type *resolved_arg_type =
+          infer_module_type_arg(ast->data.AST_APPLICATION.args + i, ctx);
+      if (!resolved_arg_type) {
+        return NULL;
+      }
+      Type *param_type = module_meta->type_params[i];
+      if (!param_type || param_type->kind != T_VAR) {
+        return type_error(ast->data.AST_APPLICATION.args + i,
+                          "Invalid module type parameter");
+      }
+      module_subst = subst_table_extend(module_subst,
+                                        param_type->data.T_VAR.id,
+                                        resolved_arg_type);
+    }
+    current = apply_subst_to_type(module_subst, deep_copy_type(fn_type));
+  }
+
+  int expected_args_len = fn_type_args_len(current);
+
+  size_t runtime_nargs = nargs - module_type_arg_count;
+  Type *arg_types[runtime_nargs > 0 ? runtime_nargs : 1];
+  for (size_t i = module_type_arg_count; i < nargs; i++) {
+    current = callable_view(current);
+
+    Type *arg_type = infer_expr(ast->data.AST_APPLICATION.args + i, ctx);
+    arg_types[i - module_type_arg_count] = arg_type;
+    if (!arg_type)
+      return NULL;
+
+    if (current->kind == T_FN) {
+      Type *param_type = current->data.T_FN.from;
+      // A void (unit) parameter — `fn () -> ...` — denotes a function that
+      // takes no real argument. When such a function is applied to an
+      // argument (a common trigger idiom like `trig 0`), the argument is
+      // ignored rather than constrained against `()`, which would otherwise
+      // spuriously require `From((), [arg])`.
+      if (param_type->kind != T_VOID) {
+        constrain_argument_for_parameter(ctx, arg_type, param_type,
+                                         ast->data.AST_APPLICATION.args + i);
+      }
+      current = current->data.T_FN.to;
+    } else {
+      // function position has too few params / is not a function
+      Type *result = next_tvar();
+      Type *expected = type_fn(arg_type, result);
+      add_constraint(ctx, current, expected);
+      current = result;
+    }
+  }
+  if (current->kind == T_MODULE && runtime_nargs == 0 &&
+      module_type_arg_count > 0) {
+    return current;
+  }
+  if (expected_args_len > (int)runtime_nargs) {
+    Type **_arg_types = t_alloc(sizeof(Type *) * runtime_nargs);
+    memcpy(_arg_types, arg_types, sizeof(Type *) * runtime_nargs);
+    Type *closure_meta = create_tuple_type(runtime_nargs, _arg_types);
+    current = deep_copy_type(current);
+    current->closure_meta = closure_meta;
+  }
+
+  if (current->kind == T_FN) {
+    return handle_closure_constants(ast, current, ctx);
+  } else {
+    return current;
+  }
 }

@@ -21,9 +21,12 @@ LANG_SRC_DIR := lang
 LANG_SRCS := $(filter-out $(LANG_SRC_DIR)/y.tab.c $(LANG_SRC_DIR)/lex.yy.c, $(wildcard $(LANG_SRC_DIR)/*.c))
 
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/types/*.c)
+LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/mir/*.c)
+LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/llvm/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/backend_llvm/coroutines/*.c)
 LANG_SRCS += $(wildcard $(LANG_SRC_DIR)/runtime/*.c)
+LANG_HEADERS := $(shell find $(LANG_SRC_DIR) -name '*.h')
 
 # C++ sources for coroutine pass integration
 LANG_CPP_SRCS := $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.cpp)
@@ -52,7 +55,7 @@ LANG_LD_FLAGS += -L$(READLINE_PREFIX)/lib -lreadline
 LANG_LD_FLAGS += -rdynamic
 
 LANG_CC += -DLLVM_BACKEND
-LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core analysis executionengine mcjit interpreter native`
+LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core linker bitreader analysis executionengine mcjit interpreter native`
 
 ifeq ($(MAKECMDGOALS),debug)
   LANG_LD_FLAGS += -lz -lzstd -lc++ -lc++abi -lncurses 
@@ -77,10 +80,13 @@ RANGE_SERVER_TARGET := $(BUILD_DIR)/tools/ylc_range_server
 LSP_SERVER_SRC := tools/ylc_lsp_server.c
 LSP_SERVER_OBJ := $(BUILD_DIR)/tools/ylc_lsp_server.o
 LSP_SERVER_TARGET := $(BUILD_DIR)/tools/ylc_lsp_server
+MIR_OPERAND_METADATA_TEST_SRC := test/test_mir_operand_metadata.c
+MIR_OPERAND_METADATA_TEST_OBJ := $(BUILD_DIR)/test_mir_operand_metadata.o
+MIR_OPERAND_METADATA_TEST_TARGET := $(BUILD_DIR)/test_mir_operand_metadata
 JSON_C_CFLAGS := $(shell pkg-config --cflags json-c 2>/dev/null)
 JSON_C_LIBS := $(shell pkg-config --libs json-c 2>/dev/null)
 
-.PHONY: all clean engine audio_jit gui gfx test wasm serve_docs engine_bindings cor range_server lsp_server test_range_server test_range_server_tool test_lsp_server
+.PHONY: all clean engine audio_jit gui gfx test wasm serve_docs engine_bindings cor range_server lsp_server test_range_server test_range_server_tool test_lsp_server test_mir_pipeline test_mir_operand_metadata
 
 all: $(BUILD_DIR)/ylc
 
@@ -110,6 +116,8 @@ $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)/types
 	mkdir -p $(BUILD_DIR)/runtime
 	mkdir -p $(BUILD_DIR)/tools
+	mkdir -p $(BUILD_DIR)/mir
+	mkdir -p $(BUILD_DIR)/llvm
 
 # Define Linux-specific YACC flags
 ifeq ($(shell uname -s),Linux)
@@ -125,18 +133,21 @@ $(LEX_OUTPUT): $(LEX_FILE)
 	flex --header-file=$(LANG_SRC_DIR)/lex.yy.h -o $(LEX_OUTPUT) $(LEX_FILE)
 
 # Build language object files
-$(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(LANG_HEADERS) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
 	$(LANG_CC) -c -o $@ $<
 
 # Build C++ object files for coroutine passes
-$(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.cpp | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.cpp $(LANG_HEADERS) | $(BUILD_DIR)
 	$(LANG_CXX) -c -o $@ $<
 
-$(RANGE_SERVER_OBJ): $(RANGE_SERVER_SRC) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
+$(RANGE_SERVER_OBJ): $(RANGE_SERVER_SRC) $(LANG_HEADERS) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
 	$(LANG_CC) -c -o $@ $<
 
-$(LSP_SERVER_OBJ): $(LSP_SERVER_SRC) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
+$(LSP_SERVER_OBJ): $(LSP_SERVER_SRC) $(LANG_HEADERS) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
 	$(LANG_CC) $(JSON_C_CFLAGS) -c -o $@ $<
+
+$(MIR_OPERAND_METADATA_TEST_OBJ): $(MIR_OPERAND_METADATA_TEST_SRC) $(LANG_HEADERS) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
+	$(LANG_CC) -c -o $@ $<
 
 # Build the final executable (use C++ linker since we have C++ objects)
 $(BUILD_DIR)/ylc: $(LANG_OBJS) | audio_jit gui
@@ -156,6 +167,12 @@ $(LSP_SERVER_TARGET): $(LSP_SERVER_OBJ) $(RANGE_SERVER_LANG_OBJS) | $(BUILD_DIR)
 	$(LANG_CXX) -o $@ $(LSP_SERVER_OBJ) $(RANGE_SERVER_LANG_OBJS) $(LANG_LD_FLAGS) $(JSON_C_LIBS)
 
 lsp_server: $(LSP_SERVER_TARGET)
+
+$(MIR_OPERAND_METADATA_TEST_TARGET): $(MIR_OPERAND_METADATA_TEST_OBJ) $(RANGE_SERVER_LANG_OBJS) | $(BUILD_DIR)
+	$(LANG_CXX) -o $@ $(MIR_OPERAND_METADATA_TEST_OBJ) $(RANGE_SERVER_LANG_OBJS) $(LANG_LD_FLAGS)
+
+test_mir_operand_metadata: $(MIR_OPERAND_METADATA_TEST_TARGET)
+	$(MIR_OPERAND_METADATA_TEST_TARGET)
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -185,6 +202,9 @@ test_lsp_server: lsp_server
 
 test_scripts:
 	$(MAKE) -C test test_scripts
+
+test_mir_pipeline:
+	$(MAKE) -C test test_mir_pipeline
 
 wasm:
 	./build_wasm.sh

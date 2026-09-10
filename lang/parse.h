@@ -28,6 +28,16 @@ typedef struct {
 
 extern ParsingContext pctx;
 
+typedef struct parse_error_info {
+  bool has_error;
+  int line;
+  int col;
+  long long absolute_offset;
+  const char *filename;
+  char message[128];
+  char near_text[64];
+} parse_error_info;
+
 void set_base_dir(const char *);
 
 // extern custom_binops_t *__custom_binops;
@@ -47,6 +57,11 @@ int yyparse();
 void yyrestart(FILE *);
 
 void yyerror(const char *s);
+void parse_clear_error(void);
+void parse_record_error(const char *message, int line, int col,
+                        long long absolute_offset, const char *near_text,
+                        const char *filename);
+const parse_error_info *parse_last_error(void);
 
 int yylex(void);
 
@@ -159,6 +174,7 @@ typedef enum ast_tag {
   AST_STRING = 3,
   AST_CHAR = 4,
   AST_BOOL = 5,
+  AST_UINT64,
   AST_IDENTIFIER,
   AST_BODY,
   AST_LET,
@@ -190,6 +206,7 @@ typedef enum ast_tag {
   AST_LOOP,
   AST_GET_ARG,
   AST_TRAIT_IMPL,
+
 } ast_tag;
 
 struct Ast {
@@ -211,11 +228,16 @@ struct Ast {
       Ast *expr;
       Ast *in_expr;
       bool is_mut;
+      bool is_decorated_let;
     } AST_LET;
 
     struct AST_INT {
       int value;
     } AST_INT;
+
+    struct AST_UINT64 {
+      uint64_t value;
+    } AST_UINT64;
 
     struct AST_FLOAT {
       float value;
@@ -473,6 +495,7 @@ typedef struct AstVisitor {
   // Optional: visitor-specific data
   void *data; // Generic pointer for visitor-specific state
 } AstVisitor;
+
 Ast *ast_module(Ast *lambda);
 // extern char *__import_current_dir;
 Ast *ast_import_stmt(ObjString path_identifier, bool import_all);
@@ -496,5 +519,13 @@ bool find_top_level_range_at_line(Ast *root, const char *src, int line,
 
 Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
                           Ast *lambda_expr);
+
+Ast *ast_decorated_signature(ObjString decorator, ObjString binding,
+                             Ast *lambda_expr);
+
+Ast *ast_variadic_expr(Ast *ast);
+Ast *ast_not(Ast *ast);
 // Ast *array_offset_expression(Ast *array, Ast *index_expr);
+//
+Ast *ast_import_from_uri(ObjString uri, bool import_all);
 #endif

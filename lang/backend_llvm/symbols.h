@@ -25,6 +25,9 @@ JITSymbol *lookup_id_ast(Ast *id, JITLangCtx *ctx);
 JITSymbol *new_symbol(symbol_type type_tag, Type *symbol_type, LLVMValueRef val,
                       LLVMTypeRef llvm_type);
 
+LLVMValueRef rematerialize_function_symbol(JITSymbol *sym, JITLangCtx *ctx,
+                                           LLVMModuleRef module);
+
 JITSymbol *create_generic_fn_symbol(Ast *fn_ast, JITLangCtx *ctx);
 
 LLVMValueRef create_generic_fn_binding(Ast *binding, Ast *fn_ast,

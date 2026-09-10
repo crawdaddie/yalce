@@ -48,4 +48,7 @@ LLVMValueRef codegen_dummy_coroutine_ref(Ast *ast, JITLangCtx *ctx,
                                          LLVMBuilderRef builder);
 
 Ast *optimise_coro_combinators(Ast *ast);
+
+LLVMValueRef IterHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                         LLVMBuilderRef builder);
 #endif

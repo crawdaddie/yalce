@@ -1,4 +1,5 @@
 #include "./function_extern.h"
+#include "strings.h"
 #include "types.h"
 #include "types/type_ser.h"
 #include "llvm-c/Core.h"
@@ -15,6 +16,13 @@ LLVMValueRef get_extern_fn(const char *name, LLVMTypeRef fn_type,
     // This ensures LLVM uses the platform's C ABI, including proper
     // struct return handling (sret) for large return values
     LLVMSetFunctionCallConv(fn, LLVMCCallConv);
+
+    // hash_string only reads its pointer argument; without this LLVM's
+    // dead-store elimination removes the stores feeding the buffer (since
+    // the extern is otherwise treated as not reading memory).
+    if (strcmp(name, "hash_string") == 0) {
+      set_memory_effects(fn, MEM_ARGMEM_REF);
+    }
   }
   return fn;
 }
@@ -26,10 +34,6 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int name_len = strlen(name);
   Type *fn_type = ast->type;
 
-  if (fn_type->kind == T_SCHEME) {
-    TICtx _c = {.env = ctx->env};
-    fn_type = instantiate(fn_type, &_c);
-  }
   int params_count = fn_type_args_len(fn_type);
 
   if (params_count == 1 && fn_type->data.T_FN.from->kind == T_VOID) {
@@ -48,10 +52,8 @@ LLVMValueRef codegen_extern_fn(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 LLVMValueRef instantiate_extern_fn_sym(JITSymbol *sym, JITLangCtx *ctx,
                                        LLVMModuleRef module,
                                        LLVMBuilderRef builder) {
-  if (sym->val == NULL) {
-    LLVMValueRef val = codegen_extern_fn(
-        sym->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast, ctx, module, builder);
-    sym->val = val;
-  }
+  LLVMValueRef val = codegen_extern_fn(
+      sym->symbol_data.STYPE_LAZY_EXTERN_FUNCTION.ast, ctx, module, builder);
+  sym->val = val;
   return sym->val;
 }

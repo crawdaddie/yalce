@@ -6,8 +6,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef void *(*perform_func_t)(void *ptr, void *state, void *inputs,
-                                int nframes, double spf);
+typedef void (*frame_perform_func_t)(void *ptr, void *state, void *inputs,
+                                     int frame, double spf);
+typedef void (*node_state_init_func_t)(void *state);
 
 // Buffer / Signal information
 typedef struct {
@@ -23,26 +24,41 @@ typedef struct {
 } Connection;
 
 typedef struct Node {
-  perform_func_t perform; // Node processing function
+  frame_perform_func_t frame_perform;
   int frame_offset;
-  int node_index;                     // Position in the graph array
   int num_inputs;                     // Number of inputs this node has
   Connection connections[MAX_INPUTS]; // Input connections
   Signal output;                      // Output buffer
   int state_size;                     // Size of node-specific state
-  int state_offset;                   // Offset to state in state memory pool
   int write_to_output;
   bool trig_end;
   struct Node *next; // For execution ordering
   char *meta;
   void *state_ptr;
+  node_state_init_func_t state_init;
   struct Node *bus;
+  struct Node *alloc_next; // For host-owned allocation tracking (ylc_clap)
+  struct Node *mix_head;  // Mix bus: head of summed source nodes (this node is
+                          // a mix bus when non-NULL)
+  struct Node *mix_next;  // Mix bus: link to the next source in the bus's list
 } Node;
 
 typedef Node *NodeRef;
 typedef Signal *SignalRef;
 typedef Node *Synth;
 
-void offset_node_bufs(Node *node, int frame_offset);
-void unoffset_node_bufs(Node *node, int frame_offset);
+/* Pluggable node allocator. A host (e.g. ylc_clap) can install its own
+   allocator to own node memory/lifetimes instead of using the default
+   calloc/free. When the installed allocator is NULL, node creation falls
+   back to calloc/free so the standalone engine/audio_jit path is
+   unchanged. */
+typedef struct ylc_node_allocator {
+  void *(*alloc)(size_t size, void *user_data);
+  void (*free)(void *ptr, void *user_data);
+  void *user_data;
+} ylc_node_allocator_t;
+
+const ylc_node_allocator_t *ylc_node_allocator_get(void);
+void ylc_node_allocator_set(const ylc_node_allocator_t *allocator);
+
 #endif

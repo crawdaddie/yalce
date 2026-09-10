@@ -1,0 +1,13 @@
+open engine/bindings/SynthEngine;
+open engine/bindings/Sched;
+
+let sample_rate = 48000;
+
+let Audio = extern fn (T: (Double ... -> Double)) -> T;
+
+# Table-lookup sine oscillator. Arg: frequency in Hz.
+let sin_osc = extern fn Double -> Double;
+# Table-lookup square oscillator. Arg: frequency in Hz.
+let sq_osc = extern fn Double -> Double;
+
+let _ = dlopen "./libaudio_jit_mlir.so";

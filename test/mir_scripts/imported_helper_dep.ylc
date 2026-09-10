@@ -1,0 +1,7 @@
+let helper = fn x: (Int) ->
+  x + 1
+;;
+
+let start = fn x: (Int) ->
+  helper x
+;;

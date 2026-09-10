@@ -26,6 +26,8 @@ LLVMValueRef StringFmtHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
 LLVMValueRef PrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                           LLVMBuilderRef builder);
+LLVMValueRef FPrintHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
+                           LLVMBuilderRef builder);
 
 LLVMTypeRef string_struct_type(LLVMTypeRef data_ptr_type);
 
@@ -34,5 +36,13 @@ LLVMValueRef stringify_value(LLVMValueRef val, Type *val_type, JITLangCtx *ctx,
 
 LLVMValueRef print_str(LLVMValueRef val, JITLangCtx *ctx, LLVMModuleRef module,
                        LLVMBuilderRef builder);
+LLVMValueRef fprint_str(LLVMValueRef file, LLVMValueRef val,
+                        LLVMModuleRef module, LLVMBuilderRef builder);
+
+// Memory effects encoding: 2 bits per location kind
+#define MEM_ARGMEM_REF (1)
+#define MEM_ARGMEM_MODREF (3)
+#define MEM_INACCESSIBLE_MODREF (3 << 2)
+void set_memory_effects(LLVMValueRef fn, uint64_t effects);
 
 #endif

@@ -1,0 +1,4 @@
+
+import std/Arrays;
+print `{Arrays.fold (+) 0. [|1., 2., 3.|]}\n`;
+print `{Arrays.fold (fn acc s -> (acc * 4) + s) 0 [|0, 1, 2|]}\n`;

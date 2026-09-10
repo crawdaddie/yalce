@@ -1,9 +1,6 @@
 #include "./ctx.h"
 #include "./node.h"
-#include "audio_graph.h"
 #include "audio_routing.h"
-#include "ext_lib.h"
-#include "group.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -28,25 +25,27 @@ void init_ctx() {
 }
 
 void audio_ctx_add(Node *node) {
+  if (!node) {
+    return;
+  }
   node->write_to_output = true;
   node_group_state *ctx = &get_audio_ctx()->graph;
+  node->next = NULL;
 
-  // Add to existing chain
   if (ctx->head == NULL) {
     ctx->head = node;
-    ctx->tail = ctx->head;
+    ctx->tail = node;
   } else {
-    // Find the end of the chain
-    Node *current = ctx->head;
-    while (current->next != NULL) {
-      current = (Node *)current->next;
-    }
-    // Append to the end
-    current->next = node;
+    ctx->tail->next = node;
+    ctx->tail = node;
   }
+  audio_ctx_mark_dirty();
 }
 
 void audio_ctx_add_before(Node *target, Node *node) {
+  if (!node) {
+    return;
+  }
   node->write_to_output = true;
   node_group_state *ctx = &get_audio_ctx()->graph;
 
@@ -54,6 +53,7 @@ void audio_ctx_add_before(Node *target, Node *node) {
     node->next = NULL;
     ctx->head = node;
     ctx->tail = node;
+    audio_ctx_mark_dirty();
     return;
   }
 
@@ -71,24 +71,21 @@ void audio_ctx_add_before(Node *target, Node *node) {
     }
     current->next = node;
     node->next = NULL;
+    ctx->tail = node;
+    audio_ctx_mark_dirty();
     return;
   }
 
   if (prev == NULL) {
     node->next = ctx->head;
     ctx->head = node;
+    audio_ctx_mark_dirty();
     return;
   }
 
   node->next = prev->next;
   prev->next = node;
-}
-
-Node *add_to_dac(Node *node) {
-  // return NULL;
-  // node->type = OUTPUT;
-  // node->write_to_dac = true;
-  return node;
+  audio_ctx_mark_dirty();
 }
 
 Ctx *get_audio_ctx() { return &ctx; }
@@ -99,3 +96,5 @@ double ctx_spf() { return ctx.spf; }
 
 double *ctx_main_out() { return ctx.output_buf; }
 void set_main_vol(double vol) { ctx.main_vol = vol; }
+
+void audio_ctx_mark_dirty(void) { ctx.graph.generation++; }

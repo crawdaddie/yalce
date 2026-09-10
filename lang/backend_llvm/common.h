@@ -29,11 +29,12 @@ typedef struct {
 typedef struct {
 } AllocatorCtx;
 
-typedef struct {
+typedef struct JITLangCtx {
   // ht stack[STACK_MAX];
   int stack_ptr;
   StackFrame *frame;
   TypeEnv *env;
+  Subst *type_subst;
   int *num_globals;
   void **global_storage_array;
   int *global_storage_capacity;
@@ -49,8 +50,14 @@ typedef struct {
 typedef struct SpecificFns {
   Type *arg_types_key;
   LLVMValueRef func;
+  char *jit_name;
   struct SpecificFns *next;
 } SpecificFns;
+
+typedef enum ModuleParamKind {
+  MODULE_PARAM_TYPE = 0,
+  MODULE_PARAM_VALUE = 1,
+} ModuleParamKind;
 
 typedef struct coroutine_generator_symbol_data_t {
   Ast *ast;
@@ -72,6 +79,7 @@ typedef enum symbol_type {
   STYPE_VARIANT_TYPE,
   STYPE_GENERIC_CONSTRUCTOR,
   STYPE_GENERIC_FUNCTION,
+  STYPE_GENERIC_MODULE,
 } symbol_type;
 
 extern int REGISTERED_JIT_SYMBOL_TYPE;
@@ -101,6 +109,7 @@ typedef struct {
   LLVMTypeRef llvm_type;
   LLVMValueRef val;
   LLVMValueRef storage;
+  char *jit_name;
   union {
     int STYPE_TOP_LEVEL_VAR;
 
@@ -120,6 +129,17 @@ typedef struct {
       SpecificFns *specific_fns;
       BuiltinHandler builtin_handler;
     } STYPE_GENERIC_FUNCTION;
+
+    struct {
+      Ast *ast;
+      int stack_ptr;
+      StackFrame *stack_frame;
+      TypeEnv *type_env;
+      SpecificFns *specific_fns;
+      ModuleParamKind *param_kinds;
+      int num_type_params;
+      int num_value_params;
+    } STYPE_GENERIC_MODULE;
 
     struct {
       JITLangCtx *ctx;

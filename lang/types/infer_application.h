@@ -1,9 +1,9 @@
-#ifndef _LANG_TYPE_INFER_APPLICATION__H
-#define _LANG_TYPE_INFER_APPLICATION__H
+#ifndef _LANG_TYPES_INFER_APPLICATION_H
+#define _LANG_TYPES_INFER_APPLICATION_H
+
 #include "types/inference.h"
 #include "types/type.h"
 Type *infer_application(Ast *ast, TICtx *ctx);
 
-const char *find_constructor_method(Type *cons_mod, int len, Type **inputs,
-                                    int *index, Type **method);
+Type *callable_view(Type *type);
 #endif

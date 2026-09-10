@@ -11,6 +11,7 @@ char *resolve_relative_path(const char *base_path, const char *relative_path);
 char *normalize_path(const char *path);
 
 void init_readline();
+void save_history();
 void add_completion_item(const char *item, int count);
 
 const char *get_mod_name_from_path_identifier(const char *str);

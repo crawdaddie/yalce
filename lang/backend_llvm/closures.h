@@ -24,6 +24,10 @@ LLVMValueRef codegen_create_closure(Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder);
 
+LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
+                                      LLVMModuleRef module,
+                                      LLVMBuilderRef builder);
+
 LLVMValueRef create_closure_symbol(Ast *binding, Ast *expr, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder);
@@ -34,11 +38,10 @@ LLVMTypeRef closure_fn_type(Type *clos_type, LLVMTypeRef rec_type,
 LLVMTypeRef closure_record_type(Type *clos_type, JITLangCtx *ctx,
                                 LLVMModuleRef module);
 
+LLVMTypeRef get_named_closure_type(LLVMModuleRef module);
+
 LLVMValueRef codegen_lambda_closure(Type *fn_type, Ast *ast, JITLangCtx *ctx,
                                     LLVMModuleRef module,
                                     LLVMBuilderRef builder);
 
-LLVMValueRef codegen_const_curried_fn(Ast *ast, JITLangCtx *ctx,
-                                      LLVMModuleRef module,
-                                      LLVMBuilderRef builder);
 #endif

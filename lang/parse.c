@@ -10,9 +10,32 @@
 #include <unistd.h>
 
 ParsingContext pctx = {.custom_binops = NULL};
+static parse_error_info last_parse_error = {0};
 
 const char *__base_dir = NULL;
 void set_base_dir(const char *dir) { __base_dir = dir; }
+
+void parse_clear_error(void) { memset(&last_parse_error, 0, sizeof(last_parse_error)); }
+
+void parse_record_error(const char *message, int line, int col,
+                        long long absolute_offset, const char *near_text,
+                        const char *filename) {
+  if (last_parse_error.has_error) {
+    return;
+  }
+
+  last_parse_error.has_error = true;
+  last_parse_error.line = line > 0 ? line : 1;
+  last_parse_error.col = col > 0 ? col : 1;
+  last_parse_error.absolute_offset = absolute_offset >= 0 ? absolute_offset : 0;
+  last_parse_error.filename = filename;
+  snprintf(last_parse_error.message, sizeof(last_parse_error.message), "%s",
+           message ? message : "syntax error");
+  snprintf(last_parse_error.near_text, sizeof(last_parse_error.near_text), "%s",
+           near_text ? near_text : "");
+}
+
+const parse_error_info *parse_last_error(void) { return &last_parse_error; }
 
 static void *__palloc(size_t size) {
   void *mem = malloc(size);
@@ -336,10 +359,8 @@ Ast *ast_test_module(Ast *expr) {
     // don't parse this unless in test context
     return NULL;
   }
-  Ast *node = Ast_new(AST_LET);
   Ast *id = ast_identifier((ObjString){"test", 4});
-  node->data.AST_LET.binding = id;
-  node->data.AST_LET.expr = expr;
+  Ast *node = ast_let(id, expr, NULL);
   ast_copy_loc(node, expr);
   return node;
 }
@@ -384,6 +405,7 @@ Ast *parse_input(char *input, const char *dirname) {
   // _cur_script = "tmp.ylc";
   // _cur_script_content = input;
   yy_scan_string(input); // Set the input for the lexer
+  parse_clear_error();
   yyparse();             // Parse the input
 
   Ast *res = pctx.ast_root;
@@ -421,6 +443,7 @@ Ast *parse_input_buffer(const char *filename, const char *input) {
 
   YY_BUFFER_STATE new_buffer = yy_scan_string((char *)input);
   reset_parser_position();
+  parse_clear_error();
   yyparse();
   yy_delete_buffer(new_buffer);
   return pctx.ast_root;
@@ -953,7 +976,8 @@ bool ast_is_placeholder_id(Ast *ast) {
     return false;
   }
 
-  if (*(ast->data.AST_IDENTIFIER.value) == '_') {
+  if (ast->data.AST_IDENTIFIER.length == 1 &&
+      *(ast->data.AST_IDENTIFIER.value) == '_') {
     return true;
   }
 
@@ -1250,7 +1274,17 @@ static ParsingContext save_parsing_context() {
 // Function to restore parsing context
 static void restore_parsing_context(ParsingContext ctx) { ctx = ctx; }
 
+static bool path_has_url_scheme(const char *path) {
+  return path &&
+         (strncmp(path, "http://", 7) == 0 ||
+          strncmp(path, "https://", 8) == 0 || strncmp(path, "ylc://", 6) == 0);
+}
+
 char *check_path(char *fully_qualified_name, char *rel_path) {
+  if (path_has_url_scheme(fully_qualified_name)) {
+    return fully_qualified_name;
+  }
+
   if (access(fully_qualified_name, F_OK) != 0 &&
       (ylc_config.base_libs_dir != NULL)) {
 
@@ -1260,6 +1294,10 @@ char *check_path(char *fully_qualified_name, char *rel_path) {
 
     sprintf(new_filename, "%s/%s", ylc_config.base_libs_dir, rel_path);
     fully_qualified_name = new_filename;
+
+    if (path_has_url_scheme(fully_qualified_name)) {
+      return fully_qualified_name;
+    }
 
     if (access(fully_qualified_name, F_OK) != 0) {
       return NULL;
@@ -1350,6 +1388,7 @@ Ast *parse_input_script(const char *filename) {
 
   // Parse the input
   reset_parser_position();
+  parse_clear_error();
   yyparse();
 
   // Save the result
@@ -1425,6 +1464,11 @@ bool find_top_level_range_at_line(Ast *root, const char *src, int line,
   }
 
   return false;
+}
+
+Ast *ast_import_from_uri(ObjString uri, bool import_all) {
+  printf("import from uri %s\n", uri.chars);
+  return NULL;
 }
 
 Ast *ast_import_stmt(ObjString path_identifier, bool import_all) {
@@ -1505,16 +1549,48 @@ Ast *array_range_expression(Ast *array, Ast *start_expr, Ast *end_expr) {
 
 Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
                           Ast *lambda_expr) {
-  // printf("%s = @ %s --\n", binding.chars, decorator.chars);
+  // printf("decoration\n");
   // print_ast(lambda_expr);
-  if (lambda_expr->tag == AST_LAMBDA) {
+
+  if (lambda_expr->tag == AST_MODULE) {
     lambda_expr->data.AST_LAMBDA.fn_name = binding;
     Ast *dec_id = ast_identifier(decorator);
     Ast *bind = ast_identifier(binding);
-    Ast *let = ast_let(bind, lambda_expr, NULL);
-    return ast_application(dec_id, let);
+    Ast *let = ast_let(bind, ast_application(dec_id, lambda_expr), NULL);
+    return let;
+  }
+  //   lambda_expr->data.AST_LAMBDA.fn_name = binding;
+  //   Ast *dec_id = ast_identifier(decorator);
+  //   Ast *bind = ast_identifier(binding);
+  //   Ast *let = ast_let(bind, lambda_expr, NULL);
+  //   let->data.AST_LET.is_decorated_let = true;
+  //   return ast_application(dec_id, let);
+  // }
+
+  if (lambda_expr->tag == AST_LAMBDA) {
+    // print_ast(lambda_expr);
+    lambda_expr->data.AST_LAMBDA.fn_name = binding;
+    Ast *dec_id = ast_identifier(decorator);
+    Ast *bind = ast_identifier(binding);
+    Ast *let = ast_let(bind, ast_application(dec_id, lambda_expr), NULL);
+    return let;
   }
   return NULL;
+}
+
+Ast *ast_decorated_signature(ObjString decorator, ObjString binding,
+                             Ast *signature_expression) {
+  if (signature_expression->tag != AST_LIST) {
+    return NULL;
+  }
+
+  Ast *dec_id = ast_identifier(decorator);
+  Ast *bind = ast_identifier(binding);
+  Ast *let = ast_let(
+      bind,
+      ast_application(dec_id, ast_extern_fn(binding, signature_expression)),
+      NULL);
+  return let;
 }
 // Ast *array_offset_expression(Ast *array, Ast *index_expr) {
 //   printf("Array offset expr\n");
@@ -1524,3 +1600,13 @@ Ast *ast_decorated_lambda(ObjString decorator, ObjString binding,
 //                       index_expr),
 //       array);
 // }
+//
+//
+Ast *ast_variadic_expr(Ast *ast) {
+  return ast_cons_decl(TOKEN_OF, ast_identifier((ObjString){"Variadic", 8}),
+                       ast);
+}
+
+Ast *ast_not(Ast *ast) {
+  return ast_application(ast_identifier((ObjString){"!", 1}), ast);
+}

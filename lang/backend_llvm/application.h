@@ -16,6 +16,4 @@ LLVMValueRef handle_type_conversions(LLVMValueRef val, Type *from_type,
 LLVMValueRef call_callable(Ast *ast, Type *callable_type, LLVMValueRef callable,
                            JITLangCtx *ctx, LLVMModuleRef module,
                            LLVMBuilderRef builder);
-
-Type *resolve_sym_type(Type *exp, Type *sym_type, TypeEnv *env);
 #endif

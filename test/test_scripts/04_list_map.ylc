@@ -19,4 +19,5 @@ let list_map = fn f l ->
 
 let test = module () ->
   let test_map_plus = (list_map ((+) 1) [0,1,2,3]) == [1,2,3,4];
+  let test_map_to_double = list_map (fn x -> Double x) [0,1,2,3] == [0.,1.,2.,3.];
 ;

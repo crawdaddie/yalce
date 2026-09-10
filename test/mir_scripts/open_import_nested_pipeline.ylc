@@ -1,0 +1,9 @@
+open open_import_nested_dep;
+
+let Outer = module () ->
+  let f = fn x: (Int) ->
+    Inner.add x 1
+  ;;
+;
+
+let main = Outer.f 2;

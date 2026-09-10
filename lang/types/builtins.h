@@ -1,8 +1,8 @@
 #ifndef _LANG_TYPE_BUILTINS_H
 #define _LANG_TYPE_BUILTINS_H
 #include "../ht.h"
+#include "./inference.h"
 #include "type.h"
-extern ht builtin_types;
 
 extern Type t_int;
 extern Type t_uint64;
@@ -18,14 +18,77 @@ extern Type t_ptr;
 extern Type t_none;
 
 extern Type t_builtin_print;
+extern Type t_builtin_fprintf;
+
+typedef struct BuiltinEnvRefs {
+  TypeEnv *print;
+  TypeEnv *fprintf;
+  TypeEnv *str;
+  TypeEnv *some;
+  TypeEnv *list_concat;
+  TypeEnv *array_at;
+  TypeEnv *array_size;
+  TypeEnv *array_set;
+  TypeEnv *array_fill_const;
+  TypeEnv *array_uninit;
+  TypeEnv *array_fill;
+  TypeEnv *array_range;
+  TypeEnv *array_succ;
+  TypeEnv *array_offset;
+  TypeEnv *list_prepend;
+  TypeEnv *cstr;
+  TypeEnv *sizeof_env;
+  TypeEnv *cor_map;
+  TypeEnv *cor_map_opt;
+  TypeEnv *cor_loop;
+  TypeEnv *cor_zip;
+  TypeEnv *cor_zip_struct;
+  TypeEnv *cor_current;
+  TypeEnv *cor_try_opt;
+  TypeEnv *iter;
+  TypeEnv *play_routine;
+  TypeEnv *play_routine_quant;
+  TypeEnv *dlopen_env;
+  TypeEnv *is_null;
+  TypeEnv *asbytes;
+  TypeEnv *typeof_env;
+  TypeEnv *arith_add;
+  TypeEnv *arith_sub;
+  TypeEnv *arith_mul;
+  TypeEnv *arith_div;
+  TypeEnv *arith_mod;
+  TypeEnv *eq;
+  TypeEnv *neq;
+  TypeEnv *lt;
+  TypeEnv *lte;
+  TypeEnv *gt;
+  TypeEnv *gte;
+  TypeEnv *logical_and;
+  TypeEnv *logical_or;
+  TypeEnv *logical_not;
+} BuiltinEnvRefs;
+
+extern BuiltinEnvRefs builtin_envs;
 
 void initialize_builtin_types();
-void add_builtin(char *name, Type *t);
 
-void print_builtin_types();
-
+// Deprecated: old API returning Type* (uses T_SCHEME internally).
+// Prefer lookup_builtin_env() for the new predicate-aware type system.
 Type *lookup_builtin_type(const char *name);
 
+// New API: builtins stored as TypeEnv entries with predicates.
+TypeEnv *lookup_builtin_env(const char *name);
+void builtin_env_foreach(void (*callback)(const char *name, TypeEnv *entry,
+                                          void *ctx),
+                         void *ctx);
+
+// Convenience: expose the generic typeclasses for external use.
+extern TypeClass *GenericArithmetic;
+extern TypeClass *GenericOrd;
+extern TypeClass *GenericEq;
+extern TypeClass *GenericFrom;
+
+// Kept for backward compat with existing callers — will be removed.
 extern Type arithmetic_scheme;
 extern Type ord_scheme;
 extern Type eq_scheme;
@@ -75,4 +138,5 @@ extern Type asbytes_scheme;
 extern Type typeof_scheme;
 extern Type cor_zip_scheme;
 extern Type is_null_type;
+void print_builtin_types(void);
 #endif

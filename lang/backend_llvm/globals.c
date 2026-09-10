@@ -1,7 +1,9 @@
 #include "backend_llvm/globals.h"
 #include "backend_llvm/common.h"
 #include "symbols.h"
+#include "types.h"
 #include "llvm-c/Core.h"
+#include <stdio.h>
 #include <string.h>
 
 // Global variables
@@ -9,8 +11,36 @@ LLVMValueRef global_storage_array_llvm;
 LLVMValueRef global_storage_size_llvm;
 
 #define _GLOBAL_STORAGE_SIZE 1024
-#define _VOID_PTR_T LLVMPointerType(LLVMInt8Type(), 0)
-#define _GLOBAL_STORAGE_TYPE LLVMArrayType(_VOID_PTR_T, _GLOBAL_STORAGE_SIZE)
+
+static LLVMContextRef module_context(LLVMModuleRef module) {
+  return LLVMGetModuleContext(module);
+}
+
+static LLVMTypeRef void_ptr_type(LLVMModuleRef module) {
+  return LLVMPointerType(LLVMInt8TypeInContext(module_context(module)), 0);
+}
+
+static LLVMTypeRef global_storage_type(LLVMModuleRef module) {
+  return LLVMArrayType(void_ptr_type(module), _GLOBAL_STORAGE_SIZE);
+}
+
+static LLVMValueRef i32_const(LLVMModuleRef module, unsigned value) {
+  return LLVMConstInt(LLVMInt32TypeInContext(module_context(module)), value,
+                      false);
+}
+
+static LLVMTypeRef symbol_storage_type(JITSymbol *sym, JITLangCtx *ctx,
+                                       LLVMModuleRef module) {
+  if (sym->symbol_type) {
+    Type *type = specialize_type_for_codegen(sym->symbol_type, ctx);
+    LLVMTypeRef llvm_type = type_to_llvm_type(type, ctx, module);
+    if (llvm_type) {
+      return llvm_type;
+    }
+  }
+
+  return sym->llvm_type;
+}
 
 LLVMValueRef get_global_storage_array(LLVMModuleRef module) {
 
@@ -22,7 +52,7 @@ LLVMValueRef get_global_storage_array(LLVMModuleRef module) {
   if (storage_array == NULL) {
     // printf("global_storage_array not found, recreating...\n");
     storage_array =
-        LLVMAddGlobal(module, _GLOBAL_STORAGE_TYPE, "global_storage_array");
+        LLVMAddGlobal(module, global_storage_type(module), "global_storage_array");
     LLVMSetLinkage(storage_array, LLVMExternalLinkage);
   }
   return storage_array;
@@ -42,18 +72,18 @@ void codegen_set_global(const char *sym_name, JITSymbol *sym,
 
   snprintf(buf, 32, "%s_generic_ptr", sym_name);
   LLVMValueRef generic_ptr =
-      LLVMBuildBitCast(builder, malloced_space, _VOID_PTR_T, buf);
+      LLVMBuildBitCast(builder, malloced_space, void_ptr_type(module), buf);
   int slot = *ctx->num_globals;
   sym->symbol_data.STYPE_TOP_LEVEL_VAR = slot;
 
-  LLVMValueRef slot_index = LLVMConstInt(LLVMInt32Type(), slot, false);
+  LLVMValueRef slot_index = i32_const(module, slot);
 
-  LLVMValueRef indices[] = {ZERO, slot_index};
+  LLVMValueRef indices[] = {i32_const(module, 0), slot_index};
 
   snprintf(buf, 32, "%s_slot_ptr", sym_name);
   LLVMValueRef storage_array = get_global_storage_array(module);
 
-  LLVMValueRef slot_ptr = LLVMBuildGEP2(builder, _GLOBAL_STORAGE_TYPE,
+  LLVMValueRef slot_ptr = LLVMBuildGEP2(builder, global_storage_type(module),
                                         storage_array, indices, 2, buf);
 
   LLVMBuildStore(builder, generic_ptr, slot_ptr);
@@ -62,22 +92,28 @@ void codegen_set_global(const char *sym_name, JITSymbol *sym,
 }
 
 LLVMValueRef codegen_get_global(const char *sym_name, JITSymbol *sym,
-                                LLVMModuleRef module, LLVMBuilderRef builder) {
+                                JITLangCtx *ctx, LLVMModuleRef module,
+                                LLVMBuilderRef builder) {
   char buf[32];
   int slot = sym->symbol_data.STYPE_TOP_LEVEL_VAR;
-  LLVMTypeRef llvm_type = sym->llvm_type;
+  LLVMTypeRef llvm_type = symbol_storage_type(sym, ctx, module);
+  if (!llvm_type) {
+    fprintf(stderr, "Error: could not rematerialize global type for %s\n",
+            sym_name);
+    return NULL;
+  }
 
-  LLVMValueRef slot_index = LLVMConstInt(LLVMInt32Type(), slot, false);
+  LLVMValueRef slot_index = i32_const(module, slot);
 
-  LLVMValueRef indices[] = {ZERO, slot_index};
+  LLVMValueRef indices[] = {i32_const(module, 0), slot_index};
   snprintf(buf, 32, "%s_slot_ptr", sym_name);
 
   LLVMValueRef storage_array = get_global_storage_array(module);
-  LLVMValueRef slot_ptr = LLVMBuildGEP2(builder, _GLOBAL_STORAGE_TYPE,
+  LLVMValueRef slot_ptr = LLVMBuildGEP2(builder, global_storage_type(module),
                                         storage_array, indices, 2, buf);
 
   LLVMValueRef generic_ptr =
-      LLVMBuildLoad2(builder, _VOID_PTR_T, slot_ptr, "void_ptr");
+      LLVMBuildLoad2(builder, void_ptr_type(module), slot_ptr, "void_ptr");
 
   LLVMValueRef typed_ptr = LLVMBuildBitCast(
       builder, generic_ptr, LLVMPointerType(llvm_type, 0), "typed_ptr");
@@ -90,9 +126,10 @@ LLVMValueRef codegen_get_global(const char *sym_name, JITSymbol *sym,
 
 void setup_global_storage(LLVMModuleRef module, LLVMBuilderRef builder) {
   global_storage_array_llvm =
-      LLVMAddGlobal(module, _GLOBAL_STORAGE_TYPE, "global_storage_array");
+      LLVMAddGlobal(module, global_storage_type(module), "global_storage_array");
   LLVMSetLinkage(global_storage_array_llvm, LLVMExternalLinkage);
 
   global_storage_size_llvm =
-      LLVMAddGlobal(module, LLVMInt32Type(), "global_storage_size");
+      LLVMAddGlobal(module, LLVMInt32TypeInContext(module_context(module)),
+                    "global_storage_size");
 }

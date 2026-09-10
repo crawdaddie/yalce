@@ -3,9 +3,18 @@ local M = {}
 local config = {
 	cmd = { "ylc" },
 	interactive_flag = "-i",
+	terminal_backend = "nvim",
+	notebook_terminal_backend = nil,
 	open_cmd = "botright vsplit",
 	close_term_on_successful_exit = true,
 	env = {},
+	kitty = {
+		cmd = { "kitty" },
+		title = "ylc.nvim",
+		socket = nil,
+		startup_delay_ms = 250,
+		extra_args = {},
+	},
 	debugger_cmd = { "lldb" },
 	lsp = {
 		enabled = true,
@@ -16,11 +25,15 @@ local config = {
 }
 
 local state = {
+	backend = nil,
 	job_id = nil,
 	term_buf = nil,
 	term_win = nil,
 	script_path = nil,
 	debug_active = false,
+	kitty_socket = nil,
+	kitty_title = nil,
+	kitty_window_id = nil,
 }
 
 local autocmd_group = vim.api.nvim_create_augroup("ylc.nvim", { clear = true })
@@ -82,14 +95,117 @@ local function escape_text(text)
 end
 
 local function reset_state()
+	state.backend = nil
 	state.job_id = nil
 	state.term_buf = nil
 	state.term_win = nil
 	state.script_path = nil
 	state.debug_active = false
+	state.kitty_socket = nil
+	state.kitty_title = nil
+	state.kitty_window_id = nil
+end
+
+local function kitty_cmd()
+	return tbl_copy(config.kitty.cmd or { "kitty" })
+end
+
+local function kitty_executable()
+	local cmd = config.kitty.cmd or { "kitty" }
+	return cmd[1] or "kitty"
+end
+
+local function kitty_socket_path()
+	if config.kitty.socket and config.kitty.socket ~= "" then
+		return config.kitty.socket
+	end
+	return string.format("/tmp/ylc-nvim-%d.sock", vim.fn.getpid())
+end
+
+local function kitty_title()
+	return string.format("%s-%d", config.kitty.title or "ylc.nvim", vim.fn.getpid())
+end
+
+local function kitty_target()
+	return "unix:" .. state.kitty_socket
+end
+
+local function kitty_remote(args, stdin)
+	if not state.kitty_socket then
+		return false, "Kitty socket is not initialized"
+	end
+
+	local cmd = kitty_cmd()
+	cmd[#cmd + 1] = "@"
+	cmd[#cmd + 1] = "--to"
+	cmd[#cmd + 1] = kitty_target()
+	for _, arg in ipairs(args) do
+		cmd[#cmd + 1] = arg
+	end
+
+	local output = vim.fn.system(cmd, stdin or "")
+	return vim.v.shell_error == 0, output
+end
+
+local function decode_json(text)
+	if vim.json and vim.json.decode then
+		local ok, decoded = pcall(vim.json.decode, text)
+		if ok then
+			return decoded
+		end
+	end
+
+	local ok, decoded = pcall(vim.fn.json_decode, text)
+	if ok then
+		return decoded
+	end
+
+	return nil
+end
+
+local function first_kitty_window_id(tree)
+	if type(tree) ~= "table" then
+		return nil
+	end
+
+	for _, os_window in ipairs(tree) do
+		for _, tab in ipairs(os_window.tabs or {}) do
+			for _, window in ipairs(tab.windows or {}) do
+				if window.id ~= nil then
+					return tostring(window.id)
+				end
+			end
+		end
+	end
+
+	return nil
+end
+
+local function record_kitty_window_id(output)
+	local id = first_kitty_window_id(decode_json(output))
+	if not id then
+		return false
+	end
+
+	state.kitty_window_id = id
+	return true
+end
+
+local function is_kitty_running()
+	if state.backend ~= "kitty" or not state.kitty_socket then
+		return false
+	end
+	local ok, output = kitty_remote({ "ls" })
+	if ok and not record_kitty_window_id(output) then
+		state.kitty_window_id = nil
+	end
+	return ok
 end
 
 local function is_job_running()
+	if state.backend == "kitty" then
+		return is_kitty_running()
+	end
 	return state.job_id and vim.fn.jobwait({ state.job_id }, 0)[1] == -1
 end
 
@@ -105,8 +221,17 @@ local function is_notebook_path(path)
 	return type(path) == "string" and path:sub(-6) == ".ylcnb"
 end
 
+local function has_cell_markers(bufnr)
+	for _, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
+		if is_cell_marker(line) then
+			return true
+		end
+	end
+	return false
+end
+
 local function current_buffer_is_notebook()
-	return is_notebook_path(current_file_path())
+	return is_notebook_path(current_file_path()) or has_cell_markers(0)
 end
 
 local function current_env()
@@ -145,6 +270,156 @@ local function lsp_root_dir(bufnr)
 	return vim.fs.dirname(path)
 end
 
+local function lsp_cmd_executable(cmd)
+	if type(cmd) == "string" then
+		return cmd
+	end
+	if type(cmd) == "table" then
+		return cmd[1]
+	end
+	return nil
+end
+
+local function path_basename(path)
+	if not path or path == "" then
+		return nil
+	end
+	if vim.fs.basename then
+		return vim.fs.basename(path)
+	end
+	return path:match("([^/\\]+)$") or path
+end
+
+local function normalize_lsp_root(root)
+	if type(root) ~= "string" or root == "" then
+		return nil
+	end
+	return vim.fs.normalize(root)
+end
+
+local function lsp_roots_match(a, b)
+	local left = normalize_lsp_root(a)
+	local right = normalize_lsp_root(b)
+	return left ~= nil and right ~= nil and left == right
+end
+
+local function lsp_cmds_match(a, b)
+	local left = lsp_cmd_executable(a)
+	local right = lsp_cmd_executable(b)
+	if not left or not right then
+		return false
+	end
+
+	if vim.fn.exepath(left) ~= "" then
+		left = vim.fn.exepath(left)
+	end
+	if vim.fn.exepath(right) ~= "" then
+		right = vim.fn.exepath(right)
+	end
+
+	left = vim.fs.normalize(left)
+	right = vim.fs.normalize(right)
+	return left == right or path_basename(left) == path_basename(right)
+end
+
+local function is_ylc_lsp_client(client, conf)
+	if not client then
+		return false
+	end
+
+	if client.name == conf.name then
+		return true
+	end
+
+	local client_cmd = client.config and client.config.cmd
+	return lsp_cmds_match(client_cmd, conf.cmd) or path_basename(lsp_cmd_executable(client_cmd)) == "ylc_lsp_server"
+end
+
+local function ylc_lsp_client_reusable(client, conf)
+	if not is_ylc_lsp_client(client, conf) then
+		return false
+	end
+
+	local client_root = client.config and client.config.root_dir
+	return lsp_roots_match(client_root, conf.root_dir)
+end
+
+local function ylc_lsp_clients_for_root(conf)
+	local clients = {}
+	for _, client in ipairs(vim.lsp.get_clients()) do
+		if ylc_lsp_client_reusable(client, conf) then
+			clients[#clients + 1] = client
+		end
+	end
+
+	table.sort(clients, function(a, b)
+		return (a.id or 0) < (b.id or 0)
+	end)
+	return clients
+end
+
+local function attach_lsp_client(bufnr, client)
+	if not (client and client.id and vim.api.nvim_buf_is_valid(bufnr)) then
+		return
+	end
+	if not vim.lsp.buf_is_attached(bufnr, client.id) then
+		pcall(vim.lsp.buf_attach_client, bufnr, client.id)
+	end
+end
+
+local function detach_lsp_client(bufnr, client)
+	if not (client and client.id and vim.api.nvim_buf_is_valid(bufnr)) then
+		return
+	end
+	if vim.lsp.buf_is_attached(bufnr, client.id) then
+		pcall(vim.lsp.buf_detach_client, bufnr, client.id)
+	end
+end
+
+local function lsp_client_buffers(client)
+	if not (client and client.id) then
+		return {}
+	end
+
+	local buffers = {}
+	for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+		if vim.api.nvim_buf_is_valid(bufnr) and vim.lsp.buf_is_attached(bufnr, client.id) then
+			buffers[#buffers + 1] = bufnr
+		end
+	end
+	return buffers
+end
+
+local function stop_lsp_client(client)
+	if client and client.stop then
+		pcall(function()
+			client:stop()
+		end)
+	end
+end
+
+local function consolidate_ylc_lsp_clients(bufnr, conf)
+	local clients = ylc_lsp_clients_for_root(conf)
+	local primary = clients[1]
+
+	if not primary then
+		return nil
+	end
+
+	attach_lsp_client(bufnr, primary)
+
+	for i = 2, #clients do
+		local duplicate = clients[i]
+		for _, duplicate_bufnr in ipairs(lsp_client_buffers(duplicate)) do
+			attach_lsp_client(duplicate_bufnr, primary)
+			detach_lsp_client(duplicate_bufnr, duplicate)
+		end
+		stop_lsp_client(duplicate)
+	end
+
+	return primary
+end
+
 local function ensure_lsp(bufnr)
 	if not config.lsp.enabled or vim.bo[bufnr].filetype ~= "ylc" then
 		return
@@ -155,16 +430,81 @@ local function ensure_lsp(bufnr)
 		cmd = { cmd }
 	end
 
-	vim.lsp.start({
+	local lsp_config = {
 		name = config.lsp.name,
 		cmd = cmd,
 		root_dir = lsp_root_dir(bufnr),
-	}, {
+	}
+
+	if consolidate_ylc_lsp_clients(bufnr, lsp_config) then
+		return
+	end
+
+	vim.lsp.start(lsp_config, {
 		bufnr = bufnr,
 		reuse_client = function(client, conf)
-			return client.name == conf.name and client.config.root_dir == conf.root_dir
+			return ylc_lsp_client_reusable(client, conf)
 		end,
 	})
+
+	vim.schedule(function()
+		if vim.api.nvim_buf_is_valid(bufnr) then
+			consolidate_ylc_lsp_clients(bufnr, lsp_config)
+		end
+	end)
+end
+
+local function definition_location_range(location)
+	if not location then
+		return nil
+	end
+	return location.range or location.targetSelectionRange or location.targetRange
+end
+
+local function definition_location_uri(location)
+	if not location then
+		return nil
+	end
+	return location.uri or location.targetUri
+end
+
+local function definition_location_key(location)
+	local uri = definition_location_uri(location)
+	local range = definition_location_range(location)
+	if not (uri and range and range.start and range["end"]) then
+		return nil
+	end
+
+	return table.concat({
+		uri,
+		range.start.line,
+		range.start.character,
+		range["end"].line,
+		range["end"].character,
+	}, ":")
+end
+
+local function add_definition_location(locations, seen, location)
+	local key = definition_location_key(location)
+	if key and not seen[key] then
+		seen[key] = true
+		locations[#locations + 1] = location
+	end
+end
+
+local function add_definition_result(locations, seen, result)
+	if not result then
+		return
+	end
+
+	if definition_location_uri(result) then
+		add_definition_location(locations, seen, result)
+		return
+	end
+
+	for _, location in ipairs(result) do
+		add_definition_location(locations, seen, location)
+	end
 end
 
 local function current_buffer_text(bufnr)
@@ -176,12 +516,7 @@ local function current_buffer_lines(bufnr)
 end
 
 local function buffer_has_notebook_markers(bufnr)
-	for _, line in ipairs(current_buffer_lines(bufnr)) do
-		if is_cell_marker(line) then
-			return true
-		end
-	end
-	return false
+	return has_cell_markers(bufnr)
 end
 
 local function get_notebook_prelude_text(bufnr)
@@ -349,13 +684,7 @@ local function get_text_from_lsp_selection_range(bufnr)
 		return nil
 	end
 
-	return get_text_for_range(
-		bufnr,
-		range.start.line,
-		range.start.character,
-		range["end"].line,
-		range["end"].character
-	)
+	return get_text_for_range(bufnr, range.start.line, range.start.character, range["end"].line, range["end"].character)
 end
 
 local function range_end_to_visual_pos(bufnr, range)
@@ -406,9 +735,30 @@ local function focus_terminal_end()
 end
 
 local function send_to_job(text)
+	if state.backend == "kitty" then
+		if not is_kitty_running() then
+			return false
+		end
+
+		local args = { "send-text" }
+		if state.kitty_window_id then
+			args[#args + 1] = "--match"
+			args[#args + 1] = "id:" .. state.kitty_window_id
+		end
+		args[#args + 1] = "--stdin"
+
+		local ok, output = kitty_remote(args, escape_text(text))
+		if not ok then
+			notify("Failed to send text to Kitty: " .. vim.trim(output or ""), vim.log.levels.ERROR)
+			return false
+		end
+		return true
+	end
+
 	if not is_job_running() then
 		return false
 	end
+
 	vim.fn.chansend(state.job_id, escape_text(text))
 	return true
 end
@@ -442,7 +792,9 @@ local function build_cmd(script_path)
 end
 
 local function build_notebook_cmd()
-	return tbl_copy(config.cmd)
+	local cmd = tbl_copy(config.cmd)
+	cmd[#cmd + 1] = config.interactive_flag
+	return cmd
 end
 
 local function build_debug_cmd(script_path, notebook)
@@ -457,7 +809,90 @@ local function build_debug_cmd(script_path, notebook)
 	return cmd
 end
 
+local function backend_for_opts(opts)
+	if opts.terminal_backend then
+		return opts.terminal_backend
+	end
+	if opts.notebook and config.notebook_terminal_backend then
+		return config.notebook_terminal_backend
+	end
+	return config.terminal_backend or "nvim"
+end
+
+local function build_kitty_launch_cmd(term_cmd)
+	local cmd = kitty_cmd()
+	cmd[#cmd + 1] = "--title"
+	cmd[#cmd + 1] = state.kitty_title
+	cmd[#cmd + 1] = "--listen-on"
+	cmd[#cmd + 1] = kitty_target()
+	cmd[#cmd + 1] = "--override"
+	cmd[#cmd + 1] = "allow_remote_control=yes"
+
+	for _, arg in ipairs(config.kitty.extra_args or {}) do
+		cmd[#cmd + 1] = arg
+	end
+
+	for _, arg in ipairs(term_cmd) do
+		cmd[#cmd + 1] = arg
+	end
+
+	return cmd
+end
+
+local function wait_for_kitty()
+	local deadline = vim.loop.hrtime() + ((config.kitty.startup_delay_ms or 250) * 1000000)
+	while vim.loop.hrtime() < deadline do
+		if is_kitty_running() then
+			return true
+		end
+		vim.wait(25)
+	end
+	return is_kitty_running()
+end
+
+local function open_kitty(term_cmd)
+	if vim.fn.executable(kitty_executable()) == 0 then
+		notify("Kitty executable not found: " .. kitty_executable(), vim.log.levels.ERROR)
+		return false
+	end
+
+	state.backend = "kitty"
+	state.kitty_socket = kitty_socket_path()
+	state.kitty_title = kitty_title()
+
+	pcall(vim.fn.delete, state.kitty_socket)
+
+	local job_id = vim.fn.jobstart(build_kitty_launch_cmd(term_cmd), {
+		env = current_env(),
+		detach = true,
+	})
+	if job_id <= 0 then
+		notify("Failed to start external Kitty YLC terminal", vim.log.levels.ERROR)
+		reset_state()
+		return false
+	end
+
+	if not wait_for_kitty() then
+		notify("Started Kitty but remote control is not ready yet", vim.log.levels.WARN)
+	end
+
+	return true
+end
+
 function M.stop()
+	if state.backend == "kitty" then
+		if is_kitty_running() then
+			local args = { "close-window" }
+			if state.kitty_window_id then
+				args[#args + 1] = "--match"
+				args[#args + 1] = "id:" .. state.kitty_window_id
+			end
+			kitty_remote(args)
+		end
+		reset_state()
+		return
+	end
+
 	if is_job_running() then
 		vim.fn.jobstop(state.job_id)
 	end
@@ -476,10 +911,10 @@ function M.open(opts)
 		return
 	end
 
-		if not opts.debug and not opts.raw_cmd and not opts.notebook and is_notebook_path(script_path) then
-			M.open_notebook()
-			return
-		end
+	if not opts.debug and not opts.raw_cmd and not opts.notebook and current_buffer_is_notebook() then
+		M.open_notebook(opts)
+		return
+	end
 
 	if is_job_running() then
 		M.stop()
@@ -489,18 +924,38 @@ function M.open(opts)
 		state.debug_active = true
 	end
 
-	local origin_win = vim.api.nvim_get_current_win()
-	open_window()
-
 	state.script_path = script_path
 	local term_cmd
-		if opts.raw_cmd then
-			term_cmd = tbl_copy(opts.raw_cmd)
-		elseif opts.notebook then
-			term_cmd = opts.debug and build_debug_cmd(script_path, true) or build_notebook_cmd()
-		else
-			term_cmd = opts.debug and build_debug_cmd(script_path, false) or build_cmd(script_path)
+	if opts.raw_cmd then
+		term_cmd = tbl_copy(opts.raw_cmd)
+	elseif opts.notebook then
+		term_cmd = opts.debug and build_debug_cmd(script_path, true) or build_notebook_cmd()
+	else
+		term_cmd = opts.debug and build_debug_cmd(script_path, false) or build_cmd(script_path)
+	end
+
+	local backend = backend_for_opts(opts)
+	if backend == "kitty" then
+		if open_kitty(term_cmd) then
+			if opts.debug then
+				notify("Started external Kitty YLC debugger for " .. script_path)
+			elseif opts.notebook then
+				notify("Started external Kitty YLC notebook for " .. script_path)
+			else
+				notify("Started external Kitty YLC for " .. script_path)
+			end
 		end
+		return
+	elseif backend ~= "nvim" then
+		notify("Unknown YLC terminal backend: " .. tostring(backend), vim.log.levels.ERROR)
+		reset_state()
+		return
+	end
+
+	local origin_win = vim.api.nvim_get_current_win()
+	open_window()
+	state.backend = "nvim"
+
 	state.job_id = vim.fn.termopen(term_cmd, {
 		env = current_env(),
 		on_stdout = function()
@@ -519,7 +974,10 @@ function M.open(opts)
 				end
 
 				state.job_id = nil
-				notify(string.format("YLC terminal exited with code %d for %s", code, exited_script or "<unknown>"), vim.log.levels.WARN)
+				notify(
+					string.format("YLC terminal exited with code %d for %s", code, exited_script or "<unknown>"),
+					vim.log.levels.WARN
+				)
 			end)
 		end,
 	})
@@ -549,6 +1007,7 @@ function M.open_notebook(opts)
 		script_path = script_path,
 		notebook = true,
 		debug = opts.debug,
+		terminal_backend = opts.terminal_backend,
 	})
 
 	if prelude ~= "" then
@@ -567,13 +1026,20 @@ function M.open_debug()
 	M.open({ debug = true })
 end
 
+function M.open_kitty(opts)
+	opts = opts or {}
+	opts.terminal_backend = "kitty"
+	M.open(opts)
+end
+
 function M.restart()
+	local terminal_backend = state.backend
 	if current_buffer_is_notebook() then
-		M.open_notebook()
+		M.open_notebook({ terminal_backend = terminal_backend })
 		return
 	end
 
-	M.open()
+	M.open({ terminal_backend = terminal_backend })
 end
 
 function M.reload_or_open()
@@ -617,6 +1083,38 @@ function M.send(text)
 	end
 
 	send_to_job(text)
+end
+
+function M.definition()
+	local bufnr = vim.api.nvim_get_current_buf()
+	ensure_lsp(bufnr)
+
+	local params = vim.lsp.util.make_position_params(0, "utf-16")
+	vim.lsp.buf_request_all(bufnr, "textDocument/definition", params, function(responses)
+		local locations = {}
+		local seen = {}
+
+		for _, response in pairs(responses or {}) do
+			add_definition_result(locations, seen, response.result)
+		end
+
+		if #locations == 0 then
+			notify("No definition found", vim.log.levels.INFO)
+			return
+		end
+
+		if #locations == 1 then
+			vim.lsp.util.jump_to_location(locations[1], "utf-16", true)
+			return
+		end
+
+		local items = vim.lsp.util.locations_to_items(locations, "utf-16")
+		vim.fn.setqflist({}, " ", {
+			title = "YLC definitions",
+			items = items,
+		})
+		vim.cmd("copen")
+	end)
 end
 
 function M.send_buffer()
@@ -688,13 +1186,8 @@ function M.select_and_send_current_node()
 
 	select_range(bufnr, range)
 
-	local text = get_text_for_range(
-		bufnr,
-		range.start.line,
-		range.start.character,
-		range["end"].line,
-		range["end"].character
-	)
+	local text =
+		get_text_for_range(bufnr, range.start.line, range.start.character, range["end"].line, range["end"].character)
 	if not text or text == "" then
 		notify("LSP selection range returned empty text, sending current line", vim.log.levels.WARN)
 		M.send_current_line()
@@ -755,44 +1248,44 @@ function M.send_current_paragraph()
 end
 
 function M.send_visual_selection()
-  local start_pos = vim.fn.getpos("'<")
-  local end_pos = vim.fn.getpos("'>")
-  local start_row = start_pos[2]
-  local start_col = start_pos[3]
-  local end_row = end_pos[2]
-  local end_col = end_pos[3]
-  local visual_mode = vim.fn.visualmode()
+	local start_pos = vim.fn.getpos("'<")
+	local end_pos = vim.fn.getpos("'>")
+	local start_row = start_pos[2]
+	local start_col = start_pos[3]
+	local end_row = end_pos[2]
+	local end_col = end_pos[3]
+	local visual_mode = vim.fn.visualmode()
 
-  if start_row == 0 or end_row == 0 then
-    notify("No visual selection available", vim.log.levels.WARN)
-    return
-  end
+	if start_row == 0 or end_row == 0 then
+		notify("No visual selection available", vim.log.levels.WARN)
+		return
+	end
 
 	if start_row > end_row or (start_row == end_row and start_col > end_col) then
 		start_row, end_row = end_row, start_row
 		start_col, end_col = end_col, start_col
 	end
 
-  local lines = vim.api.nvim_buf_get_lines(0, start_row - 1, end_row, false)
-  if #lines == 0 then
-    notify("Nothing selected", vim.log.levels.WARN)
-    return
-  end
+	local lines = vim.api.nvim_buf_get_lines(0, start_row - 1, end_row, false)
+	if #lines == 0 then
+		notify("Nothing selected", vim.log.levels.WARN)
+		return
+	end
 
-  if visual_mode == "V" then
-    M.send(table.concat(lines, "\n"))
-    return
-  end
+	if visual_mode == "V" then
+		M.send(table.concat(lines, "\n"))
+		return
+	end
 
-  if visual_mode == "\22" then
-    notify("Blockwise visual send is not supported", vim.log.levels.WARN)
-    return
-  end
+	if visual_mode == "\22" then
+		notify("Blockwise visual send is not supported", vim.log.levels.WARN)
+		return
+	end
 
-  lines[1] = string.sub(lines[1], math.max(start_col, 1))
-  lines[#lines] = string.sub(lines[#lines], 1, math.max(end_col, 1))
+	lines[1] = string.sub(lines[1], math.max(start_col, 1))
+	lines[#lines] = string.sub(lines[#lines], 1, math.max(end_col, 1))
 
-  M.send(table.concat(lines, "\n"))
+	M.send(table.concat(lines, "\n"))
 end
 
 function M.setup(opts)
@@ -803,6 +1296,20 @@ function M.setup(opts)
 		pattern = "ylc",
 		callback = function(args)
 			ensure_lsp(args.buf)
+		end,
+	})
+
+	vim.api.nvim_create_autocmd({ "LspAttach" }, {
+		group = autocmd_group,
+		callback = function(args)
+			if vim.bo[args.buf].filetype ~= "ylc" then
+				return
+			end
+			vim.schedule(function()
+				if vim.api.nvim_buf_is_valid(args.buf) then
+					ensure_lsp(args.buf)
+				end
+			end)
 		end,
 	})
 

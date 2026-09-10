@@ -1,0 +1,28 @@
+open libs/audio_jit/DSP_common;
+
+let midi_to_freq = extern fn Int -> Double;
+let param = extern fn Int -> Double;
+let tempo_mul = extern fn () -> Double;
+let tempo_coeff = extern fn () -> Double;
+let play_node = extern fn Ptr -> Ptr;
+let reset_node = extern fn Ptr -> Ptr;
+let play_voice = extern fn Ptr -> Ptr;
+let set_voice_input = extern fn Int -> Double -> Ptr -> Ptr;
+let alloc_voices = extern fn Int -> T -> Array of Ptr;
+
+let play_pattern = extern fn Double -> T -> Ptr;
+let cancel_task = extern fn Ptr -> ();
+let persist_array = extern fn Array of Double -> Array of Double;
+let EnvArrayUI = extern fn Array of Double -> ();
+let ADSRArrayUI = extern fn Array of Double -> ();
+let SoundFileUI = extern fn String -> Ptr;
+let sf_channels = extern fn Ptr -> Int;
+let sf_samplerate = extern fn Ptr -> Int;
+let sf_data = extern fn Ptr -> Array of Double;
+type MidiEventType =
+  | NoteOn
+  | NoteOff
+  | CC
+  ;
+let MidiIn = extern fn (Int -> MidiEventType -> Int -> Double -> ()) -> ();
+let ParamIn = extern fn (Int -> Int -> Double -> ()) -> ();

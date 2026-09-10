@@ -45,18 +45,30 @@ void print_allocs(Allocation *allocs) {
 }
 
 Allocation *allocations_extend(Allocation *allocs, Allocation *alloc) {
-  if (!allocs) {
-    return alloc;
-  }
   if (!alloc) {
-    return alloc;
+    return allocs;
   }
-  Allocation *a = alloc;
-  while (a->next != NULL) {
-    a = a->next;
+
+  Allocation *head = NULL;
+  Allocation *tail = NULL;
+  for (Allocation *a = alloc; a; a = a->next) {
+    Allocation *copy = ea_alloc(sizeof(Allocation));
+    *copy = *a;
+    copy->next = NULL;
+
+    if (!head) {
+      head = copy;
+    } else {
+      tail->next = copy;
+    }
+    tail = copy;
   }
-  a->next = allocs;
-  return alloc;
+
+  if (!head) {
+    return allocs;
+  }
+  tail->next = allocs;
+  return head;
 }
 
 void ctx_add_allocation(EACtx *ctx, Allocation *alloc) {
@@ -65,11 +77,11 @@ void ctx_add_allocation(EACtx *ctx, Allocation *alloc) {
 }
 
 Allocation *ctx_find_allocation(EACtx *ctx, const char *varname) {
-  if (!ctx->allocations) {
+  if (!ctx || !varname || !ctx->allocations) {
     return NULL;
   }
   for (Allocation *a = ctx->allocations; a; a = a->next) {
-    if (strcmp(a->varname, varname) == 0) {
+    if (a->varname && strcmp(a->varname, varname) == 0) {
       return a;
     }
   }
@@ -130,6 +142,9 @@ void ctx_bind_allocations(EACtx *ctx, Ast *binding, Allocation *allocs) {
 }
 
 bool alloc_crosses_yield_boundary(Allocation *alloc, Ast *lambda_ast) {
+  if (!alloc || !alloc->varname || !lambda_ast) {
+    return false;
+  }
 
   AST_LIST_ITER(
       lambda_ast->data.AST_LAMBDA.yield_boundary_crossers, ({
@@ -216,9 +231,6 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
 
       EscapeMeta *ea_meta = malloc(sizeof(EscapeMeta));
       if (alloc_crosses_yield_boundary(a, ast)) {
-        // values that cross yield boundary need to be allocated on the heap -
-        // this is because they would get recreated each time the coroutine
-        // resumes if they are on the stack
         *ea_meta = (EscapeMeta){
             .status = EA_HEAP_ALLOC,
             .id = a->id,
@@ -291,11 +303,18 @@ Allocation *ea(Ast *ast, EACtx *ctx) {
         }
       }
 
-      if (has_attr(fn_ast->type->data.T_FN.attributes, FN_ATTR_ALLOCATES)) {
+      if (fn_ast->type && fn_ast->type->kind == T_FN &&
+          has_attr(fn_ast->type->data.T_FN.attributes, FN_ATTR_ALLOCATES)) {
         Allocation *arr_alloc = create_alloc(NULL, ast, ctx->scope);
         return allocations_extend(allocations, arr_alloc);
       }
     }
+
+    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+      allocations = allocations_extend(allocations,
+          ea(ast->data.AST_APPLICATION.args + i, ctx));
+    }
+    ea(ast->data.AST_APPLICATION.function, ctx);
 
     break;
   }

@@ -9,6 +9,15 @@
 // Hash table structure: create with ht_create, free with ht_destroy.
 typedef struct ht ht;
 
+typedef void *(*ht_alloc_fn)(void *ctx, size_t size, size_t align);
+typedef void (*ht_free_fn)(void *ctx, void *ptr);
+
+typedef struct {
+  ht_alloc_fn alloc;
+  ht_free_fn free;
+  void *ctx;
+} ht_allocator;
+
 // Hash table entry (slot may be filled or empty).
 typedef struct {
   const char *key; // key is NULL if this slot is empty
@@ -20,10 +29,13 @@ struct ht {
   ht_entry *entries; // hash slots
   size_t capacity;   // size of _entries array
   size_t length;     // number of items in hash table
+  ht_allocator allocator;
+  bool owns_self;
 };
 
 // Create hash table and return pointer to it, or NULL if out of memory.
 ht *ht_create(void);
+ht *ht_create_with_allocator(ht_allocator allocator);
 
 // Free memory allocated for hash table, including allocated keys.
 void ht_destroy(ht *table);
@@ -34,8 +46,9 @@ void *ht_get(ht *table, const char *key);
 
 // Set item with given key (NUL-terminated) to value (which must not
 // be NULL). If not already present in table, key is copied to newly
-// allocated memory (keys are freed automatically when ht_destroy is
-// called). Return address of copied key, or NULL if out of memory.
+// allocated memory. Allocators with a free hook release copied keys when
+// ht_destroy is called; arena allocators can leave them to arena teardown.
+// Return address of copied key, or NULL if out of memory.
 const char *ht_set(ht *table, const char *key, void *value);
 
 // Return number of items in hash table.
@@ -66,6 +79,7 @@ const char *ht_set_hash(ht *table, const char *key, uint64_t hash, void *value);
 void *ht_get_hash(ht *table, const char *key, uint64_t hash);
 
 void ht_init(ht *table);
+void ht_init_with_allocator(ht *table, ht_allocator allocator);
 
 void ht_reinit(ht *table);
 #endif // _HT_H

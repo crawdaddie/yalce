@@ -3,24 +3,28 @@
 #include <stdint.h>
 
 typedef struct {
-  int size;
+  int32_t size;
+  int32_t offset;
   const char *chars;
 } _String;
 
 #define YLC_STRING_TYPE(n)                                                     \
   typedef struct {                                                             \
-    int size;                                                                  \
+    int32_t size;                                                              \
+    int32_t offset;                                                            \
     char *chars;                                                               \
   } n;
 
 typedef struct {
   int32_t size;
+  int32_t offset;
   double *data;
 } _DoubleArray;
 
 #define YLC_ARRAY_TYPE(t)                                                      \
   typedef struct {                                                             \
     int32_t size;                                                              \
+    int32_t offset;                                                            \
     t *data;                                                                   \
   } _YLC_##t##_Array;
 

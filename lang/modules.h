@@ -32,8 +32,4 @@ bool register_module_ast(const char *key, Ast *module_ast);
 YLCModule *init_import(YLCModule *mod);
 
 Type *infer_inline_module(Ast *ast, TICtx *ctx);
-
-Type *infer_module_access(Ast *ast, Type *type, const char *name, TICtx *ctx);
-
-Type *get_import_type(Ast *ast);
 #endif

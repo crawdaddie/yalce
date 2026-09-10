@@ -2,6 +2,7 @@
 .cache
 build
 test/*.o
+test/mir_artifacts/
 lang/*.o
 *.h.gch
 *.o

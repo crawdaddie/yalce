@@ -1,0 +1,83 @@
+open libs/audio_jit/DSP;
+
+let tempo_mul = fn () -> 60. / 150.;;
+
+let kick = @Audio fn () ->
+  let t = trig 0;
+  # pitch
+  let freq = t |> decay 0.01 |> scale 30 4000;
+
+  freq
+  |> sin_osc 
+
+  # noise component
+  |> (+) (t |> decay 0.1 |> (*) (white ()) |> Filter.lpf 1000 0.2)
+  |> (*) 2. |> Math.tanh
+
+  #amp envelope
+  |> (*) (adsr 0 0.1 0.8 0.2 (t |> rect 0.25) |> kill_on_end)
+  ;;
+
+import std/Math;
+let chirp = @Audio fn lo dr ->
+  let t = trig 0;
+  let freq = t |> decay dr |> scale lo 8000;
+  freq
+  |> sin_osc 
+  |> (+) (t |> decay 0.1 |> (*) (white ()) |> Filter.hpf 1000. 2.)
+  |> (*) (adsr 0 0.1 1. 0.02 (t |> rect 0.01) |> kill_on_end)
+  |> (*) 2. |> Math.tanh
+  |> (*) 0.5
+  |> pan 2 (lfnoise 1 0. 1.)
+  ;;
+
+
+let kick_arr = ([| 3.5, 0.5, 1.25, 0.75, 0.5, 0.25, 0.25|] |> Math.shuffle_ip);
+let chirp_arr = ([| 0.75, 0.5, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.75, 0.75|] |> Math.shuffle_ip);
+
+let task_ref = array_fill_const 1 (Ptr 0);
+let task = fn t -> 
+  task_ref[0] |> cancel_task;
+  task_ref[0] := t
+;;
+
+
+let co = fn () ->
+  kick_arr
+  |> iter
+  |> cor_map (fn d ->
+    kick () |> play_node;
+    d * tempo_mul () 
+  ) |> play_pattern 0.
+  ;  
+
+  chirp_arr
+  |> iter
+  |> cor_map (fn d ->
+
+    chirp (Math.rrand 200. 400.) 0.01 |> play_node;
+    d * tempo_mul ()
+  ) |> play_pattern 0.
+  ;  
+  yield 4. * tempo_mul ();
+
+  chirp_arr
+  |> iter
+  |> cor_map (fn d ->
+    chirp (Math.rrand 200. 400.) 0.01 |> play_node;
+    d * tempo_mul ()
+  ) |> play_pattern 0.
+  ;  
+  yield 4. * tempo_mul ();
+  yield co ()
+;;
+
+co () |> play_pattern 0. |> task;
+
+#%%
+
+co () |> play_pattern 0. |> task;
+#%%
+
+task (Ptr 0);
+

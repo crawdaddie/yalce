@@ -1,15 +1,28 @@
 #ifndef AUDIO_JIT_H
 #define AUDIO_JIT_H
 
+#include "../../engine/node.h"
 #include "../../lang/backend_llvm/common.h"
+#include "../../lang/mir/mir.h"
 #include "../../lang/ylc_datatypes.h"
+
+#include <stdbool.h>
+#include <stddef.h>
 
 LLVMValueRef ensure_float(Type *in_type, LLVMValueRef val,
                           LLVMBuilderRef builder);
 
 void ylc_register_synth_ctor(int synth_id, void *ctor);
 void *ylc_get_synth_ctor(int synth_id);
+Node *ylc_create_audio_frame_node(frame_perform_func_t frame_perform,
+                                  int num_inputs, int output_layout,
+                                  int state_bytes, const char *meta_name);
+void ylc_audio_node_set_state_init(void *node_raw, void *init_raw);
 int ylc_rand_int(int n);
+
+MirValueId ylc_audio_jit_emit_synth_voice_array(MirBuilder *builder, Ast *app,
+                                                MirCtx *ctx, Ast *size_ast,
+                                                Ast *synth_ast);
 
 extern int STYPE_AUDIO_JIT_SYM;
 extern int STYPE_AUDIO_JIT_INLINE_SYM;
@@ -86,5 +99,4 @@ void dsp_pitchshift_state_init(void *state_raw, int sample_rate,
 double dsp_pitchshift_next_sample(void *state_raw, double input,
                                   double pitch_ratio, double pitch_dispersion,
                                   double time_dispersion);
-
 #endif

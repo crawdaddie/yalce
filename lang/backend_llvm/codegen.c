@@ -3,6 +3,7 @@
 #include "adt.h"
 #include "backend_llvm/application.h"
 #include "backend_llvm/array.h"
+#include "backend_llvm/constructors.h"
 #include "backend_llvm/function.h"
 #include "backend_llvm/function_extern.h"
 #include "backend_llvm/list.h"
@@ -23,35 +24,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-LLVMValueRef GenericConsConstructorHandler(Ast *ast, JITLangCtx *ctx,
-                                           LLVMModuleRef module,
-                                           LLVMBuilderRef builder) {
-  Type *expected_type = ast->type;
-  if (expected_type->kind == T_CONS) {
-    LLVMTypeRef struct_type = named_struct_type(expected_type->data.T_CONS.name,
-                                                expected_type, ctx, module);
-
-    LLVMValueRef tuple = LLVMGetUndef(struct_type);
-    // LLVMConstNull(struct_type);
-    for (int i = 0; i < ast->data.AST_APPLICATION.len; i++) {
-      Ast *arg = ast->data.AST_APPLICATION.args + i;
-      LLVMValueRef item_val = codegen(arg, ctx, module, builder);
-      tuple = LLVMBuildInsertValue(builder, tuple, item_val, i, "");
-    }
-
-    return tuple;
-  } else {
-    fprintf(stderr,
-            "Not Implemented error - constructor handler for non cons types\n");
-    return NULL;
+static Type *record_access_type_view(Type *type) {
+  if (type && type->kind == T_RECURSIVE_REF &&
+      type->data.T_RECURSIVE_REF.decl &&
+      type->data.T_RECURSIVE_REF.decl->type) {
+    return type->data.T_RECURSIVE_REF.decl->type;
   }
+  return type;
 }
 
 LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
                                LLVMModuleRef module, LLVMBuilderRef builder) {
 
-  Type *t = ast->type;
-  LLVMTypeRef ret = LLVMVoidType();
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef ret = LLVMVoidTypeInContext(llvm_ctx);
 
   LLVMTypeRef funcType = LLVMFunctionType(ret, NULL, 0, 0);
 
@@ -62,10 +48,15 @@ LLVMValueRef codegen_top_level(Ast *ast, LLVMTypeRef *ret_type, JITLangCtx *ctx,
   }
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
-  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, func, "entry");
   LLVMPositionBuilderAtEnd(builder, block);
 
   LLVMValueRef body = codegen(ast, ctx, module, builder);
+  if (!body && VALUE_IS_PRINTABLE(ast->type)) {
+    LLVMDeleteFunction(func);
+    return NULL;
+  }
 
   LLVMBuildRetVoid(builder);
 
@@ -76,8 +67,8 @@ LLVMValueRef codegen_repl_top_level(Ast *ast, LLVMTypeRef *ret_type,
                                     JITLangCtx *ctx, LLVMModuleRef module,
                                     LLVMBuilderRef builder) {
 
-  Type *t = ast->type;
-  LLVMTypeRef ret = LLVMVoidType();
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
+  LLVMTypeRef ret = LLVMVoidTypeInContext(llvm_ctx);
 
   LLVMTypeRef funcType = LLVMFunctionType(ret, NULL, 0, 0);
 
@@ -88,10 +79,15 @@ LLVMValueRef codegen_repl_top_level(Ast *ast, LLVMTypeRef *ret_type,
   }
   LLVMSetLinkage(func, LLVMExternalLinkage);
 
-  LLVMBasicBlockRef block = LLVMAppendBasicBlock(func, "entry");
+  LLVMBasicBlockRef block =
+      LLVMAppendBasicBlockInContext(llvm_ctx, func, "entry");
   LLVMPositionBuilderAtEnd(builder, block);
 
   LLVMValueRef body = codegen(ast, ctx, module, builder);
+  if (!body && VALUE_IS_PRINTABLE(ast->type)) {
+    LLVMDeleteFunction(func);
+    return NULL;
+  }
 
   if (VALUE_IS_PRINTABLE(ast->type)) {
 
@@ -112,6 +108,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   __current_ast = ast;
   LLVMValueRef res = NULL;
+  LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
 
   switch (ast->tag) {
 
@@ -127,12 +124,20 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_INT: {
-    res = LLVMConstInt(LLVMInt32Type(), ast->data.AST_INT.value, true);
+    res = LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx),
+                       ast->data.AST_INT.value, true);
+    break;
+  }
+
+  case AST_UINT64: {
+    res = LLVMConstInt(LLVMInt64TypeInContext(llvm_ctx),
+                       ast->data.AST_UINT64.value, false);
     break;
   }
 
   case AST_DOUBLE: {
-    res = LLVMConstReal(LLVMDoubleType(), ast->data.AST_DOUBLE.value);
+    res = LLVMConstReal(LLVMDoubleTypeInContext(llvm_ctx),
+                        ast->data.AST_DOUBLE.value);
     break;
   }
 
@@ -143,7 +148,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_CHAR: {
     const char ch = ast->data.AST_CHAR.value;
-    res = LLVMConstInt(LLVMInt8Type(), ch, 0);
+    res = LLVMConstInt(LLVMInt8TypeInContext(llvm_ctx), ch, 0);
     break;
   }
 
@@ -158,7 +163,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       Type *t = item->type;
 
       if (t->kind == T_VAR) {
-        t = env_lookup(ctx->env, t->data.T_VAR);
+        t = env_lookup(ctx->env, t->data.T_VAR.name);
       }
 
       LLVMValueRef str_val =
@@ -174,7 +179,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_BOOL: {
-    res = LLVMConstInt(LLVMInt1Type(), ast->data.AST_BOOL.value, false);
+    res = LLVMConstInt(LLVMInt1TypeInContext(llvm_ctx),
+                       ast->data.AST_BOOL.value, false);
     break;
   }
 
@@ -236,29 +242,37 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     break;
   }
   case AST_VOID: {
-    res = LLVMGetUndef(LLVMVoidType());
+    res = LLVMGetUndef(LLVMVoidTypeInContext(llvm_ctx));
     break;
   }
 
   case AST_RECORD_ACCESS: {
     Ast *record = ast->data.AST_RECORD_ACCESS.record;
+    const char *member_name =
+        ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
 
-    Type *record_type = record->type;
-    JITSymbol *constructor_sym = lookup_id_ast(record, ctx);
-
-    if (constructor_sym) {
+    Type *record_type = specialize_type_for_codegen(record->type, ctx);
+    Type *member_type = specialize_type_for_codegen(ast->type, ctx);
+    JITSymbol *record_sym = lookup_id_ast(record, ctx);
+    if (record_sym && record_sym->symbol_type) {
+      Type *symbol_type =
+          specialize_type_for_codegen(record_sym->symbol_type, ctx);
+      if (symbol_type && (!record_type || is_generic(record_type))) {
+        record_type = symbol_type;
+      }
     }
+    Type *record_view = record_access_type_view(record_type);
 
     // printf("RECORD ACCESS cons: %p\n", record_type->constructor);
     // print_ast(ast);
     // print_type(record_type);
 
-    if (record_type->kind == T_CONS &&
-        strcmp(record_type->data.T_CONS.name, TYPE_NAME_MODULE) == 0) {
+    if (is_module(record_view)) {
 
       LLVMValueRef val = codegen_module_access(
-          record, record_type, ast->data.AST_RECORD_ACCESS.index,
-          ast->data.AST_RECORD_ACCESS.member, ast->type, ctx, module, builder);
+          record, record_view, ast->data.AST_RECORD_ACCESS.index,
+          ast->data.AST_RECORD_ACCESS.member, member_type, ctx, module,
+          builder);
       res = val;
       break;
     }
@@ -268,10 +282,12 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     // print_ast(record);
     // printf("rec %p\n", rec);
 
-    const char *member_name =
-        ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
-
-    int member_idx = ast->data.AST_RECORD_ACCESS.index;
+    bool has_named_fields = record_view && record_view->kind == T_CONS &&
+                            record_view->data.T_CONS.names;
+    int member_idx = get_struct_member_idx(member_name, record_view);
+    if (member_idx < 0 && !has_named_fields && !is_generic(record_view)) {
+      member_idx = ast->data.AST_RECORD_ACCESS.index;
+    }
 
     if (member_idx < 0) {
       fprintf(stderr, "Error: no member %s in obj\n", member_name);
@@ -280,7 +296,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
     }
 
     res = codegen_tuple_access(
-        member_idx, rec, type_to_llvm_type(record_type, ctx, module), builder);
+        member_idx, rec, type_to_llvm_aggregate_type(record_view, ctx, module),
+        builder);
     break;
   }
 
@@ -290,7 +307,8 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_TYPE_DECL: {
-    Type *t = ast->type;
+    Type *t = specialize_type_for_codegen(ast->type, ctx);
+    ast->type = t;
 
     if (!is_generic(t) && is_sum_type(t)) {
 
@@ -327,13 +345,13 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       break;
     }
 
-    if (is_generic(t) && t->kind == T_SCHEME) {
+    if (is_generic(t)) {
       const char *id = ast->data.AST_LET.binding->data.AST_IDENTIFIER.value;
 
       JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, t, NULL, NULL);
 
       sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler =
-          GenericConsConstructorHandler;
+          codegen_cons_type_constructor;
 
       ht *stack = (ctx->frame->table);
       ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
@@ -343,7 +361,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, t, NULL, NULL);
 
       sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler =
-          GenericConsConstructorHandler;
+          codegen_cons_type_constructor;
 
       ht *stack = (ctx->frame->table);
       ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
@@ -353,7 +371,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
       JITSymbol *sym = new_symbol(STYPE_GENERIC_FUNCTION, t, NULL, NULL);
 
       sym->symbol_data.STYPE_GENERIC_FUNCTION.builtin_handler =
-          GenericConsConstructorHandler;
+          codegen_cons_type_constructor;
 
       ht *stack = (ctx->frame->table);
       ht_set_hash(stack, id, hash_string(id, strlen(id)), sym);
@@ -373,7 +391,7 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_IMPORT: {
     codegen_import(ast, NULL, ctx, module, builder);
-    res = LLVMConstInt(LLVMInt32Type(), 1, 0);
+    res = LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), 1, 0);
     break;
   }
 
@@ -383,6 +401,18 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   }
 
   case AST_BINOP: {
+    // `[] of T` / `[||] of T`: the element type is resolved by inference and
+    // stored on the container node's type. Delegate to the existing list/array
+    // codegen, which emits an empty container (null pointer / undef array).
+    if (ast->data.AST_BINOP.op == TOKEN_OF) {
+      Ast *container = ast->data.AST_BINOP.left;
+      if ((container->tag == AST_LIST || container->tag == AST_ARRAY) &&
+          container->data.AST_LIST.len == 0 && container->type) {
+        container->tag = container->tag; // keep tag for codegen dispatch
+        res = codegen(container, ctx, module, builder);
+        break;
+      }
+    }
     break;
   }
 
@@ -400,6 +430,11 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     if (CHARS_EQ(ast->data.AST_TRAIT_IMPL.trait_name.chars, "Arithmetic")) {
       res = create_arithmetic_typeclass_methods(ast, ctx, module, builder);
+      break;
+    }
+
+    if (CHARS_EQ(ast->data.AST_TRAIT_IMPL.trait_name.chars, "From")) {
+      res = create_from_typeclass_methods(ast, ctx, module, builder);
       break;
     }
 
