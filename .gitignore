@@ -46,3 +46,7 @@ dev/kernel/*.ipynb
 # macOS
 .DS_Store
 .repl_history*
+
+
+euler/
+aoc/
