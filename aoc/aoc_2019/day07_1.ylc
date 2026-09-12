@@ -1,0 +1,158 @@
+open day07_input;
+import Intcode;
+open Intcode;
+
+type AmpResult = (
+  pc: Int,
+  rb: Int,
+  input_used: Int,
+  halted: Int,
+  output: Int
+);
+
+let step_direct = fn pc: (Int) rb: (Int) arr: (Array of Int) ->
+  match arr[pc] % 100 with
+  | 1 -> add pc rb arr
+  | 2 -> mul pc rb arr
+  | 3 -> get_input pc rb arr
+  | 4 -> output pc rb arr
+  | 5 -> jump_true pc rb arr
+  | 6 -> jump_false pc rb arr
+  | 7 -> lt pc rb arr
+  | 8 -> eq pc rb arr
+  | 9 -> adjust_rb pc rb arr
+  | 99 -> terminate pc rb arr
+  | _ -> (pc + 1, rb, Continue)
+;;
+
+let run_amp_halt = fn pc: (Int) rb: (Int) arr: (Array of Int) phase: (Int) signal: (Int) input_idx: (Int) last: (Int) ->
+  let pcn, rbn, ev = step_direct pc rb arr;
+
+  match ev with
+  | Continue -> run_amp_halt pcn rbn arr phase signal input_idx last
+  | NeedsInput ref -> (
+    ref[0] := if input_idx == 0 then phase else signal;
+    run_amp_halt pcn rbn arr phase signal (input_idx + 1) last
+  )
+  | Output v -> run_amp_halt pcn rbn arr phase signal input_idx v
+  | Halted -> last
+;;
+
+let run_amp_once = fn prog: (Array of Int) phase: (Int) signal: (Int) ->
+  run_amp_halt 0 0 (copy_prog prog) phase signal 0 0
+;;
+
+let phase_sequence = fn prog: (Array of Int) phases: (Array of Int) ->
+  let a = run_amp_once prog (phases[0]) 0;
+  let b = run_amp_once prog (phases[1]) a;
+  let c = run_amp_once prog (phases[2]) b;
+  let d = run_amp_once prog (phases[3]) c;
+  run_amp_once prog (phases[4]) d
+;;
+
+# print `43210: {phase_sequence [|3,15,3,16,1002,16,10,16,1,16,15,15,4,15,99,0,0|] [|4,3,2,1,0|]}\n`;
+# print `54321: {phase_sequence [|
+# 3,23,3,24,1002,24,10,24,1002,23,-1,23,101,5,23,23,1,24,23,23,4,23,99,0,0|] [|0,1,2,3,4|]}\n`;
+# print `65210: {phase_sequence [|3,31,3,32,1002,32,10,32,1001,31,-2,31,1007,31,0,33,1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0   |] [|1,0,4,3,2|]}\n`;
+
+let swap = fn arr i j ->
+  let tmp = arr[i];
+  arr[i] := arr[j];
+  arr[j] := tmp
+;;
+
+let print_perm = fn arr ->
+  for i = 0 .. array_size arr in (
+    print `{arr[i]}`
+  );
+  print "\n"
+;;
+import std/Math;
+let fold_permutations = fn f acc k arr ->
+  if k == 1 then (
+    # compute final output and compare with acc ??
+    # print_perm arr
+    acc[0] := f (acc[0]) arr ;
+    # Math.max (acc[0]) (phase_sequence inp arr);
+    ()
+  ) else (
+    fold_permutations f acc (k - 1) arr;
+    for i = 0 .. (k - 1) in (
+      if k % 2 == 0 then (
+        swap arr i (k - 1)
+      ) else (
+        swap arr 0 (k - 1)
+      );
+
+      fold_permutations f acc (k - 1) arr
+    )
+  )
+;;
+
+let run_amp_out = fn pc: (Int) rb: (Int) prog: (Array of Int) phase: (Int) signal: (Int) input_used: (Int) ->
+  let pcn, rbn, ev = step_direct pc rb prog;
+
+  match ev with
+  | Continue -> run_amp_out pcn rbn prog phase signal input_used
+  | NeedsInput ref -> (
+    ref[0] := if input_used == 0 then phase else signal;
+    run_amp_out pcn rbn prog phase signal 1
+  )
+  | Output v -> AmpResult pcn rbn input_used 0 v
+  | Halted -> AmpResult pcn rbn input_used 1 signal
+;;
+
+let run_fb_vms = fn last: (Int) signal: (Int) phases: (Array of Int)
+                    pcA: (Int) rbA: (Int) usedA: (Int) arrA: (Array of Int)
+                    pcB: (Int) rbB: (Int) usedB: (Int) arrB: (Array of Int)
+                    pcC: (Int) rbC: (Int) usedC: (Int) arrC: (Array of Int)
+                    pcD: (Int) rbD: (Int) usedD: (Int) arrD: (Array of Int)
+                    pcE: (Int) rbE: (Int) usedE: (Int) arrE: (Array of Int) ->
+
+  let ares = run_amp_out pcA rbA arrA (phases[0]) signal usedA;
+  let bres = run_amp_out pcB rbB arrB (phases[1]) ares.output usedB;
+  let cres = run_amp_out pcC rbC arrC (phases[2]) bres.output usedC;
+  let dres = run_amp_out pcD rbD arrD (phases[3]) cres.output usedD;
+  let eres = run_amp_out pcE rbE arrE (phases[4]) dres.output usedE;
+
+  if eres.halted == 1 then last else (
+    run_fb_vms eres.output eres.output phases
+      ares.pc ares.rb ares.input_used arrA
+      bres.pc bres.rb bres.input_used arrB
+      cres.pc cres.rb cres.input_used arrC
+      dres.pc dres.rb dres.input_used arrD
+      eres.pc eres.rb eres.input_used arrE
+  )
+;;
+
+let phase_sequence_fb = fn prog: (Array of Int) phases: (Array of Int) ->
+  run_fb_vms 0 0 phases
+    0 0 0 (copy_prog prog)
+    0 0 0 (copy_prog prog)
+    0 0 0 (copy_prog prog)
+    0 0 0 (copy_prog prog)
+    0 0 0 (copy_prog prog)
+;;
+
+# let phases = [|0,1,2,3,4|];
+let phases = [|0,1,2,3,4|];
+let phases2 = [|5,6,7,8,9|];
+let best = [|0|];
+let best2 = [|0|];
+fold_permutations (fn acc arr -> 
+  Math.max acc (phase_sequence inp arr)
+) best (array_size phases) phases;
+
+print `{best[0]}\n`;
+
+print `part2 test1: {phase_sequence_fb [|3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5|] [|9,8,7,6,5|]}\n`;
+print `part2 test2: {phase_sequence_fb [|
+3,52,1001,52,-5,52,3,53,1,52,56,54,1007,54,5,55,1005,55,26,1001,54,
+-5,54,1105,1,12,1,53,54,53,1008,54,0,55,1001,55,1,55,2,53,55,53,4,
+53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10
+|] [|9,7,8,5,6|]}\n`;
+
+fold_permutations (fn acc arr ->
+  Math.max acc (phase_sequence_fb inp arr)
+) best2 (array_size phases2) phases2;
+print `{best2[0]}\n`;

@@ -1,0 +1,34 @@
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+let read_bytes = extern fn Ptr -> String;
+let read_lines = extern fn Ptr -> (List of String, Int);
+
+let (lines,n) = match open_file "~/projects/yalce/aoc/aoc_2019/day01.txt" "rb" with
+  | Some fd -> read_lines fd
+  | None -> (["",], 0)
+  ;
+
+import std/Lists;
+let parse_int = extern fn String -> Int;
+
+let mass_calc = fn x -> (x / 3) - 2;;
+
+let total = Lists.fold (fn acc inp_str ->
+  let fuel_mass = parse_int inp_str |> mass_calc;
+  acc + fuel_mass 
+) 0 lines;
+
+print `{total}\n`;
+
+let total_mass = fn acc x ->
+  let m = mass_calc x;
+  match m > 0 with
+  | false -> acc 
+  | true -> total_mass (acc + m) m
+;;
+
+let total2 = Lists.fold (fn acc inp_str ->
+  acc + total_mass 0 (parse_int inp_str)
+) 0 lines;
+
+print `{total2}\n`;

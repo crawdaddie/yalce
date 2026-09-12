@@ -1,0 +1,239 @@
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+
+let read_bytes = extern fn Ptr -> String;
+
+let sscanf = extern fn Ptr -> Ptr -> Ptr -> Ptr -> Int;
+
+let inp = match open_file "~/projects/yalce/aoc/aoc_2019/day03.txt" "rb" with
+  | Some fd -> read_bytes fd
+  | _ -> "" 
+  ;
+
+let find_first_idx = fn idx a delim ->
+  if idx >= (array_size a) then (None) else (
+    match a[idx] with 
+    | xx if xx == delim -> Some idx
+    | _ -> find_first_idx (idx + 1) a delim 
+  )
+;;
+
+let split_on = fn str delim ->
+  match find_first_idx 0 str delim with
+  | Some idx -> Some (str[0 .. idx], str[(idx + 1) ..])
+  | None -> None
+;;
+
+let parse_int = extern fn String -> Int;
+
+let proc_instr = fn x (xp, yp) ->
+  match x[0] with
+  | 'U' -> (xp, yp + (x[1 ..] |> parse_int))
+  | 'D' -> (xp, yp - (x[1 ..] |> parse_int))
+  | 'L' -> (xp - (x[1 ..] |> parse_int), yp)
+  | 'R' -> (xp + (x[1 ..] |> parse_int), yp)
+;;
+
+import std/Math;
+
+let dist = fn (x1, y1) (x2, y2) ->
+  Math.abs (x1 - x2) + Math.abs (y1 - y2)
+;;
+
+let proc_instrs = fn st (xp, yp) steps acc ->
+  match split_on st ',' with
+  | Some (x, rest) -> (
+    let n = proc_instr x (xp, yp);
+    (((xp, yp), n), steps)::acc |> proc_instrs rest n (steps + dist (xp, yp) n)
+  )
+  | None ->
+    if array_size st == 0 then acc else (
+      let n = proc_instr st (xp, yp);
+      (((xp, yp), n), steps)::acc
+    )
+;;
+
+let between = fn x a b ->
+  x >= (Math.min a b) && x <= (Math.max a b)
+;;
+
+let manhattan = fn p -> dist (0, 0) p;;
+
+let not_origin = fn (x, y) ->
+  !(x == 0 && y == 0)
+;;
+
+let closest_to_zero = fn lo hi ->
+  if between 0 lo hi then 0 else (
+    if Math.abs lo < Math.abs hi then lo else hi
+  )
+;;
+
+let overlap = fn a1 a2 b1 b2 ->
+  let lo = Math.max (Math.min a1 a2) (Math.min b1 b2);
+  let hi = Math.min (Math.max a1 a2) (Math.max b1 b2);
+
+  if lo <= hi then Some (lo, hi) else None
+;;
+
+let intersects = fn ((x1, y1), (x2, y2)) ((x3, y3), (x4, y4)) ->
+  let s1_vert = x1 == x2;
+  let s2_vert = x3 == x4;
+
+  match (s1_vert, s2_vert) with
+  | (true, false) ->
+    if between x1 (Math.min x3 x4) (Math.max x3 x4) &&
+       between y3 (Math.min y1 y2) (Math.max y1 y2)
+    then Some (x1, y3)
+    else None
+
+  | (false, true) ->
+    if between x3 (Math.min x1 x2) (Math.max x1 x2) &&
+       between y1 (Math.min y3 y4) (Math.max y3 y4)
+    then Some (x3, y1)
+    else None
+
+  | (true, true) ->
+    if x1 == x3 then (
+      match overlap y1 y2 y3 y4 with
+      | Some (lo, hi) -> Some (x1, closest_to_zero lo hi)
+      | None -> None
+    ) else None
+
+  | (false, false) ->
+    if y1 == y3 then (
+      match overlap x1 x2 x3 x4 with
+      | Some (lo, hi) -> Some (closest_to_zero lo hi, y1)
+      | None -> None
+    ) else None
+;;
+
+let better = fn best p ->
+  if not_origin p then Math.min best (manhattan p) else best
+;;
+
+let segment = fn (seg, _) -> seg;;
+
+let closest_against = fn seg segs best ->
+  match segs with
+  | [] -> best
+  | other::rest -> (
+    let next = match intersects (segment seg) (segment other) with
+    | Some p -> better best p
+    | None -> best
+    ;
+    closest_against seg rest next
+  )
+;;
+
+let closest_all = fn segs1 segs2 best ->
+  match segs2 with
+  | [] -> best
+  | seg::rest -> closest_all segs1 rest (closest_against seg segs1 best)
+;;
+
+let delay = fn (seg1, steps1) (seg2, steps2) p ->
+  let (start1, _) = seg1;
+  let (start2, _) = seg2;
+
+  steps1 + dist start1 p + steps2 + dist start2 p
+;;
+
+let better_delay = fn best seg1 seg2 p ->
+  if not_origin p then Math.min best (delay seg1 seg2 p) else best
+;;
+
+let score_v = fn best seg1 seg2 x lo hi y ->
+  if between y lo hi then better_delay best seg1 seg2 (x, y) else best
+;;
+
+let score_h = fn best seg1 seg2 y lo hi x ->
+  if between x lo hi then better_delay best seg1 seg2 (x, y) else best
+;;
+
+let best_overlap_v = fn best seg1 seg2 x lo hi y1 y2 y3 y4 ->
+  let b1 = score_v best seg1 seg2 x lo hi lo;
+  let b2 = score_v b1 seg1 seg2 x lo hi hi;
+  let b3 = score_v b2 seg1 seg2 x lo hi y1;
+  let b4 = score_v b3 seg1 seg2 x lo hi y2;
+  let b5 = score_v b4 seg1 seg2 x lo hi y3;
+  let b6 = score_v b5 seg1 seg2 x lo hi y4;
+
+  if x == 0 && between 0 lo hi then (
+    let b7 = score_v b6 seg1 seg2 x lo hi (0 - 1);
+    score_v b7 seg1 seg2 x lo hi 1
+  ) else b6
+;;
+
+let best_overlap_h = fn best seg1 seg2 y lo hi x1 x2 x3 x4 ->
+  let b1 = score_h best seg1 seg2 y lo hi lo;
+  let b2 = score_h b1 seg1 seg2 y lo hi hi;
+  let b3 = score_h b2 seg1 seg2 y lo hi x1;
+  let b4 = score_h b3 seg1 seg2 y lo hi x2;
+  let b5 = score_h b4 seg1 seg2 y lo hi x3;
+  let b6 = score_h b5 seg1 seg2 y lo hi x4;
+
+  if y == 0 && between 0 lo hi then (
+    let b7 = score_h b6 seg1 seg2 y lo hi (0 - 1);
+    score_h b7 seg1 seg2 y lo hi 1
+  ) else b6
+;;
+
+let best_delay_pair = fn best (((x1, y1), (x2, y2)), steps1) (((x3, y3), (x4, y4)), steps2) ->
+  let seg1 = (((x1, y1), (x2, y2)), steps1);
+  let seg2 = (((x3, y3), (x4, y4)), steps2);
+  let s1_vert = x1 == x2;
+  let s2_vert = x3 == x4;
+
+  match (s1_vert, s2_vert) with
+  | (true, true) ->
+    if x1 == x3 then (
+      match overlap y1 y2 y3 y4 with
+      | Some (lo, hi) -> best_overlap_v best seg1 seg2 x1 lo hi y1 y2 y3 y4
+      | None -> best
+    ) else best
+
+  | (false, false) ->
+    if y1 == y3 then (
+      match overlap x1 x2 x3 x4 with
+      | Some (lo, hi) -> best_overlap_h best seg1 seg2 y1 lo hi x1 x2 x3 x4
+      | None -> best
+    ) else best
+
+  | _ ->
+    match intersects (segment seg1) (segment seg2) with
+    | Some p -> better_delay best seg1 seg2 p
+    | None -> best
+;;
+
+let best_delay_against = fn seg segs best ->
+  match segs with
+  | [] -> best
+  | other::rest -> (
+    let next = best_delay_pair best seg other;
+    best_delay_against seg rest next
+  )
+;;
+
+let best_delay_all = fn segs1 segs2 best ->
+  match segs2 with
+  | [] -> best
+  | seg::rest -> best_delay_all segs1 rest (best_delay_against seg segs1 best)
+;;
+
+let segments1, segments2 = match split_on inp '\n' with
+  | Some (l1, l2) -> (proc_instrs l1 (0, 0) 0 [], proc_instrs l2 (0, 0) 0 [])
+  | None -> ([], [])
+  ;
+
+let part1 = closest_all segments1 segments2 Math.MAX_INT;
+let part2 = best_delay_all segments1 segments2 Math.MAX_INT;
+
+print `{part1}\n`;
+print `{part2}\n`
+
+
+#
+#
+# proc_instrs inp
+#

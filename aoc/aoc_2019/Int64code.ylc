@@ -1,0 +1,272 @@
+type Int64 = Uint64;
+
+let int64_from_int = extern fn Int -> Uint64;
+let int64_from_uint64 = extern fn Uint64 -> Uint64;
+let int64_to_int = extern fn Uint64 -> Int;
+let int64_str = extern fn Uint64 -> String;
+
+let int64_add = extern fn Uint64 -> Uint64 -> Uint64;
+let int64_mul = extern fn Uint64 -> Uint64 -> Uint64;
+let int64_eq = extern fn Uint64 -> Uint64 -> Bool;
+let int64_ne = extern fn Uint64 -> Uint64 -> Bool;
+let int64_lt = extern fn Uint64 -> Uint64 -> Bool;
+
+type VmEvent = 
+  | Continue
+  | Halted
+  | NeedsInput of (Array of Int64)
+  | Output of Int64
+  ;
+
+type Vm = (
+  pc: Int,
+  rb: Int64,
+  prog: Array of Int64,
+  event: VmEvent
+);
+
+let MEM_SIZE = 1000000;
+
+let addr = fn x ->
+  int64_to_int x
+;;
+
+let get_operand = fn pc rb arr offset mode ->
+  let p = arr[pc + offset];
+
+  match mode with
+  | 0 -> arr[addr p]
+  | 1 -> p
+  | 2 -> arr[addr (int64_add rb p)]
+  | _ -> int64_from_int 0
+;;
+
+let write_addr = fn pc rb arr offset mode ->
+  let p = arr[pc + offset];
+
+  match mode with
+  | 2 -> addr (int64_add rb p)
+  | _ -> addr p
+;;
+
+let modes = fn opcode -> 
+  let pmodes = (int64_to_int opcode) / 100;
+  let m1 = pmodes % 10;
+  let m2 = (pmodes / 10) % 10;
+  let m3 = (pmodes / 100) % 10;
+  (m1, m2, m3)
+;;
+
+let add = fn pc rb arr ->
+  let opcode = arr[pc];
+  let (m1, m2, m3) = modes opcode;
+
+  let a = get_operand pc rb arr 1 m1;
+  let b = get_operand pc rb arr 2 m2;
+
+  let r_pos = write_addr pc rb arr 3 m3;
+  arr[r_pos] := int64_add a b;
+
+  (pc + 4, rb, Continue)
+;;
+
+let mul = fn pc rb arr ->
+  let opcode = arr[pc];
+  let (m1, m2, m3) = modes opcode;
+
+  let a = get_operand pc rb arr 1 m1;
+  let b = get_operand pc rb arr 2 m2;
+
+  let r_pos = write_addr pc rb arr 3 m3;
+  arr[r_pos] := int64_mul a b;
+
+  (pc + 4, rb, Continue)
+;;
+
+let jump_true = fn pc rb arr ->
+  let opcode = arr[pc];
+  let (m1, m2, _) = modes opcode;
+
+  let a = get_operand pc rb arr 1 m1;
+  let b = get_operand pc rb arr 2 m2;
+
+  if (int64_ne a (int64_from_int 0)) then (
+    (addr b, rb, Continue)
+  ) else (
+    (pc + 3, rb, Continue)
+  )
+;;
+
+let jump_false = fn pc rb arr ->
+  let opcode = arr[pc];
+  let (m1, m2, _) = modes opcode;
+
+  let a = get_operand pc rb arr 1 m1;
+  let b = get_operand pc rb arr 2 m2;
+
+  if (int64_eq a (int64_from_int 0)) then (
+    (addr b, rb, Continue)
+  ) else (
+    (pc + 3, rb, Continue)
+  )
+;;
+
+let lt = fn pc rb arr ->
+  let opcode = arr[pc];
+  let (m1, m2, m3) = modes opcode;
+
+  let a = get_operand pc rb arr 1 m1;
+  let b = get_operand pc rb arr 2 m2;
+
+  let r_pos = write_addr pc rb arr 3 m3;
+
+  arr[r_pos] := if (int64_lt a b) then int64_from_int 1 else int64_from_int 0;
+ 
+  (pc + 4, rb, Continue)
+;;
+
+let eq = fn pc rb arr ->
+  let opcode = arr[pc];
+  let (m1, m2, m3) = modes opcode;
+
+  let a = get_operand pc rb arr 1 m1;
+  let b = get_operand pc rb arr 2 m2;
+
+  let r_pos = write_addr pc rb arr 3 m3;
+
+  arr[r_pos] := if (int64_eq a b) then int64_from_int 1 else int64_from_int 0;
+ 
+  (pc + 4, rb, Continue)
+;;
+
+let scanf = extern fn Ptr -> Ptr -> Int;
+
+let get_input = fn pc rb arr ->
+  let opcode = arr[pc];
+  let (m1, _, _) = modes opcode;
+
+  let addr = write_addr pc rb arr 1 m1;
+  (pc + 2, rb, NeedsInput (array_range addr 1 arr))
+;;
+
+let output = fn pc rb arr ->
+  let opcode = arr[pc];
+  let (m1, _, _) = modes opcode;
+
+  let v = get_operand pc rb arr 1 m1;
+  (pc + 2, rb, Output v)
+;;
+
+let terminate = fn pc rb arr ->
+  (array_size arr, rb, Halted)
+;;
+
+let adjust_rb = fn pc rb arr ->
+  let opcode = arr[pc];
+  let (m1, _, _) = modes opcode;
+  let v = get_operand pc rb arr 1 m1;
+
+  (pc + 2, int64_add rb v, Continue)
+;;
+
+let step_vm = fn vm: (Vm) ->
+  let pc = vm.pc;
+  let arr = vm.prog;
+  let rb = vm.rb;
+
+  let pcn, rbn, ev = match int64_to_int (arr[pc]) % 100 with
+    | 1 -> add pc rb arr
+    | 2 -> mul pc rb arr
+    | 3 -> get_input pc rb arr
+    | 4 -> output pc rb arr
+    | 5 -> jump_true pc rb arr
+    | 6 -> jump_false pc rb arr
+    | 7 -> lt pc rb arr
+    | 8 -> eq pc rb arr
+    | 9 -> adjust_rb pc rb arr
+    | 99 -> terminate pc rb arr
+    | _ -> (pc + 1, rb, Continue)
+    ;
+  Vm pcn rbn arr ev
+;;
+
+let copy_prog_sized = fn prog: (Array of Int) size: (Int) ->
+  let cpy = array_fill_const size (int64_from_int 0);
+
+  for i = 0 .. array_size prog in (
+    cpy[i] := int64_from_int (prog[i])
+  );
+  cpy
+;;
+
+let copy_prog64_sized = fn prog: (Array of Uint64) size: (Int) ->
+  let cpy = array_fill_const size (int64_from_int 0);
+
+  for i = 0 .. array_size prog in (
+    cpy[i] := int64_from_uint64 (prog[i])
+  );
+  cpy
+;;
+
+let run_vm = fn vm: (Vm) ->
+  let nvm = step_vm vm;
+
+  match nvm.event with
+  | Continue -> run_vm nvm
+  | NeedsInput ref -> (
+    let v = [|0|];
+    print "need input for vm\n";
+    print "enter an integer: ";
+    scanf (cstr "%d") (cstr v);
+    ref[0] := int64_from_int (v[0]);
+    run_vm (Vm nvm.pc nvm.rb nvm.prog Continue)
+  )
+  | Halted -> ()
+  | Output v -> (
+    print `got output value: {int64_str v}\n`;
+    run_vm (Vm nvm.pc nvm.rb nvm.prog Continue)
+  )
+;;
+
+let run_pc = fn pc rb arr ->
+  let pcn, rbn, ev = match int64_to_int (arr[pc]) % 100 with
+    | 1 -> add pc rb arr
+    | 2 -> mul pc rb arr
+    | 3 -> get_input pc rb arr
+    | 4 -> output pc rb arr
+    | 5 -> jump_true pc rb arr
+    | 6 -> jump_false pc rb arr
+    | 7 -> lt pc rb arr
+    | 8 -> eq pc rb arr
+    | 9 -> adjust_rb pc rb arr
+    | 99 -> terminate pc rb arr
+    | _ -> (pc + 1, rb, Continue)
+    ;
+
+  match ev with
+  | Continue -> run_pc pcn rbn arr
+  | NeedsInput ref -> (
+    let v = [|0|];
+    print "need input for vm\n";
+    print "enter an integer: ";
+    scanf (cstr "%d") (cstr v);
+    ref[0] := int64_from_int (v[0]);
+    run_pc pcn rbn arr
+  )
+  | Halted -> ()
+  | Output v -> (
+    print `got output value: {int64_str v}\n`;
+    run_pc pcn rbn arr
+  )
+;;
+
+let new_vm = fn prog -> Vm 0 (int64_from_int 0) (copy_prog_sized prog (array_size prog)) Continue;;
+let new_vm64 = fn prog -> Vm 0 (int64_from_int 0) (copy_prog64_sized prog (array_size prog)) Continue;;
+
+let Run = fn prog ->
+  run_pc 0 (int64_from_int 0) (copy_prog_sized prog MEM_SIZE)
+;;
+
+let Run64 = fn prog ->
+  run_pc 0 (int64_from_int 0) (copy_prog64_sized prog MEM_SIZE)
+;;

@@ -1,0 +1,25 @@
+open day02_input;
+
+import Intcode;
+
+let try_input = fn a b prog ->
+  let cpy = array_fill_const (array_size prog) 0;
+  for i = 0 .. array_size prog in (
+    cpy[i] := prog[i]
+  );
+  cpy[1] := a;
+  cpy[2] := b;
+  let v = Intcode.Run cpy;
+  v.prog[0]
+
+;;
+
+let search = fn pr i ->
+  let a = i / 100;
+  let b = i % 100;
+  match try_input a b pr with  
+  | 19690720 -> i
+  | _ -> search pr (i + 1)
+;;
+
+print `{search inp 0}`

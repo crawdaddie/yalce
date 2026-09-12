@@ -1,0 +1,203 @@
+let open_file = extern fn String -> String -> Option of Ptr;
+let read_bytes = extern fn Ptr -> String;
+let read_lines = extern fn Ptr -> (List of String, Int);
+let l, _ = match open_file "~/projects/yalce/aoc/aoc_2019/day06.txt" "rb" with 
+  | Some fd -> read_lines fd
+  | None -> ([], 0)
+  ;
+
+# let l = [
+#   "COM)B",
+#   "B)C",
+#   "C)D",
+#   "D)E",
+#   "E)F",
+#   "B)G",
+#   "G)H",
+#   "D)I",
+#   "E)J",
+#   "J)K",
+#   "K)L",
+# ];
+
+
+let char_to_int = extern fn Char -> Int;
+
+let key_char = fn cc ->
+  let c = char_to_int cc;
+  let A_int = 'A' |> char_to_int;
+  let Z_int = 'Z' |> char_to_int;
+
+  if (c >= A_int && c <= Z_int) then (
+    c - A_int
+  ) else (
+    26 + (c - ('1' |> char_to_int))
+  )
+;;
+
+let KEY_BASE = 35;
+let KEY_CAP = KEY_BASE * KEY_BASE * KEY_BASE;
+
+let key_part = fn key i ->
+  if i >= array_size key then 0 else key_char (key[i])
+;;
+
+let key_idx = fn key ->
+  let a = key_part key 0;
+  let b = key_part key 1;
+  let c = key_part key 2;
+
+  a * KEY_BASE * KEY_BASE + b * KEY_BASE + c
+;;
+
+# type Orbit = (
+#   orbit_key: Int
+# );
+#
+let orbits = array_fill_const KEY_CAP 0;
+
+let find_first_idx = fn idx a delim ->
+  if idx >= (array_size a) then (None) else (
+    match a[idx] with 
+    | xx if xx == delim -> Some idx
+    | _ -> find_first_idx (idx + 1) a delim 
+  )
+;;
+let split_on = fn str delim ->
+  match find_first_idx 0 str delim with
+  | Some idx -> Some (str[0 .. idx], str[(idx + 1) ..])
+  | None -> None
+;;
+
+let proc_orbit_specs = fn l orbits ->
+  match l with
+  | [] -> orbits
+  | x::rest -> (
+    match split_on x ')' with
+    | None -> orbits
+    | Some (sun_key, planet_key) -> (
+      let planet_key_idx = key_idx planet_key;
+      let sun_key_idx = key_idx sun_key;
+      orbits[planet_key_idx] := sun_key_idx;
+      proc_orbit_specs rest orbits
+    )
+  )
+;;
+
+proc_orbit_specs l orbits;
+
+let com_idx = key_idx "COM";
+
+let count_orbits = fn orbits c idx ->
+  if idx == com_idx then c else (
+    let idx2 = orbits[idx];
+    count_orbits orbits (c + 1) idx2
+  )
+;;
+
+let proc_planets = fn orbits ll ->
+  match ll with
+  | [] -> ()
+  | x::rest -> (
+    match split_on x ')' with
+    | Some (s, p) -> (
+      # print "planet: ";
+      # print `{p} {key_idx p} orbits (direct / indirect): {count_orbits orbits 0 (key_idx p)}\n`;
+      proc_planets orbits rest 
+    )
+    | None -> ()
+  )
+;;
+
+let total_orbits = fn orbits ll acc ->
+  match ll with
+  | [] -> acc
+  | x::rest -> (
+    match split_on x ')' with
+    | Some (s, p) -> total_orbits orbits rest (acc + count_orbits orbits 0 (key_idx p))
+    | None -> total_orbits orbits rest acc
+  )
+;;
+
+proc_planets orbits l;
+print `total: {total_orbits orbits l 0}\n`;
+# Part 2:
+
+
+
+
+# print `{orbits[key_idx "C"]}\n`
+
+
+let empty_int_list = match [0,] with
+  | _::rest -> rest
+  | [] -> []
+  ;
+
+let tree = array_fill_const KEY_CAP empty_int_list;
+
+let cons_tree = fn l tr ->
+  match l with
+  | [] -> tr
+  | x::rest -> (
+    match split_on x ')' with
+    | None -> tr
+    | Some (sun_key, planet_key) -> (
+      let planet_key_idx = key_idx planet_key;
+      let sun_key_idx = key_idx sun_key;
+      let children = tr[sun_key_idx];
+      tr[sun_key_idx] := planet_key_idx::children;
+      cons_tree rest tr
+    )
+  )
+;;
+cons_tree l tree;
+
+let contains_nodes = fn tree nodes target ->
+  match nodes with
+  | [] -> false
+  | idx::rest ->
+    if idx == target then true else (
+      if contains_nodes tree (tree[idx]) target then true else contains_nodes tree rest target
+    )
+;;
+
+let depth_nodes = fn tree nodes target d ->
+  match nodes with
+  | [] -> 0
+  | idx::rest ->
+    if idx == target then d else (
+      let child_depth = depth_nodes tree (tree[idx]) target (d + 1);
+      if child_depth > 0 then child_depth else depth_nodes tree rest target d
+    )
+;;
+
+let depth_from = fn tree idx target d ->
+  depth_nodes tree (idx::[]) target d
+;;
+
+let common_child = fn tree children a b fallback ->
+  match children with
+  | [] -> fallback
+  | child::rest ->
+    if contains_nodes tree (child::[]) a then (
+      if contains_nodes tree (child::[]) b then child else common_child tree rest a b fallback
+    ) else (
+      common_child tree rest a b fallback
+    )
+;;
+
+let lca_from = fn tree idx a b ->
+  let child = common_child tree (tree[idx]) a b idx;
+  if child == idx then idx else lca_from tree child a b
+;;
+
+let transfers = fn tree from_key to_key ->
+  let from = key_idx from_key;
+  let dst = key_idx to_key;
+  let common = lca_from tree com_idx from dst;
+
+  (depth_from tree common from 0) + (depth_from tree common dst 0) - 2
+;;
+
+print `transfers: {transfers tree "YOU" "SAN"}\n`;

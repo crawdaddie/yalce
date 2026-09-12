@@ -1,0 +1,66 @@
+let digits = [|0, 0, 0, 0, 0, 0|];
+# let pw = 372304;
+
+let increasing = fn i repeats arr ->
+  if (i >= array_size arr) then ( repeats >= 1 ) else (
+    match arr[i] >= arr[i - 1] with
+    | false -> false
+    | true -> (
+      let rep = repeats + (if arr[i] == arr[i - 1] then 1 else 0);
+      increasing (i + 1) rep arr
+    ) 
+  )
+;;
+
+  # print `{arr[i]}`;
+
+# print `increasing 123456 {increasing 1 [|1, 2, 3,4,5,6|]}\n`;
+let conforming = [|0|];
+for pw = 372304 .. 847061 in (
+  digits[0] := (pw % 1000000) / 100000;
+  digits[1] := (pw % 100000) / 10000;
+  digits[2] := (pw % 10000) / 1000;
+  digits[3] := (pw % 1000) / 100;
+  digits[4] := (pw % 100) / 10;
+  digits[5] := (pw % 10);
+
+
+  if (increasing 1 0 digits) then (
+    conforming[0] := 1 + conforming[0]
+  )
+);
+
+
+let arr_some = fn cb arr -> 
+  match array_size arr with
+  | 0 -> false
+  | _ -> (if (cb (arr[0])) then true else (arr_some cb (arr[1 ..])))
+;;
+
+let part2_conforming = fn arr ->
+  
+  let dmap = [|0, 0, 0, 0, 0, 0, 0, 0, 0, 0|]; 
+  for i = 0 .. 6 in (
+    dmap[arr[i]] := 1 + dmap[arr[i]]
+  );
+  arr_some (fn x -> x == 2) dmap 
+;;
+
+print `conforming pwords: {conforming[0]}\n`;
+conforming[0] := 0;
+for pw = 372304 .. 847061 in (
+  digits[0] := (pw % 1000000) / 100000;
+  digits[1] := (pw % 100000) / 10000;
+  digits[2] := (pw % 10000) / 1000;
+  digits[3] := (pw % 1000) / 100;
+  digits[4] := (pw % 100) / 10;
+  digits[5] := (pw % 10);
+
+
+  if ((increasing 1 0 digits) && part2_conforming digits) then (
+    conforming[0] := 1 + conforming[0]
+  )
+);
+
+
+print `conforming pwords: {conforming[0]}\n`
