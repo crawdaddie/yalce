@@ -49,5 +49,5 @@ dev/kernel/*.ipynb
 
 
 euler/
-aoc/
+# aoc/
 notes/
