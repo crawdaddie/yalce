@@ -5363,7 +5363,10 @@ static MirSymbol *mir_open_import_member_symbol(
   }
 
   symbol->as = exported->as;
-  symbol->global_value = exported->global_value;
+  // Opened globals cross function boundaries; reload them from storage.
+  symbol->global_value = exported->kind == MIR_SYMBOL_GLOBAL
+                             ? MIR_NO_VALUE
+                             : exported->global_value;
   symbol->global_slot = exported->global_slot;
   symbol->module_path = mir_scope_strdup(ctx, import_path);
   symbol->module_member_name = mir_scope_strdup(ctx, member_name);

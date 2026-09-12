@@ -1,5 +1,6 @@
-
+let MAX_INT = 2147483647;
 let PI = 3.14159265358979323846264338327950288;
+
 let epsilon = 0.000000000001;
 let rand_int = extern fn Int -> Int ;
 

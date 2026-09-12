@@ -1,5 +1,6 @@
 #ifndef _LANG_YLC_STDLIB_H
 #define _LANG_YLC_STDLIB_H
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "../ylc_datatypes.h"
@@ -68,12 +69,9 @@ struct _OptFile {
   FILE *fd;
 };
 
-typedef struct ByteArray {
-  size_t size;
-  char *bytes;
-} ByteArray;
+typedef _String ByteArray;
 
-struct ByteArray read_bytes(FILE *f);
+ByteArray read_bytes(FILE *f);
 
 // typedef struct _YLC__String_List {
 //   _String data;
@@ -147,8 +145,18 @@ typedef struct __attribute__((packed)) {
 // String parsing functions
 int32_t int32_parse(_String str);
 double double_parse(_String str);
+uint64_t int64_from_int(int32_t x);
+uint64_t int64_from_uint64(uint64_t x);
+int32_t int64_to_int(uint64_t x);
+_String int64_str(uint64_t x);
+uint64_t int64_add(uint64_t x, uint64_t y);
+uint64_t int64_mul(uint64_t x, uint64_t y);
+bool int64_eq(uint64_t x, uint64_t y);
+bool int64_ne(uint64_t x, uint64_t y);
+bool int64_lt(uint64_t x, uint64_t y);
 
 // Find first regex match in a string
 int regex_find_one(char *str, char *pattern, int32_t *res);
 
+int MAX_INT();
 #endif

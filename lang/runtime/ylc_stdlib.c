@@ -1,6 +1,7 @@
 #include "ylc_stdlib.h"
 #include <ctype.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <math.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -13,6 +14,10 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+static const uint32_t YLC_RC_HEAP_COUNT = 1;
+static const uint32_t YLC_RC_DEFAULT_TAG = 0;
+static const size_t CSTR_NUL_BYTES = 1;
 
 void str_copy(char *dest, char *src, int len) {
   // printf("calling str copy %s %s %d\n", dest, src, len);
@@ -53,6 +58,60 @@ void __ylc_drop(void *ptr) {
 }
 
 void fprint(FILE *f, _String str) { fprintf(f, "%s", str.chars); }
+
+static void *ylc_rc_alloc(size_t payload_size) {
+  YlcRcHeader *header = malloc(sizeof(YlcRcHeader) + payload_size);
+  if (header == NULL) {
+    return NULL;
+  }
+
+  header->rc = YLC_RC_HEAP_COUNT;
+  header->tag_or_size_class = YLC_RC_DEFAULT_TAG;
+
+  return (char *)header + sizeof(YlcRcHeader);
+}
+
+static void ylc_rc_free(void *payload) {
+  if (payload == NULL) {
+    return;
+  }
+
+  free(__ylc_header(payload));
+}
+
+static _String alloc_string(const char *chars, size_t len) {
+  char *payload = ylc_rc_alloc(len + CSTR_NUL_BYTES);
+  if (payload == NULL) {
+    return (_String){0, 0, NULL};
+  }
+
+  memcpy(payload, chars, len);
+  payload[len] = '\0';
+
+  return (_String){(int32_t)len, 0, payload};
+}
+
+static STRLIST *alloc_str_node(_String str) {
+  STRLIST *node = ylc_rc_alloc(sizeof(STRLIST));
+  if (node == NULL) {
+    return NULL;
+  }
+
+  node->data = str;
+  node->next = NULL;
+
+  return node;
+}
+
+static void free_lines(STRLIST *list) {
+  while (list != NULL) {
+    STRLIST *next = (STRLIST *)list->next;
+    ylc_rc_free((void *)list->data.chars);
+    ylc_rc_free(list);
+    list = next;
+  }
+}
+
 struct char_matrix {
   int32_t rows;
   int32_t cols;
@@ -176,7 +235,7 @@ _String transpose_string(int input_rows, int input_cols, int output_rows,
 }
 
 ByteArray read_bytes(FILE *f) {
-  ByteArray result = {0, NULL};
+  ByteArray result = {0, 0, NULL};
 
   long original_pos = ftell(f);
   if (original_pos == -1) {
@@ -195,27 +254,34 @@ ByteArray read_bytes(FILE *f) {
     return result;
   }
 
+  if (file_size > INT32_MAX) {
+    fprintf(stderr, "Error: file too large\n");
+    return result;
+  }
+
   if (fseek(f, 0, SEEK_SET) != 0) {
     perror("Error seeking to beginning of file");
     return result;
   }
 
-  result.bytes = (char *)malloc(file_size + 1); // +1 for null terminator
-  if (result.bytes == NULL) {
+  // Return a normal YLC string so RC dup/drop can touch it.
+  char *bytes = ylc_rc_alloc((size_t)file_size + CSTR_NUL_BYTES);
+  if (bytes == NULL) {
     perror("Memory allocation failed");
     return result;
   }
 
-  size_t bytes_read = fread(result.bytes, 1, file_size, f);
+  size_t bytes_read = fread(bytes, 1, file_size, f);
   if (bytes_read < file_size && !feof(f)) {
     perror("Error reading file");
-    free(result.bytes);
-    result.bytes = NULL;
+    ylc_rc_free(bytes);
     return result;
   }
 
-  result.bytes[bytes_read] = '\0';
-  result.size = bytes_read;
+  bytes[bytes_read] = '\0';
+  result.size = (int32_t)bytes_read;
+  result.offset = 0;
+  result.chars = bytes;
 
   if (fseek(f, original_pos, SEEK_SET) != 0) {
     perror("Error restoring file position");
@@ -236,13 +302,6 @@ void free_str_list(_YLC__String_List *list) {
   }
 }
 
-/*
- * Read all lines from a FILE pointer and return them as a linked list
- *
- * Note: This implementation does not copy line data but instead points
- * into the original buffer. The returned lines will be invalid if the
- * original buffer is freed.
- */
 ReadLinesResult read_lines(FILE *f) {
   if (f == NULL) {
     fprintf(stderr, "Error: NULL file pointer\n");
@@ -250,25 +309,14 @@ ReadLinesResult read_lines(FILE *f) {
   }
 
   ByteArray file_bytes = read_bytes(f);
-  if (file_bytes.bytes == NULL || file_bytes.size == 0) {
+  if (file_bytes.chars == NULL || file_bytes.size == 0) {
+    ylc_rc_free((void *)file_bytes.chars);
     return (ReadLinesResult){NULL, 0};
   }
 
-  _YLC__String_List *head =
-      (_YLC__String_List *)malloc(sizeof(_YLC__String_List));
-  if (head == NULL) {
-    free(file_bytes.bytes);
-
-    return (ReadLinesResult){NULL, 0};
-  }
-
-  head->data.chars = NULL;
-  head->data.size = 0;
-  head->data.offset = 0;
-  head->next = NULL;
-
-  _YLC__String_List *current = head;
-  char *buffer = file_bytes.bytes;
+  STRLIST *head = NULL;
+  STRLIST *tail = NULL;
+  char *buffer = (char *)file_bytes.chars;
   char *line_start = buffer;
   size_t line_length = 0;
 
@@ -279,22 +327,28 @@ ReadLinesResult read_lines(FILE *f) {
         line_length++;
       }
 
-      _YLC__String_List *new_node =
-          (_YLC__String_List *)malloc(sizeof(_YLC__String_List));
-      if (new_node == NULL) {
-        // Memory allocation failed
-        free(file_bytes.bytes);
-        free_str_list(head);
+      // Lines are normal YLC strings so RC dup/drop can touch them.
+      _String line = alloc_string(line_start, line_length);
+      if (line.chars == NULL) {
+        ylc_rc_free((void *)file_bytes.chars);
+        free_lines(head);
         return (ReadLinesResult){NULL, 0};
       }
 
-      new_node->data.chars = line_start;
-      new_node->data.size = line_length;
-      new_node->data.offset = 0;
-      new_node->next = NULL;
+      STRLIST *node = alloc_str_node(line);
+      if (node == NULL) {
+        ylc_rc_free((void *)line.chars);
+        ylc_rc_free((void *)file_bytes.chars);
+        free_lines(head);
+        return (ReadLinesResult){NULL, 0};
+      }
 
-      current->next = new_node;
-      current = new_node;
+      if (head == NULL) {
+        head = node;
+      } else {
+        tail->next = (struct _YLC__String_List *)node;
+      }
+      tail = node;
 
       line_start = buffer + i + 1;
       line_length = 0;
@@ -304,13 +358,9 @@ ReadLinesResult read_lines(FILE *f) {
     }
   }
 
-  head->data.chars = file_bytes.bytes;
-  head->data.offset = 0;
+  ylc_rc_free((void *)file_bytes.chars);
 
-  _YLC__String_List *result = head->next;
-  free(head);
-
-  return (ReadLinesResult){result, num_lines};
+  return (ReadLinesResult){head, num_lines};
 }
 
 struct _OptFile open_file(_String path, _String mode) {
@@ -830,4 +880,34 @@ int ipow(int base, int exp) {
 
   return result;
 }
-// let ipow = fn a ->
+
+int MAX_INT() { return INT_MAX; }
+
+static int64_t int64_bits(uint64_t x) { return (int64_t)x; }
+
+uint64_t int64_from_int(int32_t x) { return (uint64_t)(int64_t)x; }
+
+uint64_t int64_from_uint64(uint64_t x) { return x; }
+
+int32_t int64_to_int(uint64_t x) { return (int32_t)int64_bits(x); }
+
+_String int64_str(uint64_t x) {
+  char buf[32];
+  int len = snprintf(buf, sizeof(buf), "%lld", (long long)int64_bits(x));
+
+  if (len < 0) {
+    return alloc_string("", 0);
+  }
+
+  return alloc_string(buf, (size_t)len);
+}
+
+uint64_t int64_add(uint64_t x, uint64_t y) { return x + y; }
+
+uint64_t int64_mul(uint64_t x, uint64_t y) { return x * y; }
+
+bool int64_eq(uint64_t x, uint64_t y) { return int64_bits(x) == int64_bits(y); }
+
+bool int64_ne(uint64_t x, uint64_t y) { return int64_bits(x) != int64_bits(y); }
+
+bool int64_lt(uint64_t x, uint64_t y) { return int64_bits(x) < int64_bits(y); }

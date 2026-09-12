@@ -196,6 +196,84 @@ let begin_splot = fn gp ->
   gp
 ;;
 
+let plot_matrix_image = fn gp ->
+  fprintf gp "plot '-' matrix with image\n";
+  gp
+;;
+
+let emit_matrix = fn width height value gp ->
+  for y = 0 .. height in (
+    for x = 0 .. width in (
+      fprintf gp `{value y x} `
+    );
+    fprintf gp "\n"
+  );
+  end_data gp
+;;
+
+let emit_matrix_array = fn width height values gp ->
+  for y = 0 .. height in (
+    for x = 0 .. width in (
+      fprintf gp `{values[(y * width) + x]} `
+    );
+    fprintf gp "\n"
+  );
+  end_data gp
+;;
+
+let plot_matrix_png = fn filename plot_width plot_height width height values ->
+  let gp = start ();
+
+  fprintf gp `set terminal pngcairo size {plot_width},{plot_height}\n`;
+  fprintf gp "set output '";
+  fprintf gp filename;
+  fprintf gp "'\n";
+  fprintf gp "unset key\n";
+  fprintf gp "unset border\n";
+  fprintf gp "unset tics\n";
+  fprintf gp "unset colorbox\n";
+  fprintf gp "set size ratio -1\n";
+  fprintf gp `set yrange [{height - 1}:-1]\n`;
+  fprintf gp "set palette defined (0 'black', 1 'white')\n";
+  fprintf gp "set cbrange [0:1]\n";
+  fprintf gp "plot '-' matrix with image\n";
+
+  for y = 0 .. height in (
+    for x = 0 .. width in (
+      fprintf gp `{values[(y * width) + x]} `
+    );
+    fprintf gp "\n"
+  );
+
+  fprintf gp "e\n";
+  finish gp
+;;
+
+let plot_matrix_kitty = fn plot_width plot_height width height values ->
+  let gp = start ();
+
+  fprintf gp `set terminal kittycairo size {plot_width},{plot_height} scroll\n`;
+  fprintf gp "unset key\n";
+  fprintf gp "unset border\n";
+  fprintf gp "unset tics\n";
+  fprintf gp "unset colorbox\n";
+  fprintf gp "set size ratio -1\n";
+  fprintf gp `set yrange [{height - 1}:-1]\n`;
+  fprintf gp "set palette defined (0 'black', 1 'white')\n";
+  fprintf gp "set cbrange [0:1]\n";
+  fprintf gp "plot '-' matrix with image\n";
+
+  for y = 0 .. height in (
+    for x = 0 .. width in (
+      fprintf gp `{values[(y * width) + x]} `
+    );
+    fprintf gp "\n"
+  );
+
+  fprintf gp "e\n";
+  finish gp
+;;
+
 type SeriesSpec = (
   kind: Int,
   source: String,
