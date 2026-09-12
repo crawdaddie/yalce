@@ -10,7 +10,7 @@ type AmpResult = (
   output: Int
 );
 
-let step_direct = fn pc: (Int) rb: (Int) arr: (Array of Int) ->
+let step_direct = fn pc rb arr ->
   match arr[pc] % 100 with
   | 1 -> add pc rb arr
   | 2 -> mul pc rb arr
@@ -25,7 +25,7 @@ let step_direct = fn pc: (Int) rb: (Int) arr: (Array of Int) ->
   | _ -> (pc + 1, rb, Continue)
 ;;
 
-let run_amp_halt = fn pc: (Int) rb: (Int) arr: (Array of Int) phase: (Int) signal: (Int) input_idx: (Int) last: (Int) ->
+let run_amp_halt = fn pc rb arr phase signal input_idx last ->
   let pcn, rbn, ev = step_direct pc rb arr;
 
   match ev with
@@ -38,16 +38,16 @@ let run_amp_halt = fn pc: (Int) rb: (Int) arr: (Array of Int) phase: (Int) signa
   | Halted -> last
 ;;
 
-let run_amp_once = fn prog: (Array of Int) phase: (Int) signal: (Int) ->
+let run_amp_once = fn prog phase signal ->
   run_amp_halt 0 0 (copy_prog prog) phase signal 0 0
 ;;
 
-let phase_sequence = fn prog: (Array of Int) phases: (Array of Int) ->
-  let a = run_amp_once prog (phases[0]) 0;
-  let b = run_amp_once prog (phases[1]) a;
-  let c = run_amp_once prog (phases[2]) b;
-  let d = run_amp_once prog (phases[3]) c;
-  run_amp_once prog (phases[4]) d
+let phase_sequence = fn prog phases ->
+  run_amp_once prog (phases[0]) 0
+  |> run_amp_once prog (phases[1])
+  |> run_amp_once prog (phases[2])
+  |> run_amp_once prog (phases[3])
+  |> run_amp_once prog (phases[4])
 ;;
 
 # print `43210: {phase_sequence [|3,15,3,16,1002,16,10,16,1,16,15,15,4,15,99,0,0|] [|4,3,2,1,0|]}\n`;
@@ -89,7 +89,7 @@ let fold_permutations = fn f acc k arr ->
   )
 ;;
 
-let run_amp_out = fn pc: (Int) rb: (Int) prog: (Array of Int) phase: (Int) signal: (Int) input_used: (Int) ->
+let run_amp_out = fn pc rb prog phase signal input_used ->
   let pcn, rbn, ev = step_direct pc rb prog;
 
   match ev with
@@ -102,12 +102,12 @@ let run_amp_out = fn pc: (Int) rb: (Int) prog: (Array of Int) phase: (Int) signa
   | Halted -> AmpResult pcn rbn input_used 1 signal
 ;;
 
-let run_fb_vms = fn last: (Int) signal: (Int) phases: (Array of Int)
-                    pcA: (Int) rbA: (Int) usedA: (Int) arrA: (Array of Int)
-                    pcB: (Int) rbB: (Int) usedB: (Int) arrB: (Array of Int)
-                    pcC: (Int) rbC: (Int) usedC: (Int) arrC: (Array of Int)
-                    pcD: (Int) rbD: (Int) usedD: (Int) arrD: (Array of Int)
-                    pcE: (Int) rbE: (Int) usedE: (Int) arrE: (Array of Int) ->
+let run_fb_vms = fn last signal phases
+                    pcA rbA usedA arrA
+                    pcB rbB usedB arrB
+                    pcC rbC usedC arrC
+                    pcD rbD usedD arrD
+                    pcE rbE usedE arrE ->
 
   let ares = run_amp_out pcA rbA arrA (phases[0]) signal usedA;
   let bres = run_amp_out pcB rbB arrB (phases[1]) ares.output usedB;
@@ -125,7 +125,7 @@ let run_fb_vms = fn last: (Int) signal: (Int) phases: (Array of Int)
   )
 ;;
 
-let phase_sequence_fb = fn prog: (Array of Int) phases: (Array of Int) ->
+let phase_sequence_fb = fn prog phases ->
   run_fb_vms 0 0 phases
     0 0 0 (copy_prog prog)
     0 0 0 (copy_prog prog)
