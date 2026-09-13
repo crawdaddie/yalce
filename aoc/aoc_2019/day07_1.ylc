@@ -102,36 +102,46 @@ let run_amp_out = fn pc rb prog phase signal input_used ->
   | Halted -> AmpResult pcn rbn input_used 1 signal
 ;;
 
-let run_fb_vms = fn last signal phases
-                    pcA rbA usedA arrA
-                    pcB rbB usedB arrB
-                    pcC rbC usedC arrC
-                    pcD rbD usedD arrD
-                    pcE rbE usedE arrE ->
+let step_amp = fn idx phases pcs rbs used progs halted signal ->
+  let res = run_amp_out (pcs[idx]) (rbs[idx]) (progs[idx]) (phases[idx]) signal (used[idx]);
 
-  let ares = run_amp_out pcA rbA arrA (phases[0]) signal usedA;
-  let bres = run_amp_out pcB rbB arrB (phases[1]) ares.output usedB;
-  let cres = run_amp_out pcC rbC arrC (phases[2]) bres.output usedC;
-  let dres = run_amp_out pcD rbD arrD (phases[3]) cres.output usedD;
-  let eres = run_amp_out pcE rbE arrE (phases[4]) dres.output usedE;
+  pcs[idx] := res.pc;
+  rbs[idx] := res.rb;
+  used[idx] := res.input_used;
+  halted[0] := res.halted;
 
-  if eres.halted == 1 then last else (
-    run_fb_vms eres.output eres.output phases
-      ares.pc ares.rb ares.input_used arrA
-      bres.pc bres.rb bres.input_used arrB
-      cres.pc cres.rb cres.input_used arrC
-      dres.pc dres.rb dres.input_used arrD
-      eres.pc eres.rb eres.input_used arrE
+  res.output
+;;
+
+
+let run_fb_vms = fn last signal phases pcs rbs used progs ->
+  let halted = [|0|];
+  let out = signal
+    |> step_amp 0 phases pcs rbs used progs halted
+    |> step_amp 1 phases pcs rbs used progs halted
+    |> step_amp 2 phases pcs rbs used progs halted
+    |> step_amp 3 phases pcs rbs used progs halted
+    |> step_amp 4 phases pcs rbs used progs halted
+    ;
+
+  if halted[0] == 1 then last else (
+    run_fb_vms out out phases pcs rbs used progs
   )
 ;;
 
 let phase_sequence_fb = fn prog phases ->
-  run_fb_vms 0 0 phases
-    0 0 0 (copy_prog prog)
-    0 0 0 (copy_prog prog)
-    0 0 0 (copy_prog prog)
-    0 0 0 (copy_prog prog)
-    0 0 0 (copy_prog prog)
+  let pcs = [|0, 0, 0, 0, 0|];
+  let rbs = [|0, 0, 0, 0, 0|];
+  let used = [|0, 0, 0, 0, 0|];
+  let progs = [|
+    copy_prog prog,
+    copy_prog prog,
+    copy_prog prog,
+    copy_prog prog,
+    copy_prog prog
+  |];
+
+  run_fb_vms 0 0 phases pcs rbs used progs
 ;;
 
 # let phases = [|0,1,2,3,4|];
