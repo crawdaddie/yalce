@@ -1,0 +1,4 @@
+import tail_call_module_self_dep;
+
+tail_call_module_self_dep.step
+  (tail_call_module_self_dep.Vm 2 tail_call_module_self_dep.Continue);

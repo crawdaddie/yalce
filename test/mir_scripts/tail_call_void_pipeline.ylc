@@ -1,0 +1,12 @@
+type Ev =
+  | Continue
+  | Done
+;
+
+let run = fn ev ->
+  match ev with
+  | Continue -> run Done
+  | Done -> ()
+;;
+
+run Continue;

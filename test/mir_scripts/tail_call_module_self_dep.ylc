@@ -1,0 +1,22 @@
+type Ev =
+  | Continue
+  | Done
+;
+
+type Vm = (
+  pc: Int,
+  event: Ev
+);
+
+let step = fn vm ->
+  let nvm =
+    if vm.pc > 0 then
+      Vm (vm.pc - 1) Continue
+    else
+      Vm vm.pc Done
+    ;
+
+  match nvm.event with
+  | Continue -> step nvm
+  | Done -> nvm
+;;

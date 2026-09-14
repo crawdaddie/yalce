@@ -5,6 +5,8 @@
 #include "../../lang/ylc_datatypes.h"
 #include <SDL3/SDL.h>
 
+YLC_ARRAY_TYPE(int32_t)
+
 // ============================================================================
 // Generic window type registration
 // ============================================================================
@@ -27,6 +29,7 @@ void ylc_window_type_register(YLCWindowType type);
 
 // Open a window of the given type. `state` is passed verbatim to callbacks.
 void ylc_window_open(int type_id, const char *title, int w, int h, void *state);
+void ylc_gui_loop(void);
 
 // ============================================================================
 // Built-in oscilloscope window  (type id = 0)
@@ -36,6 +39,7 @@ void ylc_window_open(int type_id, const char *title, int w, int h, void *state);
 #define YLC_WINDOW_ARRAY_EDITOR 1
 #define YLC_WINDOW_SPECTROGRAM 2
 #define YLC_WINDOW_KB_INPUT 3
+#define YLC_WINDOW_FRAMEBUFFER 4
 
 // Open an oscilloscope window for `node`. Creates a tap node internally.
 void ylc_scope_open(Node *node);
@@ -52,5 +56,18 @@ void ylc_array_editor_open(_DoubleArray data, double min_value,
 void ylc_spectrogram_open(_DoubleArray mag, _DoubleArray transient,
                           int num_frames, int num_bins, double db_min,
                           double db_max, double transient_threshold);
+
+void *ylc_framebuffer_open(int64_t pixels_meta, int32_t *pixels, int width,
+                           int height, int scale);
+void *ylc_framebuffer_open_input(int64_t pixels_meta, int32_t *pixels,
+                                 int width, int height, int scale,
+                                 int64_t joystick_meta, int32_t *joystick);
+void *ylc_framebuffer_open_tick(int64_t pixels_meta, int32_t *pixels,
+                                int width, int height, int scale, void *tick);
+void *ylc_framebuffer_open_tick_input(int64_t pixels_meta, int32_t *pixels,
+                                      int width, int height, int scale,
+                                      int64_t joystick_meta, int32_t *joystick,
+                                      void *tick);
+int ylc_framebuffer_joystick(void *state);
 
 #endif

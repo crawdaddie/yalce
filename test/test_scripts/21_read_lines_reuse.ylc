@@ -1,0 +1,21 @@
+let open_file = extern fn String -> String -> Option of Ptr;
+let read_lines = extern fn Ptr -> (List of String, Int);
+let parse_int = extern fn String -> Int;
+
+import std/Lists;
+
+let sum = fn lines ->
+  Lists.fold (fn acc line -> acc + parse_int line) 0 lines
+;;
+
+let test = module () ->
+  let (lines, n) =
+    match open_file "../test/fixtures/read_lines_reuse.txt" "rb" with
+    | Some fd -> read_lines fd
+    | None -> (["",], 0)
+  ;
+
+  let test_count = n == 4;
+  let test_sum_once = sum lines == 100000000;
+  let test_sum_reuse = (sum lines; sum lines) == 100000000;
+;

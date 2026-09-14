@@ -1,0 +1,6 @@
+let nums = [|10, 20, 30|];
+let answer = 42;
+
+let inc = fn x: (Int) ->
+  x + 1
+;;

@@ -1,0 +1,11 @@
+type Ev =
+  | More
+  | Done
+;
+
+type Vm = (
+  pc: Int,
+  event: Ev
+);
+
+let zero = 0;
