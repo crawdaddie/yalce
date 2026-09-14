@@ -139,6 +139,31 @@ static Type *compute_type_expression_inner(Ast *expr, TICtx *ctx) {
 
     return lookup_or_bind_type_var(name);
   }
+  case AST_RECORD_ACCESS: {
+    Type *module_type =
+        compute_type_expression_inner(expr->data.AST_RECORD_ACCESS.record, ctx);
+    if (!module_type || module_type->kind != T_MODULE ||
+        !expr->data.AST_RECORD_ACCESS.member ||
+        expr->data.AST_RECORD_ACCESS.member->tag != AST_IDENTIFIER) {
+      return NULL;
+    }
+
+    const char *member_name =
+        expr->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+    TypeEnv *member = lookup_type_ref(module_type->data.T_MODULE.env,
+                                      member_name);
+    if (!member || !member->type) {
+      return NULL;
+    }
+
+    if ((member->md.type == BT_TYPE_DECL ||
+         member->md.type == BT_TYPE_CONSTRUCTOR) &&
+        member->type) {
+      return resolve_type_in_env(deep_copy_type(member->type), ctx->env);
+    }
+
+    return member->type;
+  }
   case AST_TUPLE: {
     // print_ast("compute tuple??\n");
     // print_ast(expr);

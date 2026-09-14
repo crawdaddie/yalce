@@ -1,96 +1,168 @@
-# --- Day 11: Space Police ---
-# On the way to Jupiter, you're pulled over by the Space Police.
-#
-# "Attention, unmarked spacecraft! You are in violation of Space Law! All
-# spacecraft must have a clearly visible registration identifier! You have 24
-# hours to comply or be sent to Space Jail!"
-#
-# Not wanting to be sent to Space Jail, you radio back to the Elves on Earth
-# for help. Although it takes almost three hours for their reply signal to
-# reach you, they send instructions for how to power up the emergency hull
-# painting robot and even provide a small Intcode program (your puzzle input)
-# that will cause it to paint your ship appropriately.
-#
-# There's just one problem: you don't have an emergency hull painting robot.
-#
-# You'll need to build a new emergency hull painting robot. The robot needs to
-# be able to move around on the grid of square panels on the side of your ship,
-# detect the color of its current panel, and paint its current panel black or
-# white. (All of the panels are currently black.)
-#
-# The Intcode program will serve as the brain of the robot. The program uses
-# input instructions to access the robot's camera: provide 0 if the robot is
-# over a black panel or 1 if the robot is over a white panel. Then, the program
-# will output two values:
-#
-# First, it will output a value indicating the color to paint the panel the
-# robot is over: 0 means to paint the panel black, and 1 means to paint the
-# panel white. Second, it will output a value indicating the direction the
-# robot should turn: 0 means it should turn left 90 degrees, and 1 means it
-# should turn right 90 degrees. After the robot turns, it should always move
-# forward exactly one panel. The robot starts facing up.
-#
-# The robot will continue running for a while like this and halt when it is
-# finished drawing. Do not restart the Intcode computer inside the robot during
-# this process.
-#
-# For example, suppose the robot is about to start running. Drawing black
-# panels as ., white panels as #, and the robot pointing the direction it is
-# facing (< ^ > v), the initial state and region near the robot looks like
-# this:
-#
-# .....
-# .....
-# ..^..
-# .....
-# .....
-# The panel under the robot (not visible here because a ^ is shown instead) is
-# also black, and so any input instructions at this point should be provided 0.
-# Suppose the robot eventually outputs 1 (paint white) and then 0 (turn left).
-# After taking these actions and moving forward one panel, the region now looks
-# like this:
-#
-# .....
-# .....
-# .<#..
-# .....
-# .....
-# Input instructions should still be provided 0. Next, the robot might output 0
-# (paint black) and then 0 (turn left):
-#
-# .....
-# .....
-# ..#..
-# .v...
-# .....
-# After more outputs (1,0, 1,0):
-#
-# .....
-# .....
-# ..^..
-# .##..
-# .....
-# The robot is now back where it started, but because it is now on a white
-# panel, input instructions should be provided 1. After several more outputs
-# (0,1, 1,0, 1,0), the area looks like this:
-#
-# .....
-# ..<#.
-# ...#.
-# .##..
-# .....
-# Before you deploy the robot, you should probably have an estimate of the area
-# it will cover: specifically, you need to know the number of panels it paints
-# at least once, regardless of color. In the example above, the robot painted 6
-# panels at least once. (It painted its starting panel twice, but that panel is
-# still only counted once; it also never painted the panel it ended on.)
-#
-# Build a new emergency hull painting robot and run the Intcode program on it.
-# How many panels does it paint at least once?
-#
 open day11_input;
 import Int64code;
+import std/Math;
+import libs/Gnuplot/Gnuplot;
+open Int64code;
 
-Int64code.Run inp
+let ROWS = 256;
+let COLS = 256;
+let PLOT_W = 800;
+let PLOT_H = 220;
+let origin = (ROWS / 2, COLS / 2);
+let START_POS = (0, 0);
+let START_DIR = 0;
 
+let turn = fn dir cmd ->
+  if cmd == 0 then (dir + 3) % 4 else (dir + 1) % 4
+;;
 
+let panel_idx = fn px py ->
+  let ox, oy = origin;
+  COLS * (oy + py) + (ox + px)
+;;
+
+let move = fn x y dir ->
+  match dir with
+  | 0 -> (x, y - 1)
+  | 1 -> (x + 1, y)
+  | 2 -> (x, y + 1)
+  | 3 -> (x - 1, y)
+  | _ -> (x, y)
+;;
+
+let patch_prog = fn prog ->
+  # These constants overflow before an Int -> Int64 copy.
+  prog[327] := int64_from_uint64 932972962600u64;
+  prog[337] := int64_from_uint64 838483681940u64;
+  prog[384] := int64_from_uint64 3375393987u64;
+  prog[395] := int64_from_uint64 46174071847u64;
+  prog[418] := int64_from_uint64 988648461076u64;
+  prog[430] := int64_from_uint64 709580452200u64;
+
+  prog
+;;
+
+let run_vm_io = fn vm grid painted output_idx (px, py) dir ->
+  let nvm = step_vm vm;
+  match nvm.event with
+  | NeedsInput ref -> (
+    let idx = panel_idx px py;
+    ref[0] := int64_from_int (grid[idx]);
+    run_vm_io (Vm nvm.pc nvm.rb nvm.prog Continue) grid painted output_idx (px, py) dir
+  )
+  | Output v -> (
+    if output_idx == 0 then (
+      let idx = panel_idx px py;
+      grid[idx] := int64_to_int v;
+      painted[idx] := 1;
+
+      run_vm_io (Vm nvm.pc nvm.rb nvm.prog Continue) grid painted 1 (px, py) dir
+    ) else (
+      let ndir = turn dir (int64_to_int v);
+      let nx, ny = move px py ndir;
+
+      run_vm_io (Vm nvm.pc nvm.rb nvm.prog Continue) grid painted 0 (nx, ny) ndir
+    )
+  )
+  | Halted -> (grid, painted)
+;;
+
+let grid = array_fill_const (ROWS * COLS) 0;
+let painted = array_fill_const (ROWS * COLS) 0;
+let prog1 = patch_prog (copy_prog_sized inp MEM_SIZE);
+let prog2 = patch_prog (copy_prog_sized inp MEM_SIZE);
+
+let gr, p = run_vm_io
+  (Vm 0 (int64_from_int 0) prog1 Continue)
+  grid
+  painted
+  0
+  START_POS
+  START_DIR;
+
+let min_col = [|COLS|];
+let max_col = [|0|];
+let min_row = [|ROWS|];
+let max_row = [|0|];
+
+# Find the painted viewport.
+for row = 0 .. ROWS in (
+  for col = 0 .. COLS in (
+    let idx = COLS * row + col;
+
+    if p[idx] == 1 then (
+      min_col[0] := Math.min (min_col[0]) col;
+      max_col[0] := Math.max (max_col[0]) col;
+      min_row[0] := Math.min (min_row[0]) row;
+      max_row[0] := Math.max (max_row[0]) row
+    )
+  )
+);
+
+let painted_count = [|0|];
+
+for row = (min_row[0]) .. (max_row[0] + 1) in (
+  for col = (min_col[0]) .. (max_col[0] + 1) in (
+    if painted[COLS * row + col] == 1 then (
+      painted_count[0] := 1 + painted_count[0]
+    )
+  )
+);
+
+print `num painted: {painted_count[0]}\n`;
+
+let grid2 = array_fill_const (ROWS * COLS) 0;
+let painted2 = array_fill_const (ROWS * COLS) 0;
+
+grid2[panel_idx 0 0] := 1;
+
+let gr2, p2 = run_vm_io
+  (Vm 0 (int64_from_int 0) prog2 Continue)
+  grid2
+  painted2
+  0
+  START_POS
+  START_DIR;
+
+min_col[0] := COLS;
+max_col[0] := 0;
+min_row[0] := ROWS;
+max_row[0] := 0;
+
+# Find the painted viewport.
+for row = 0 .. ROWS in (
+  for col = 0 .. COLS in (
+    let idx = COLS * row + col;
+
+    if p2[idx] == 1 then (
+      min_col[0] := Math.min (min_col[0]) col;
+      max_col[0] := Math.max (max_col[0]) col;
+      min_row[0] := Math.min (min_row[0]) row;
+      max_row[0] := Math.max (max_row[0]) row
+    )
+  )
+);
+
+let img_w = (max_col[0]) - (min_col[0]) + 1;
+let img_h = (max_row[0]) - (min_row[0]) + 1;
+
+let pixel_values = fn img ->
+  let vals = array_fill_const (img_w * img_h) 0;
+
+  for row = 0 .. img_h in (
+    for col = 0 .. img_w in (
+      let src_row = (min_row[0]) + row;
+      let src_col = (min_col[0]) + col;
+
+      vals[(row * img_w) + col] := img[(src_row * COLS) + src_col]
+    )
+  );
+
+  vals
+;;
+
+let plot_image = fn img ->
+  Gnuplot.plot_matrix_kitty PLOT_W PLOT_H img_w img_h (pixel_values img)
+;;
+
+plot_image gr2;

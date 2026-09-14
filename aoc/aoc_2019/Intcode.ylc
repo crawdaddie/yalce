@@ -12,6 +12,8 @@ type Vm = (
   event: VmEvent
 );
 
+let MEM_SIZE = 20000;
+
 let get_operand = fn pc rb arr offset mode ->
   match mode with
   | 0 -> (
@@ -222,7 +224,10 @@ let step_vm = fn vm ->
     | 99 -> terminate pc rb arr
     | _ -> (pc + 1, rb, Continue)
     ;
-  Vm pcn rbn arr ev
+
+  match ev with
+  | Continue -> Vm pcn rbn arr ev |> step_vm
+  | _ -> Vm pcn rbn arr ev
 ;;
 
 
@@ -264,29 +269,6 @@ let run_vm = fn vm ->
 let new_vm = fn prog -> Vm 0 0 (copy_prog prog) Continue;;
 
 let Run = fn prog ->
-  let v = Vm 0 0 (copy_prog_sized prog 20000) Continue;
+  let v = Vm 0 0 (copy_prog_sized prog MEM_SIZE) Continue;
   run_vm v
 ;;
-
-# let v = Vm 0 (copy_prog inp) Continue;
-#
-# let run_vm = fn vm ->
-#   let nvm = step_vm vm;
-#   match nvm.event with
-#   | Continue -> run_vm nvm
-#   | NeedsInput ref -> (
-#     print "need input for vm\n";
-#     print "enter an integer: ";
-#     scanf (cstr "%d") (cstr ref);
-#     run_vm (Vm nvm.pc nvm.prog Continue)
-#   )
-#   | Halted -> nvm
-#   | Output v -> (
-#     print `got output value: {v}\n`;
-#     run_vm (Vm nvm.pc nvm.prog Continue)
-#   )
-# ;;
-#
-# run_vm v
-#
-#

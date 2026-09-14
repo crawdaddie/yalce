@@ -1196,6 +1196,50 @@ int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx) {
         return 0;
       }
     }
+    if (pattern->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
+      Ast *fn = pattern->data.AST_APPLICATION.function;
+      Type *ctor_type = extract_member_from_sum_type(value_type, fn);
+      if (ctor_type && ctor_type->kind == T_CONS &&
+          (size_t)ctor_type->data.T_CONS.num_args ==
+              pattern->data.AST_APPLICATION.len) {
+        for (size_t i = 0; i < pattern->data.AST_APPLICATION.len; i++) {
+          if (bind_pattern(pattern->data.AST_APPLICATION.args + i,
+                           ctor_type->data.T_CONS.args[i], ctx) != 0) {
+            return 1;
+          }
+        }
+        return 0;
+      }
+
+      Type *current = infer_expr(fn, ctx);
+      for (size_t i = 0; i < pattern->data.AST_APPLICATION.len; i++) {
+        if (!current || current->kind != T_FN) {
+          return 1;
+        }
+        if (bind_pattern(pattern->data.AST_APPLICATION.args + i,
+                         current->data.T_FN.from, ctx) != 0) {
+          return 1;
+        }
+        current = current->data.T_FN.to;
+      }
+      if (current) {
+        add_constraint(ctx, value_type, current);
+        return 0;
+      }
+    }
+    break;
+  }
+  case AST_RECORD_ACCESS: {
+    Type *ctor_type = extract_member_from_sum_type(value_type, pattern);
+    if (ctor_type) {
+      return 0;
+    }
+
+    Type *current = infer_expr(pattern, ctx);
+    if (current && current->kind != T_FN) {
+      add_constraint(ctx, value_type, current);
+      return 0;
+    }
     break;
   }
   default:
@@ -1374,7 +1418,16 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
       int i = 0;
       for (TypeEnv *te = rec_view->data.T_MODULE.env; te; te = te->next, i++) {
         if (CHARS_EQ(te->name, member_name)) {
-          type = instantiate_env(te, ctx);
+          if (te->md.type == BT_TYPE_DECL && te->type &&
+              te->type->kind == T_CONS && !is_sum_type(te->type)) {
+            Type *decl_type =
+                resolve_type_in_env(deep_copy_type(te->type), ctx->env);
+            type = create_type_multi_param_fn(
+                decl_type->data.T_CONS.num_args, decl_type->data.T_CONS.args,
+                decl_type);
+          } else {
+            type = instantiate_env(te, ctx);
+          }
           ast->data.AST_RECORD_ACCESS.index = i;
           break;
         }

@@ -1,36 +1,35 @@
 open day07_input;
 import Intcode;
-open Intcode;
-# Intcode.Run inp
+import std/Math;
+import std/Permutations;
 
-let run_vm_io = fn vm inputs output ->
-  let nvm = step_vm vm;
+let run_amp = fn vm inputs output ->
+  let nvm = Intcode.step_vm vm;
   match nvm.event with
-  | Continue -> run_vm_io nvm inputs output
-  | NeedsInput ref -> (
+  | Intcode.NeedsInput ref -> (
     ref[0] := inputs[0];
-    run_vm_io (Vm nvm.pc 0 nvm.prog Continue) (inputs[1 ..]) output
+    run_amp (Intcode.Vm nvm.pc nvm.rb nvm.prog Intcode.Continue) (inputs[1 ..]) output
   )
-  | Halted -> nvm
-  | Output v -> (
+  | Intcode.Halted -> nvm
+  | Intcode.Output v -> (
     output[0] := v;
-    run_vm_io (Vm nvm.pc 0 nvm.prog Continue) inputs output
+    Intcode.Vm nvm.pc nvm.rb nvm.prog Intcode.Continue
   )
 ;;
 
 let phase_sequence = fn prog phases ->
-  let vmA = new_vm prog;   
-  let vmB = new_vm prog;
-  let vmC = new_vm prog;
-  let vmD = new_vm prog;
-  let vmE = new_vm prog;
+  let vmA = Intcode.new_vm prog;
+  let vmB = Intcode.new_vm prog;
+  let vmC = Intcode.new_vm prog;
+  let vmD = Intcode.new_vm prog;
+  let vmE = Intcode.new_vm prog;
   let o = [|0|];
 
-  run_vm_io vmA [| phases[0], 0 |] o;
-  run_vm_io vmB [| phases[1], o[0] |] o;
-  run_vm_io vmC [| phases[2], o[0] |] o;
-  run_vm_io vmD [| phases[3], o[0] |] o;
-  run_vm_io vmE [| phases[4], o[0] |] o;
+  run_amp vmA [| phases[0], o[0] |] o;
+  run_amp vmB [| phases[1], o[0] |] o;
+  run_amp vmC [| phases[2], o[0] |] o;
+  run_amp vmD [| phases[3], o[0] |] o;
+  run_amp vmE [| phases[4], o[0] |] o;
   o[0]
 ;;
 
@@ -39,91 +38,38 @@ let phase_sequence = fn prog phases ->
 # 3,23,3,24,1002,24,10,24,1002,23,-1,23,101,5,23,23,1,24,23,23,4,23,99,0,0|] [|0,1,2,3,4|]}\n`;
 # print `65210: {phase_sequence [|3,31,3,32,1002,32,10,32,1001,31,-2,31,1007,31,0,33,1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0   |] [|1,0,4,3,2|]}\n`;
 
-let swap = fn arr i j ->
-  let tmp = arr[i];
-  arr[i] := arr[j];
-  arr[j] := tmp
-;;
-
-let print_perm = fn arr ->
-  for i = 0 .. array_size arr in (
-    print `{arr[i]}`
-  );
-  print "\n"
-;;
-import std/Math;
-let fold_permutations = fn f acc k arr ->
-  if k == 1 then (
-    # compute final output and compare with acc ??
-    # print_perm arr
-    acc[0] := f (acc[0]) arr ;
-    # Math.max (acc[0]) (phase_sequence inp arr);
-    ()
-  ) else (
-    fold_permutations f acc (k - 1) arr;
-    for i = 0 .. (k - 1) in (
-      if k % 2 == 0 then (
-        swap arr i (k - 1)
-      ) else (
-        swap arr 0 (k - 1)
-      );
-
-      fold_permutations f acc (k - 1) arr
-    )
-  )
-;;
-
-# let phases = [|0,1,2,3,4|];
 let phases = [|0,1,2,3,4|];
-let best = [|0|];
-fold_permutations (fn acc arr -> 
+let best = Permutations.fold (fn acc arr ->
   Math.max acc (phase_sequence inp arr)
-) best (array_size phases) phases;
+) 0 phases;
 
-print `{best[0]}\n`;
-
-
-let run_vm_io2 = fn vm inputs output ->
-  let nvm = step_vm vm;
-  match nvm.event with
-  | Continue -> run_vm_io2 nvm inputs output
-  | NeedsInput ref -> (
-    ref[0] := inputs[0];
-    run_vm_io2 (Vm nvm.pc 0 nvm.prog Continue) (inputs[1 ..]) output
-  )
-  | Halted -> nvm
-  | Output v -> (
-    output[0] := v;
-    Vm nvm.pc 0 nvm.prog Continue
-  )
-;;
-
+print `{best}\n`;
 
 let run_fb_vms = fn o _a _b _c _d _e ->
-  let a = run_vm_io2 _a [| o[0] |] o;
-  let b = run_vm_io2 _b [| o[0] |] o;
-  let c = run_vm_io2 _c [| o[0] |] o;
-  let d = run_vm_io2 _d [| o[0] |] o;
-  let e = run_vm_io2 _e [| o[0] |] o;
-  match (a.event, b.event, c.event, d.event, e.event) with 
-  | (Halted, Halted, Halted, Halted, Halted) -> o[0]
+  let a = run_amp _a [| o[0] |] o;
+  let b = run_amp _b [| o[0] |] o;
+  let c = run_amp _c [| o[0] |] o;
+  let d = run_amp _d [| o[0] |] o;
+  let e = run_amp _e [| o[0] |] o;
+  match (a.event, b.event, c.event, d.event, e.event) with
+  | (Intcode.Halted, Intcode.Halted, Intcode.Halted, Intcode.Halted, Intcode.Halted) -> o[0]
   | _ -> run_fb_vms o a b c d e
 ;;
 
 let phase_sequence_fb = fn prog phases ->
-  let vmA = new_vm prog;   
-  let vmB = new_vm prog;
-  let vmC = new_vm prog;
-  let vmD = new_vm prog;
-  let vmE = new_vm prog;
+  let vmA = Intcode.new_vm prog;
+  let vmB = Intcode.new_vm prog;
+  let vmC = Intcode.new_vm prog;
+  let vmD = Intcode.new_vm prog;
+  let vmE = Intcode.new_vm prog;
   let o = [|0|];
 
   #initialize
-  let a = run_vm_io2 vmA [| phases[0], o[0] |] o;
-  let b = run_vm_io2 vmB [| phases[1], o[0] |] o;
-  let c = run_vm_io2 vmC [| phases[2], o[0] |] o;
-  let d = run_vm_io2 vmD [| phases[3], o[0] |] o;
-  let e = run_vm_io2 vmE [| phases[4], o[0] |] o;
+  let a = run_amp vmA [| phases[0], o[0] |] o;
+  let b = run_amp vmB [| phases[1], o[0] |] o;
+  let c = run_amp vmC [| phases[2], o[0] |] o;
+  let d = run_amp vmD [| phases[3], o[0] |] o;
+  let e = run_amp vmE [| phases[4], o[0] |] o;
 
   run_fb_vms o a b c d e
 ;;
@@ -136,8 +82,7 @@ print `part2 test2: {phase_sequence_fb [|
 |] [|9,7,8,5,6|]}\n`;
 
 let phases2 = [|5,6,7,8,9|];
-let best2 = [|0|];
-fold_permutations (fn acc arr ->
+let best2 = Permutations.fold (fn acc arr ->
   Math.max acc (phase_sequence_fb inp arr)
-) best2 (array_size phases2) phases2;
-print `{best2[0]}\n`;
+) 0 phases2;
+print `{best2}\n`;

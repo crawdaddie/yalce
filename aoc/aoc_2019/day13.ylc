@@ -1,0 +1,158 @@
+open day13_input;
+import Int64code;
+open Int64code;
+
+let _ = dlopen "../../libs/gui/libgui.so";
+let ylc_framebuffer_open_tick_input =
+  extern fn Array of Int -> Int -> Int -> Int -> Array of Int -> (() -> ()) -> Ptr;
+let ylc_gui_loop = extern fn () -> ();
+
+let SCREEN_W = 40;
+let SCREEN_H = 25;
+let GRID_SIZE = SCREEN_W * SCREEN_H;
+let TILE_SCALE = 18;
+
+let TILE_EMPTY = 0;
+let TILE_BLOCK = 2;
+let SCORE_X = -1;
+let SCORE_Y = 0;
+let STEPS_PER_FRAME = 1000;
+
+let tile_idx = fn x y ->
+  y * SCREEN_W + x
+;;
+
+let draw_tile = fn x y t grid ->
+  grid[tile_idx x y] := t;
+  ()
+;;
+
+let run = fn
+  vm
+  grid
+  buf
+  buf_idx
+  joystick ->
+  let nvm = Int64code.step_vm vm;
+
+  match nvm.event with
+  | Int64code.NeedsInput ref -> (
+    ref[0] := Int64code.int64_from_int (joystick[0]);
+    run (Int64code.Vm nvm.pc nvm.rb nvm.prog Int64code.Continue) grid buf buf_idx joystick
+  )
+  | Int64code.Output v -> (
+    let out = Int64code.int64_to_int v;
+
+    if buf_idx == 2 then (
+      draw_tile (buf[0]) (buf[1]) out grid;
+      run (Int64code.Vm nvm.pc nvm.rb nvm.prog Int64code.Continue) grid buf 0 joystick
+    ) else (
+      buf[buf_idx] := out;
+      run (Int64code.Vm nvm.pc nvm.rb nvm.prog Int64code.Continue) grid buf (buf_idx + 1) joystick
+    )
+  )
+  | Int64code.Halted -> grid
+;;
+
+let count_blocks = fn grid ->
+  let total = [|0|];
+
+  for i = 0 .. GRID_SIZE in (
+    if grid[i] == TILE_BLOCK then (
+      total[0] := total[0] + 1
+    )
+  );
+
+  total[0]
+;;
+
+let new_grid = fn () ->
+  array_fill_const GRID_SIZE TILE_EMPTY
+;;
+
+let play = fn prog ->
+  let grid = new_grid ();
+  let buf = [|0,0,0|];
+  let joystick = [|0|];
+  let vm = Int64code.Vm 0 (Int64code.int64_from_int 0) prog Int64code.Continue;
+
+  run vm grid buf 0 joystick
+;;
+
+let prog1 = Int64code.copy_prog_sized inp Int64code.MEM_SIZE;
+let grid1 = play prog1;
+
+print `part1: {count_blocks grid1}\n`;
+
+let prog2 = Int64code.copy_prog_sized inp Int64code.MEM_SIZE;
+prog2[0] := Int64code.int64_from_int 2;
+
+let grid2 = new_grid ();
+let buf = [|0,0,0|];
+let buf_idx = [|0|];
+let joystick = [|0|];
+let score = [|0|];
+let halted = [|0|];
+let pc = [|0|];
+let rb = [|Int64code.int64_from_int 0|];
+
+let set_vm = fn nvm: (Vm) ->
+  pc[0] := nvm.pc;
+  rb[0] := nvm.rb;
+  ()
+;;
+
+let handle_output = fn out: (Int) ->
+  if buf_idx[0] == 2 then (
+    if (buf[0] == SCORE_X) && (buf[1] == SCORE_Y) then (
+      score[0] := out;
+      ()
+    ) else (
+      draw_tile (buf[0]) (buf[1]) out grid2
+    );
+
+    buf_idx[0] := 0
+  ) else (
+    buf[buf_idx[0]] := out;
+    buf_idx[0] := buf_idx[0] + 1
+  );
+
+  ()
+;;
+
+let step_game = fn _: (Int) ->
+  if halted[0] == 1 then (
+    ()
+  ) else (
+    let nvm = Int64code.step_vm (
+      Int64code.Vm (pc[0]) (rb[0]) prog2 Int64code.Continue
+    );
+
+    match nvm.event with
+    | Int64code.NeedsInput ref -> (
+      ref[0] := Int64code.int64_from_int (joystick[0]);
+      set_vm nvm
+    )
+    | Int64code.Halted -> (
+      halted[0] := 1;
+      print `score: {score[0]}\n`;
+      ()
+    )
+    | Int64code.Output v -> (
+      let out = Int64code.int64_to_int v;
+      handle_output out;
+      set_vm nvm
+    )
+    | _ -> set_vm nvm
+  )
+;;
+
+let tick = fn () ->
+  print "tick??\n";
+  for _ = 0 .. STEPS_PER_FRAME in (
+    step_game 0
+  )
+;;
+
+ylc_framebuffer_open_tick_input grid2 SCREEN_W SCREEN_H TILE_SCALE joystick tick;
+ylc_gui_loop ();
