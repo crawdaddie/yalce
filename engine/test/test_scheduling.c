@@ -109,6 +109,11 @@ static void reset_all(void) {
   atomic_store(&global_sample_position, 0);
 }
 
+static void test_scheduler_fds_init(void) {
+  scheduler_init_fds();
+  assert(scheduler_fds_ready);
+}
+
 /* Helper: process all due events (single-threaded equivalent of the
    scheduler thread's inner loop). */
 static void process_scheduler_events(uint64_t current_sample) {
@@ -878,6 +883,7 @@ int main(void) {
   RUN_TEST(test_queue_num_msgs_tracking);
 
   printf("\n=== Layer 1.5: Scheduler Logic ===\n");
+  RUN_TEST(test_scheduler_fds_init);
   RUN_TEST(test_process_events_fires_due);
   RUN_TEST(test_process_events_none_due);
   RUN_TEST(test_process_events_reschedule);

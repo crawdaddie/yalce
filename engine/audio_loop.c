@@ -1,11 +1,10 @@
 #include "audio_loop.h"
-#include "engine_core.h"
-#include "../lang/backend_llvm/lib_registry.h"
 #include "../lang/config.h"
 #include "../lang/ylc_datatypes.h"
 #include "audio_loop_utils.h"
 #include "audio_routing.h"
 #include "ctx.h"
+#include "engine_core.h"
 #include "scheduling.h"
 #include <soundio/soundio.h>
 #include <stdarg.h>

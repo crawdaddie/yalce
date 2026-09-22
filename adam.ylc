@@ -734,7 +734,7 @@ let metal_hat = @Audio fn dec ->
   |> Filter.bpf 4000 4.
   |> (*) (sin_osc 670.)
   |> (*) (t |> decay dec |> kill_on_end) 
-  |> (*) (Math.db_amp 12.)
+  |> (*) (Math.db_amp 20.)
   |> pan 2 (rand_trig -1. 1. t)
   ;;
 
@@ -825,23 +825,19 @@ let drums = fn () ->
     yield 1.;
     metal_snare 0.1 1.5 |> play_fx (random_fx ());
     yield 2.;
-
     metal_snare 0.1 1. |> play_fx (random_fx ());
     yield 1.;
-    yield 1.;
 
+    yield 1.;
     metal_snare 0.1 2. |> play_fx (random_fx ());
     yield 1.;
-
     metal_snare 0.1 1. |> play_fx (random_fx ());
     yield 0.75;
-
-
     metal_snare 0.1 1. |> play_fx (random_fx ());
     yield 0.75;
-
     metal_snare 0.1 1. |> play_fx (random_fx ());
-    yield 0.75;
+    yield 0.5;
+
   ) in  
   xx () |> cor_map (fn d -> d * beat) |> play_pattern 0.;
 
@@ -850,30 +846,29 @@ let drums = fn () ->
   yield 0.75 * beat;
   # (play_rim2 0.25) ;
   # yield 0.5 * beat ;
-  yield (play_rim 0.5) ;
-  yield (play_rim2 0.75) ;
-  yield (play_kick 0.25) ;
-  yield (play_rim 0.5) ;
+  yield play_rim 0.5 ;
+  yield play_rim2 0.75 ;
+  yield play_kick 0.25 ;
+  yield play_rim 0.5 ;
 
-  yield (play_rim2 0.5) ;
+  yield play_rim2 0.5 ;
   yield beat;
-  # yield (play_glitch1 0.25) ;
-  # yield (play_glitch1 0.25) ;
-  # yield (play_glitch3 0.25) ;
-  # yield (play_glitch1 0.25) ;
 
   Math.chance 0.5 (fn () -> play_kick 0.25);
-  yield 0.25 * beat;
-  yield (play_kick 0.25) ;
+  yield 0.75 * beat;
+  yield play_kick 0.25 ;
 
-  yield .5 * beat;
-  yield (play_rim2 1.) ;
+  # yield .25 * beat;
+  yield play_rim2 1. ;
 
-  yield .5 * beat;
-  yield (play_glitch3 0.25) ;
-  yield (play_glitch1 0.25) ;
-  yield (play_glitch1 0.25) ;
-  yield (play_glitch1 0.25) ;
+  yield .25 * beat;
+  Math.chance 0.5 (fn () -> play_kick 0.25);
+
+  yield .25 * beat;
+  yield play_glitch3 0.25 ;
+  yield play_glitch1 0.25 ;
+  yield play_glitch1 0.25 ;
+  yield play_glitch1 0.25 ;
   # yield beat;
 
   yield drums ()
@@ -890,65 +885,65 @@ let b = bass 0. 0. 0. |> play_node;
   ;;
 let bass_line = fn () ->
 
-  yield (play_bass 32. 0.5) ;
-  yield (play_bass 32. 0.5) ;
-  yield (play_bass 32. 0.5) ;
+  yield play_bass 32. 0.5 ;
+  yield play_bass 32. 0.5 ;
+  yield play_bass 32. 0.5 ;
   yield beat ;
-  yield (play_bass 30. 1.) ;
-  yield (play_bass 32. 0.5) ;
-  yield (play_bass 32. 0.25) ;
-  yield (play_bass 44. 0.25) ;
-  yield (play_bass 30. 0.25) ;
-  yield (play_bass 30. 0.25) ;
-  yield (play_bass 32. 2.5) ;
-  yield (play_bass 32. 0.25) ;
-  yield (play_bass 44. 0.25) ;
+  yield play_bass 30. 1. ;
+  yield play_bass 32. 0.5 ;
+  yield play_bass 32. 0.25 ;
+  yield play_bass 44. 0.25 ;
+  yield play_bass 30. 0.25 ;
+  yield play_bass 30. 0.25 ;
+  yield play_bass 32. 2.5 ;
+  yield play_bass 32. 0.25 ;
+  yield play_bass 44. 0.25 ;
 
   # yield (play_bass 32. 0.5) ;
 
-  yield (play_bass 30. 0.5) ;
-  yield (play_bass 40. 0.5) ;
-  yield (play_bass 32. 0.5) ;
-  yield (play_bass 39. 2.) ;
-  yield (play_bass 30. 0.5) ;
-  yield (play_bass 39. 2.) ;
-  yield (play_bass 40. 0.5) ;
-  yield (play_bass 40. 0.25) ;
-  yield (play_bass 40. 0.25) ;
+  yield play_bass 30. 0.5 ;
+  yield play_bass 40. 0.5 ;
+  yield play_bass 32. 0.5 ;
+  yield play_bass 39. 2. ;
+  yield play_bass 30. 0.5 ;
+  yield play_bass 39. 2. ;
+  yield play_bass 40. 0.5 ;
+  yield play_bass 40. 0.25 ;
+  yield play_bass 40. 0.25 ;
   yield beat;
 
   let arr = [|39., 40., 32., 30., 35., 42.,|];
   let arr2 = [|12., 24., -12., 0., 0., 36.|];
 
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
 
   yield 0.5 * beat ;
 
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
 
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.5) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 1.) ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.5 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 1. ;
 
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
 
   yield 0.5 * beat ;
 
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25 ;
 
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.5) ;
-  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 1.) ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 0.5 ;
+  yield play_bass (Math.array_choose arr + Math.array_choose arr2) 1. ;
 
 
   yield bass_line ()

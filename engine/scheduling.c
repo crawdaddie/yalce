@@ -2,12 +2,21 @@
 #include "scheduling.h"
 #include "../lang/format_utils.h"
 #include "ctx.h"
+#ifdef __APPLE__
+#include <fcntl.h>
+#include <sys/event.h>
+#else
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/timerfd.h>
+#include <unistd.h>
+#endif
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 // #define SCHED_DEBUG 1
@@ -20,7 +29,13 @@
 #define SCHED_DBG(fmt, ...) ((void)0)
 #endif
 
+#ifdef __APPLE__
+static int kqueue_fd;
+static int wake_pipe[2];
+static const uintptr_t scheduler_timer_id = 1;
+#else
 static int timer_fd, wake_fd, epoll_fd;
+#endif
 
 static pthread_mutex_t scheduler_mutex = PTHREAD_MUTEX_INITIALIZER;
 static bool scheduler_fds_ready = false;
@@ -243,6 +258,22 @@ SchedulerEvent pop_event(EventHeap *heap) {
 
 static void arm_timer(uint64_t target_tick) {
   uint64_t now = get_current_sample();
+#ifdef __APPLE__
+  uint64_t delay_ms = 1;
+  if (target_tick > now) {
+    double seconds = (double)(target_tick - now) / ctx_sample_rate();
+    delay_ms = (uint64_t)(seconds * 1000.0);
+    if (delay_ms == 0) {
+      delay_ms = 1;
+    }
+  }
+
+  struct kevent event;
+  EV_SET(&event, scheduler_timer_id, EVFILT_TIMER,
+         EV_ADD | EV_ONESHOT, NOTE_MSECONDS, (intptr_t)delay_ms, NULL);
+  kevent(kqueue_fd, &event, 1, NULL, 0, NULL);
+  return;
+#else
   struct itimerspec its = {0};
   if (target_tick <= now) {
     its.it_value.tv_nsec = 1; // fire immediately
@@ -260,6 +291,7 @@ static void arm_timer(uint64_t target_tick) {
               seconds);
   }
   timerfd_settime(timer_fd, 0, &its, NULL);
+#endif
 }
 
 void scheduler_wake() {
@@ -267,8 +299,13 @@ void scheduler_wake() {
     return;
   }
 
-  uint64_t val = 1;
-  write(wake_fd, &val, sizeof(val));
+#ifdef __APPLE__
+  char value = 1;
+  write(wake_pipe[1], &value, sizeof(value));
+#else
+  uint64_t value = 1;
+  write(wake_fd, &value, sizeof(value));
+#endif
 }
 
 static void push_task_event(SchedulerTask *task, uint64_t delay_in_samples,
@@ -395,6 +432,24 @@ void scheduler_init_fds() {
     return;
   }
 
+#ifdef __APPLE__
+  kqueue_fd = kqueue();
+  if (kqueue_fd < 0 || pipe(wake_pipe) < 0) {
+    return;
+  }
+
+  fcntl(wake_pipe[0], F_SETFL, O_NONBLOCK);
+  fcntl(wake_pipe[1], F_SETFL, O_NONBLOCK);
+
+  struct kevent event;
+  EV_SET(&event, wake_pipe[0], EVFILT_READ, EV_ADD, 0, 0, NULL);
+  if (kevent(kqueue_fd, &event, 1, NULL, 0, NULL) < 0) {
+    return;
+  }
+
+  scheduler_fds_ready = true;
+  return;
+#else
   timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
   wake_fd = eventfd(0, EFD_NONBLOCK);
   epoll_fd = epoll_create1(0);
@@ -408,6 +463,7 @@ void scheduler_init_fds() {
   ev.data.fd = wake_fd;
   epoll_ctl(epoll_fd, EPOLL_CTL_ADD, wake_fd, &ev);
   scheduler_fds_ready = true;
+#endif
 }
 
 // Batch of events to fire outside the lock
@@ -456,6 +512,49 @@ static void fire_events(int count) {
 uint64_t get_current_sample() { return atomic_load(&global_sample_position); }
 
 void *scheduler_thread_fn(void *arg) {
+#ifdef __APPLE__
+  SCHED_DBG("thread started, kqueue_fd=%d wake_fd=%d", kqueue_fd,
+            wake_pipe[0]);
+  struct kevent events[2];
+  for (;;) {
+    int nfds = kevent(kqueue_fd, NULL, 0, events, 2, NULL);
+
+    if (nfds < 0) {
+      perror("[sched] kevent");
+      continue;
+    }
+
+    for (int i = 0; i < nfds; i++) {
+      if (events[i].filter == EVFILT_READ) {
+        char buffer[64];
+        while (read(wake_pipe[0], buffer, sizeof(buffer)) > 0) {
+        }
+      }
+    }
+
+    sched_now = get_current_sample();
+    uint64_t now = sched_now;
+
+    for (;;) {
+      pthread_mutex_lock(&scheduler_mutex);
+      int count = collect_due_events(now);
+      pthread_mutex_unlock(&scheduler_mutex);
+
+      if (count == 0) {
+        break;
+      }
+
+      fire_events(count);
+    }
+
+    pthread_mutex_lock(&scheduler_mutex);
+    if (scheduler_queue.size > 0) {
+      arm_timer(scheduler_queue.events[0].tick);
+    }
+    pthread_mutex_unlock(&scheduler_mutex);
+  }
+  return NULL;
+#else
   SCHED_DBG("thread started, epoll_fd=%d timer_fd=%d wake_fd=%d", epoll_fd,
             timer_fd, wake_fd);
   struct epoll_event events[2];
@@ -510,6 +609,7 @@ void *scheduler_thread_fn(void *arg) {
     pthread_mutex_unlock(&scheduler_mutex);
   }
   return NULL;
+#endif
 }
 
 void *schedule_event(uint64_t now, double delay_seconds,

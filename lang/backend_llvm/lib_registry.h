@@ -1,8 +1,8 @@
 #ifndef YLC_LIB_REGISTRY_H
 #define YLC_LIB_REGISTRY_H
 
-#include <stdbool.h>
 #include <llvm-c/Types.h>
+#include <stdbool.h>
 
 typedef struct JITLangCtx JITLangCtx;
 typedef struct MirProgram MirProgram;
