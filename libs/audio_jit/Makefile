@@ -3,8 +3,21 @@ include ../../.env
 CC ?= clang
 CXX ?= clang++
 LLVM        = ${LLVM_PATH}
-LLVM_CONFIG = $(LLVM)/bin/llvm-config
-CLANG       = $(LLVM)/bin/clang
+LLVM_VERSION = 21
+LLVM_CONFIG = $(shell \
+	for config in \
+		"$(LLVM)/bin/llvm-config" \
+		/usr/lib/llvm21/bin/llvm-config \
+		/usr/lib/llvm-21/bin/llvm-config \
+		"$$(command -v llvm-config-21 2>/dev/null)" \
+		"$$(brew --prefix llvm@21 2>/dev/null)/bin/llvm-config" \
+		"$$(command -v llvm-config 2>/dev/null)"; do \
+		if [ -x "$$config" ] && "$$config" --version | grep -q '^$(LLVM_VERSION)[.]'; then \
+			echo "$$config"; \
+			break; \
+		fi; \
+	done)
+CLANG       = $(dir $(LLVM_CONFIG))clang
 
 CFLAGS  = -Wall -Wextra -fPIC -g
 CFLAGS += -I../../lang

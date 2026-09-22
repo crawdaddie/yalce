@@ -4,6 +4,8 @@ include ../.env
 BUILD_DIR := ./build
 SRCS := $(wildcard *.c)
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
+CONFIG_OBJ := $(BUILD_DIR)/ylc_config.o
+OBJS += $(CONFIG_OBJ)
 COMPILER_OPTIONS := -g -fPIC
 
 LDFLAGS := -lsoundio -lm -lsndfile -lfftw3 -lxml2
@@ -36,6 +38,9 @@ $(BUILD_DIR):
 
 # Build engine object files
 $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
+	$(CC) $(COMPILER_OPTIONS) -c -o $@ $<
+
+$(CONFIG_OBJ): ../lang/config.c ../lang/config.h | $(BUILD_DIR)
 	$(CC) $(COMPILER_OPTIONS) -c -o $@ $<
 
 ylc_bindings:
