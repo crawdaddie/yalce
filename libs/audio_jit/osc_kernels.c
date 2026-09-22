@@ -112,6 +112,27 @@ ylc_audio_sin_osc_kernel(SinOscState *state, double spf, double freq) {
   return sample;
 }
 
+/* Estimate frequency from rising zero crossings of an already filtered signal.
+ */
+__attribute__((always_inline)) double
+ylc_audio_zero_xing_freq_kernel(ZeroCrossingState *state, double spf,
+                                double input) {
+  if (!state || spf <= 0.0 || !isfinite(spf) || !isfinite(input)) {
+    return 0.0;
+  }
+
+  state->samples++;
+  if (state->previous <= 0.0 && input > 0.0) {
+    int64_t period = state->samples - state->last_crossing;
+    if (state->last_crossing > 0 && period > 0) {
+      state->frequency = 1.0 / ((double)period * spf);
+    }
+    state->last_crossing = state->samples;
+  }
+  state->previous = input;
+  return state->frequency;
+}
+
 #define SQ_TABSIZE (1 << 11)
 static double sq_table[SQ_TABSIZE] = {
 #include "./sq_table.csv"
@@ -238,6 +259,95 @@ ylc_audio_phasor_kernel(PhasorState *state, double spf, double freq) {
   double phase = state->phase;
   state->phase = fmod(state->phase + freq * spf, 1.0);
   return phase;
+}
+
+__attribute__((always_inline)) double ylc_audio_sweep_kernel(SweepState *state,
+                                                             double spf,
+                                                             double rate,
+                                                             double trig) {
+  double value =
+      audio_jit_rising_edge(trig, state->prev_trig) ? 0.0 : state->value;
+  state->value = value + rate * spf;
+  state->prev_trig = trig;
+  return value;
+}
+
+__attribute__((always_inline)) double
+ylc_audio_freq_shift_kernel(FreqShiftState *state, double spf, double freq,
+                            double phase_offset, double input) {
+  static const double hilbert_gamma[] = {
+      0.3609, 2.7412, 11.1573, 44.7581, 179.6242, 798.4578,
+      1.2524, 5.5671, 22.3423, 89.6271, 364.7914, 2770.1114,
+  };
+
+  if (!state->initialized) {
+    const double gamma_scale = 15.0 * M_PI * spf;
+    for (int i = 0; i < FREQ_SHIFT_HILBERT_STAGES; i++) {
+      double gamma = gamma_scale * hilbert_gamma[i];
+      state->coefs[i] = (gamma - 1.0) / (gamma + 1.0);
+      state->y1[i] = 0.0;
+    }
+    state->phase = 0.0;
+    state->initialized = 1;
+  }
+
+  double y = input;
+  double cosine = 0.0;
+  for (int i = 0; i < FREQ_SHIFT_HILBERT_STAGES / 2; i++) {
+    double y0 = y - state->coefs[i] * state->y1[i];
+    y = state->coefs[i] * y0 + state->y1[i];
+    state->y1[i] = y0;
+    cosine = y;
+  }
+
+  y = input;
+  double sine = 0.0;
+  for (int i = FREQ_SHIFT_HILBERT_STAGES / 2; i < FREQ_SHIFT_HILBERT_STAGES;
+       i++) {
+    double y0 = y - state->coefs[i] * state->y1[i];
+    y = state->coefs[i] * y0 + state->y1[i];
+    state->y1[i] = y0;
+    sine = y;
+  }
+
+  double angle = state->phase + phase_offset;
+  double output = cosine * cos(angle) + sine * sin(angle);
+  state->phase += 2.0 * M_PI * freq * spf;
+  state->phase = fmod(state->phase, 2.0 * M_PI);
+  return output;
+}
+
+__attribute__((always_inline)) double
+ylc_audio_rand_trig_kernel(RandTrigState *state, double spf, double lo,
+                           double hi, double trig) {
+  if (!state->initialized || audio_jit_rising_edge(trig, state->prev_trig)) {
+    state->value = audio_jit_rand_range(lo, hi);
+    state->initialized = 1;
+  }
+
+  state->prev_trig = trig;
+  return state->value;
+}
+
+__attribute__((always_inline)) double
+ylc_audio_fold2_kernel(void *state, double spf, double value, double bound) {
+  (void)state;
+  (void)spf;
+
+  double lo = -bound;
+  double hi = bound;
+  if (hi == lo) {
+    return lo;
+  }
+
+  double range = hi - lo;
+  double range2 = range + range;
+  double folded = value - lo;
+  folded -= range2 * floor(folded / range2);
+  if (folded >= range) {
+    folded = range2 - folded;
+  }
+  return folded + lo;
 }
 
 __attribute__((always_inline)) double
@@ -472,6 +582,177 @@ ylc_audio_dl_allpass_kernel(DelayLineState *state, double spf,
   double out = delayed - (g * input);
   audio_jit_delay_line_write(state, input + (g * delayed));
   return out;
+}
+
+/* Four staggered, linearly interpolated read heads preserve time while
+   changing their read slopes to shift pitch. */
+__attribute__((always_inline)) double
+ylc_audio_pitchshift_kernel(PitchShiftState *state, double spf,
+                            int32_t max_samples, double window, double ratio,
+                            double pitch_dispersion, double time_dispersion,
+                            double input) {
+  const double min_window = 3.0 * spf;
+  if (!state || max_samples < 8 || spf <= 0.0 || !isfinite(spf)) {
+    return input;
+  }
+
+  if (!isfinite(window) || window < min_window) {
+    window = min_window;
+  }
+
+  int32_t framesize = (int32_t)(window / spf) + 2;
+  framesize &= ~3;
+  if (framesize < 4) {
+    framesize = 4;
+  }
+
+  if (state->size == 0) {
+    state->size = max_samples;
+    state->mask = max_samples - 1;
+    state->write_pos = 0;
+    state->stage = 3;
+    state->counter = framesize >> 2;
+    state->framesize = framesize;
+    state->slope = 2.0 / (double)framesize;
+    state->ramp[0] = 0.5;
+    state->ramp[1] = 1.0;
+    state->ramp[2] = 0.5;
+    state->ramp[3] = 0.0;
+    state->ramp_slope[0] = -state->slope;
+    state->ramp_slope[1] = -state->slope;
+    state->ramp_slope[2] = state->slope;
+    state->ramp_slope[3] = state->slope;
+    state->read_pos[0] = state->read_pos[1] = state->read_pos[2] =
+        state->read_pos[3] = 2.0;
+    state->read_slope[0] = state->read_slope[1] = state->read_slope[2] =
+        state->read_slope[3] = 1.0;
+  }
+
+  if (state->framesize != (double)framesize) {
+    state->framesize = framesize;
+    state->slope = 2.0 / (double)framesize;
+  }
+
+  if (state->counter <= 0) {
+    double dispersed_ratio = isfinite(ratio) ? ratio : 1.0;
+    if (isfinite(pitch_dispersion)) {
+      dispersed_ratio += pitch_dispersion * audio_jit_rand_range(-1.0, 1.0);
+    }
+    dispersed_ratio = audio_jit_clamp(dispersed_ratio, 0.0, 4.0);
+    double ratio_delta = dispersed_ratio - 1.0;
+    double start =
+        ratio_delta < 0.0 ? 2.0 : state->framesize * ratio_delta + 2.0;
+    double dispersion =
+        isfinite(time_dispersion)
+            ? audio_jit_clamp(time_dispersion, 0.0, window) / spf
+            : 0.0;
+    start += dispersion * audio_jit_rand_range(0.0, 1.0);
+
+    state->counter = framesize >> 2;
+    state->stage = (state->stage + 1) & 3;
+    int stage = state->stage;
+    state->read_slope[stage] = -ratio_delta;
+    state->read_pos[stage] = start;
+    state->ramp[stage] = 0.0;
+    state->ramp_slope[stage] = state->slope;
+    state->ramp_slope[(stage + 2) & 3] = -state->slope;
+  }
+
+  state->counter--;
+  state->write_pos = (state->write_pos + 1) & state->mask;
+  double output = 0.0;
+  for (int i = 0; i < 4; i++) {
+    state->read_pos[i] += state->read_slope[i];
+    int32_t sample = (int32_t)state->read_pos[i];
+    double frac = state->read_pos[i] - (double)sample;
+    int32_t read = (state->write_pos - sample) & state->mask;
+    int32_t previous = (read - 1) & state->mask;
+    output +=
+        audio_jit_lerp(state->storage[read], state->storage[previous], frac) *
+        state->ramp[i];
+    state->ramp[i] += state->ramp_slope[i];
+  }
+
+  state->storage[state->write_pos] = input;
+  return output * 0.5;
+}
+
+/* Fontana's digital Moog VCF: four cascaded one-pole sections inside a
+   feedback loop, with coefficients recomputed when cutoff changes. */
+__attribute__((always_inline)) double
+ylc_audio_moogff_kernel(MoogFFState *state, double spf, double freq,
+                        double gain, double reset, double input) {
+  if (!state || spf <= 0.0 || !isfinite(spf)) {
+    return input;
+  }
+
+  if (!isfinite(freq)) {
+    freq = 0.0;
+  }
+  if (state->freq != freq) {
+    double wc = 2.0 * tan(M_PI * freq * spf);
+    if (!isfinite(wc) || wc < 0.0) {
+      wc = 0.0;
+    }
+    state->b0 = wc / (wc + 2.0);
+    state->a1 = (wc - 2.0) / (wc + 2.0);
+    state->freq = freq;
+  }
+
+  if (reset > 0.0) {
+    state->s1 = 0.0;
+    state->s2 = 0.0;
+    state->s3 = 0.0;
+    state->s4 = 0.0;
+  }
+
+  double k = audio_jit_clamp(gain, 0.0, 4.0);
+  double b0 = state->b0;
+  double a1 = state->a1;
+  double b0_2 = b0 * b0;
+  double b0_4 = b0_2 * b0_2;
+  double output = (b0_4 * input + state->s4 +
+                   b0 * (state->s3 + b0 * (state->s2 + b0 * state->s1))) /
+                  (1.0 + b0_4 * k);
+  double u = input - k * output;
+
+  double past = u;
+  double future = b0 * past + state->s1;
+  state->s1 = b0 * past - a1 * future;
+
+  past = future;
+  future = b0 * past + state->s2;
+  state->s2 = b0 * past - a1 * future;
+
+  past = future;
+  future = b0 * past + state->s3;
+  state->s3 = b0 * past - a1 * future;
+  state->s4 = b0 * future - a1 * output;
+
+  return isfinite(output) ? output : 0.0;
+}
+
+/* Match SuperCollider's Hasher: hash the 32-bit float representation, then
+   reinterpret the result as a float in [2, 3) and shift it to [-1, 0). */
+__attribute__((always_inline)) double
+ylc_audio_hasher_kernel(void *unused, double spf, double input) {
+
+  union {
+    float f;
+    uint32_t u;
+  } value;
+  value.f = (float)input;
+
+  uint32_t hash = value.u;
+  hash += ~(hash << 15);
+  hash ^= hash >> 10;
+  hash += hash << 3;
+  hash ^= hash >> 6;
+  hash += ~(hash << 11);
+  hash ^= hash >> 16;
+
+  value.u = UINT32_C(0x40000000) | (hash >> 9);
+  return (double)value.f - 3.0;
 }
 
 __attribute__((always_inline)) double ylc_audio_lag_kernel(LagState *state,
@@ -1313,6 +1594,60 @@ ylc_audio_glue_kernel(GlueCompState *state, double spf, double thresh,
     gain = 1.0;
   }
   return x * gain;
+}
+
+/* Look-ahead limiter modeled on SuperCollider's three-buffer limiter. */
+__attribute__((always_inline)) double
+ylc_audio_limiter_kernel(LimiterState *state, double spf, int32_t max_samples,
+                         double level, double input) {
+  if (!state || spf <= 0.0 || max_samples <= 0 || !isfinite(input) ||
+      !isfinite(level) || level < 0.0) {
+    return input;
+  }
+
+  if (state->size != max_samples) {
+    state->size = max_samples;
+    state->pos = 0;
+    state->flips = 0;
+    state->slope = 0.0;
+    state->level = 1.0;
+    state->current_max = 0.0;
+    state->previous_max = 0.0;
+    for (int32_t i = 0; i < max_samples * 3; i++) {
+      state->storage[i] = 0.0;
+    }
+  }
+
+  int32_t pos = state->pos;
+  int32_t input_segment = (2 * state->flips) % 3;
+  int32_t output_segment = (2 * state->flips + 2) % 3;
+  double *input_buffer = state->storage + input_segment * max_samples;
+  double *output_buffer = state->storage + output_segment * max_samples;
+  double value = fabs(input);
+  input_buffer[pos] = input;
+
+  double output = state->flips >= 2 ? state->level * output_buffer[pos] : 0.0;
+  state->level += state->slope;
+  if (value > state->current_max) {
+    state->current_max = value;
+  }
+
+  pos++;
+  if (pos >= max_samples) {
+    pos = 0;
+    double max_value = state->previous_max > state->current_max
+                           ? state->previous_max
+                           : state->current_max;
+    state->previous_max = state->current_max;
+    state->current_max = 0.0;
+
+    double next_level = max_value > level ? level / max_value : 1.0;
+    state->slope = (next_level - state->level) / (double)max_samples;
+    state->flips++;
+  }
+
+  state->pos = pos;
+  return output;
 }
 
 /* pan: distribute a mono signal across N output channels with equal-power

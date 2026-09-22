@@ -43,7 +43,13 @@ static Type *create_module_type_from_env(TypeEnv *mod_env, int mod_size);
 
 static bool occurs_in(int var_id, Type *type);
 
+static Type *infer_expr_inner(Ast *ast, TICtx *ctx);
+
 static FILE *err_stream;
+
+// Innermost expression currently being inferred; stamped onto every new
+// constraint so a solve failure can point at the culprit's source line.
+static Ast *constraint_site;
 
 static Type *recursive_ref_decl_type(Type *type) {
   if (!type || type->kind != T_RECURSIVE_REF ||
@@ -1196,6 +1202,50 @@ int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx) {
         return 0;
       }
     }
+    if (pattern->data.AST_APPLICATION.function->tag == AST_RECORD_ACCESS) {
+      Ast *fn = pattern->data.AST_APPLICATION.function;
+      Type *ctor_type = extract_member_from_sum_type(value_type, fn);
+      if (ctor_type && ctor_type->kind == T_CONS &&
+          (size_t)ctor_type->data.T_CONS.num_args ==
+              pattern->data.AST_APPLICATION.len) {
+        for (size_t i = 0; i < pattern->data.AST_APPLICATION.len; i++) {
+          if (bind_pattern(pattern->data.AST_APPLICATION.args + i,
+                           ctor_type->data.T_CONS.args[i], ctx) != 0) {
+            return 1;
+          }
+        }
+        return 0;
+      }
+
+      Type *current = infer_expr(fn, ctx);
+      for (size_t i = 0; i < pattern->data.AST_APPLICATION.len; i++) {
+        if (!current || current->kind != T_FN) {
+          return 1;
+        }
+        if (bind_pattern(pattern->data.AST_APPLICATION.args + i,
+                         current->data.T_FN.from, ctx) != 0) {
+          return 1;
+        }
+        current = current->data.T_FN.to;
+      }
+      if (current) {
+        add_constraint(ctx, value_type, current);
+        return 0;
+      }
+    }
+    break;
+  }
+  case AST_RECORD_ACCESS: {
+    Type *ctor_type = extract_member_from_sum_type(value_type, pattern);
+    if (ctor_type) {
+      return 0;
+    }
+
+    Type *current = infer_expr(pattern, ctx);
+    if (current && current->kind != T_FN) {
+      add_constraint(ctx, value_type, current);
+      return 0;
+    }
     break;
   }
   default:
@@ -1205,7 +1255,18 @@ int bind_pattern(Ast *pattern, Type *value_type, TICtx *ctx) {
   return 1;
 }
 
+// Tracks the innermost expression being inferred so constraints record the
+// source construct responsible for them. Restoring on exit keeps the site
+// accurate through recursion and leaves it NULL once inference unwinds.
 Type *infer_expr(Ast *ast, TICtx *ctx) {
+  Ast *saved_site = constraint_site;
+  constraint_site = ast;
+  Type *type = infer_expr_inner(ast, ctx);
+  constraint_site = saved_site;
+  return type;
+}
+
+static Type *infer_expr_inner(Ast *ast, TICtx *ctx) {
   Type *type = NULL;
 
   switch (ast->tag) {
@@ -1374,7 +1435,16 @@ Type *infer_expr(Ast *ast, TICtx *ctx) {
       int i = 0;
       for (TypeEnv *te = rec_view->data.T_MODULE.env; te; te = te->next, i++) {
         if (CHARS_EQ(te->name, member_name)) {
-          type = instantiate_env(te, ctx);
+          if (te->md.type == BT_TYPE_DECL && te->type &&
+              te->type->kind == T_CONS && !is_sum_type(te->type)) {
+            Type *decl_type =
+                resolve_type_in_env(deep_copy_type(te->type), ctx->env);
+            type = create_type_multi_param_fn(
+                decl_type->data.T_CONS.num_args, decl_type->data.T_CONS.args,
+                decl_type);
+          } else {
+            type = instantiate_env(te, ctx);
+          }
           ast->data.AST_RECORD_ACCESS.index = i;
           break;
         }
@@ -2000,6 +2070,7 @@ void add_constraint(TICtx *result, Type *var, Type *type) {
   Constraint *constraint = t_alloc(sizeof(Constraint));
   *constraint = (Constraint){.kind = CONSTRAINT_EQUALITY,
                              .data = {.EQUALITY = {.left = var, .right = type}},
+                             .site = constraint_site,
                              .next = result->constraints};
   result->constraints = constraint;
 }
@@ -2171,6 +2242,27 @@ Subst *solve_constraints(Constraint *constraints) {
     Subst *new_subst = NULL;
     if (unify_types(c->data.EQUALITY.left, c->data.EQUALITY.right, subst,
                     &new_subst) != 0) {
+      // The pair is printed post-substitution so tvars show their inferred
+      // types: e.g. `Type Error at f.ylc 3:7: <source> / cannot unify ...`.
+      if (err_stream) {
+        loc_info *loc = c->site ? c->site->loc_info : NULL;
+        if (loc && loc->src_file && loc->src_content) {
+          // Source next to the location; the caret pads past the header.
+          int header_len = fprintf(err_stream, "Type Error at %s %d:%d: ",
+                                   loc->src_file, loc->line, loc->col);
+          print_source_caret(c->site, header_len);
+        } else {
+          fprintf(err_stream, "Type Error: ");
+        }
+        fprintf(err_stream, "cannot unify ");
+        print_type_to_stream(apply_subst_to_type(subst, c->data.EQUALITY.left),
+                             err_stream);
+        fprintf(err_stream, " with ");
+        print_type_to_stream(apply_subst_to_type(subst, c->data.EQUALITY.right),
+                             err_stream);
+        fprintf(err_stream, "\n");
+        fflush(err_stream);
+      }
       return NULL;
     }
     if (new_subst) {

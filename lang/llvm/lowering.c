@@ -6672,10 +6672,49 @@ static bool lower_mir_coro_restart_terminator(
   return true;
 }
 
+static bool lower_mir_tail_call_terminator(
+    MirFunction *fn, MirTerminator *term, MirLlvmValueMap *values,
+    MirLlvmCtx *lctx, LLVMModuleRef module, LLVMBuilderRef builder) {
+  if (!fn || !term || !values || !lctx) {
+    return false;
+  }
+
+  Type *ret_type = fn_return_type(fn->type);
+  MirInstr call = mir_make_instr(MIR_CALL, ret_type, fn->origin);
+  mir_emit_call_init(&call, term->value, NULL, fn->type);
+  call.data.call.operands = term->args;
+  call.data.call.operand_uses = (MirOperandUseVec){0};
+  for (size_t i = 0; i < term->args.len; i++) {
+    mir_operand_use_vec_push(fn->arena, &call.data.call.operand_uses,
+                             MIR_OPERAND_USE_CONSUME);
+  }
+
+  LLVMValueRef result = lower_mir_call(fn, &call, values, lctx, module, builder);
+  if (!result) {
+    fprintf(stderr, "MIR to LLVM lowering could not lower tail call in %s\n",
+            fn && fn->name ? fn->name : "<anonymous>");
+    return false;
+  }
+
+  if (LLVMIsACallInst(result)) {
+    LLVMSetTailCall(result, true);
+  }
+
+  LLVMTypeRef llvm_ret_type = LLVMGetReturnType(lctx->function_types[fn->id]);
+  if (LLVMGetTypeKind(llvm_ret_type) == LLVMVoidTypeKind) {
+    LLVMBuildRetVoid(builder);
+    return true;
+  }
+
+  LLVMBuildRet(builder, result);
+  return true;
+}
+
 static bool lower_mir_terminator(MirFunction *fn, MirTerminator *term,
                                  MirLlvmValueMap *values,
                                  MirLlvmBlockMap *blocks, LLVMTypeRef ret_type,
-                                 MirLlvmCoroCtx *coro, LLVMModuleRef module,
+                                 MirLlvmCoroCtx *coro, MirLlvmCtx *lctx,
+                                 LLVMModuleRef module,
                                  LLVMBuilderRef builder) {
   switch (term->kind) {
   case MIR_TERM_RETURN: {
@@ -6731,6 +6770,9 @@ static bool lower_mir_terminator(MirFunction *fn, MirTerminator *term,
   case MIR_TERM_CORO_DONE: {
     return lower_mir_coro_done_terminator(fn, coro, module, builder);
   }
+  case MIR_TERM_TAIL_CALL:
+    return lower_mir_tail_call_terminator(fn, term, values, lctx, module,
+                                          builder);
   case MIR_TERM_UNREACHABLE:
     LLVMBuildUnreachable(builder);
     return true;
@@ -6831,7 +6873,7 @@ static bool lower_mir_block_body(MirLlvmCtx *lctx, MirFunction *fn,
 
   LLVMTypeRef ret_type = LLVMGetReturnType(lctx->function_types[fn->id]);
   if (!lower_mir_terminator(fn, &mir_block->term, values, blocks, ret_type,
-                            coro, module, builder)) {
+                            coro, lctx, module, builder)) {
     return false;
   }
   if (blocks->exits && block_id < blocks->len) {

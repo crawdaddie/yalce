@@ -1081,13 +1081,14 @@ Ast *ast_match_guard_clause(Ast *expr, Ast *guard) {
   return node;
 }
 
-void print_location(Ast *ast) {
+// Prints the source line of `ast`, continuing the current output line, then
+// a caret under the culprit column padded by `caret_pad` (the width of
+// whatever prefix precedes the source, e.g. the error header).
+void print_source_caret(Ast *ast, int caret_pad) {
   loc_info *loc = ast->loc_info;
-  if (!loc || !loc->src_file || !loc->src_content) {
-    print_ast_err(ast);
+  if (!loc || !loc->src_content) {
     return;
   }
-  fprintf(stderr, "%s %d:%d\n", loc->src_file, loc->line, loc->col);
 
   const char *start = loc->src_content;
   const char *offset = start + loc->absolute_offset;
@@ -1108,9 +1109,19 @@ void print_location(Ast *ast) {
   }
   fprintf(stderr, "\n");
 
-  fprintf(stderr, "%*c", loc->col - 1, ' ');
+  fprintf(stderr, "%*s", caret_pad + loc->col - 1, "");
   fprintf(stderr, "^");
   fprintf(stderr, "\n");
+}
+
+void print_location(Ast *ast) {
+  loc_info *loc = ast->loc_info;
+  if (!loc || !loc->src_file || !loc->src_content) {
+    print_ast_err(ast);
+    return;
+  }
+  fprintf(stderr, "%s %d:%d\n", loc->src_file, loc->line, loc->col);
+  print_source_caret(ast, 0);
 }
 
 Ast *ast_yield(Ast *expr) {

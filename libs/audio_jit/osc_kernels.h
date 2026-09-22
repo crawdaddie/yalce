@@ -8,6 +8,26 @@ typedef struct {
 } PhasorState;
 
 typedef struct {
+  double value;
+  double prev_trig;
+} SweepState;
+
+#define FREQ_SHIFT_HILBERT_STAGES 12
+
+typedef struct {
+  double coefs[FREQ_SHIFT_HILBERT_STAGES];
+  double y1[FREQ_SHIFT_HILBERT_STAGES];
+  double phase;
+  uint64_t initialized;
+} FreqShiftState;
+
+typedef struct {
+  double value;
+  double prev_trig;
+  uint64_t initialized;
+} RandTrigState;
+
+typedef struct {
   double phase;
   uint64_t initialized;
 } TrigState;
@@ -19,6 +39,13 @@ typedef struct {
 typedef struct {
   double phase;
 } SinOscState;
+
+typedef struct {
+  double previous;
+  double frequency;
+  int64_t samples;
+  int64_t last_crossing;
+} ZeroCrossingState;
 
 // Square wave oscillator
 typedef struct SqOscState {
@@ -108,6 +135,32 @@ typedef struct DelayLineState {
   double storage[];
 } DelayLineState;
 
+typedef struct PitchShiftState {
+  int32_t size;
+  int32_t mask;
+  int32_t write_pos;
+  int32_t counter;
+  int32_t stage;
+  double framesize;
+  double slope;
+  double read_pos[4];
+  double read_slope[4];
+  double ramp[4];
+  double ramp_slope[4];
+  double storage[];
+} PitchShiftState;
+
+typedef struct MoogFFState {
+  double freq;
+  double b0;
+  double a1;
+  double k;
+  double s1;
+  double s2;
+  double s3;
+  double s4;
+} MoogFFState;
+
 typedef struct LagState {
   int initialized;
   double y1;
@@ -157,9 +210,37 @@ typedef struct GlueCompState {
   double env_b;
 } GlueCompState;
 
+typedef struct LimiterState {
+  int32_t size;
+  int32_t pos;
+  int32_t flips;
+  double slope;
+  double level;
+  double current_max;
+  double previous_max;
+  double storage[];
+} LimiterState;
+
 /* pan: distribute a mono signal across N output channels (equal-power).
    `out` is a buffer of `n` doubles written by the kernel. See
    ylc_audio_pan_kernel in osc_kernels.c. */
 void ylc_audio_pan_kernel(double *out, int n, double pos, double signal);
+
+double ylc_audio_pitchshift_kernel(PitchShiftState *state, double spf,
+                                    int32_t max_samples, double window,
+                                    double ratio, double pitch_dispersion,
+                                    double time_dispersion, double input);
+
+double ylc_audio_moogff_kernel(MoogFFState *state, double spf, double freq,
+                               double gain, double reset, double input);
+
+double ylc_audio_hasher_kernel(void *unused, double spf, double input);
+
+double ylc_audio_zero_xing_freq_kernel(ZeroCrossingState *state, double spf,
+                                       double input);
+
+double ylc_audio_limiter_kernel(LimiterState *state, double spf,
+                                int32_t max_samples, double level,
+                                double input);
 
 #endif

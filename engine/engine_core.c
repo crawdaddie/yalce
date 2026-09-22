@@ -2,11 +2,108 @@
 #include "./audio_loop.h"
 #include "./scheduling.h"
 #include <math.h>
+#include <pthread.h>
 #include <sndfile.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+typedef struct {
+  SNDFILE *file;
+  sf_count_t frames_left;
+  double samples[BUF_SIZE * LAYOUT];
+  pthread_mutex_t mutex;
+} AudioRecorder;
+
+static AudioRecorder recorder = {
+    .file = NULL,
+    .frames_left = 0,
+    .mutex = PTHREAD_MUTEX_INITIALIZER,
+};
+
+int record_start(_String filename, double seconds) {
+  if (!filename.chars || filename.chars[0] == '\0' || seconds <= 0.0) {
+    return 0;
+  }
+
+  int sample_rate = ctx_sample_rate();
+  if (sample_rate <= 0) {
+    return 0;
+  }
+
+  SF_INFO info = {0};
+  info.samplerate = sample_rate;
+  info.channels = LAYOUT;
+  info.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
+
+  SNDFILE *file = sf_open(filename.chars, SFM_WRITE, &info);
+  if (!file) {
+    fprintf(stderr, "record_start: %s\n", sf_strerror(NULL));
+    return 0;
+  }
+
+  sf_count_t frames = (sf_count_t)ceil(seconds * (double)sample_rate);
+
+  pthread_mutex_lock(&recorder.mutex);
+  if (recorder.file) {
+    sf_close(recorder.file);
+  }
+  recorder.file = file;
+  recorder.frames_left = frames;
+  pthread_mutex_unlock(&recorder.mutex);
+
+  return 1;
+}
+
+void record_stop(void) {
+  pthread_mutex_lock(&recorder.mutex);
+  if (recorder.file) {
+    sf_close(recorder.file);
+    recorder.file = NULL;
+  }
+  recorder.frames_left = 0;
+  pthread_mutex_unlock(&recorder.mutex);
+}
+
+void record_write(const double *samples, int frames, double volume) {
+  if (!samples || frames <= 0 || frames > BUF_SIZE) {
+    return;
+  }
+
+  pthread_mutex_lock(&recorder.mutex);
+  if (!recorder.file || recorder.frames_left <= 0) {
+    pthread_mutex_unlock(&recorder.mutex);
+    return;
+  }
+
+  sf_count_t write_frames = frames;
+  if (write_frames > recorder.frames_left) {
+    write_frames = recorder.frames_left;
+  }
+
+  for (sf_count_t i = 0; i < write_frames * LAYOUT; i++) {
+    recorder.samples[i] = samples[i] * volume;
+  }
+
+  sf_count_t written =
+      sf_writef_double(recorder.file, recorder.samples, write_frames);
+  if (written != write_frames) {
+    fprintf(stderr, "record_write: %s\n", sf_strerror(recorder.file));
+    sf_close(recorder.file);
+    recorder.file = NULL;
+    recorder.frames_left = 0;
+    pthread_mutex_unlock(&recorder.mutex);
+    return;
+  }
+
+  recorder.frames_left -= written;
+  if (recorder.frames_left == 0) {
+    sf_close(recorder.file);
+    recorder.file = NULL;
+  }
+  pthread_mutex_unlock(&recorder.mutex);
+}
 
 typedef enum {
   BINOP_ADD,
@@ -248,13 +345,19 @@ void write_to_dac(int dac_layout, double *dac_buf, int layout, double *buf,
 }
 
 double ylc_read_inlet_node(void *node_raw, int64_t frame) {
+  return ylc_read_inlet_node_lane_i32(node_raw, (int)frame, 0);
+}
+
+double ylc_read_inlet_node_lane_i32(void *node_raw, int frame, int lane) {
   Node *node = (Node *)node_raw;
-  if (!node || !node->output.buf || frame < 0 || frame >= node->output.size) {
+  if (!node || !node->output.buf || frame < 0 || frame >= node->output.size ||
+      lane < 0) {
     return 0.0;
   }
 
   int layout = node->output.layout > 0 ? node->output.layout : 1;
-  return node->output.buf[(size_t)frame * (size_t)layout];
+  int source_lane = lane < layout ? lane : 0;
+  return node->output.buf[(size_t)frame * (size_t)layout + source_lane];
 }
 
 static const ylc_node_allocator_t *ylc_current_node_allocator = NULL;
@@ -430,11 +533,8 @@ NodeRef pipe_into(NodeRef filter, int idx, NodeRef node) {
   return filter;
 }
 
-/* Per-frame mix-bus perform: sum every live source's samples into this
-   node's (mono) output buffer, downmixing multi-channel sources by
-   summing their channels. Sources whose trig_end has been set (e.g. a
-   voice whose kill_on_end fired) are skipped; the plan builder unlinks
-   them from the list. */
+/* Per-frame mix-bus perform. Mono sources broadcast to every bus lane; extra
+   source lanes are ignored. Sources whose trig_end has been set are skipped. */
 static void mix_bus_perform(void *node_raw, void *state, void *inputs,
                             int frame, double spf) {
   (void)state;
@@ -445,27 +545,33 @@ static void mix_bus_perform(void *node_raw, void *state, void *inputs,
     return;
   }
 
-  double sample = 0.0;
-  for (Node *source = node->mix_head; source; source = source->mix_next) {
-    if (source->trig_end || !source->output.buf ||
-        frame >= source->output.size) {
-      continue;
+  int bus_layout = node->output.layout > 0 ? node->output.layout : 1;
+  for (int channel = 0; channel < bus_layout; channel++) {
+    double sample = 0.0;
+    for (Node *source = node->mix_head; source; source = source->mix_next) {
+      if (source->trig_end || !source->output.buf ||
+          frame >= source->output.size) {
+        continue;
+      }
+
+      int source_layout = source->output.layout > 0 ? source->output.layout : 1;
+      int source_channel = channel < source_layout ? channel : 0;
+      sample += source->output.buf[(size_t)frame * (size_t)source_layout +
+                                   (size_t)source_channel];
     }
-    int layout = source->output.layout > 0 ? source->output.layout : 1;
-    double *in =
-        source->output.buf + (size_t)frame * (size_t)layout;
-    for (int c = 0; c < layout; c++) {
-      sample += in[c];
-    }
+
+    node->output.buf[(size_t)frame * (size_t)bus_layout + (size_t)channel] =
+        sample;
   }
-  node->output.buf[(size_t)frame] = sample;
 }
 
 /* Return the mix bus feeding `target`'s input slot, creating and connecting
    one on first use. The bus replaces the target's existing input connection
-   (e.g. a const inlet) and becomes the persistent summing point every
-   play_into voice is routed through. */
-static Node *play_into_mix_bus(NodeRef target, int input) {
+   and becomes the persistent summing point for every play_into voice.
+
+   The target output layout is the best available layout proxy. The robust
+   fix is per-input layout metadata populated by audio-node construction. */
+static Node *play_into_mix_bus(NodeRef target, int input, NodeRef source) {
   if (!target || input < 0 || input >= MAX_INPUTS || target->num_inputs <= 0) {
     return NULL;
   }
@@ -475,7 +581,12 @@ static Node *play_into_mix_bus(NodeRef target, int input) {
     return bus;
   }
 
-  bus = node_alloc(0, 1, BUF_SIZE, "mix_bus");
+  int layout = target->output.layout > 0 ? target->output.layout : 1;
+  if (layout == 1 && source && source->output.layout > 1) {
+    layout = source->output.layout;
+  }
+
+  bus = node_alloc(0, layout, BUF_SIZE, "mix_bus");
   if (!bus) {
     return NULL;
   }
@@ -498,7 +609,7 @@ static NodeRef play_into_common(uint64_t tick, NodeRef target, int input,
     return NULL;
   }
 
-  Node *bus = play_into_mix_bus(target, input);
+  Node *bus = play_into_mix_bus(target, input, node);
   if (!bus) {
     return node;
   }
@@ -506,11 +617,11 @@ static NodeRef play_into_common(uint64_t tick, NodeRef target, int input,
   /* Route the voice through the msg queue: the audio thread adds it to the
      bus's source list at the block boundary, coherent with play_node
      timing. The voice is not written to the main output. */
-  push_msg(&ctx.msg_queue,
-           (audio_instruction){NODE_MIX_INPUT,
-                               tick,
-                               {.NODE_MIX_INPUT = {.mixer = bus,
-                                                   .source = node}}});
+  push_msg(
+      &ctx.msg_queue,
+      (audio_instruction){NODE_MIX_INPUT,
+                          tick,
+                          {.NODE_MIX_INPUT = {.mixer = bus, .source = node}}});
   return node;
 }
 

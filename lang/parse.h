@@ -453,6 +453,8 @@ void add_custom_binop(const char *binop_name);
 
 void print_location(Ast *ast);
 
+void print_source_caret(Ast *ast, int caret_pad);
+
 Ast *ast_yield(Ast *expr);
 Ast *ast_await(Ast *expr);
 Ast *ast_yield_end();

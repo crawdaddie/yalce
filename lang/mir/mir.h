@@ -257,6 +257,7 @@ typedef enum {
   MIR_TERM_YIELD,
   MIR_TERM_CORO_RESTART,
   MIR_TERM_CORO_DONE,
+  MIR_TERM_TAIL_CALL,
 } MirTermKind;
 
 typedef struct MirArenaBlock {

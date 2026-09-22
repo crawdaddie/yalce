@@ -46,6 +46,7 @@ typedef struct Constraint {
       Type *yield_type;
     } YIELD;
   } data;
+  Ast *site; // expression whose inference added this constraint
   struct Constraint *next;
 } Constraint;
 

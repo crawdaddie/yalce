@@ -56,6 +56,8 @@ let play_node_offset_w_kill = extern fn Uint64 -> Double -> Int -> Synth -> Synt
 
 
 let set_main_vol = extern fn Double -> ();
+let record_start = extern fn String -> Double -> Int;
+let record_stop = extern fn () -> ();
 let play_into = extern fn Synth -> Synth -> Synth;
 let play_into_offset = extern fn Uint64 -> Synth -> Synth -> Synth;
 let play_into_idx = extern fn Synth -> Int -> Synth -> Synth;

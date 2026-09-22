@@ -197,6 +197,7 @@ Type *infer_let_expr(Ast *ast, TICtx *ctx) {
   mark_function_binding_slice(binding, expr, ctx->env, outer_env);
   mark_generalizable_slice(ctx->env, outer_env);
   if (checkpoint_generalizable_slice(ctx->env, outer_env, ctx) != 0) {
+    type_error(ast, "failed to solve constraints in let binding");
     ctx->env = outer_env;
     return NULL;
   }

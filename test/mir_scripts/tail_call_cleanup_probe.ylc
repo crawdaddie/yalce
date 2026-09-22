@@ -1,0 +1,39 @@
+type VmEvent =
+  | Continue
+  | Halted
+;
+
+type Vm = (
+  pc: Int,
+  prog: Array of Int,
+  event: VmEvent
+);
+
+let step_vm = fn vm ->
+  if vm.pc > 0 then
+    Vm (vm.pc - 1) vm.prog Continue
+  else
+    Vm vm.pc vm.prog Halted
+;;
+
+let run_vm = fn vm ->
+  let nvm = step_vm vm;
+
+  match nvm.event with
+  | Continue -> run_vm nvm
+  | Halted -> array_size nvm.prog
+;;
+
+let step_scalar = fn pc ->
+  pc - 1
+;;
+
+let run_scalar = fn pc prog ->
+  if pc > 0 then
+    run_scalar (step_scalar pc) prog
+  else
+    array_size prog
+;;
+
+run_vm (Vm 3 [| 1, 2, 3 |] Continue);
+run_scalar 3 [| 1, 2, 3 |];

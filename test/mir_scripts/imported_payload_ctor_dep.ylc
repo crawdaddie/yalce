@@ -1,0 +1,13 @@
+type Ev =
+  | NeedsInput of (Array of Int)
+  | Done
+;
+
+type Vm = (
+  pc: Int,
+  event: Ev
+);
+
+let step = fn vm ->
+  Vm vm.pc (NeedsInput [|0|])
+;;

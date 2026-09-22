@@ -26,7 +26,17 @@ uint64_t hash_key(const char *key) {
 
 int __BREAK_REPL_FOR_GUI_LOOP = false;
 void (*break_repl_for_gui_loop_cb)(void) = NULL; // Changed from int to void
+bool __GUI_LOOP_STOP_REQUESTED = false;
+YlcHostLoopFn ylc_host_loop_cb = NULL;
 
 void __set_break_repl_flag(bool f) { __BREAK_REPL_FOR_GUI_LOOP = f; }
 
 void __set_break_repl_cb(void (*cb)(void)) { break_repl_for_gui_loop_cb = cb; }
+
+void ylc_host_loop_register(YlcHostLoopFn cb) { ylc_host_loop_cb = cb; }
+
+void __clear_gui_loop_stop(void) { __GUI_LOOP_STOP_REQUESTED = false; }
+
+void __request_gui_loop_stop(void) { __GUI_LOOP_STOP_REQUESTED = true; }
+
+bool __gui_loop_should_stop(void) { return __GUI_LOOP_STOP_REQUESTED; }

@@ -18,6 +18,7 @@
 #include "types/builtins.h"
 #include "types/inference.h"
 #include "types/type_ser.h"
+#include "../common.h"
 #include <llvm-c/Analysis.h>
 #include <llvm-c/Core.h>
 #include <llvm-c/Error.h>
@@ -509,6 +510,52 @@ static bool handle_repl_command(const char *input, TypeEnv *env) {
   return false;
 }
 
+typedef struct {
+  TypeEnv **env;
+  JITLangCtx *ctx;
+  LLVMOrcLLJITRef jit;
+  LLVMOrcJITDylibRef jd;
+  LLVMTargetMachineRef target_machine;
+  MirStackFrame *mir_root_frame;
+  int *counter;
+} OrcReplState;
+
+static void orc_repl_line_ready(const char *input, void *userdata) {
+  OrcReplState *state = (OrcReplState *)userdata;
+  if (!state || !input) {
+    return;
+  }
+
+  if (repl_input_matches(input, "%quit")) {
+    __request_gui_loop_stop();
+    return;
+  }
+
+  if (handle_repl_command(input, *state->env)) {
+    return;
+  }
+
+  char filename[64];
+  snprintf(filename, sizeof(filename), "<repl:%d>", (*state->counter)++);
+
+  ORCCompiledModule compiled =
+      compile_source(filename, input, true, state->env, state->ctx, state->jit,
+                     state->target_machine, state->mir_root_frame);
+  if (!compiled.module) {
+    return;
+  }
+
+  if (execute_module_top(compiled, state->jit, state->jd) != 0) {
+    fprintf(stderr, "REPL input failed\n");
+  }
+  printf("\n");
+}
+
+static void orc_repl_tick(void *userdata) {
+  (void)userdata;
+  ylc_repl_poll_stdin();
+}
+
 int orcjit(int argc, char **argv) {
 
   LLVMInitializeNativeTarget();
@@ -580,6 +627,27 @@ int orcjit(int argc, char **argv) {
       break;
     }
   }
+
+  if (ylc_host_loop_cb != NULL) {
+    int repl_counter = 0;
+    OrcReplState repl_state = {
+        .env = &env,
+        .ctx = &ctx,
+        .jit = jit,
+        .jd = jd,
+        .target_machine = target_machine,
+        .mir_root_frame = &mir_root_frame,
+        .counter = &repl_counter,
+    };
+
+    init_readline();
+    ylc_repl_begin(COLOR_RED "λ " COLOR_RESET COLOR_CYAN, orc_repl_line_ready,
+                   &repl_state);
+    ylc_host_loop_cb(orc_repl_tick, NULL);
+    save_history();
+    goto cleanup;
+  }
+
   if (ylc_config.interactive_mode) {
     init_readline();
   }
@@ -627,6 +695,7 @@ int orcjit(int argc, char **argv) {
     save_history();
   }
 
+cleanup:
   LLVMDisposeTargetMachine(target_machine);
   LLVMOrcDisposeLLJIT(jit);
   mir_durable_builtins_destroy(mir_durable_builtins);

@@ -1,0 +1,19 @@
+import imported_payload_ctor_dep;
+
+let run = fn vm ->
+  let nvm = imported_payload_ctor_dep.step vm;
+  match nvm.event with
+  | imported_payload_ctor_dep.NeedsInput ref ->
+      imported_payload_ctor_dep.Vm nvm.pc imported_payload_ctor_dep.Done
+  | imported_payload_ctor_dep.Done ->
+      nvm
+;;
+
+let all_done = fn a b ->
+  match (a.event, b.event) with
+  | (imported_payload_ctor_dep.Done, imported_payload_ctor_dep.Done) -> 1
+  | _ -> 0
+;;
+
+all_done (imported_payload_ctor_dep.Vm 1 imported_payload_ctor_dep.Done)
+  (imported_payload_ctor_dep.Vm 2 imported_payload_ctor_dep.Done);

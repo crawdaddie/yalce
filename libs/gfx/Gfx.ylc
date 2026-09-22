@@ -1,0 +1,39 @@
+let gfx_begin_frame = extern fn () -> ();
+let gfx_end_frame = extern fn () -> ();
+let gfx_clear = extern fn Double -> Double -> Double -> Double -> ();
+
+let gfx_screen = extern fn () -> Ptr;
+let gfx_target = extern fn Int -> Int -> Ptr;
+let gfx_bind_target = extern fn Ptr -> ();
+let gfx_framebuffer = extern fn Int -> Int -> Ptr;
+let gfx_framebuffer_write = extern fn Ptr -> String -> ();
+let gfx_framebuffer_draw = extern fn Ptr -> Int -> ();
+
+let gfx_shader = extern fn String -> String -> Ptr;
+let gfx_use_shader = extern fn Ptr -> ();
+let gfx_uniform1f = extern fn Ptr -> String -> Double -> ();
+let gfx_uniform2f = extern fn Ptr -> String -> Double -> Double -> ();
+let gfx_uniform_mat4 = extern fn Ptr -> String -> Array of Double -> ();
+let gfx_uniform_tex = extern fn Ptr -> String -> Ptr -> Int -> ();
+let gfx_compute_shader = extern fn String -> Ptr;
+
+let gfx_use_compute_shader = extern fn Ptr -> ();
+let gfx_bind_image_texture = extern fn Ptr -> Int -> Int -> Int -> ();
+let gfx_dispatch_compute = extern fn Int -> Int -> Int -> ();
+let gfx_memory_barrier = extern fn () -> ();
+
+let gfx_fullscreen_quad = extern fn () -> Ptr;
+let gfx_draw_mesh = extern fn Ptr -> ();
+
+let gfx_time = extern fn () -> Double;
+let gfx_resolution = extern fn () -> (Int, Int);
+let gfx_run = extern fn (() -> ()) -> ();
+
+let gfx_register_sdl_event_handler = extern fn String -> (Ptr -> ()) -> ();
+let gfx_event_type = extern fn Ptr -> Int;
+let gfx_event_key = extern fn Ptr -> Int;
+
+let gfx_points = extern fn Array of Double -> Int -> Ptr;
+let gfx_lines = extern fn Array of Double -> Int -> Ptr;
+
+let _ = dlopen "./libgfx.so";

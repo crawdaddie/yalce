@@ -6,6 +6,7 @@
 #include "../lang/types/type_ser.h"
 
 #include <string.h>
+#include <unistd.h>
 
 #define MAX_FAILURES 1000
 #define MAX_FAILURE_MSG_LEN 2048
@@ -3846,6 +3847,78 @@ bool test_variadic_templates() {
   return status;
 }
 
+// A let binding whose constraints cannot solve must report the conflicting
+// types and the binding's location, not just "failed to infer type".
+bool test_solve_failure_diagnostics() {
+  printf("\n=== Solve Failure Diagnostics ===\n");
+  bool status = true;
+
+  // One arm is a partial application (function type), the other is unit.
+  const char *input = "type E =\n"
+                      "  | A\n"
+                      "  | B\n"
+                      "  ;\n"
+                      "let f = fn x y ->\n"
+                      "  match y with\n"
+                      "  | A -> f x\n"
+                      "  | B -> ()\n"
+                      ";;\n";
+
+  // Capture stderr while inferring.
+  fflush(stderr);
+  int saved_fd = dup(STDERR_FILENO);
+  FILE *cap = tmpfile();
+  dup2(fileno(cap), STDERR_FILENO);
+
+  reset_type_var_counter();
+  Ast *ast = parse_input_buffer("diag_test.ylc", input);
+  TICtx ctx = {.env = NULL};
+  bool infer_failed = infer(ast, &ctx) == NULL;
+
+  fflush(stderr);
+  dup2(saved_fd, STDERR_FILENO);
+  close(saved_fd);
+
+  char buf[4096] = {0};
+  rewind(cap);
+  fread(buf, 1, sizeof(buf) - 1, cap);
+  fclose(cap);
+
+  bool reported_types = strstr(buf, "cannot unify") != NULL;
+  bool reported_loc = strstr(buf, "let binding") != NULL;
+  // The culprit's source line sits beside the location on the header line,
+  // then the caret, then the conflict message.
+  char *header = strstr(buf, "Type Error at diag_test.ylc 7:");
+  bool source_beside = false;
+  bool cause_after = false;
+  if (header) {
+    char *nl = strchr(header, '\n');
+    char seg[256];
+    snprintf(seg, sizeof(seg), "%.*s",
+             nl ? (int)(nl - header) : (int)strlen(header), header);
+    source_beside = strstr(seg, "| A -> f x") != NULL;
+    const char *cause = strstr(buf, "cannot unify");
+    cause_after = cause && nl && cause > nl;
+  }
+
+  if (infer_failed && reported_types && reported_loc && source_beside &&
+      cause_after) {
+    fprintf(stderr, "✅ solve failure reports conflicting types\n");
+  } else {
+    char fail_msg[MAX_FAILURE_MSG_LEN];
+    snprintf(fail_msg, MAX_FAILURE_MSG_LEN,
+             "Solve failure diagnostic incomplete (infer failed: %d, "
+             "reported types: %d, reported location: %d, source beside: %d, "
+             "cause after: %d):\n%s",
+             infer_failed, reported_types, reported_loc, source_beside,
+             cause_after, buf);
+    add_failure(fail_msg, __FILE__, __LINE__);
+    status = false;
+  }
+
+  return status;
+}
+
 int main() {
   // initialize_builtin_schemes();
   reset_type_var_counter();
@@ -3879,6 +3952,7 @@ int main() {
   status &= test_closures();
   status &= test_variadic_templates();
   status &= test_record_field_predicates();
+  status &= test_solve_failure_diagnostics();
   print_all_failures();
   return status == true ? 0 : 1;
 }

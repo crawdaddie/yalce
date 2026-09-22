@@ -6,7 +6,7 @@ SRCS := $(wildcard *.c)
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 COMPILER_OPTIONS := -g -fPIC
 
-LDFLAGS := -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2 -lstdc++
+LDFLAGS := -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2 -lstdc++ -lpthread
 
 ifeq ($(shell uname -s),Darwin)
     FRAMEWORKS = -framework opengl \

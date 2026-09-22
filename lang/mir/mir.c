@@ -54,6 +54,9 @@ static MirFunction *mir_program_find_function_by_name(MirProgram *program,
                                                       const char *name);
 MirSymbol *mir_resolve_ast_symbol(MirBuilder *builder, Ast *ast, MirCtx *ctx);
 MirValueId mir_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx);
+static bool mir_tail_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx);
+static bool mir_tail_self_application(MirBuilder *builder, Ast *ast,
+                                      MirCtx *ctx);
 
 static void mir_builder_error_at(MirBuilder *builder, Ast *origin,
                                  const char *fmt, ...) {
@@ -1282,6 +1285,20 @@ void mir_builder_set_cond(MirBuilder *builder, MirValueId cond,
                                          .else_block = else_block};
 }
 
+static void mir_builder_set_tail_call(MirBuilder *builder, MirValueId callee,
+                                      MirValueIdVec args) {
+  if (!builder || !builder->block) {
+    return;
+  }
+  builder->block->term = (MirTerminator){.kind = MIR_TERM_TAIL_CALL,
+                                         .value = callee,
+                                         .cond = MIR_NO_VALUE,
+                                         .target = MIR_NO_BLOCK,
+                                         .then_block = MIR_NO_BLOCK,
+                                         .else_block = MIR_NO_BLOCK,
+                                         .args = args};
+}
+
 void mir_builder_set_unreachable(MirBuilder *builder) {
   if (!builder || !builder->block) {
     return;
@@ -1864,6 +1881,24 @@ bool mir_term_for_each_operand(MirTerminator *term, MirOperandVisitor visitor,
                                               MIR_OPERAND_USE_BORROW, 0),
                              ctx);
   case MIR_TERM_CORO_RESTART:
+    for (size_t i = 0; i < term->args.len; i++) {
+      if (!mir_visit_operand(NULL, visitor,
+                             mir_make_operand(term->args.items[i],
+                                              MIR_OPERAND_ROLE_VALUE,
+                                              MIR_OPERAND_USE_CONSUME, i),
+                             ctx)) {
+        return false;
+      }
+    }
+    return true;
+  case MIR_TERM_TAIL_CALL:
+    if (!mir_visit_operand(NULL, visitor,
+                           mir_make_operand(term->value,
+                                            MIR_OPERAND_ROLE_CALLEE,
+                                            MIR_OPERAND_USE_BORROW, 0),
+                           ctx)) {
+      return false;
+    }
     for (size_t i = 0; i < term->args.len; i++) {
       if (!mir_visit_operand(NULL, visitor,
                              mir_make_operand(term->args.items[i],
@@ -3986,6 +4021,25 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
                                     .then_block = MIR_NO_BLOCK,
                                     .else_block = MIR_NO_BLOCK};
       break;
+    case MIR_TERM_TAIL_CALL: {
+      MirValueIdVec args = {0};
+      for (size_t k = 0; k < source_block->term.args.len; k++) {
+        mir_value_id_vec_push(
+            program->arena, &args,
+            mir_remap_value(value_map, value_map_len,
+                            source_block->term.args.items[k]));
+      }
+      block->term =
+          (MirTerminator){.kind = MIR_TERM_TAIL_CALL,
+                          .value = mir_remap_value(value_map, value_map_len,
+                                                   source_block->term.value),
+                          .cond = MIR_NO_VALUE,
+                          .target = MIR_NO_BLOCK,
+                          .then_block = MIR_NO_BLOCK,
+                          .else_block = MIR_NO_BLOCK,
+                          .args = args};
+      break;
+    }
     case MIR_TERM_UNREACHABLE:
       block->term = (MirTerminator){.kind = MIR_TERM_UNREACHABLE,
                                     .value = MIR_NO_VALUE,
@@ -4953,6 +5007,25 @@ MirValueId mir_application(MirBuilder *builder, Type *type, Ast *ast,
           custom_symbol->as.custom.handler(builder, ast, ctx, custom_symbol);
       if (value != MIR_NO_VALUE) {
         return value;
+      }
+    }
+
+    if (function->data.AST_RECORD_ACCESS.member &&
+        function->data.AST_RECORD_ACCESS.member->tag == AST_IDENTIFIER) {
+      const char *constructor_name =
+          function->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+      MirValueId constructor = mir_constructor_call(
+          builder, ast, ast->type, constructor_name,
+          ast->data.AST_APPLICATION.args, ast->data.AST_APPLICATION.len, ctx);
+      if (constructor != MIR_NO_VALUE) {
+        return constructor;
+      }
+
+      constructor = mir_record_constructor_call(
+          builder, ast, ast->type, constructor_name,
+          ast->data.AST_APPLICATION.args, ast->data.AST_APPLICATION.len, ctx);
+      if (constructor != MIR_NO_VALUE) {
+        return constructor;
       }
     }
   }
@@ -6598,6 +6671,14 @@ static MirValueId mir_record_access(MirBuilder *builder, Ast *ast,
     return member_value;
   }
 
+  const char *member_name =
+      ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+  MirValueId constructor =
+      mir_constructor_call(builder, ast, ast->type, member_name, NULL, 0, ctx);
+  if (constructor != MIR_NO_VALUE) {
+    return constructor;
+  }
+
   Ast *record = ast->data.AST_RECORD_ACCESS.record;
   MirValueId record_value = mir_expr(builder, record, ctx);
   if (record_value == MIR_NO_VALUE) {
@@ -6613,8 +6694,6 @@ static MirValueId mir_record_access(MirBuilder *builder, Ast *ast,
        is_generic(record_view))) {
     record_view = value_view;
   }
-  const char *member_name =
-      ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
   if (!record_view || record_view->kind != T_CONS) {
     if (ast->type && member_name && (!record_view || is_generic(record_view))) {
       size_t unresolved_index = ast->data.AST_RECORD_ACCESS.index >= 0
@@ -7525,6 +7604,366 @@ static MirValueId mir_match_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
   return mir_phi(builder, ast->type, ast, incoming);
 }
 
+static bool mir_tail_return_value(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
+  MirValueId value = mir_expr(builder, ast, ctx);
+  if (value == MIR_NO_VALUE) {
+    mir_builder_set_unreachable_if_open(builder);
+    return false;
+  }
+
+  mir_builder_set_return(builder, value);
+  return true;
+}
+
+static bool mir_tail_body(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
+  if (!builder || !ast || ast->tag != AST_BODY) {
+    return false;
+  }
+
+  AstList *last = NULL;
+  for (AstList *item = ast->data.AST_BODY.stmts; item; item = item->next) {
+    if (item->ast && item->ast->tag != AST_TYPE_DECL) {
+      last = item;
+    }
+  }
+
+  if (!last) {
+    MirValueId value = mir_const_void(builder, &t_void, ast);
+    if (value == MIR_NO_VALUE) {
+      return false;
+    }
+    mir_builder_set_return(builder, value);
+    return true;
+  }
+
+  for (AstList *item = ast->data.AST_BODY.stmts; item && item != last;
+       item = item->next) {
+    if (item->ast && item->ast->tag == AST_TYPE_DECL) {
+      continue;
+    }
+    if (builder->block && builder->block->term.kind != MIR_TERM_NONE) {
+      return true;
+    }
+
+    MirValueId value = mir_expr(builder, item->ast, ctx);
+    if (value == MIR_NO_VALUE) {
+      mir_builder_set_unreachable_if_open(builder);
+      return false;
+    }
+  }
+
+  return mir_tail_expr(builder, last->ast, ctx);
+}
+
+static bool mir_tail_let(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
+  if (!builder || !ast || ast->tag != AST_LET || !ctx) {
+    return false;
+  }
+
+  Ast *binding = ast->data.AST_LET.binding;
+  Ast *expr = ast->data.AST_LET.expr;
+  bool is_module_binding =
+      expr && (expr->tag == AST_MODULE ||
+               mir_is_specialized_module_binding_expr(builder, expr, ctx));
+
+  if (!ast->data.AST_LET.in_expr) {
+    return mir_tail_return_value(builder, ast, ctx);
+  }
+
+  MIR_STACK_ALLOC_CTX_PUSH(cont_ctx, builder, ctx)
+  cont_ctx.export_bindings = false;
+  MirValueId value = mir_let_value(builder, ast, &cont_ctx);
+  if (value == MIR_NO_VALUE) {
+    mir_builder_set_unreachable_if_open(builder);
+    return false;
+  }
+
+  if (is_module_binding ||
+      mir_current_binding_is_custom_symbol(&cont_ctx, binding)) {
+    return mir_tail_expr(builder, ast->data.AST_LET.in_expr, &cont_ctx);
+  }
+
+  if (!mir_bind_pattern(builder, &cont_ctx, binding, value,
+                        expr ? expr->type : binding->type)) {
+    mir_builder_set_unreachable_if_open(builder);
+    return false;
+  }
+
+  return mir_tail_expr(builder, ast->data.AST_LET.in_expr, &cont_ctx);
+}
+
+static bool mir_tail_bool_match_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx,
+                                     size_t true_index, size_t false_index) {
+  if (!builder || !builder->fn || !builder->block || !ast || !ctx) {
+    return false;
+  }
+
+  MirValueId scrutinee = mir_expr(builder, ast->data.AST_MATCH.expr, ctx);
+  if (scrutinee == MIR_NO_VALUE) {
+    return false;
+  }
+
+  MirBlock *match_block = builder->block;
+  MirBlock *true_block = mir_function_add_block(builder->fn, "match.true");
+  MirBlock *false_block = mir_function_add_block(builder->fn, "match.false");
+  if (!true_block || !false_block) {
+    return false;
+  }
+
+  mir_builder_position_at_end(builder, match_block);
+  mir_builder_set_cond(builder, scrutinee, true_block->id, false_block->id);
+
+  Ast *true_body = ast->data.AST_MATCH.branches + (true_index * 2) + 1;
+  Ast *false_body = ast->data.AST_MATCH.branches + (false_index * 2) + 1;
+
+  MIR_STACK_ALLOC_CTX_PUSH(true_ctx, builder, ctx)
+  mir_builder_position_at_end(builder, true_block);
+  if (!mir_tail_expr(builder, true_body, &true_ctx)) {
+    return false;
+  }
+
+  MIR_STACK_ALLOC_CTX_PUSH(false_ctx, builder, ctx)
+  mir_builder_position_at_end(builder, false_block);
+  return mir_tail_expr(builder, false_body, &false_ctx);
+}
+
+static bool mir_tail_match_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
+  if (!builder || !builder->fn || !builder->block || !ast ||
+      ast->tag != AST_MATCH || !ctx) {
+    return false;
+  }
+
+  size_t true_index = 0;
+  size_t false_index = 0;
+  if (mir_match_bool_exhaustive_arms(ast, &true_index, &false_index)) {
+    return mir_tail_bool_match_expr(builder, ast, ctx, true_index, false_index);
+  }
+
+  MirArena *arena = builder->fn->arena;
+  MirValueId scrutinee = mir_expr(builder, ast->data.AST_MATCH.expr, ctx);
+  if (scrutinee == MIR_NO_VALUE) {
+    return false;
+  }
+
+  MirBlock *match_block = builder->block;
+  MirBlock *no_match_block =
+      mir_function_add_block(builder->fn, "match.no_match");
+  if (!no_match_block) {
+    return false;
+  }
+
+  MirBlock *first_test_block =
+      ast->data.AST_MATCH.len > 0
+          ? mir_function_add_block(builder->fn, "match.arm.0.test")
+          : NULL;
+  if (ast->data.AST_MATCH.len > 0 && !first_test_block) {
+    return false;
+  }
+
+  MirBlockId first_test =
+      first_test_block ? first_test_block->id : no_match_block->id;
+  mir_builder_position_at_end(builder, match_block);
+  mir_builder_set_br(builder, first_test);
+
+  MirBlock *test_block = first_test_block;
+  for (size_t i = 0; i < ast->data.AST_MATCH.len; i++) {
+    Ast *pattern = ast->data.AST_MATCH.branches + (i * 2);
+    Ast *body = ast->data.AST_MATCH.branches + (i * 2) + 1;
+
+    MirBlock *body_block = mir_function_add_block(
+        builder->fn, mir_arena_printf(arena, "match.arm.%zu.body", i));
+    MirBlock *next_test_block =
+        i + 1 < ast->data.AST_MATCH.len
+            ? mir_function_add_block(
+                  builder->fn,
+                  mir_arena_printf(arena, "match.arm.%zu.test", i + 1))
+            : NULL;
+    MirBlockId fail_block =
+        next_test_block ? next_test_block->id : no_match_block->id;
+    if (!test_block || !body_block) {
+      return false;
+    }
+
+    MIR_STACK_ALLOC_CTX_PUSH(branch_ctx, builder, ctx)
+    mir_builder_position_at_end(builder, test_block);
+    if (!mir_lower_pattern_to_cfg(builder, &branch_ctx, pattern, scrutinee,
+                                  ast->data.AST_MATCH.expr->type,
+                                  body_block->id, fail_block)) {
+      return false;
+    }
+
+    mir_builder_position_at_end(builder, body_block);
+    if (!mir_tail_expr(builder, body, &branch_ctx)) {
+      return false;
+    }
+
+    test_block = next_test_block;
+  }
+
+  mir_builder_position_at_end(builder, no_match_block);
+  if (ast->data.AST_MATCH.allow_no_match && ast->type &&
+      ast->type->kind == T_VOID) {
+    MirValueId value = mir_const_void(builder, &t_void, ast);
+    if (value == MIR_NO_VALUE) {
+      return false;
+    }
+    mir_builder_set_return(builder, value);
+  } else {
+    mir_builder_set_unreachable(builder);
+  }
+
+  return true;
+}
+
+static bool mir_tail_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
+  if (!builder || !ast) {
+    return false;
+  }
+
+  switch (ast->tag) {
+  case AST_BODY:
+    return mir_tail_body(builder, ast, ctx);
+  case AST_LET:
+    return mir_tail_let(builder, ast, ctx);
+  case AST_MATCH:
+    return mir_tail_match_expr(builder, ast, ctx);
+  case AST_APPLICATION:
+    if (mir_tail_self_application(builder, ast, ctx)) {
+      return true;
+    }
+    return mir_tail_return_value(builder, ast, ctx);
+  default:
+    return mir_tail_return_value(builder, ast, ctx);
+  }
+}
+
+static const char *mir_application_root_name(Ast *ast) {
+  if (!ast || ast->tag != AST_APPLICATION) {
+    return NULL;
+  }
+
+  Ast *fn = ast->data.AST_APPLICATION.function;
+  while (fn && fn->tag == AST_APPLICATION) {
+    fn = fn->data.AST_APPLICATION.function;
+  }
+
+  if (!fn) {
+    return NULL;
+  }
+
+  if (fn->tag == AST_IDENTIFIER) {
+    return fn->data.AST_IDENTIFIER.value;
+  }
+
+  if (fn->tag == AST_RECORD_ACCESS && fn->data.AST_RECORD_ACCESS.member &&
+      fn->data.AST_RECORD_ACCESS.member->tag == AST_IDENTIFIER) {
+    return fn->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+  }
+
+  return NULL;
+}
+
+static bool mir_name_matches_self(const char *name, const char *self_name) {
+  if (!name || !self_name) {
+    return false;
+  }
+
+  if (strcmp(name, self_name) == 0) {
+    return true;
+  }
+
+  size_t name_len = strlen(name);
+  size_t self_len = strlen(self_name);
+  if (self_len <= name_len || self_name[self_len - name_len - 1] != '.') {
+    return false;
+  }
+
+  return strcmp(self_name + self_len - name_len, name) == 0;
+}
+
+static bool mir_tail_self_application(MirBuilder *builder, Ast *ast,
+                                      MirCtx *ctx) {
+  if (!builder || !builder->fn || !ast || ast->tag != AST_APPLICATION) {
+    return false;
+  }
+
+  const char *name = mir_application_root_name(ast);
+  if (!mir_name_matches_self(name, builder->fn->name)) {
+    return false;
+  }
+
+  MirValueId callee = mir_expr(builder, ast->data.AST_APPLICATION.function, ctx);
+  if (callee == MIR_NO_VALUE) {
+    mir_builder_set_unreachable_if_open(builder);
+    return false;
+  }
+
+  MirInstr *callee_def = mir_function_find_def_instr(builder->fn, callee);
+  if (!callee_def || callee_def->kind != MIR_FN_REF ||
+      callee_def->data.fn_ref.fn != builder->fn) {
+    return false;
+  }
+
+  MirValueIdVec args = {0};
+  for (size_t i = 0; i < ast->data.AST_APPLICATION.len; i++) {
+    MirValueId arg = mir_expr(builder, ast->data.AST_APPLICATION.args + i, ctx);
+    if (arg == MIR_NO_VALUE) {
+      mir_builder_set_unreachable_if_open(builder);
+      return false;
+    }
+    mir_value_id_vec_push(builder->fn->arena, &args, arg);
+  }
+
+  mir_builder_set_tail_call(builder, callee, args);
+  return true;
+}
+
+static bool mir_tail_expr_has_self_call(Ast *ast, const char *self_name) {
+  if (!ast || !self_name) {
+    return false;
+  }
+
+  switch (ast->tag) {
+  case AST_BODY: {
+    AstList *last = NULL;
+    for (AstList *item = ast->data.AST_BODY.stmts; item; item = item->next) {
+      if (item->ast && item->ast->tag != AST_TYPE_DECL) {
+        last = item;
+      }
+    }
+    return last && mir_tail_expr_has_self_call(last->ast, self_name);
+  }
+
+  case AST_LET:
+    return ast->data.AST_LET.in_expr &&
+           mir_tail_expr_has_self_call(ast->data.AST_LET.in_expr, self_name);
+
+  case AST_MATCH: {
+    size_t true_index = 0;
+    size_t false_index = 0;
+    if (mir_match_bool_exhaustive_arms(ast, &true_index, &false_index)) {
+      return false;
+    }
+
+    for (size_t i = 0; i < ast->data.AST_MATCH.len; i++) {
+      Ast *body = ast->data.AST_MATCH.branches + (i * 2) + 1;
+      if (mir_tail_expr_has_self_call(body, self_name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  case AST_APPLICATION: {
+    const char *name = mir_application_root_name(ast);
+    return mir_name_matches_self(name, self_name);
+  }
+
+  default:
+    return false;
+  }
+}
+
 static MirValueId mir_loop_range_expr(MirBuilder *builder, Ast *ast,
                                       MirCtx *ctx) {
   if (!builder || !builder->fn || !builder->block || !ast ||
@@ -7796,11 +8235,20 @@ static bool mir_populate_function_body(MirProgram *program, MirFunction *fn,
   }
 
   Ast *body = fn_ast->data.AST_LAMBDA.body;
-  MirValueId result = mir_expr(&builder, body, &fn_ctx);
   if (is_coroutine_constructor_type(fn_ast->type)) {
+    mir_expr(&builder, body, &fn_ctx);
     mir_builder_set_coro_done_if_open(&builder);
     return true;
   }
+
+  if (mir_tail_expr_has_self_call(body, fn->name)) {
+    if (!mir_tail_expr(&builder, body, &fn_ctx)) {
+      mir_builder_set_unreachable_if_open(&builder);
+    }
+    return true;
+  }
+
+  MirValueId result = mir_expr(&builder, body, &fn_ctx);
   if (result != MIR_NO_VALUE && builder.block &&
       builder.block->term.kind == MIR_TERM_NONE) {
     mir_builder_set_return(&builder, result);
@@ -8706,6 +9154,15 @@ static void dump_term(FILE *stream, const MirTerminator *term) {
     break;
   case MIR_TERM_CORO_DONE:
     fputs("    coro.done\n", stream);
+    break;
+  case MIR_TERM_TAIL_CALL:
+    fputs("    tail_call ", stream);
+    dump_value(stream, term->value);
+    fputc('(', stream);
+    dump_value_id_vec(stream, &term->args);
+    fputc(')', stream);
+    dump_term_operand_meta(stream, term);
+    fputc('\n', stream);
     break;
   case MIR_TERM_UNREACHABLE:
     fputs("    unreachable\n", stream);

@@ -1,4 +1,5 @@
 #include "audio_loop.h"
+#include "engine_core.h"
 #include "../lang/backend_llvm/lib_registry.h"
 #include "../lang/config.h"
 #include "../lang/ylc_datatypes.h"
@@ -218,6 +219,8 @@ static void write_callback(struct SoundIoOutStream *outstream,
       set_block_time(&block_time);
       user_ctx_callback(ctx, subblock_start_sample, subframes,
                         seconds_per_frame);
+
+      record_write(ctx->output_buf, subframes, ctx->main_vol);
 
       int sample_idx;
       double sample;

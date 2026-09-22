@@ -2,6 +2,7 @@
 #include "../../engine/common.h"
 #include "../../engine/node.h"
 #include "../../lang/common.h"
+#include "../../lang/input.h"
 #include <SDL3/SDL.h>
 #include <math.h>
 #include <stdatomic.h>
@@ -9,9 +10,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-// Provided by libyalce (jit.c) — non-blocking REPL for shared main thread
-extern void repl_poll_stdin(void);
 
 #define MAX_WINDOWS 64
 
@@ -49,11 +47,30 @@ typedef struct {
 
 static GUIWindow windows[MAX_WINDOWS];
 static int num_windows = 0;
+static bool sdl_ready = false;
+
+static bool ylc_gui_ensure_sdl(void) {
+  if (sdl_ready) {
+    return true;
+  }
+
+  if (!SDL_Init(SDL_INIT_VIDEO)) {
+    fprintf(stderr, "libgui: SDL_Init failed: %s\n", SDL_GetError());
+    return false;
+  }
+
+  sdl_ready = true;
+  return true;
+}
 
 void ylc_window_open(int type_id, const char *title, int w, int h,
                      void *state) {
-  if (num_windows >= MAX_WINDOWS)
+  if (!ylc_gui_ensure_sdl()) {
     return;
+  }
+  if (num_windows >= MAX_WINDOWS) {
+    return;
+  }
   YLCWindowType *t = find_type(type_id);
   if (!t) {
     fprintf(stderr, "libgui: unknown window type %d\n", type_id);
@@ -65,6 +82,8 @@ void ylc_window_open(int type_id, const char *title, int w, int h,
     fprintf(stderr, "libgui: SDL_CreateWindow: %s\n", SDL_GetError());
     return;
   }
+  SDL_StartTextInput(win);
+
   SDL_Renderer *ren = SDL_CreateRenderer(win, NULL);
   if (!ren) {
     fprintf(stderr, "libgui: SDL_CreateRenderer: %s\n", SDL_GetError());
@@ -594,6 +613,154 @@ static void spectrogram_destroy(void *state) {
 }
 
 // ============================================================================
+// Framebuffer window type (id = YLC_WINDOW_FRAMEBUFFER = 4)
+// ============================================================================
+
+typedef struct {
+  _YLC_int32_t_Array data;
+  _YLC_int32_t_Array joystick;
+  SDL_Texture *texture;
+  uint32_t *pixels;
+  void (*tick)(void);
+  int width;
+  int height;
+  bool left_down;
+  bool right_down;
+} FramebufferState;
+
+static void framebuffer_set_joystick(FramebufferState *s) {
+  if (!s || !s->joystick.data || s->joystick.size <= 0) {
+    return;
+  }
+
+  int value = 0;
+  if (s->left_down) {
+    value = -1;
+  } else if (s->right_down) {
+    value = 1;
+  }
+
+  s->joystick.data[s->joystick.offset] = value;
+}
+
+static uint32_t framebuffer_color(int tile) {
+  switch (tile) {
+  case 0:
+    return 0xff08090d;
+  case 1:
+    return 0xff35506b;
+  case 2:
+    return 0xfff0c36a;
+  case 3:
+    return 0xfff4f1de;
+  case 4:
+    return 0xffe84a5f;
+  default:
+    return 0xff7a7f87;
+  }
+}
+
+static void framebuffer_build_pixels(FramebufferState *s) {
+  if (!s || !s->pixels || !s->data.data) {
+    return;
+  }
+
+  int n = s->width * s->height;
+  if (s->data.size < n) {
+    n = s->data.size;
+  }
+
+  for (int i = 0; i < n; i++) {
+    s->pixels[i] = framebuffer_color(s->data.data[s->data.offset + i]);
+  }
+}
+
+static void framebuffer_draw(SDL_Window *win, SDL_Renderer *ren, void *state) {
+  FramebufferState *s = (FramebufferState *)state;
+  if (!s || !s->data.data || s->width <= 0 || s->height <= 0) {
+    SDL_SetRenderDrawColor(ren, 8, 9, 13, 255);
+    SDL_RenderClear(ren);
+    SDL_RenderPresent(ren);
+    return;
+  }
+
+  if (s->tick) {
+    s->tick();
+  }
+
+  if (!s->texture) {
+    s->texture =
+        SDL_CreateTexture(ren, SDL_PIXELFORMAT_RGBA8888,
+                          SDL_TEXTUREACCESS_STREAMING, s->width, s->height);
+    if (s->texture) {
+      SDL_SetTextureScaleMode(s->texture, SDL_SCALEMODE_NEAREST);
+    }
+  }
+
+  int width = 0;
+  int height = 0;
+  SDL_GetWindowSize(win, &width, &height);
+
+  SDL_SetRenderDrawColor(ren, 8, 9, 13, 255);
+  SDL_RenderClear(ren);
+
+  if (s->texture) {
+    framebuffer_build_pixels(s);
+    SDL_UpdateTexture(s->texture, NULL, s->pixels,
+                      s->width * (int)sizeof(uint32_t));
+
+    SDL_FRect dst = {0.0f, 0.0f, (float)width, (float)height};
+    SDL_RenderTexture(ren, s->texture, NULL, &dst);
+  }
+
+  SDL_RenderPresent(ren);
+}
+
+static void framebuffer_on_event(SDL_Event *e, SDL_Window *win,
+                                 SDL_Renderer *ren, void *state) {
+  (void)ren;
+  FramebufferState *s = (FramebufferState *)state;
+  if (!s || (e->type != SDL_EVENT_KEY_DOWN && e->type != SDL_EVENT_KEY_UP)) {
+    return;
+  }
+  if (SDL_GetWindowID(win) != e->key.windowID) {
+    return;
+  }
+
+  bool down = e->type == SDL_EVENT_KEY_DOWN;
+  SDL_Keycode key = e->key.key;
+
+  if (key == SDLK_LEFT || key == SDLK_A || key == SDLK_L) {
+    s->left_down = down;
+  }
+  if (key == SDLK_RIGHT || key == SDLK_D || key == SDLK_R) {
+    s->right_down = down;
+  }
+
+  framebuffer_set_joystick(s);
+}
+
+static void framebuffer_destroy(void *state) {
+  FramebufferState *s = (FramebufferState *)state;
+  if (!s) {
+    return;
+  }
+  if (s->texture) {
+    SDL_DestroyTexture(s->texture);
+  }
+  free(s->pixels);
+  free(s);
+}
+
+static _YLC_int32_t_Array int_array_from_abi(int64_t meta, int32_t *data) {
+  return (_YLC_int32_t_Array){
+      .size = (int32_t)(meta & 0xffffffff),
+      .offset = (int32_t)((uint64_t)meta >> 32),
+      .data = data,
+  };
+}
+
+// ============================================================================
 // Public scope API
 // ============================================================================
 
@@ -698,6 +865,89 @@ void ylc_spectrogram_open(_DoubleArray mag, _DoubleArray transient,
   ylc_window_open(YLC_WINDOW_SPECTROGRAM, "spectrogram", win_w, win_h, s);
 }
 
+static void *framebuffer_open_tick_input_impl(_YLC_int32_t_Array data,
+                                              int width, int height, int scale,
+                                              _YLC_int32_t_Array joystick,
+                                              void *tick) {
+  if (!data.data || width <= 0 || height <= 0 || data.size < width * height) {
+    return NULL;
+  }
+
+  FramebufferState *s = calloc(1, sizeof(FramebufferState));
+  if (!s) {
+    return NULL;
+  }
+
+  s->data = data;
+  s->joystick = joystick;
+  s->width = width;
+  s->height = height;
+  s->tick = (void (*)(void))tick;
+  framebuffer_set_joystick(s);
+  s->pixels = calloc((size_t)width * (size_t)height, sizeof(uint32_t));
+  if (!s->pixels) {
+    free(s);
+    return NULL;
+  }
+
+  int win_w = width * scale;
+  int win_h = height * scale;
+  if (win_w <= 0) {
+    win_w = width;
+  }
+  if (win_h <= 0) {
+    win_h = height;
+  }
+
+  ylc_window_open(YLC_WINDOW_FRAMEBUFFER, "framebuffer", win_w, win_h, s);
+  return s;
+}
+
+void *ylc_framebuffer_open_tick_input(int64_t data_meta, int32_t *data,
+                                      int width, int height, int scale,
+                                      int64_t joystick_meta, int32_t *joystick,
+                                      void *tick) {
+  _YLC_int32_t_Array data_arr = int_array_from_abi(data_meta, data);
+  _YLC_int32_t_Array joystick_arr = int_array_from_abi(joystick_meta, joystick);
+
+  return framebuffer_open_tick_input_impl(data_arr, width, height, scale,
+                                          joystick_arr, tick);
+}
+
+void *ylc_framebuffer_open_input(int64_t data_meta, int32_t *data, int width,
+                                 int height, int scale, int64_t joystick_meta,
+                                 int32_t *joystick) {
+  return ylc_framebuffer_open_tick_input(data_meta, data, width, height, scale,
+                                         joystick_meta, joystick, NULL);
+}
+
+void *ylc_framebuffer_open_tick(int64_t data_meta, int32_t *data, int width,
+                                int height, int scale, void *tick) {
+  _YLC_int32_t_Array joystick = {0};
+  _YLC_int32_t_Array data_arr = int_array_from_abi(data_meta, data);
+
+  return framebuffer_open_tick_input_impl(data_arr, width, height, scale,
+                                          joystick, tick);
+}
+
+void *ylc_framebuffer_open(int64_t data_meta, int32_t *data, int width,
+                           int height, int scale) {
+  _YLC_int32_t_Array joystick = {0};
+  _YLC_int32_t_Array data_arr = int_array_from_abi(data_meta, data);
+
+  return framebuffer_open_tick_input_impl(data_arr, width, height, scale,
+                                          joystick, NULL);
+}
+
+int ylc_framebuffer_joystick(void *state) {
+  FramebufferState *s = (FramebufferState *)state;
+  if (!s || !s->joystick.data || s->joystick.size <= 0) {
+    return 0;
+  }
+
+  return s->joystick.data[s->joystick.offset];
+}
+
 static void kb_input_draw(SDL_Window *win, SDL_Renderer *ren, void *state) {
 
   SDL_RenderPresent(ren);
@@ -742,29 +992,35 @@ void ylc_kb_input_open() {
 // Main SDL event loop — runs on the main thread
 // ============================================================================
 
-static void sdl_main_loop(void) {
-  if (!SDL_Init(SDL_INIT_VIDEO)) {
-    fprintf(stderr, "libgui: SDL_Init failed: %s\n", SDL_GetError());
+static void sdl_main_loop_inner(bool poll_repl) {
+  if (!ylc_gui_ensure_sdl()) {
     return;
   }
 
-  while (true) {
+  __clear_gui_loop_stop();
+  while (!__gui_loop_should_stop()) {
     // Process events
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
-      if (e.type == SDL_EVENT_QUIT)
+      if (e.type == SDL_EVENT_QUIT) {
         goto quit;
+      }
 
       if (e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
         for (int i = 0; i < num_windows; i++) {
-          if (SDL_GetWindowID(windows[i].window) != e.window.windowID)
+          if (SDL_GetWindowID(windows[i].window) != e.window.windowID) {
             continue;
+          }
           YLCWindowType *t = find_type(windows[i].type_id);
-          if (t && t->destroy)
+          if (t && t->destroy) {
             t->destroy(windows[i].state);
+          }
           SDL_DestroyRenderer(windows[i].renderer);
           SDL_DestroyWindow(windows[i].window);
           windows[i] = windows[--num_windows];
+          if (num_windows == 0) {
+            goto quit;
+          }
           break;
         }
       }
@@ -772,33 +1028,43 @@ static void sdl_main_loop(void) {
       // Dispatch event to each window's type handler
       for (int i = 0; i < num_windows; i++) {
         YLCWindowType *t = find_type(windows[i].type_id);
-        if (t && t->on_event)
+        if (t && t->on_event) {
           t->on_event(&e, windows[i].window, windows[i].renderer,
                       windows[i].state);
+        }
       }
     }
 
     // Draw all windows
     for (int i = 0; i < num_windows; i++) {
       YLCWindowType *t = find_type(windows[i].type_id);
-      if (t && t->draw)
+      if (t && t->draw) {
         t->draw(windows[i].window, windows[i].renderer, windows[i].state);
+      }
     }
 
-    repl_poll_stdin();
+    if (poll_repl) {
+      ylc_repl_poll_stdin();
+    }
     SDL_Delay(8);
   }
 
 quit:
   for (int i = 0; i < num_windows; i++) {
     YLCWindowType *t = find_type(windows[i].type_id);
-    if (t && t->destroy)
+    if (t && t->destroy) {
       t->destroy(windows[i].state);
+    }
     SDL_DestroyRenderer(windows[i].renderer);
     SDL_DestroyWindow(windows[i].window);
   }
   SDL_Quit();
+  sdl_ready = false;
 }
+
+static void sdl_main_loop(void) { sdl_main_loop_inner(true); }
+
+void ylc_gui_loop(void) { sdl_main_loop_inner(true); }
 
 // ============================================================================
 // Library constructor — register built-in types and hook into REPL
@@ -829,6 +1095,13 @@ __attribute__((constructor)) static void ylc_gui_init(void) {
       .draw = kb_input_draw,
       .on_event = kb_input_handler,
       .destroy = kb_input_destroy,
+  });
+
+  ylc_window_type_register((YLCWindowType){
+      .id = YLC_WINDOW_FRAMEBUFFER,
+      .draw = framebuffer_draw,
+      .on_event = framebuffer_on_event,
+      .destroy = framebuffer_destroy,
   });
 
   __set_break_repl_flag(true);

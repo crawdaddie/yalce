@@ -3,12 +3,14 @@
 // -- need to make sure stdio is included BEFORE readline
 #include <signal.h>
 #include <stdio.h>
+#include <poll.h>
 #include <readline/history.h>
 #include <readline/readline.h>
 // clang-format on
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define MAX_COMPLETIONS 100
 const char *completions_array[MAX_COMPLETIONS] = {
@@ -128,6 +130,143 @@ char *repl_input(const char *prompt) {
   }
 
   return line;
+}
+
+static char *nb_accum = NULL;
+static size_t nb_accum_len = 0;
+static YlcReplLineCb nb_cb = NULL;
+static void *nb_userdata = NULL;
+static bool nb_active = false;
+
+static void repl_nb_reset(void) {
+  free(nb_accum);
+  nb_accum = NULL;
+  nb_accum_len = 0;
+}
+
+static void repl_nb_submit(char *line) {
+  size_t len = strlen(line);
+
+  if (len > 0 && line[len - 1] == '\\') {
+    size_t new_len = nb_accum_len + len;
+    char *tmp = realloc(nb_accum, new_len + 1);
+    if (!tmp) {
+      free(line);
+      return;
+    }
+
+    nb_accum = tmp;
+    memcpy(nb_accum + nb_accum_len, line, len - 1);
+    nb_accum[nb_accum_len + len - 1] = '\n';
+    nb_accum[nb_accum_len + len] = '\0';
+    nb_accum_len = new_len;
+    free(line);
+    return;
+  }
+
+  size_t final_len = nb_accum_len + len + 2;
+  char *input = malloc(final_len);
+  if (!input) {
+    free(line);
+    return;
+  }
+
+  if (nb_accum_len > 0) {
+    memcpy(input, nb_accum, nb_accum_len);
+  }
+  memcpy(input + nb_accum_len, line, len);
+  input[nb_accum_len + len] = '\n';
+  input[nb_accum_len + len + 1] = '\0';
+  free(line);
+  repl_nb_reset();
+
+  if (nb_cb) {
+    nb_cb(input, nb_userdata);
+  }
+  free(input);
+}
+
+static void repl_nb_line_ready(char *line) {
+  if (!line) {
+    repl_nb_reset();
+    rl_callback_handler_remove();
+    nb_active = false;
+    return;
+  }
+
+  if (*line) {
+    add_history(line);
+  }
+  repl_nb_submit(line);
+}
+
+void ylc_repl_begin(const char *prompt, YlcReplLineCb cb, void *userdata) {
+  nb_cb = cb;
+  nb_userdata = userdata;
+  nb_active = true;
+  rl_callback_handler_install(prompt, repl_nb_line_ready);
+}
+
+void ylc_repl_poll_stdin(void) {
+  if (!nb_active) {
+    return;
+  }
+
+  struct pollfd pfd = {.fd = STDIN_FILENO, .events = POLLIN};
+  if (poll(&pfd, 1, 0) > 0 && (pfd.revents & POLLIN)) {
+    rl_callback_read_char();
+  }
+}
+
+void ylc_repl_feed_text(const char *text) {
+  if (!nb_active || !text) {
+    return;
+  }
+
+  rl_insert_text(text);
+  rl_redisplay();
+}
+
+static void repl_call_named(const char *name, int key) {
+  rl_command_func_t *fn = rl_named_function(name);
+  if (fn) {
+    fn(1, key);
+    rl_redisplay();
+  }
+}
+
+void ylc_repl_feed_key(int key) {
+  if (!nb_active) {
+    return;
+  }
+
+  if (key == YLC_REPL_KEY_BACKSPACE) {
+    if (rl_point > 0) {
+      rl_delete_text(rl_point - 1, rl_point);
+      rl_point--;
+      rl_redisplay();
+    }
+    return;
+  }
+
+  if (key == YLC_REPL_KEY_ENTER) {
+    char *line = strdup(rl_line_buffer ? rl_line_buffer : "");
+    rl_replace_line("", 0);
+    rl_point = 0;
+    rl_redisplay();
+    repl_nb_line_ready(line);
+    return;
+  }
+
+  if (key == YLC_REPL_KEY_LEFT) {
+    repl_call_named("backward-char", key);
+  } else if (key == YLC_REPL_KEY_RIGHT) {
+    repl_call_named("forward-char", key);
+  } else if (key == YLC_REPL_KEY_UP) {
+    repl_call_named("previous-history", key);
+  } else if (key == YLC_REPL_KEY_DOWN) {
+    repl_call_named("next-history", key);
+  }
 }
 
 char *read_script(const char *filename) {

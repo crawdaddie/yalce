@@ -12,6 +12,7 @@ void audio_engine_mark_dirty(Ctx *ctx);
 void write_to_dac(int dac_layout, double *dac_buf, int layout, double *buf,
                   int output_num, int nframes);
 double ylc_read_inlet_node(void *node_raw, int64_t frame);
+double ylc_read_inlet_node_lane_i32(void *node_raw, int frame, int lane);
 
 NodeRef play_node(NodeRef node);
 NodeRef play_node_offset(uint64_t tick, NodeRef node);
@@ -63,6 +64,10 @@ NodeRef play_into_offset(uint64_t tick, NodeRef target, NodeRef node);
 NodeRef play_into_idx(NodeRef target, int idx, NodeRef node);
 
 void set_main_vol(double vol);
+
+int record_start(_String filename, double seconds);
+void record_stop(void);
+void record_write(const double *samples, int frames, double volume);
 
 NodeRef load_soundfile(_String filename);
 #endif

@@ -1,0 +1,19 @@
+let open_file = extern fn String -> String -> Option of Ptr;
+let read_bytes = extern fn Ptr -> String;
+let parse_int = extern fn String -> Int;
+
+let bytes =
+  match open_file "../test/fixtures/read_bytes_reuse.txt" "rb" with
+  | Some fd -> read_bytes fd
+  | None -> ""
+;
+
+let parsed = fn bytes ->
+  parse_int bytes
+;;
+
+let test = module () ->
+  let test_len = array_size bytes == 6;
+  let test_parse_once = parsed bytes == 12345;
+  let test_parse_reuse = (parsed bytes; parsed bytes) == 12345;
+;

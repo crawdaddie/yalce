@@ -4,6 +4,7 @@ let Audio = extern fn (T: (Double ... -> Double)) -> T;
 
 let ~ = extern fn Array of T -> T;
 let sin_osc = extern fn Double -> Double;
+let zero_xing_freq = extern fn Double -> Double;
 let sq_osc = extern fn Double -> Double;
 let saw_osc = extern fn Double -> Double;
 let pm_osc = extern fn Double -> Double -> Double -> Double;
@@ -11,9 +12,26 @@ let phasor = extern fn Double -> Double;
 
 # Resettable phasor. Args: frequency, trigger/reset signal.
 let phasor_sinc = extern fn Double -> Double -> Double;
+# Linear accumulator. Args: rate in units/second, trigger/reset signal.
+let sweep = extern fn Double -> Double -> Double;
+# Hilbert-transform single-sideband frequency shifter. Args: frequency Hz,
+# phase radians, input.
+let freq_shift = extern fn Double -> Double -> Double -> Double;
+# Held random value in [lo, hi], refreshed on a rising trigger.
+let rand_trig = extern fn Double -> Double -> Double -> Double;
+# Fold input into [-bound, bound].
+let fold2 = extern fn Double -> Double -> Double;
 # Impulse generator. Arg: trigger frequency; `0` is commonly used for a one-shot trigger.
 let trig = extern fn Double -> Double;
 let trig_sinc = extern fn Double -> Double -> Double;
+
+
+
+let tri_osc = @Audio fn freq ->
+  phasor freq
+  |> (*) 4.
+  |> fold2 1.
+;;
 
 # Emits a trigger when the input value changes.
 let changed = extern fn Double -> Double;
@@ -58,6 +76,22 @@ let comb = extern fn Double -> Double -> Double -> Double -> Double;
 # Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
 let dl_allpass = extern fn Double -> Double -> Double -> Double -> Double;
 
+# SuperCollider-compatible four-head pitch shifter.
+let pitchshift = extern fn Double -> Double -> Double -> Double -> Double -> Double;
+
+
+# Hash the IEEE-754 bits of each input sample into a bounded float.
+let hasher = extern fn Double -> Double;
+
+# Apply a statically known, already-curried callback and mix it with input.
+let mixadd = extern fn T -> Double -> Double;
+
+# Static delay network. The callback is instantiated once per feedback lane.
+let feedback_net = extern fn Double -> Array of Double -> Array of Double -> (Double -> Double) -> Double -> Double;
+
+# Inline a callback with `(write index, delay buffer, input sample)`.
+let delay_proc = extern fn (Int -> Array of Double -> Double -> Double) -> Array of Double -> Double -> Double;
+
 # Disperser: a cascade of identical 2nd-order allpass sections all tuned to a
 # single cutoff, modeled on the Kilohearts Disperser (a stack of allpass
 # filters causing frequency-dependent delay, flat gain).
@@ -96,6 +130,13 @@ let arr_seq = extern fn Array of Double -> Double -> Double;
 let sah = extern fn Double -> Double -> Double;
 
 let mix = extern fn Int -> Double -> Double; 
+# Spread every input lane across N output lanes with equal-power panning.
+let splay = extern fn Int -> Double -> Double;
+
+let sum  = @Audio fn inp ->
+  mix 1 inp
+;;
+
 let pan = extern fn Int -> Double -> Double -> Double; 
 # let pan2 = pan 2;
 
@@ -376,6 +417,12 @@ let dispersion32 = @Audio fn base amount x ->
     acc |> allpass2 f q
   ) 32
 ;;
+
+# Moog VCF. Args: cutoff Hz, resonance [0,4], reset, input.
+let moogff = extern fn Double -> Double -> Double -> Double -> Double;
+
+# Look-ahead limiter. Args: level, duration (compile-time constant), input.
+let limiter = extern fn Double -> Double -> Double -> Double;
 ;
 
 let white = @Audio fn () ->
@@ -391,8 +438,7 @@ let pink = @Audio fn () ->
   let b2 = 0.96900  * B[2] + w * 0.1538520;
   let b3 = 0.86650  * B[3] + w * 0.3104856;
   let b4 = 0.55000  * B[4] + w * 0.5329522;
-  let b5 = -0.7616  * B[5] - w * 0.0168980;
-  let out = (b0 + b1 + b2 + b3 + b4 + b5 + B[6] + w * 0.5362) * 0.11;
+  let b5 = -0.7616  * B[5] - w * 0.0168980; let out = (b0 + b1 + b2 + b3 + b4 + b5 + B[6] + w * 0.5362) * 0.11;
   B[0] := b0;
   B[1] := b1;
   B[2] := b2;
@@ -646,3 +692,7 @@ let midi_freq = fn n ->
 #   yield __elapsed_secs st;
 #   yield time_coro st
 # ;;
+
+let midiratio = fn n ->
+  Math.pow 2. (n / 12.)
+;;

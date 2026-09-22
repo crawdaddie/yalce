@@ -1,0 +1,11 @@
+import tail_call_imported_ctor_dep;
+
+let run = fn vm: (tail_call_imported_ctor_dep.Vm) ->
+  match vm.event with
+  | tail_call_imported_ctor_dep.More ->
+      run (tail_call_imported_ctor_dep.Vm (vm.pc - 1) tail_call_imported_ctor_dep.Done)
+  | tail_call_imported_ctor_dep.Done ->
+      tail_call_imported_ctor_dep.Vm vm.pc tail_call_imported_ctor_dep.Done
+;;
+
+run (tail_call_imported_ctor_dep.Vm 1 tail_call_imported_ctor_dep.More);
