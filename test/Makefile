@@ -8,6 +8,7 @@ READLINE_PREFIX ?= ${READLINE_PREFIX}
 # Compiler and flags
 CC ?= clang
 CFLAGS := -g -I$(LANG_SRC_DIR) -I$(READLINE_PREFIX)/include
+CFLAGS += -Wno-error=incompatible-pointer-types
 LDFLAGS := -L$(READLINE_PREFIX)/lib -lreadline
 
 # Lex and Yacc files

@@ -160,6 +160,14 @@ get_lib_path() {
     esac
 }
 
+package_name() {
+    if [[ $OS == "macos" && $1 == "llvm" ]]; then
+        echo "llvm@21"
+        return
+    fi
+    echo "$1"
+}
+
 # Install build tools for Arch Linux
 if [[ $OS == "arch" ]]; then
     echo "Checking build tools..."
@@ -207,6 +215,7 @@ libs=(
 
 for lib in "${libs[@]}"; do
     IFS=";" read -r lib_name env_var <<< "$lib"
+    package=$(package_name "$lib_name")
 
     lib_dir_name=${lib_name%%@*}
 
@@ -215,8 +224,8 @@ for lib in "${libs[@]}"; do
         echo "$lib_name Found at: $path"
     else
         echo "Installing $lib_name..."
-        install_package "$lib_name"
-        path=$(get_lib_path "$lib_name")
+        install_package "$package"
+        path=$(get_lib_path "$package")
     fi
     echo "export $env_var=$path" >> .env
 done

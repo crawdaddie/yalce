@@ -10,7 +10,7 @@ ifeq ($(MAKECMDGOALS),debug)
     LLVM := $(DEBUG_LLVM)
 endif
 
-LLVM_CONFIG := $(LLVM)/bin/llvm-config
+LLVM_CONFIG := $(if $(wildcard $(LLVM)/bin/llvm-config),$(LLVM)/bin/llvm-config,$(shell command -v llvm-config 2>/dev/null))
 CC ?= clang
 CXX ?= clang++
 
@@ -32,6 +32,8 @@ LANG_HEADERS := $(shell find $(LANG_SRC_DIR) -name '*.h')
 LANG_CPP_SRCS := $(wildcard $(LANG_SRC_DIR)/backend_llvm/*.cpp)
 CFLAGS := -I./lang 
 CFLAGS += -I./gui -I${SDL2_PATH}/include -I${SDL2_PATH}/include/SDL2 -I${SDL2_TTF_PATH}/include
+CFLAGS += -Wno-error=incompatible-pointer-types
+
 
 CFLAGS += -I$(READLINE_PREFIX)/include
 CFLAGS += -I./lang/backend_llvm

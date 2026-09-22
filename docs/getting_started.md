@@ -24,7 +24,7 @@ brew install crawdaddie/yalce/yalce
 On macOS with Homebrew:
 
 ```bash
-brew install llvm sdl2 sdl2_ttf sdl2_gfx sdl2_image readline \
+brew install llvm@21 sdl2 sdl2_ttf sdl2_gfx sdl2_image readline \
   libsoundio libsndfile fftw glew glfw libxml2
 ```
 
@@ -41,7 +41,7 @@ brew install llvm sdl2 sdl2_ttf sdl2_gfx sdl2_image readline \
         BREW_PREFIX=$(brew --prefix)
         export CPATH="$BREW_PREFIX/include"
         export LIBRARY_PATH="$BREW_PREFIX/lib"
-        export LLVM_PATH="$(brew --prefix llvm)"
+        export LLVM_PATH="$(brew --prefix llvm@21)"
         export SDL2_PATH="$(brew --prefix sdl2)"
         export SDL2_TTF_PATH="$(brew --prefix sdl2_ttf)"
         export SDL2_GFX_PATH="$(brew --prefix sdl2_gfx)"
