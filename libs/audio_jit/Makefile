@@ -33,7 +33,7 @@ CXXFLAGS  = $(CFLAGS)
 CXXFLAGS += -std=c++17
 
 LDFLAGS   = -shared
-LDFLAGS  += `$(LLVM_CONFIG) --libs core linker passes`
+LDFLAGS  += `$(LLVM_CONFIG) --ldflags --libs core linker passes`
 LDFLAGS  += `$(LLVM_CONFIG) --system-libs`
 LDFLAGS  += -lm
 LDFLAGS  += -L../../engine/build -Wl,-rpath,'$$ORIGIN/../../engine/build'
