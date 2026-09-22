@@ -5,6 +5,7 @@
 #ifdef __APPLE__
 #include <fcntl.h>
 #include <sys/event.h>
+#include <sys/time.h>
 #else
 #include <pthread.h>
 #include <stdio.h>
@@ -32,7 +33,6 @@
 #ifdef __APPLE__
 static int kqueue_fd;
 static int wake_pipe[2];
-static const uintptr_t scheduler_timer_id = 1;
 #else
 static int timer_fd, wake_fd, epoll_fd;
 #endif
@@ -257,23 +257,11 @@ SchedulerEvent pop_event(EventHeap *heap) {
 }
 
 static void arm_timer(uint64_t target_tick) {
-  uint64_t now = get_current_sample();
 #ifdef __APPLE__
-  uint64_t delay_ms = 1;
-  if (target_tick > now) {
-    double seconds = (double)(target_tick - now) / ctx_sample_rate();
-    delay_ms = (uint64_t)(seconds * 1000.0);
-    if (delay_ms == 0) {
-      delay_ms = 1;
-    }
-  }
-
-  struct kevent event;
-  EV_SET(&event, scheduler_timer_id, EVFILT_TIMER,
-         EV_ADD | EV_ONESHOT, NOTE_MSECONDS, (intptr_t)delay_ms, NULL);
-  kevent(kqueue_fd, &event, 1, NULL, 0, NULL);
+  (void)target_tick;
   return;
 #else
+  uint64_t now = get_current_sample();
   struct itimerspec its = {0};
   if (target_tick <= now) {
     its.it_value.tv_nsec = 1; // fire immediately
@@ -517,7 +505,31 @@ void *scheduler_thread_fn(void *arg) {
             wake_pipe[0]);
   struct kevent events[2];
   for (;;) {
-    int nfds = kevent(kqueue_fd, NULL, 0, events, 2, NULL);
+    struct timespec timeout;
+    struct timespec *timeout_ptr = NULL;
+
+    pthread_mutex_lock(&scheduler_mutex);
+    if (scheduler_queue.size > 0) {
+      uint64_t now = get_current_sample();
+      uint64_t target = scheduler_queue.events[0].tick;
+      int sample_rate = ctx_sample_rate();
+      if (sample_rate <= 0) {
+        sample_rate = 48000;
+      }
+      double seconds = target <= now
+                           ? 0.0
+                           : (double)(target - now) / sample_rate;
+      timeout.tv_sec = (time_t)seconds;
+      timeout.tv_nsec =
+          (long)((seconds - (double)timeout.tv_sec) * 1e9);
+      if (timeout.tv_sec == 0 && timeout.tv_nsec == 0) {
+        timeout.tv_nsec = 1;
+      }
+      timeout_ptr = &timeout;
+    }
+    pthread_mutex_unlock(&scheduler_mutex);
+
+    int nfds = kevent(kqueue_fd, NULL, 0, events, 2, timeout_ptr);
 
     if (nfds < 0) {
       perror("[sched] kevent");
