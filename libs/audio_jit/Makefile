@@ -33,6 +33,7 @@ CXXFLAGS  = $(CFLAGS)
 CXXFLAGS += -std=c++17
 
 LDFLAGS   = -shared
+LDFLAGS  += -L`$(LLVM_CONFIG) --libdir`
 LDFLAGS  += `$(LLVM_CONFIG) --ldflags --libs core linker passes`
 LDFLAGS  += `$(LLVM_CONFIG) --system-libs`
 LDFLAGS  += -lm

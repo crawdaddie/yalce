@@ -79,6 +79,7 @@ else
 endif
 
 LANG_CC += -DLLVM_BACKEND
+LANG_LD_FLAGS += -L`$(LLVM_CONFIG) --libdir`
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core linker bitreader analysis executionengine mcjit interpreter native`
 
 ifeq ($(MAKECMDGOALS),debug)
