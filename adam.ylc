@@ -1,0 +1,991 @@
+open libs/audio_jit/DSP;
+import std/Math;
+
+let set_input_scalar = extern fn Ptr -> Int -> Double -> Ptr;
+let set_input_trig = extern fn Ptr -> Int -> Ptr;
+
+let bool_to_double = fn x -> 
+  match x with
+  | true -> 1.
+  | false -> 0.
+  ;;
+
+
+let perc = @Audio fn attack decay_time ->
+  decay decay_time 1.
+;;
+
+# DelayC approximation using a circular delay line.
+# tabread_samp does not provide fractional interpolation.
+let delay_c = @Audio fn delay input ->
+  let buffer = delay_line 0.2;
+  let size = array_size buffer;
+  let write = [| 0 |];
+  let index = write[0];
+  let output = tabread_samp buffer (index - delay / spf);
+
+  buffer[index] := input;
+  write[0] := (index + 1) % size;
+
+  output
+;;
+
+# Exponential XLine approximation using the decay primitive.
+let xline = @Audio fn start finish duration ->
+  scale finish start (decay duration (trig 0))
+;;
+
+let rim = @Audio fn freq scale_factor duration ->
+  let trigger = trig 0 ;
+  let base_freq =
+    freq
+    |> (*) scale_factor
+    |> (*) (xline 1.3 1. 0.002);
+  let f = base_freq |> (*) (~ [0.9, 1., 0.7, 0.5, 2.6]);
+
+  let snd =
+    (sin_osc f * decay
+      (~ [0.05, 0.03, 0.2, 0.1, 0.1]) trigger)
+    |> (*) (1. + 20. * decay 0.001 trigger)
+    |> Math.clamp (-1.) 1.
+    |> (+) (rect 0.01 trigger
+      * (hasher (sweep 1. trigger) |> Filter.bpf 6200. 0.3))
+    |> (+) (rect 0.005 trigger
+      * (hasher (sweep 1. trigger) |> Filter.bpf 8200. 0.3))
+  ;
+
+  let pshift =
+    snd
+    |> (+) (pitchshift 0.013 1.3 0. 0. snd)
+    |> (+) (pitchshift 0.023 1.5 0. 0. snd)
+    |> (*) (1. + 0.3 * decay 0.001 trigger) ;
+
+  let filtered =
+    pshift
+    |> Filter.lpf 3000. 0.707
+    |> Filter.hpf 200. 0.707
+    |> (*) (Math.db_amp (-8.))
+    ;
+
+  let d = pshift 
+    |> (+) (delay_c 0.031 filtered)
+    |> (+) (delay_c 0.011 filtered)
+    |> (*) (rect duration trigger |> kill_on_end)
+
+;;
+
+let exp_range = @Audio fn lo hi value ->
+  Math.exp (scale (Math.log lo) (Math.log hi) value)
+;;
+
+let kick = @Audio fn freq duration ->
+  let trigger = trig 0 ;
+  # let pitch = freq
+  #   |> (*) (decay 0.05 trigger |> scale 1. 8.);
+
+  let pitch = trigger |> decay 0.02 |> scale freq 4000;
+
+  let body = sin_osc pitch
+    |> (*) (1. + 10. * decay 0.001 trigger)
+  ;
+
+  let click = decay 0.1 trigger
+    * (hasher (sweep 1. trigger) |> Filter.hpf 1000. 0.707);
+
+  let raw = body + click ;
+
+  let clipped = raw |> Math.clamp (-1.) 1.
+    |> (+) (fold2 1. raw |> (*) (Math.db_amp (-10.))) ;
+
+  let shaped = clipped
+    |> Filter.lpf 3000. 0.707
+    |> Filter.hpf 200. 0.707
+    |> (*) (Math.db_amp (-20.))
+  ;
+
+  # let delayed = clipped
+  #   |> (+) (delay_c 0.031 shaped)
+  #   |> (+) (delay_c 0.041 shaped)
+  # ;
+  shaped + clipped
+
+  |> (*) (rect (duration + 0.1) trigger |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+;;
+
+let kick2 = @Audio fn freq duration ->
+  let trigger = trig 0 ;
+  let pitch =
+    freq
+    |> (*) (decay 0.08 trigger |> scale 1. 8.);
+
+  let body = sin_osc pitch
+    |> (*) (1. + 10. * decay 0.001 trigger)
+  ;
+  let click = decay 0.01 trigger
+    * (hasher (sweep 1. trigger) |> Filter.hpf 3200. 0.707);
+
+  let raw = body + click ;
+
+  let clipped = raw |> Math.clamp (-1.) 1.
+    |> (+) (fold2 1. raw |> (*) (Math.db_amp (-10.))) ;
+
+  let shaped = clipped
+    |> Filter.lpf 3000. 0.707
+    |> Filter.hpf 200. 0.707
+    |> (*) (Math.db_amp (-20.))
+  ;
+  let delayed = clipped
+    |> (+) (delay_c 0.031 shaped)
+    |> (+) (delay_c 0.041 shaped)
+  ;
+  delayed
+  |> (*) (rect (duration + 0.1) trigger |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+;;
+
+let rim2 = @Audio fn freq scale_factor duration velocity ->
+  let trigger = trig 0 ;
+  let base_freq = freq * scale_factor * xline 1.3 1. 0.002;
+  let f = base_freq * (~ [0.9, 1., 0.7, 0.5, 2.6]);
+  let osc = sin_osc f
+    * decay (~ [0.0025, 0.0015, 0.01, 0.005, 0.005]) trigger
+    |> sum
+    |> (*) (1. + 10. * velocity * decay 0.001 trigger)
+    |> Math.clamp (-1.) 1.
+  ;
+  let noise =
+    rect 0.05 trigger
+    * (hasher (sweep 1. trigger) |> Filter.bpf 2200. 0.3)
+    + rect 0.01 trigger
+    * (hasher (sweep 1. trigger) |> Filter.bpf 3200. 0.3)
+  ;
+  let shifted = osc + noise
+    |> (+) (pitchshift 0.003 1.3 0. 0. (osc * velocity))
+    |> (+) (pitchshift 0.033 1.5 0. 0. (osc * velocity))
+  ;
+  let shaped = shifted
+    |> Filter.lpf (exp_range 100. 16000. velocity) 0.707
+  ;
+  let filtered = shaped
+    |> Filter.lpf 3000. 0.707
+    |> Filter.hpf 200. 0.707
+    |> (*) (Math.db_amp (-20.))
+  ;
+  shaped
+  |> (+) (delay_c 0.041 filtered)
+  |> (+) (delay_c 0.031 filtered)
+  |> (*) (rect duration trigger |> kill_on_end)
+;;
+
+let rim3 = @Audio fn freq duration velocity ->
+  let trigger = trig 0 ;
+  let base_freq = freq * xline 1.3 1. 0.002;
+  let f = base_freq * (~ [0.9, 1., 0.7, 0.5, 2.6]);
+  let osc = sin_osc f
+    * decay (~ [0.0025, 0.0015, 0.01, 0.005, 0.005]) trigger
+    |> sum
+    |> (*) (1. + 5. * velocity * decay 0.001 trigger)
+    |> Math.clamp (-1.) 1.
+  ;
+  let noise =
+    rect 0.02 trigger
+    * (hasher (sweep 1. trigger) |> Filter.bpf 1200. 0.3)
+    + rect 0.03 trigger
+    * (hasher (sweep 1. trigger) |> Filter.bpf 4200. 0.3)
+  ;
+  let shaped = osc + noise
+    |> (+) (pitchshift 0.043 2. 0. 0. osc)
+    |> (+) (pitchshift 0.073 2.5 0. 0. osc)
+    |> (*) (1. + 0.3 * decay 0.001 trigger)
+    |> Filter.lpf (exp_range 100. 16000. velocity) 0.707
+  ;
+  let filtered = shaped
+    |> Filter.lpf 3000. 0.707
+    |> Filter.hpf 200. 0.707
+    |> (*) (Math.db_amp (-20.))
+  ;
+  shaped
+  |> (+) (delay_c 0.031 filtered)
+  |> (+) (delay_c 0.011 filtered)
+  |> (*) (rect duration trigger |> kill_on_end)
+;;
+
+let rim_soft = @Audio fn freq scale_factor duration velocity ->
+  let trigger = trig 0 ;
+  let base_freq = freq * scale_factor * xline 1.3 1. 0.002;
+  let f = base_freq * (~ [0.9, 1., 0.7, 0.5, 2.6]);
+  let osc = sin_osc f
+    * decay (~ [0.005, 0.003, 0.02, 0.01, 0.01]) trigger
+    |> sum
+  ;
+  let noise =
+    rect 0.011 trigger * (hasher (sweep 1. trigger) |> Filter.bpf 500. 0.3)
+    + rect 0.04 trigger * (hasher (sweep 1. trigger) |> Filter.bpf 600. 0.3)
+  ;
+  let shaped = osc + noise
+    |> (+) (pitchshift 0.06 1.2 0. 0. (osc * velocity))
+    |> (+) (pitchshift 0.003 1.6 0. 0. (osc * velocity))
+    |> freq_shift 720. 0.
+    |> Filter.lpf (exp_range 100. 16000. velocity) 0.707
+  ;
+  let filtered = shaped
+    |> Filter.lpf 3000. 0.707
+    |> Filter.hpf 200. 0.707
+    # |> (*) (Math.db_amp (-20.))
+  ;
+  shaped
+  |> (+) (delay_c 0.021 filtered)
+  |> (+) (delay_c 0.061 filtered)
+  |> (*) (rect duration trigger |> kill_on_end)
+;;
+
+let high = @Audio fn freq duration ->
+  let trigger = trig 0 ;
+  let position = rand_trig 0.25 0.75 (trig 0) ;
+  sin_osc freq
+  |> pan 2 position
+  |> (*) (decay 0.03 trigger)
+  |> (*) (rect duration trigger |> kill_on_end)
+;;
+
+let high2 = @Audio fn freq duration ->
+  let trigger = trig 0 ;
+  let position = rand_trig 0.25 0.75 (trig 0) ;
+  sin_osc freq
+  |> pan 2 position
+  |> (*) (decay 0.01 trigger)
+  |> (*) (rect duration trigger |> kill_on_end)
+;;
+
+let random_glitch1 = @Audio fn duration ->
+  let trigger = trig 0 ;
+  let carrier = rand_trig 100. 16000. trigger ;
+  let level = rand_trig 0. 20. trigger ;
+  let phase = sin_osc (carrier |> (*) level) ;
+  # SC skipped: snd = SinOsc.ar(ExpRand(1000, 16e3), snd);
+  # sin_osc has no phase-input form; retain the carrier.
+  let snd = sin_osc (rand_trig 1000. 16000. trigger)
+    |> (*) (1. + 2. * decay 0.001 trigger)
+    |> pan 2 (rand_trig 0.25 0.75 trigger)
+  ;
+  snd
+  |> (*) (rect duration trigger |> kill_on_end)
+;;
+
+let random_glitch2 = @Audio fn duration ->
+  let lifetime = trig 0 ;
+  let randomize = trig 300. ;
+  let low = rand_trig 100. 8000. randomize ;
+  let high = rand_trig 2000. 8000. randomize ;
+  let freq = rand_trig low high randomize ;
+  let snd = sin_osc freq
+    |> pan 2 (rand_trig 0.25 0.75 lifetime)
+  ;
+
+  snd
+  |> (*) (lifetime |> rect duration |> kill_on_end)
+;;
+
+let breath = @Audio fn duration velocity ->
+  let trigger = trig 0 ;
+  let noise = hasher (sweep 1. trigger) ;
+  let snd = noise
+    |> Filter.bpf (~[1040., 1560., 4030., 4680.]) 0.2
+    |> sum
+  ;
+  # SC: snd = snd ! 2;
+  # Use center-panned stereo instead of direct channel duplication.
+  # let snd = bands |> pan 2 0.5 ;
+  # SC: snd = snd * Env.perc(duration, 0, curve: -4).ar(Done.freeSelf);
+  # The attack-shaped envelope is approximated with decay.
+  snd
+  |> (*) (decay duration trigger |> kill_on_end)
+;;
+
+let kick2_fx = @Audio fn freq duration ->
+  let trigger = trig 0 ;
+  let pitch = freq
+    |> (*) (xline 4. 1. 0.01)
+    |> (*) (xline 1. 0.7 1.2)
+  ;
+  let snd = sin_osc pitch
+    |> (*) (decay 0.5 trigger)
+    |> (*) (1. + 3. * decay 0.1 trigger)
+    |> Math.tanh
+  ;
+  # SC skipped: snd = BLowShelf.ar(snd, 200, 0.3, 4);
+  let filtered = snd
+    |> Filter.lpf 3000. 0.707
+    |> Filter.hpf 200. 0.707
+  ;
+  let snd = snd |> (+) (delay_c 0.012 filtered) |> (+) (delay_c 0.034 filtered) ;
+  snd
+  |> (*) (rect (duration + 0.03) trigger |> kill_on_end)
+;;
+
+let snare2 = @Audio fn freq duration ->
+  let trigger = trig 0 ;
+  let tone = sin_osc (decay 0.05 trigger |> scale 150. 600.) ;
+  let noise = (decay 0.08 trigger)
+    * (hasher (sweep 1. trigger) |> Filter.bpf 2300. 0.5)
+  ;
+  let snd = tone + noise |> (*) 2. |> Math.tanh |> pan 2 0.5 ;
+  snd
+  |> (*) (rect (duration + 0.03) trigger |> adsr 0. 0. 1. 0.1 |> kill_on_end)
+;;
+
+let clap2 = @Audio fn duration ->
+  let trigger = trig 0 ;
+  let snd = decay 0.1 trigger
+    * (hasher (sweep 1. trigger) |> Filter.bpf 1600. 0.5)
+    |> (*) (Math.db_amp 14.)
+    |> Math.tanh
+  ;
+  let wet = snd |> Reverb.reverb 60. 1. |> (*) (Math.db_amp (-30.)) ;
+  let snd = snd + wet ;
+  snd
+  |> (*) (rect (duration + 0.03) trigger |> kill_on_end)
+;;
+
+# Approximation of SC atmosphere. The current feedback_net returns a mono
+# average, so the eight-tap Splay/reordering stage is omitted.
+let atmosphere = @Audio fn duration ->
+  let trigger = trig 0. ;
+  let source = tri_osc 60. |> (*) (decay 5. trigger) ;
+  let matrix = [|
+    -0.5, 0.5, 0.5, 0.5,
+     0.5,-0.5, 0.5, 0.5,
+     0.5, 0.5,-0.5, 0.5,
+     0.5, 0.5, 0.5,-0.5
+  |] ;
+  let tank = feedback_net
+    1.
+    [| 0.02, 0.04, 0.07, 0.11 |]
+    matrix
+    (fn x ->
+      let low = x |> Filter.lpf 500. 0.707 ;
+      let high = x |> (*) (Math.db_amp (-10.))
+        |> Filter.hpf 3120. 0.707 ;
+      (low + high) |> Math.tanh
+    )
+    source ;
+  # SC omitted: fb = fb[[3, 2, 1, 0, 4, 5, 6, 7]]; fb = Splay.ar(fb);
+  tank
+  |> (*) (1. - (0.2 * decay 0.3 trigger))
+  |> (*) (Math.db_amp (-6.))
+  |> (*) (rect duration trigger |> kill_on_end)
+;;
+
+# Approximation of SC drumFx. Pass the trigger control explicitly.
+let drum_fx = @Audio fn trigger inp ->
+  let matrix = [| 0., 1., 1., 0. |] ;
+  let tank = feedback_net
+    0.05
+    [| 0.05, 0.05 |]
+    matrix
+    (fn x ->
+      x
+      |> Filter.lpf 2000. 0.707
+      |> Filter.hpf 500. 0.707
+      |> (*) (Math.db_amp (-1.))
+    )
+    inp ;
+
+  let verb = inp
+    |> Reverb.reverb 60. 2.
+    |> Filter.lpf 1000. 0.707
+    |> Filter.hpf 300. 0.707
+    |> (*) (Math.db_amp (-30.)) ;
+
+  let shifted = inp
+    |> freq_shift (-35.) 0.
+    |> delay_c 0.014
+    |> freq_shift 35. 0. ;
+
+  let selected = match (trigger |> rand_trig 0. 1.) < 0.2 with
+    | true -> shifted
+    | _ -> inp ;
+
+  let latched = sah selected (trig (rand_trig 4000. 16000. trigger)) ;
+  let selected = match (trigger |> rand_trig 0. 1.) < 0.1 with
+    | true -> latched
+    | _ -> selected ;
+  selected
+  |> (+) verb
+  |> (+) (tank |> (*) (Math.db_amp (-5.)))
+  |> (+) (delay_c 0.01 (inp |> (*) (Math.db_amp (-15.))))
+  |> (*) (Math.db_amp (-3.))
+;;
+
+# Approximation of SC fx3. Pass the trigger control explicitly; LocalIn/LocalOut
+# are represented by feedback_net.
+let fx3 = @Audio fn trigger dry_sound inp ->
+  let matrix = [| 0., 1., 1., 0. |] ;
+  let wet = feedback_net
+    1.
+    [| 0.03, 0.07 |]
+    matrix
+    (fn x ->
+      x
+      |> Filter.lpf 8000. 0.707
+      |> Filter.hpf 100. 0.707
+      |> pitchshift 0.1 1.5 0. 0.
+      |> Math.clamp (-1.) 1.
+    )
+    inp ;
+  let dry = inp
+    |> Filter.lowshelf 200. 0.3 (-3.)
+    |> Filter.highshelf 2000. 0.3 (-3.) ;
+  # SC omitted: Limiter.ar; Math.clamp is used below.
+  let wet_mix = match (dry_sound < 0.5) with
+    | true -> wet
+    | _ -> 0. ;
+  dry
+  |> (*) (Math.db_amp 1.5)
+  |> (+) wet_mix
+  |> Math.clamp (-1.) 1.
+  |> (*) (Math.db_amp (-12.5))
+;;
+
+# Delay-buffer callback example. Grain position is normalized to the one-second
+# delay buffer; this replaces the older sample_rate-based expression.
+let grain_delay = @Audio fn dt fb inp ->
+  let dl = delay_line 1. ;
+  inp
+  |> delay_proc (fn w dl input ->
+    let pos = (w * 1. / (array_size dl * 1.)) - dt ;
+    let trigger = trig 20. ;
+    let grains_out = trigger
+      |> grains 30 dl
+        (arr_choose [| 1., 2., 0.5 |] trigger)
+        (pos - lfnoise0 20. 0. 0.1)
+        0.1
+      |> Filter.lpf1p 8000.
+      |> Filter.hpf1p 100. ;
+    input + grains_out * fb
+  ) dl
+;;
+
+let _bass = @Audio fn freq duration ->
+  let trigger = trig 0 ;
+  let cutoff1 = rand_trig 1000. 3000. trigger ;
+  let cutoff2 = decay 0.05 trigger |> scale (rand_trig 60. 1000. trigger) 3000.;
+  # |> decay trigger;
+
+  let snd = saw_osc (freq * ~[1., 1.02])
+    |> sum
+    |> (*) (Math.db_amp (-8.))
+    |> Filter.moogff cutoff1 2. 0.
+    |> (*) (Math.db_amp 20.)
+    |> Filter.moogff cutoff2 3. 0.
+    |> (*) (Math.db_amp 5.)
+  ;
+  # SC skipped: snd = snd + LFPulse.ar(...) ! 2;
+  # SC skipped: snd = Splay.ar(snd);
+  snd
+  |> mixadd (pitchshift 0.01 ((arr_choose [|0.5, 2., 1.5,|] trigger) * (lfnoise 1. 0.9 1.1)) 0.05 0.)
+  |> Math.tanh
+  |> (*) 1.5
+  # |> (+) 
+  |> (*) (decay duration trigger |> adsr 0. 0. 1. 0.1 |> kill_on_end)
+  |> (*) (Math.db_amp (-2.))
+;;
+
+let bass = @Audio fn trigger freq duration ->
+  # let trigger = trig 0 ;
+  let cutoff1 = rand_trig 1000. 3000. trigger ;
+  let cutoff2 = decay 0.05 trigger |> scale (rand_trig 60. 1000. trigger) 3000.;
+  # |> decay trigger;
+
+  let snd = saw_osc ((lag 0.1 freq) * ~[1., 1.02])
+    |> sum
+    |> (*) (Math.db_amp (-8.))
+    |> Filter.moogff cutoff1 2. 0.
+    # |> mixadd (pitchshift 0.02 ((arr_choose [|0.5, 2., 1.5,|] trigger) * (lfnoise 2. 0.9 1.1)) 0.05 0.)
+    # |> mixadd (pitchshift 0.02 2. 0.08 0.)
+    |> (*) (Math.db_amp 20.)
+    |> disperser 200. 1. 1. 
+    |> Filter.moogff cutoff2 3. 0.
+    # |> (*) (Math.db_amp 5.)
+  ;
+  # SC skipped: snd = snd + LFPulse.ar(...) ! 2;
+  # SC skipped: snd = Splay.ar(snd);
+  # |> Math.tanh
+  # |> (*) 1.5
+  # |> (+) 
+  snd
+  |> (*) (trigger |> rect duration |> adsr 0. 0. 0.8 0.3)
+  |> (*) (Math.db_amp (-2.))
+;;
+
+let bass2 = @Audio fn freq duration ->
+  let trigger = trig 0 ;
+  let pitch = freq;
+  let snd = sq_osc (pitch * (sin_osc 2 |> scale_bp 1. 1.5))
+    |> Filter.moogff (rand_trig 500. 3000. trigger) 3. 0.
+    |> (*) (Math.db_amp 20.)
+    |> Filter.moogff (rand_trig 500. 3000. trigger) 2. 0.
+    |> (*) (Math.db_amp 5.)
+    |> Math.tanh
+    |> (*) (Math.db_amp 8.)
+  ;
+  let latch_rate = rand_trig 3000. 16000. trigger ;
+  snd
+  # |> (+) (sah snd (trig latch_rate) |> (*) (Math.db_amp (-5.))) 
+  |> (*) (decay duration trigger |> kill_on_end)
+  |> (*) (Math.db_amp (-3.))
+;;
+
+
+let vocals = @Audio fn f ->
+  let trigger = trig 0 ;
+
+  let ratios = ~ (array_fill 4 (fn _ ->
+    lfnoise 3. -0.2 0.3 |> midiratio)
+  );
+
+  let voices = tri_osc ((lag 1. f) * ratios) ;
+  let level = Math.min 1. ((sweep 1. trigger) / 21.) ;
+
+  splay 2 voices
+  |> (*) (1.2 * level)
+  |> Math.tanh
+  # |> Filter.lpf (lfnoise 3. 800 8000) 0.2 
+  |> Filter.lpf (lfnoise 3 4000 8000) 0.5
+  # |> (*) (Math.db_amp -4.)
+;;
+
+let r = @Audio fn inp: (Stereo) ->
+  inp
+  |> Filter.hpf 30. 0.1
+  |> comb (0.5 + lfnoise 0.2 -0.05 0.05) 0.7 0.7
+  |> Math.tanh
+  |> Reverb.reverb 10. 0.1
+;;
+
+let stutter = @Audio fn trig_sig active beat_length subdiv rate inp ->
+  let live = delay_line 4.;
+  let size = array_size live;
+  let segment = beat_length * subdiv;
+  let length = Math.max 8. (segment / spf);
+  let write_index = [| 0 |];
+  let start_index = [| 0. |];
+  let state = [| 0., 0. |];
+
+  let write = write_index[0];
+  let start = start_index[0];
+  let playhead = state[0];
+  live[write] := inp;
+
+  let retrigger = bool_to_double (trig_sig == 1.);
+  let capture = retrigger * write + (1. - retrigger) * start;
+  let position = retrigger * (length - 1.) + (1. - retrigger) * playhead;
+  let chunk = tabread_samp live (capture - length + 1. + position);
+  let playing = bool_to_double (active == 1.);
+  let output = playing * chunk + (1. - playing) * inp;
+
+  let next = position + rate;
+  let wraps = Math.floor (next / length);
+  let next_position = next - length * wraps;
+  start_index[0] := capture;
+  let keep_playing = bool_to_double (active >= 0.5);
+  state[0] := keep_playing * next_position + (1. - keep_playing) * playhead;
+  state[1] := trig_sig;
+  write_index[0] := (write + 1) % size;
+  output
+;;
+
+let bool_to_double = fn x -> 
+  match x with
+  | true -> 1.
+  | false -> 0.
+  ;;
+
+type Stereo = Double;
+let fx = @Audio fn sel trigger subdiv beat_length rate inpp: (Stereo) ->
+  let inp = inpp + (inpp * (bool_to_double (sel == 5.)) |> Filter.hpf 800. 1. |> Reverb.concert);
+
+  let comb_short = inp
+  # |> comb 0.025 0.1 (rand_trig (-0.1) (-0.9) trigger)
+  |> comb (lfnoise 1. 0.01 0.025) 0.1 0.5
+  |> disperser 100. 1. 1.
+  ;
+
+  let latch = sah inp (trig (rand_trig 4000. 8000. trigger))
+  # |> Filter.dispersion32 100. 0.9
+  ;
+
+
+  let shifted = inp
+    |> pitchshift 0.01 ((arr_choose [|0.5, 1., 1.2, 1.5, 2., 2., 4., 1.5|] trigger) * (lfnoise 1. 0.9 1.2)) 0. 0.
+    |> (*) (Math.db_amp 4.)
+    # |> Filter.dispersion32 100. 2.
+    ;
+
+  let comb_long = inp
+    |> comb (lfnoise 0.5 0.01 0.1) 0.1 0.5
+    |> (*) (Math.db_amp (-1.))
+    |> disperser 100. 1. 1.
+
+    ;
+  let ring_source = inp |> Filter.lpf 1000. 0.707 ;
+
+  let ring = inp
+    |> (*) (sin_osc (ring_source |> zero_xing_freq |> lag 0.01))
+    |> (*) (Math.db_amp 4.)
+    ;
+
+  let stutt = stutter trigger
+    (bool_to_double (sel == 6.))
+    beat_length subdiv rate inp ;
+
+  # let reverb = inp
+  #   |> Reverb.reverb 10. 1.
+  #   |> (*) (Math.db_amp (-23.))
+  #
+  #   ;
+
+  # let stutt = rr |> stutter tr ((sel == 6.) |> bool_to_double) beat_len subdiv rate;
+
+  (match sel with
+    | 0. -> comb_short
+    | 1. -> latch
+    | 2. -> shifted
+    | 3. -> comb_long
+    | 4. -> ring
+    | 5. -> inp
+    | 6. -> stutt
+    | _ -> inp)
+  |> glue -12. 4. 0.005 0.15 6. 3.
+  |> (*) (Math.db_amp -2.)
+  # |> Filter.lpf 10000. 0.2
+
+;;
+
+let fx_node = fx 0. 0. 1. (60. / 150.) 1. 0. |> play_node ;
+
+let set_fx = fn node selection ->
+  set_input_scalar node 0 selection ;
+  set_input_trig node 1
+;;
+
+let play_fx = fn selection node ->
+  set_fx fx_node selection ;
+  match selection with
+  | 6. -> (
+    set_input_scalar fx_node 2 @@ Math.array_choose [| 0.25, 0.25, 0.25, 0.125, 0.75, 0.5, 1.5 |];
+    set_input_scalar fx_node 4 @@ Math.array_choose [| -1., 1., 2.|];
+    ()
+  )
+  | _ -> ()
+  ;
+  play_into fx_node node
+;;
+
+let g = r 0. |> play_node;
+let play_rv = fn n -> play_into g n;;
+
+
+let task_ref = [| Ptr 0, |];
+let task = fn t -> 
+  task_ref[0] |> cancel_task;
+  task_ref[0] := t
+  ;;
+
+let tempo_mul = fn () -> 60. / 160. ;;
+
+let random_fx = fn () ->
+  Double (Math.rand_int 9)
+  # match Math.rand_int 12 with
+  # # | 0 -> 6.
+  # | _ -> 
+  ;;
+  # let v = Double (Math.rand_int 6);
+  # print `{v}\n`;
+  # v;
+  # 5.
+  # ;;
+  
+# let random_fx = fn () -> 0.
+# ;;
+# id (Math.rand_int 6) ;;
+
+let kickhard = @Audio fn () ->
+  let t = trig 0;
+  # pitch
+  let freq = t |> decay 0.01 |> scale 30 4000;
+
+  freq
+  |> sin_osc 
+
+  # noise component
+  |> (+) (
+    t |> decay 0.1
+    |> (*) (white ())
+    |> Filter.lpf 1000 0.2
+  )
+  |> (*) 2. |> Math.tanh
+
+  #amp envelope
+  |> (*) (t |> rect 0.25 |> adsr 0 0.1 0.8 0.2 |> kill_on_end)
+  ;;
+let metal_hat = @Audio fn dec ->
+  let t = trig 0;
+  pink ()
+  |> Filter.bpf 4000 4.
+  |> (*) (sin_osc 670.)
+  |> (*) (t |> decay dec |> kill_on_end) 
+  |> (*) (Math.db_amp 12.)
+  |> pan 2 (rand_trig -1. 1. t)
+  ;;
+
+let chirp = @Audio fn lo dr ->
+  let t = trig 0;
+  let freq = t |> decay dr |> scale lo 1000;
+  freq
+  |> sin_osc 
+  |> (+) (t |> decay 0.1 |> (*) (white ()) |> Filter.hpf 1000. 2.)
+  |> (*) (adsr 0 0.1 1. 0.02 (t |> rect 0.01))
+  |> (*) 2. |> Math.tanh
+  ;;
+
+let metal_snare = @Audio fn dec pmul ->
+  let t = trig 0;
+  sin_osc (pmul * ~[330., 410., 550., 770.] )
+  |> mix 1
+  |> (*) 3. |> Math.tanh
+  |> (*) (sin_osc 591.)
+  |> (*) (sin_osc 150.)
+  |> (+) (chirp 100. 0.1)
+  # |> (*) 0.5
+  |> (*) (t |> decay dec) 
+  |> (+) (
+    let x = pink ()
+      |> Filter.hpf 1500 4.
+      |> (*) (t |> decay (dec * 0.6))
+  )
+  |> (*) (t |> decay dec |> kill_on_end) 
+  |> (*) (Math.db_amp 16)
+  ;;
+
+
+let beat = tempo_mul () ;
+let play_kick = fn d ->
+  kick (midi_freq 20.) (d * beat * 0.5) |> play_node;
+  d * beat
+;;
+
+let play_kick2 = fn d ->
+  kick2 60. (d * beat) |> play_into fx_node;
+  d * beat
+;;
+
+let play_rim = fn d ->
+  rim 1700. 1. 0.1 |> play_into fx_node ;
+  d * beat
+;;
+
+let play_rim2 = fn d ->
+  rim2 2000. 1. 0.1 1. |> play_into fx_node  ;
+  d * beat
+;;
+
+let play_rim3 = fn d ->
+  rim3 3000. (d * beat) 1. |> play_into fx_node ;
+  d * beat
+;;
+
+let play_glitch1 = fn d ->
+  random_glitch1 0.1 |> play_fx (random_fx ()) ;
+  d * beat
+;;
+
+let play_glitch2 = fn d ->
+  random_glitch2 0.1 |> play_fx (random_fx ()) ;
+  d * beat
+;;
+
+let play_glitch3 = fn d ->
+  rim2 1000. 1. 0.01 1. |> play_fx (random_fx ()) ;
+  d * beat
+;;
+
+#
+#
+let drums = fn () ->
+
+  array_fill_const 28 0.25
+  |> iter
+  |> cor_map (fn d -> 
+    metal_hat (Math.rrand 0.01 0.05) |> play_into fx_node; 
+    d * beat
+  )
+  |> play_pattern 0.;
+
+  let xx = (fn () ->
+    yield 1.;
+    metal_snare 0.1 1.5 |> play_fx (random_fx ());
+    yield 2.;
+
+    metal_snare 0.1 1. |> play_fx (random_fx ());
+    yield 1.;
+    yield 1.;
+
+    metal_snare 0.1 2. |> play_fx (random_fx ());
+    yield 1.;
+
+    metal_snare 0.1 1. |> play_fx (random_fx ());
+    yield 0.75;
+
+
+    metal_snare 0.1 1. |> play_fx (random_fx ());
+    yield 0.75;
+
+    metal_snare 0.1 1. |> play_fx (random_fx ());
+    yield 0.75;
+  ) in  
+  xx () |> cor_map (fn d -> d * beat) |> play_pattern 0.;
+
+  yield (play_kick 0.25) ;
+  # yield (play_rim2 0.25) ;
+  yield 0.75 * beat;
+  # (play_rim2 0.25) ;
+  # yield 0.5 * beat ;
+  yield (play_rim 0.5) ;
+  yield (play_rim2 0.75) ;
+  yield (play_kick 0.25) ;
+  yield (play_rim 0.5) ;
+
+  yield (play_rim2 0.5) ;
+  yield beat;
+  # yield (play_glitch1 0.25) ;
+  # yield (play_glitch1 0.25) ;
+  # yield (play_glitch3 0.25) ;
+  # yield (play_glitch1 0.25) ;
+
+  Math.chance 0.5 (fn () -> play_kick 0.25);
+  yield 0.25 * beat;
+  yield (play_kick 0.25) ;
+
+  yield .5 * beat;
+  yield (play_rim2 1.) ;
+
+  yield .5 * beat;
+  yield (play_glitch3 0.25) ;
+  yield (play_glitch1 0.25) ;
+  yield (play_glitch1 0.25) ;
+  yield (play_glitch1 0.25) ;
+  # yield beat;
+
+  yield drums ()
+;;
+let b = bass 0. 0. 0. |> play_node;
+
+  let play_bass = fn note duration ->
+    # bass (midi_freq note) (duration * beat * 0.5) |> play_node ;
+    # set_nobass (midi_freq note) (duration * beat * 0.5) |> play_node ;
+    set_input_scalar b 1 (midi_freq note);
+    set_input_scalar b 2 (duration * beat * 0.5);
+    set_input_trig b 0;
+    duration * beat
+  ;;
+let bass_line = fn () ->
+
+  yield (play_bass 32. 0.5) ;
+  yield (play_bass 32. 0.5) ;
+  yield (play_bass 32. 0.5) ;
+  yield beat ;
+  yield (play_bass 30. 1.) ;
+  yield (play_bass 32. 0.5) ;
+  yield (play_bass 32. 0.25) ;
+  yield (play_bass 44. 0.25) ;
+  yield (play_bass 30. 0.25) ;
+  yield (play_bass 30. 0.25) ;
+  yield (play_bass 32. 2.5) ;
+  yield (play_bass 32. 0.25) ;
+  yield (play_bass 44. 0.25) ;
+
+  # yield (play_bass 32. 0.5) ;
+
+  yield (play_bass 30. 0.5) ;
+  yield (play_bass 40. 0.5) ;
+  yield (play_bass 32. 0.5) ;
+  yield (play_bass 39. 2.) ;
+  yield (play_bass 30. 0.5) ;
+  yield (play_bass 39. 2.) ;
+  yield (play_bass 40. 0.5) ;
+  yield (play_bass 40. 0.25) ;
+  yield (play_bass 40. 0.25) ;
+  yield beat;
+
+  let arr = [|39., 40., 32., 30., 35., 42.,|];
+  let arr2 = [|12., 24., -12., 0., 0., 36.|];
+
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+
+  yield 0.5 * beat ;
+
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.5) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 1.) ;
+
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+
+  yield 0.5 * beat ;
+
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.25) ;
+
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 0.5) ;
+  yield (play_bass (Math.array_choose arr + Math.array_choose arr2) 1.) ;
+
+
+  yield bass_line ()
+;;
+#
+drums () |> play_pattern beat |> task;
+# bass_line () |> play_pattern beat;
+# (bass_line ());
+
+# rim_soft 1. 1. |> play_node
+# rim2 100. 1. 1. 1. |> play_node;
+#
+let co = fn v sc ->
+  set_input_scalar (v[3]) 0 (Math.array_choose [|53., 51., 58.|] |> midi_freq);
+  yield 4. * sc;
+  set_input_scalar (v[2]) 0 (Math.array_choose [|53., 51., 61.|] |> midi_freq);
+  yield 4. * sc;
+  set_input_scalar (v[1]) 0 (Math.array_choose [|39., 36., 30.|] |> midi_freq);
+  set_input_scalar (v[2]) 0 (Math.array_choose [|53., 51., 61., 63.,|] |> midi_freq);
+  yield 4. * sc;
+  yield co v sc
+;;
+
+
+let v = [|
+  vocals (32. |> midi_freq) |> play_rv,
+  vocals (39. |> midi_freq) |> play_rv,
+  vocals (51. |> midi_freq) |> play_rv,
+  vocals (53. |> midi_freq) |> play_rv
+
+|];
+co v (4 * tempo_mul ()) |> play_pattern beat;
+
+# let record_start = extern fn String -> Double -> Int;
+# let record_stop = extern fn () -> ();
+#
+# record_start "test_150.wav" 120. ;
+
+
+# |> task;

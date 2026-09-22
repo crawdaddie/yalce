@@ -6,9 +6,10 @@ SRCS := $(wildcard *.c)
 OBJS := $(SRCS:%.c=$(BUILD_DIR)/%.o)
 COMPILER_OPTIONS := -g -fPIC
 
-LDFLAGS := -lsoundio -lm -lsndfile -lfftw3 -ldl -lxml2 -lstdc++ -lpthread
+LDFLAGS := -lsoundio -lm -lsndfile -lfftw3 -lxml2
 
 ifeq ($(shell uname -s),Darwin)
+    LDFLAGS += -lpthread
     FRAMEWORKS = -framework opengl \
                  -framework CoreMIDI \
                  -framework cocoa \
@@ -16,10 +17,11 @@ ifeq ($(shell uname -s),Darwin)
                  -framework AudioToolbox \
                  -framework CoreFoundation
 else
+    LDFLAGS += -ldl -lstdc++ -lpthread
     FRAMEWORKS = -lasound
 endif
 
-COMPILER_OPTIONS += -I../lang/
+COMPILER_OPTIONS += -I../lang/ -I$(LIBXML2_PATH)/include/libxml2
 
 CC ?= clang
 
@@ -41,7 +43,7 @@ ylc_bindings:
 
 # Build the shared library
 $(SHARED_LIB_TARGET): $(OBJS)
-	$(CC) -shared -o $@ $^ $(LDFLAGS) $(FRAMEWORKS)
+	$(CC) $(if $(filter Darwin,$(shell uname -s)),-dynamiclib,-shared) -o $@ $^ $(LDFLAGS) $(FRAMEWORKS)
 ifeq ($(shell uname -s),Darwin)
 	install_name_tool -id @rpath/libyalce_synth.so $@
 endif

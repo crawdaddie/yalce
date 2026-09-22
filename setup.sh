@@ -12,16 +12,17 @@ detect_os() {
     fi
 }
 
-OS=$(detect_os)
+OS=${YLC_OS:-$(detect_os)}
 echo "Detected OS: $OS"
 
 case $OS in
     macos)
         PKG_MANAGER="brew"
-        INCLUDE_PATHS=("/usr/include" "/usr/local/include" "/opt/homebrew/include")
-        LIBRARY_PATHS=("/usr/lib" "/usr/local/lib" "/opt/homebrew/lib")
-        DEFAULT_CPATH="/opt/homebrew/include"
-        DEFAULT_LIBRARY_PATH="/opt/homebrew/lib"
+        BREW_PREFIX=$(brew --prefix)
+        INCLUDE_PATHS=("/usr/include" "/usr/local/include" "$BREW_PREFIX/include")
+        LIBRARY_PATHS=("/usr/lib" "/usr/local/lib" "$BREW_PREFIX/lib")
+        DEFAULT_CPATH="$BREW_PREFIX/include"
+        DEFAULT_LIBRARY_PATH="$BREW_PREFIX/lib"
         ;;
     arch)
         PKG_MANAGER="pacman"
@@ -43,46 +44,37 @@ case $OS in
         ;;
 esac
 
-declare -A arch_pkgs=(
-    ["llvm"]="llvm"
-    ["sdl2"]="sdl2"
-    ["sdl2_ttf"]="sdl2_ttf"
-    ["sdl2_gfx"]="sdl2_gfx"
-    ["sdl2_image"]="sdl2_image"
-    ["readline"]="readline"
-    ["libsoundio"]="libsoundio"
-    ["libsndfile"]="libsndfile"
-    ["fftw"]="fftw"
-    ["glew"]="glew"
-    ["glfw"]="glfw-x11"
-    ["libxml2"]="libxml2"
-)
+arch_package() {
+    case $1 in
+        llvm|sdl2|sdl2_ttf|sdl2_gfx|sdl2_image|readline|libsoundio|libsndfile|fftw|glew|libxml2)
+            echo "$1"
+            ;;
+        glfw)
+            echo "glfw-x11"
+            ;;
+    esac
+}
 
-declare -A arch_build_tools=(
-    ["base-devel"]="base-devel"
-    ["bison"]="bison"
-    ["flex"]="flex"
-    ["git"]="git"
-    ["clang"]="clang"
-)
-
-declare -A ubuntu_pkgs=(
-    ["llvm"]="llvm"
-    ["sdl2"]="libsdl2-dev"
-    ["sdl2_ttf"]="libsdl2-ttf-dev"
-    ["sdl2_gfx"]="libsdl2-gfx-dev"
-    ["readline"]="libreadline-dev"
-    ["libsoundio"]="libsoundio-dev"
-    ["libsndfile"]="libsndfile1-dev"
-    ["fftw"]="libfftw3-dev"
-)
+ubuntu_package() {
+    case $1 in
+        llvm) echo "llvm" ;;
+        sdl2) echo "libsdl2-dev" ;;
+        sdl2_ttf) echo "libsdl2-ttf-dev" ;;
+        sdl2_gfx) echo "libsdl2-gfx-dev" ;;
+        readline) echo "libreadline-dev" ;;
+        libsoundio) echo "libsoundio-dev" ;;
+        libsndfile) echo "libsndfile1-dev" ;;
+        fftw) echo "libfftw3-dev" ;;
+    esac
+}
 
 check_library() {
     local lib_name=$1
 
     # For Arch, check if package is installed using pacman
     if [[ $OS == "arch" ]]; then
-        local pkg_name="${arch_pkgs[$lib_name]}"
+        local pkg_name
+        pkg_name=$(arch_package "$lib_name")
         if [[ -n "$pkg_name" ]] && pacman -Q "$pkg_name" > /dev/null 2>&1; then
             # Package is installed, return standard path
             echo "/usr"
@@ -120,8 +112,9 @@ install_package() {
             brew install "$brew_pkg"
             ;;
         arch)
-            if [[ -n "${arch_pkgs[$brew_pkg]}" ]]; then
-                local pkg="${arch_pkgs[$brew_pkg]}"
+            local pkg
+            pkg=$(arch_package "$brew_pkg")
+            if [[ -n "$pkg" ]]; then
                 # Try pacman first
                 if sudo pacman -S --noconfirm "$pkg" 2>/dev/null; then
                     echo "$pkg installed successfully"
@@ -142,8 +135,10 @@ install_package() {
             fi
             ;;
         ubuntu)
-            if [[ -n "${ubuntu_pkgs[$brew_pkg]}" ]]; then
-                sudo apt-get install -y "${ubuntu_pkgs[$brew_pkg]}"
+            local pkg
+            pkg=$(ubuntu_package "$brew_pkg")
+            if [[ -n "$pkg" ]]; then
+                sudo apt-get install -y "$pkg"
             else
                 echo "Warning: No mapping for $brew_pkg on Ubuntu"
             fi
@@ -168,12 +163,12 @@ get_lib_path() {
 # Install build tools for Arch Linux
 if [[ $OS == "arch" ]]; then
     echo "Checking build tools..."
-    for tool in "${!arch_build_tools[@]}"; do
-        if ! pacman -Q "${arch_build_tools[$tool]}" > /dev/null 2>&1; then
-            echo "Installing ${arch_build_tools[$tool]}..."
-            sudo pacman -S --noconfirm "${arch_build_tools[$tool]}"
+    for tool in base-devel bison flex git clang; do
+        if ! pacman -Q "$tool" > /dev/null 2>&1; then
+            echo "Installing $tool..."
+            sudo pacman -S --noconfirm "$tool"
         else
-            echo "${arch_build_tools[$tool]} already installed"
+            echo "$tool already installed"
         fi
     done
 
@@ -200,10 +195,14 @@ libs=(
     "sdl2;SDL2_PATH"
     "sdl2_ttf;SDL2_TTF_PATH"
     "sdl2_gfx;SDL2_GFX_PATH"
+    "sdl2_image;SDL2_IMAGE_PATH"
     "readline;READLINE_PREFIX"
     "libsoundio;LIBSOUNDIO_PATH"
     "libsndfile;LIBSNDFILE_PATH"
     "fftw;LIBFFTW3_PATH"
+    "glew;GLEW_PATH"
+    "glfw;GLFW_PATH"
+    "libxml2;LIBXML2_PATH"
 )
 
 for lib in "${libs[@]}"; do

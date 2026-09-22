@@ -23,6 +23,10 @@ brew install crawdaddie/yalce/yalce
 
 On macOS with Homebrew:
 
+```bash
+brew install llvm sdl2 sdl2_ttf sdl2_gfx sdl2_image readline \
+  libsoundio libsndfile fftw glew glfw libxml2
+```
 
 #### Build Steps
 1. Clone the repository:
@@ -34,16 +38,21 @@ On macOS with Homebrew:
 2. Create a `.env` file with paths to dependencies:
    
         # .env
-        export CPATH=/opt/homebrew/include
-        export LIBRARY_PATH=/opt/homebrew/lib
-        export LLVM_PATH=/opt/homebrew/opt/llvm@20
-        export SDL2_PATH=/opt/homebrew/opt/sdl2
-        export SDL2_TTF_PATH=/opt/homebrew/opt/sdl2_ttf
-        export SDL2_GFX_PATH=/opt/homebrew/opt/sdl2_gfx
-        export READLINE_PREFIX=/opt/homebrew/opt/readline
-        export LIBSOUNDIO_PATH=/opt/homebrew/opt/libsoundio
-        export LIBSNDFILE_PATH=/opt/homebrew/opt/libsndfile
-        export LIBFFTW3_PATH=/opt/homebrew/opt/fftw
+        BREW_PREFIX=$(brew --prefix)
+        export CPATH="$BREW_PREFIX/include"
+        export LIBRARY_PATH="$BREW_PREFIX/lib"
+        export LLVM_PATH="$(brew --prefix llvm)"
+        export SDL2_PATH="$(brew --prefix sdl2)"
+        export SDL2_TTF_PATH="$(brew --prefix sdl2_ttf)"
+        export SDL2_GFX_PATH="$(brew --prefix sdl2_gfx)"
+        export SDL2_IMAGE_PATH="$(brew --prefix sdl2_image)"
+        export READLINE_PREFIX="$(brew --prefix readline)"
+        export LIBSOUNDIO_PATH="$(brew --prefix libsoundio)"
+        export LIBSNDFILE_PATH="$(brew --prefix libsndfile)"
+        export LIBFFTW3_PATH="$(brew --prefix fftw)"
+        export GLEW_PATH="$(brew --prefix glew)"
+        export GLFW_PATH="$(brew --prefix glfw)"
+        export LIBXML2_PATH="$(brew --prefix libxml2)"
 
     Or you can use the script `./setup.sh` to download dependencies automatically and create the .env file
 
