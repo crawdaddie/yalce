@@ -569,6 +569,20 @@ ylc_audio_comb_kernel(DelayLineState *state, double spf, int32_t max_samples,
 }
 
 __attribute__((always_inline)) double
+ylc_audio_delay_kernel(DelayLineState *state, double spf, int32_t max_samples,
+                       double delay_secs, double feedback, double input) {
+  (void)feedback;
+  if (!state || max_samples <= 1) {
+    return input;
+  }
+
+  double delayed =
+      audio_jit_delay_line_read(state, max_samples, delay_secs, spf);
+  audio_jit_delay_line_write(state, input);
+  return delayed;
+}
+
+__attribute__((always_inline)) double
 ylc_audio_dl_allpass_kernel(DelayLineState *state, double spf,
                             int32_t max_samples, double delay_secs,
                             double feedback, double input) {

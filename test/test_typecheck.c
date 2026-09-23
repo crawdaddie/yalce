@@ -3816,6 +3816,12 @@ bool test_variadic_templates() {
     "f 1 2;",
     &t_num);
 
+  // Bool args coerce to Double via From.
+  T("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
+    "let f = @Audio fn a -> a;;\n"
+    "f true;",
+    &t_num);
+
   // String arg fails — String is not coercible to Double
   TFAIL("let Audio = extern fn (T: (Double ... -> Double)) -> T;\n"
         "let f = @Audio fn a -> a;;\n"

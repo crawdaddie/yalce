@@ -3404,6 +3404,9 @@ static AudioValue audio_builtin_emit_delay_line(const AudioBuiltin *builtin,
                                                 AudioCompileCtx *audio,
                                                 Ast *origin, AudioValue *args,
                                                 size_t argc);
+static AudioValue audio_builtin_emit_delay(const AudioBuiltin *builtin,
+                                           AudioCompileCtx *audio, Ast *origin,
+                                           AudioValue *args, size_t argc);
 static AudioValue audio_builtin_emit_array_trigger(const AudioBuiltin *builtin,
                                                    AudioCompileCtx *audio,
                                                    Ast *origin,
@@ -3647,6 +3650,17 @@ static const AudioBuiltin audio_builtins[] = {
      .state_align = __alignof__(LagState),
      .state_name = "lag.state",
      .lane_expand_mask = AUDIO_ARG_MASK(0) | AUDIO_ARG_MASK(1),
+     .arg_order = NULL,
+     .kernel_argc = 0},
+
+    {.name = "delay",
+     .source_argc = 3,
+     .kernel_symbol = "ylc_audio_delay_kernel",
+     .emit = audio_builtin_emit_delay,
+     .state_size = 0,
+     .state_align = 8,
+     .state_name = "delay.state",
+     .lane_expand_mask = AUDIO_ARG_MASK(0) | AUDIO_ARG_MASK(2),
      .arg_order = NULL,
      .kernel_argc = 0},
 
@@ -5636,6 +5650,28 @@ static AudioValue audio_builtin_emit_delay_line(const AudioBuiltin *builtin,
       builtin->state_name, control_mask);
 }
 
+static AudioValue audio_builtin_emit_delay(const AudioBuiltin *builtin,
+                                           AudioCompileCtx *audio, Ast *origin,
+                                           AudioValue *args, size_t argc) {
+  if (!builtin || argc != 3) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  uint64_t control_mask = 0;
+  if (builtin->lane_expand_mask & AUDIO_ARG_MASK(0)) {
+    control_mask |= AUDIO_ARG_MASK(0);
+  }
+  if (builtin->lane_expand_mask & AUDIO_ARG_MASK(2)) {
+    control_mask |= AUDIO_ARG_MASK(2);
+  }
+
+  AudioValue no_feedback = audio_mir_value(
+      &t_num, mir_const_double(audio->kernel_builder, &t_num, origin, 0.0), 1);
+  return audio_mir_emit_delay_line_values(
+      audio, origin, args[0], args[1], no_feedback, args[2],
+      builtin->kernel_symbol, builtin->state_name, control_mask);
+}
+
 static AudioValue audio_builtin_emit_array_trigger(const AudioBuiltin *builtin,
                                                    AudioCompileCtx *audio,
                                                    Ast *origin,
@@ -7463,6 +7499,36 @@ static AudioValue audio_mir_expr(AudioCompileCtx *audio, Ast *ast) {
     }
 
     if (name) {
+      if (strcmp(name, "Double") == 0 &&
+          audio_mir_application_value_arg_count(ast) == 1) {
+        AudioValue input = audio_mir_expr(
+            audio, ast->data.AST_APPLICATION.args);
+        int lanes = audio_mir_value_lane_count(input);
+        if (!audio_mir_value_is_valid(input) || lanes <= 0) {
+          return AUDIO_VALUE_NULL;
+        }
+
+        MirValueId *values =
+            lanes > 1 ? audio_mir_alloc_lane_values(audio, lanes) : NULL;
+        if (lanes > 1 && !values) {
+          return AUDIO_VALUE_NULL;
+        }
+
+        for (int lane = 0; lane < lanes; lane++) {
+          MirValueId value = audio_mir_num_lane(audio, ast, input, lane);
+          if (value == MIR_NO_VALUE) {
+            return AUDIO_VALUE_NULL;
+          }
+          if (lanes == 1) {
+            return audio_mir_value(&t_num, value, 1);
+          }
+          values[lane] = value;
+        }
+
+        return audio_mir_multi_value_typed(audio, ast, ast->type, &t_num,
+                                           values, lanes);
+      }
+
       static const struct {
         const char *name;
         AudioValue (*fn)(AudioCompileCtx *, Ast *);

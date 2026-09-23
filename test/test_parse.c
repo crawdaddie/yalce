@@ -424,6 +424,7 @@ int main() {
   status &= test_parse("(+)", "+");
   status &= test_parse("(+) 1 2", "((+ 1) 2)");
   status &= test_parse("1 |> (*) 2", "((* 2) 1)");
+  status &= test_parse("x ~> y", "((~> x) y)");
 
   status &= test_parse("let ($~) = fn a b -> a + b;;", "(let $~ ($~ a b -> \n"
                                                        "((+ a) b))\n"

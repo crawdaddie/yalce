@@ -1,5 +1,6 @@
 let Audio = extern fn (T: (Double ... -> Double)) -> T;
 
+
 # aTyable-lookup sine oscillator. Arg: frequency in Hz.
 
 let ~ = extern fn Array of T -> T;
@@ -69,9 +70,18 @@ let rect = extern fn Double -> Double -> Double;
 
 let delay_line = extern fn Double -> Array of Double;
 
+# Delay. Args: delay seconds, max delay seconds, input.
+# Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
+let delay = extern fn Double -> Double -> Double -> Double;
+
+# let delay_simple = @Audio fn dt inp ->
+#   delay dt dt inp
+# ;;
+
 # Comb filter. Args: delay seconds, max delay seconds, feedback, input.
 # Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
 let comb = extern fn Double -> Double -> Double -> Double -> Double;
+
 # Delay-line allpass. Args: delay seconds, max delay seconds, feedback, input.
 # Compile-time constant: arg 2 (`max delay`) must be a constant > 0.
 let dl_allpass = extern fn Double -> Double -> Double -> Double -> Double;
@@ -696,3 +706,11 @@ let midi_freq = fn n ->
 let midiratio = fn n ->
   Math.pow 2. (n / 12.)
 ;;
+
+
+# Exponential XLine approximation using the decay primitive.
+let xline = @Audio fn start finish duration ->
+  scale finish start (decay duration (trig 0))
+;;
+
+

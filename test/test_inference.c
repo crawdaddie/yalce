@@ -577,6 +577,18 @@ static void test_resolve_predicates_from_succeeds_for_double_from_int() {
               "expected Double : From<Int> obligation to resolve");
 }
 
+static void test_resolve_predicates_from_succeeds_for_double_from_bool() {
+  start_test(__func__, __LINE__);
+  TypeList params = {.type = &t_bool, .next = NULL};
+  Predicate *preds =
+      predicate_append_applied(NULL, GenericFrom, &t_num, &params);
+  Subst *subst = NULL;
+
+  int rc = resolve_predicates(&subst, preds);
+  assert_true(rc == 0, "resolve_predicates accepts Double : From<Bool>",
+              "expected Double : From<Bool> obligation to resolve");
+}
+
 static void test_resolve_predicates_from_fails_for_int_from_double() {
   start_test(__func__, __LINE__);
   TypeList params = {.type = &t_num, .next = NULL};
@@ -879,6 +891,7 @@ int main(void) {
   test_extract_member_from_sum_type_idx_handles_record_access_name();
   test_instantiate_env_freshens_scheme_vars_and_predicates();
   test_resolve_predicates_from_succeeds_for_double_from_int();
+  test_resolve_predicates_from_succeeds_for_double_from_bool();
   test_resolve_predicates_from_fails_for_int_from_double();
   test_resolve_predicates_from_succeeds_for_coroutine_from_list();
   test_resolve_predicates_from_succeeds_for_coroutine_from_array();

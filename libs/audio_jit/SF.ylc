@@ -1,6 +1,7 @@
 type SFInfo = (fd: Ptr, frames: Uint64, samplerate: Int, channels: Int);
 type SF = (data: Array of Double, channels: Int, samplerate: Int);
 let sf_open_opt = extern fn String -> Option of SFInfo;
+let sf_close = extern fn Ptr -> Int; 
 let u64_to_int = extern fn Uint64 -> Int;
 
 let sf_read_double = extern fn Ptr -> Ptr -> Uint64 -> Uint64;
@@ -11,6 +12,7 @@ let load_sf = fn path ->
       let total_size = frames * channels ;
       let data = array_fill_const (u64_to_int total_size) 0.;
       let frames_read = sf_read_double fd (cstr data) total_size;
+      sf_close fd;
       SF data channels samplerate
     )
     | None -> SF [| |] 0 0
@@ -28,6 +30,7 @@ let load_sf_mono = fn path ->
       for i = 0 .. frames_int in (
         mono_data[i] := 0.5 * (data[i * 2 + 0] + data[i * 2 + 1])
       );
+      sf_close fd;
       SF mono_data 1 samplerate
     )
     | None -> SF [| |] 0 0
