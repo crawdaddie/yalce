@@ -89,7 +89,6 @@ typedef struct {
 
 #define INITIAL_CAPACITY 64
 #define INITIAL_TASK_CAPACITY 16
-enum { SCHEDULER_LOOKAHEAD_SUBBLOCKS = 4 };
 static const uint64_t scheduler_lookahead_samples =
     BUF_SIZE * SCHEDULER_LOOKAHEAD_SUBBLOCKS;
 static uint64_t next_event_sequence = 0;
@@ -716,7 +715,10 @@ void *ylc_schedule_current_task_event(uint64_t now, double delay_seconds) {
     return task;
   }
 
-  push_task_event(task, delay_samps, now, now);
+  /* Prepare future coroutine steps against the scheduler clock.  Using the
+     yielded event tick here makes every step in the lookahead immediately
+     due and can run an unbounded coroutine chain in one wakeup. */
+  push_task_event(task, delay_samps, now, get_sched_tick());
   return task;
 }
 

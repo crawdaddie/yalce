@@ -537,6 +537,11 @@ static void lookahead_once_cb(void *userdata, uint64_t tick) {
 static void test_task_lookahead_tick(void) {
   reset_all();
   ctx.sample_rate = 48000;
+  const uint64_t step_samples = 2000;
+  const uint64_t lookahead_samples =
+      BUF_SIZE * SCHEDULER_LOOKAHEAD_SUBBLOCKS;
+  const uint64_t next_tick =
+      step_samples * (lookahead_samples / step_samples + 1);
 
   void *handle =
       ylc_play_pattern_start(0.0, lookahead_once_cb, &fractional_count);
@@ -545,8 +550,9 @@ static void test_task_lookahead_tick(void) {
   process_scheduler_events(0);
 
   assert(scheduler_queue.size == 1);
-  assert(scheduler_queue.events[0].tick == 2000);
-  assert(scheduler_queue.events[0].dispatch_tick == 2000 - BUF_SIZE * 4);
+  assert(scheduler_queue.events[0].tick == next_tick);
+  assert(scheduler_queue.events[0].dispatch_tick ==
+         next_tick - lookahead_samples);
 
   cancel_task(handle);
 }

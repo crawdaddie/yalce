@@ -3,6 +3,8 @@
 
 #include <stdatomic.h>
 #include <stdint.h>
+
+enum { SCHEDULER_LOOKAHEAD_SUBBLOCKS = 32 };
 typedef void (*SchedulerCallback)(void *, uint64_t);
 typedef void (*DeferQuantCallback)(uint64_t);
 
