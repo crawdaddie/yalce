@@ -386,10 +386,9 @@ void audio_engine_render(Ctx *ctx, int frame_count, double spf) {
 
 void user_ctx_callback(Ctx *ctx, uint64_t current_tick, int frame_count,
                        double spf) {
-  int consumed =
-      process_msg_queue_pre(current_tick, frame_count, &ctx->msg_queue);
+  process_audio_events_pre(current_tick, frame_count, &ctx->msg_queue);
   audio_engine_render(ctx, frame_count, spf);
-  process_msg_queue_post(current_tick, frame_count, &ctx->msg_queue, consumed);
+  process_audio_events_post();
 }
 
 void node_connect_input(int idx, NodeRef node, NodeRef input) {

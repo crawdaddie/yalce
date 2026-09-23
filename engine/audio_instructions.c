@@ -3,6 +3,86 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define AUDIO_EVENT_HEAP_MAX MSG_QUEUE_MAX_SIZE
+
+typedef struct {
+  audio_instruction msg;
+  uint64_t sequence;
+} AudioPending;
+
+static AudioPending event_heap[AUDIO_EVENT_HEAP_MAX];
+static int event_heap_size;
+static AudioPending active_events[AUDIO_EVENT_HEAP_MAX];
+static int active_offsets[AUDIO_EVENT_HEAP_MAX];
+static int active_event_count;
+static uint64_t event_sequence;
+
+static int audio_event_before(AudioPending left, AudioPending right) {
+  if (left.msg.tick != right.msg.tick) {
+    return left.msg.tick < right.msg.tick;
+  }
+  return left.sequence < right.sequence;
+}
+
+static void swap_events(AudioPending *left, AudioPending *right) {
+  AudioPending tmp = *left;
+  *left = *right;
+  *right = tmp;
+}
+
+static void heap_up(int index) {
+  while (index > 0) {
+    int parent = (index - 1) / 2;
+    if (!audio_event_before(event_heap[index], event_heap[parent])) {
+      return;
+    }
+    swap_events(&event_heap[index], &event_heap[parent]);
+    index = parent;
+  }
+}
+
+static void heap_down(int index) {
+  for (;;) {
+    int left = index * 2 + 1;
+    int right = left + 1;
+    int smallest = index;
+
+    if (left < event_heap_size &&
+        audio_event_before(event_heap[left], event_heap[smallest])) {
+      smallest = left;
+    }
+    if (right < event_heap_size &&
+        audio_event_before(event_heap[right], event_heap[smallest])) {
+      smallest = right;
+    }
+    if (smallest == index) {
+      return;
+    }
+    swap_events(&event_heap[index], &event_heap[smallest]);
+    index = smallest;
+  }
+}
+
+static int heap_push(audio_instruction msg) {
+  if (event_heap_size >= AUDIO_EVENT_HEAP_MAX) {
+    return 0;
+  }
+
+  event_heap[event_heap_size] =
+      (AudioPending){.msg = msg, .sequence = event_sequence++};
+  heap_up(event_heap_size++);
+  return 1;
+}
+
+static AudioPending heap_pop(void) {
+  AudioPending result = event_heap[0];
+  event_heap[0] = event_heap[--event_heap_size];
+  if (event_heap_size > 0) {
+    heap_down(0);
+  }
+  return result;
+}
+
 void node_connect_input(int idx, NodeRef node, NodeRef input);
 
 static Node *jit_inlet_node(Node *node, int input) {
@@ -175,6 +255,40 @@ static void process_msg_post(int frame_offset, audio_instruction msg) {
   default:
     break;
   }
+}
+
+void process_audio_events_pre(uint64_t current_tick, int frame_count,
+                              audio_instructions_queue *queue) {
+  active_event_count = 0;
+
+  while (queue->num_msgs > 0) {
+    if (!heap_push(pop_msg(queue))) {
+      fprintf(stderr, "Audio event heap full\n");
+      break;
+    }
+  }
+
+  uint64_t end_tick = current_tick + (uint64_t)frame_count;
+  while (event_heap_size > 0 && event_heap[0].msg.tick < end_tick) {
+    AudioPending event = heap_pop();
+    int offset = event.msg.tick < current_tick
+                     ? 0
+                     : (int)(event.msg.tick - current_tick);
+    process_msg_pre(offset, event.msg);
+
+    if (active_event_count < AUDIO_EVENT_HEAP_MAX) {
+      active_events[active_event_count++] = event;
+      active_offsets[active_event_count - 1] = offset;
+    }
+  }
+}
+
+void process_audio_events_post(void) {
+  for (int i = active_event_count - 1; i >= 0; i--) {
+    AudioPending event = active_events[i];
+    process_msg_post(active_offsets[i], event.msg);
+  }
+  active_event_count = 0;
 }
 void print_msg(audio_instruction *msg) {
   printf("[%lu]", (unsigned long)msg->tick);

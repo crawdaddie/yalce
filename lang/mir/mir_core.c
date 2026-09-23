@@ -42,6 +42,11 @@ static bool mir_type_is_primitive_numeric(Type *type) {
   }
 }
 
+static bool mir_type_can_convert_to_double(Type *type) {
+  return mir_type_is_primitive_numeric(type) ||
+         (type && type->kind == T_BOOL);
+}
+
 static bool mir_type_is_primitive_ordered(Type *type) {
   if (!type) {
     return false;
@@ -183,8 +188,10 @@ static MirValueId mir_primitive_cast_if_needed(MirBuilder *builder,
   if (!from_type || !to_type || types_equal(from_type, to_type)) {
     return value;
   }
-  if (!mir_type_is_primitive_numeric(from_type) ||
-      !mir_type_is_primitive_numeric(to_type)) {
+  bool bool_to_double = from_type->kind == T_BOOL && to_type->kind == T_NUM;
+  if ((!mir_type_is_primitive_numeric(from_type) ||
+       !mir_type_is_primitive_numeric(to_type)) &&
+      !bool_to_double) {
     return MIR_NO_VALUE;
   }
   return mir_primitive_cast(builder, from_type, to_type, origin, value);
@@ -703,7 +710,7 @@ static MirValueId MirDoubleConstructorHandler(MirBuilder *builder, Ast *app,
   Type *from_type = arg->type;
   if (!target_type || !from_type ||
       !mir_type_is_primitive_numeric(target_type) ||
-      !mir_type_is_primitive_numeric(from_type)) {
+      !mir_type_can_convert_to_double(from_type)) {
     return MIR_NO_VALUE;
   }
 
@@ -2213,7 +2220,7 @@ mir_lower_specialized_primitive_constructor_call(MirBuilder *builder,
                               operand);
   }
 
-  if (!mir_type_is_primitive_numeric(from_type) ||
+  if (!mir_type_can_convert_to_double(from_type) ||
       !mir_type_is_primitive_numeric(target_type)) {
     return MIR_NO_VALUE;
   }

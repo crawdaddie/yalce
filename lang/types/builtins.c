@@ -875,6 +875,10 @@ void initialize_builtin_types() {
   static TypeClass tc_num_from_int = {.name = TYPE_NAME_TYPECLASS_FROM,
                                       .rank = 2.0,
                                       .params = &tc_num_from_int_params};
+  static TypeList tc_num_from_bool_params = {.type = &t_bool, .next = NULL};
+  static TypeClass tc_num_from_bool = {.name = TYPE_NAME_TYPECLASS_FROM,
+                                       .rank = 2.0,
+                                       .params = &tc_num_from_bool_params};
 
   static TypeList tc_uint64_from_int_params = {.type = &t_int, .next = NULL};
   static TypeClass tc_uint64_from_int = {.name = TYPE_NAME_TYPECLASS_FROM,
@@ -914,6 +918,7 @@ void initialize_builtin_types() {
   typeclasses_extend(&t_num, &tc_num_ord);
   typeclasses_extend(&t_num, &tc_num_eq);
   typeclasses_extend(&t_num, &tc_num_from_int);
+  typeclasses_extend(&t_num, &tc_num_from_bool);
 
   // Register primitive types as monomorphic builtins (no predicates)
   add_builtin_env(TYPE_NAME_INT, make_monomorphic_env(TYPE_NAME_INT, &t_int));

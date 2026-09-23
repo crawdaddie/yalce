@@ -1016,6 +1016,11 @@ LLVMValueRef double_constructor(LLVMValueRef val, Type *from_type,
                            "cast_uint64_to_double");
   }
 
+  case T_BOOL: {
+    return LLVMBuildUIToFP(builder, val, module_double_type(module),
+                           "cast_bool_to_double");
+  }
+
   default:
     return NULL;
   }

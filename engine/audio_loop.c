@@ -216,6 +216,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
       }
 
       set_block_time(&block_time);
+      atomic_store(&global_sample_position, subblock_start_sample);
       user_ctx_callback(ctx, subblock_start_sample, subframes,
                         seconds_per_frame);
 
@@ -259,7 +260,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
     //   //         frame_count, before, after);
     // } else {
     // }
-    atomic_fetch_add(&global_sample_position, frame_count);
+    atomic_store(&global_sample_position, buffer_start_sample + frame_count);
     if (frames_left <= 0)
       break;
   }

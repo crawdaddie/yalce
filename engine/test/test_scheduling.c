@@ -214,6 +214,32 @@ static void test_heap_duplicate_ticks(void) {
   assert(scheduler_queue.size == 0);
 }
 
+static void test_heap_equal_dispatch_order(void) {
+  reset_all();
+
+  scheduler_queue.events[0] =
+      (SchedulerEvent){.tick = 30, .dispatch_tick = 0, .sequence = 0};
+  scheduler_queue.size = 1;
+  scheduler_queue.events[1] =
+      (SchedulerEvent){.tick = 10, .dispatch_tick = 0, .sequence = 1};
+  scheduler_queue.size = 2;
+  heapify_up(&scheduler_queue, 1);
+  scheduler_queue.events[2] =
+      (SchedulerEvent){.tick = 20, .dispatch_tick = 0, .sequence = 2};
+  scheduler_queue.size = 3;
+  heapify_up(&scheduler_queue, 2);
+
+  SchedulerEvent e1 = pop_event(&scheduler_queue);
+  SchedulerEvent e2 = pop_event(&scheduler_queue);
+  SchedulerEvent e3 = pop_event(&scheduler_queue);
+
+  assert(e1.sequence < e2.sequence);
+  assert(e2.sequence < e3.sequence);
+  assert(e1.tick == 30);
+  assert(e2.tick == 10);
+  assert(e3.tick == 20);
+}
+
 static void test_heap_single_element(void) {
   reset_all();
   push_event(record_tick_cb, (void *)1, 42, 0);
@@ -467,6 +493,62 @@ static void test_schedule_event_conversion(void) {
   /* NULL userdata -> early return, nothing pushed */
   schedule_event(0, 1.0, record_tick_cb, NULL);
   assert(scheduler_queue.size == 0);
+}
+
+static uint64_t fractional_ticks[5];
+static int fractional_count;
+
+static void fractional_reschedule_cb(void *userdata, uint64_t tick) {
+  (void)userdata;
+  fractional_ticks[fractional_count++] = tick;
+
+  if (fractional_count < 5) {
+    ylc_schedule_current_task_event(tick, 1.5 / 48000.0);
+    return;
+  }
+
+  ylc_complete_current_task();
+}
+
+static void test_fractional_task_delay(void) {
+  reset_all();
+  ctx.sample_rate = 48000;
+  fractional_count = 0;
+
+  void *handle = ylc_play_pattern_start(
+      0.0, fractional_reschedule_cb, &fractional_count);
+  assert(handle != NULL);
+
+  process_scheduler_events(100);
+
+  assert(fractional_count == 5);
+  assert(fractional_ticks[0] == 0);
+  assert(fractional_ticks[1] == 1);
+  assert(fractional_ticks[2] == 3);
+  assert(fractional_ticks[3] == 4);
+  assert(fractional_ticks[4] == 6);
+}
+
+static void lookahead_once_cb(void *userdata, uint64_t tick) {
+  (void)userdata;
+  ylc_schedule_current_task_event(tick, 2000.0 / 48000.0);
+}
+
+static void test_task_lookahead_tick(void) {
+  reset_all();
+  ctx.sample_rate = 48000;
+
+  void *handle =
+      ylc_play_pattern_start(0.0, lookahead_once_cb, &fractional_count);
+  assert(handle != NULL);
+
+  process_scheduler_events(0);
+
+  assert(scheduler_queue.size == 1);
+  assert(scheduler_queue.events[0].tick == 2000);
+  assert(scheduler_queue.events[0].dispatch_tick == 2000 - BUF_SIZE * 4);
+
+  cancel_task(handle);
 }
 
 static int task_step_count = 0;
@@ -871,6 +953,7 @@ int main(void) {
   RUN_TEST(test_heap_insert_pop_order);
   RUN_TEST(test_heap_pop_empty);
   RUN_TEST(test_heap_duplicate_ticks);
+  RUN_TEST(test_heap_equal_dispatch_order);
   RUN_TEST(test_heap_single_element);
   RUN_TEST(test_heap_grow_past_capacity);
   RUN_TEST(test_heap_large_batch);
@@ -889,6 +972,8 @@ int main(void) {
   RUN_TEST(test_process_events_reschedule);
   RUN_TEST(test_defer_quant_alignment);
   RUN_TEST(test_schedule_event_conversion);
+  RUN_TEST(test_fractional_task_delay);
+  RUN_TEST(test_task_lookahead_tick);
   RUN_TEST(test_play_pattern_cancel_returned_handle);
   RUN_TEST(test_play_pattern_cancel_parent_cancels_child);
   RUN_TEST(test_cancelled_parent_rejects_child);

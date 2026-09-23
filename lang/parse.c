@@ -449,6 +449,12 @@ Ast *parse_input_buffer(const char *filename, const char *input) {
   return pctx.ast_root;
 }
 
+static bool is_operator_name(const char *id) {
+  static const char operator_chars[] = "$*+-/=>@^|%<~&!.:?";
+
+  return id && id[0] != '\0' && strchr(operator_chars, id[0]) != NULL;
+}
+
 bool is_custom_binop(const char *id) {
   custom_binops_t *bb = pctx.custom_binops;
   while (bb) {
@@ -462,7 +468,8 @@ bool is_custom_binop(const char *id) {
     }
     bb = bb->next;
   }
-  return false;
+
+  return is_operator_name(id);
 }
 
 Ast *ast_application(Ast *func, Ast *arg) {

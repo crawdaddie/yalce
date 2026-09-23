@@ -1,0 +1,24 @@
+open libs/audio_jit/DSP;
+
+let sample_rate = 48000.;
+let interval = 513. / sample_rate;
+ # /60. / 173.;
+
+let click = @Audio fn trigger ->
+  trigger
+;;
+
+let node = click 0. |> play_node;
+
+let hit = fn () ->
+  set_input_trig node 0;
+  interval 
+;;
+
+let pattern = fn () ->
+  yield hit ();
+  yield pattern ()
+;;
+
+record_start "/tmp/yalce-sample-timing.wav" 0.68;
+pattern () |> play_pattern 0.;

@@ -8,8 +8,10 @@
 #include <sys/time.h>
 #else
 #include <pthread.h>
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
 #include <sys/timerfd.h>
@@ -35,6 +37,7 @@ static int kqueue_fd;
 static int wake_pipe[2];
 #else
 static int timer_fd, wake_fd, epoll_fd;
+static const int scheduler_rt_priority = 10;
 #endif
 
 static pthread_mutex_t scheduler_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -60,6 +63,7 @@ atomic_ullong global_sample_position = 0;
 typedef struct SchedulerTask {
   bool cancelled;
   bool completed;
+  double sample_remainder;
   struct SchedulerTask *parent;
   struct SchedulerTask **children;
   size_t num_children;
@@ -73,6 +77,8 @@ typedef struct {
   void *userdata;
   SchedulerTask *task;
   uint64_t tick;
+  uint64_t dispatch_tick;
+  uint64_t sequence;
 } SchedulerEvent;
 
 typedef struct {
@@ -83,6 +89,27 @@ typedef struct {
 
 #define INITIAL_CAPACITY 64
 #define INITIAL_TASK_CAPACITY 16
+enum { SCHEDULER_LOOKAHEAD_SUBBLOCKS = 4 };
+static const uint64_t scheduler_lookahead_samples =
+    BUF_SIZE * SCHEDULER_LOOKAHEAD_SUBBLOCKS;
+static uint64_t next_event_sequence = 0;
+
+static bool event_before(const SchedulerEvent *left,
+                         const SchedulerEvent *right) {
+  if (left->dispatch_tick != right->dispatch_tick) {
+    return left->dispatch_tick < right->dispatch_tick;
+  }
+  return left->sequence < right->sequence;
+}
+
+static uint64_t task_dispatch_tick(uint64_t target_tick, uint64_t base_tick) {
+  if (target_tick <= base_tick + scheduler_lookahead_samples) {
+    return base_tick;
+  }
+
+  uint64_t dispatch_tick = target_tick - scheduler_lookahead_samples;
+  return dispatch_tick > base_tick ? dispatch_tick : base_tick;
+}
 
 static SchedulerTask **scheduler_tasks = NULL;
 static size_t scheduler_tasks_size = 0;
@@ -182,8 +209,23 @@ static uint64_t scheduler_seconds_to_samples(double seconds) {
   if (sr <= 0) {
     sr = 48000;
   }
-  int delay_samps = (int)(seconds * (double)sr);
-  return delay_samps > 0 ? (uint64_t)delay_samps : 0;
+  return seconds > 0.0 ? (uint64_t)(seconds * (double)sr) : 0;
+}
+
+static uint64_t task_delay_samples(SchedulerTask *task, double seconds) {
+  if (!task || seconds <= 0.0) {
+    return 0;
+  }
+
+  int sr = ctx_sample_rate();
+  if (sr <= 0) {
+    sr = 48000;
+  }
+
+  double exact = seconds * (double)sr + task->sample_remainder;
+  uint64_t samples = (uint64_t)exact;
+  task->sample_remainder = exact - (double)samples;
+  return samples;
 }
 
 void init_heap(EventHeap *heap) {
@@ -205,7 +247,7 @@ void heap_swap_events(SchedulerEvent *a, SchedulerEvent *b) {
 void heapify_up(EventHeap *heap, size_t index) {
   while (index > 0) {
     size_t parent = (index - 1) / 2;
-    if (heap->events[index].tick < heap->events[parent].tick) {
+    if (event_before(&heap->events[index], &heap->events[parent])) {
       heap_swap_events(&heap->events[index], &heap->events[parent]);
       index = parent;
     } else {
@@ -221,12 +263,12 @@ void heapify_down(EventHeap *heap, size_t index) {
     size_t smallest = index;
 
     if (left_child < heap->size &&
-        heap->events[left_child].tick < heap->events[smallest].tick) {
+        event_before(&heap->events[left_child], &heap->events[smallest])) {
       smallest = left_child;
     }
 
     if (right_child < heap->size &&
-        heap->events[right_child].tick < heap->events[smallest].tick) {
+        event_before(&heap->events[right_child], &heap->events[smallest])) {
       smallest = right_child;
     }
 
@@ -241,7 +283,14 @@ void heapify_down(EventHeap *heap, size_t index) {
 EventHeap scheduler_queue = {};
 SchedulerEvent pop_event(EventHeap *heap) {
   if (heap->size == 0) {
-    SchedulerEvent empty = {NULL, NULL, NULL, 0};
+    SchedulerEvent empty = {
+        .callback = NULL,
+        .userdata = NULL,
+        .task = NULL,
+        .tick = 0,
+        .dispatch_tick = 0,
+        .sequence = 0,
+    };
     return empty;
   }
 
@@ -297,7 +346,7 @@ void scheduler_wake() {
 }
 
 static void push_task_event(SchedulerTask *task, uint64_t delay_in_samples,
-                            uint64_t base_time) {
+                            uint64_t target_base, uint64_t dispatch_base) {
   if (!task || task_is_done(task)) {
     return;
   }
@@ -328,30 +377,33 @@ static void push_task_event(SchedulerTask *task, uint64_t delay_in_samples,
     queue->capacity = next_cap;
   }
 
-  uint64_t target_time = base_time + delay_in_samples;
+  uint64_t target_time = target_base + delay_in_samples;
+  uint64_t dispatch_time = task_dispatch_tick(target_time, dispatch_base);
 
   SchedulerEvent event = {.callback = task->callback,
                           .userdata = task->userdata,
                           .task = task,
-                          .tick = target_time};
+                          .tick = target_time,
+                          .dispatch_tick = dispatch_time,
+                          .sequence = next_event_sequence++};
 
   queue->events[queue->size] = event;
 
   heapify_up(queue, queue->size);
   queue->size++;
 
-  bool is_earliest = (queue->events[0].tick == target_time);
+  bool is_earliest = (queue->events[0].dispatch_tick == dispatch_time);
   pthread_mutex_unlock(&scheduler_mutex);
 
   if (is_earliest && scheduler_fds_ready) {
     SCHED_DBG("push_task_event: new earliest tick=%llu, arming timer",
-              (unsigned long long)target_time);
-    arm_timer(target_time);
+              (unsigned long long)dispatch_time);
+    arm_timer(dispatch_time);
     scheduler_wake();
   } else {
     SCHED_DBG("push_task_event: tick=%llu (earliest=%llu, heap size=%zu)",
-              (unsigned long long)target_time,
-              (unsigned long long)queue->events[0].tick, queue->size);
+              (unsigned long long)dispatch_time,
+              (unsigned long long)queue->events[0].dispatch_tick, queue->size);
   }
 }
 
@@ -385,7 +437,9 @@ void push_event(void (*callback)(void *, uint64_t), void *userdata,
   SchedulerEvent event = {.callback = callback,
                           .userdata = userdata,
                           .task = NULL,
-                          .tick = target_time};
+                          .tick = target_time,
+                          .dispatch_tick = target_time,
+                          .sequence = next_event_sequence++};
 
   queue->events[queue->size] = event;
 
@@ -393,7 +447,7 @@ void push_event(void (*callback)(void *, uint64_t), void *userdata,
   queue->size++;
 
   // did this event become the new earliest?
-  bool is_earliest = (queue->events[0].tick == target_time);
+  bool is_earliest = (queue->events[0].dispatch_tick == target_time);
   pthread_mutex_unlock(&scheduler_mutex);
 
   if (is_earliest && scheduler_fds_ready) {
@@ -404,7 +458,7 @@ void push_event(void (*callback)(void *, uint64_t), void *userdata,
   } else {
     SCHED_DBG("push_event: tick=%llu (earliest=%llu, heap size=%zu)",
               (unsigned long long)target_time,
-              (unsigned long long)queue->events[0].tick, queue->size);
+              (unsigned long long)queue->events[0].dispatch_tick, queue->size);
   }
 }
 static _Thread_local uint64_t sched_now = 0;
@@ -462,7 +516,7 @@ static SchedulerEvent pending_batch[MAX_BATCH];
 static int collect_due_events(uint64_t current_sample) {
   int count = 0;
   while (scheduler_queue.size > 0 &&
-         scheduler_queue.events[0].tick <= current_sample &&
+         scheduler_queue.events[0].dispatch_tick <= current_sample &&
          count < MAX_BATCH) {
     pending_batch[count++] = pop_event(&scheduler_queue);
   }
@@ -500,6 +554,16 @@ static void fire_events(int count) {
 uint64_t get_current_sample() { return atomic_load(&global_sample_position); }
 
 void *scheduler_thread_fn(void *arg) {
+#ifndef __APPLE__
+  struct sched_param param = {.sched_priority = scheduler_rt_priority};
+  int priority_result =
+      pthread_setschedparam(pthread_self(), SCHED_RR, &param);
+  if (priority_result != 0) {
+    fprintf(stderr, "scheduler: real-time priority unavailable: %s\n",
+            strerror(priority_result));
+  }
+#endif
+
 #ifdef __APPLE__
   SCHED_DBG("thread started, kqueue_fd=%d wake_fd=%d", kqueue_fd,
             wake_pipe[0]);
@@ -511,7 +575,7 @@ void *scheduler_thread_fn(void *arg) {
     pthread_mutex_lock(&scheduler_mutex);
     if (scheduler_queue.size > 0) {
       uint64_t now = get_current_sample();
-      uint64_t target = scheduler_queue.events[0].tick;
+      uint64_t target = scheduler_queue.events[0].dispatch_tick;
       int sample_rate = ctx_sample_rate();
       if (sample_rate <= 0) {
         sample_rate = 48000;
@@ -561,7 +625,7 @@ void *scheduler_thread_fn(void *arg) {
 
     pthread_mutex_lock(&scheduler_mutex);
     if (scheduler_queue.size > 0) {
-      arm_timer(scheduler_queue.events[0].tick);
+      arm_timer(scheduler_queue.events[0].dispatch_tick);
     }
     pthread_mutex_unlock(&scheduler_mutex);
   }
@@ -596,7 +660,7 @@ void *scheduler_thread_fn(void *arg) {
       SCHED_DBG("processing: now=%llu, heap size=%zu, earliest=%llu",
                 (unsigned long long)now, scheduler_queue.size,
                 scheduler_queue.size > 0
-                    ? (unsigned long long)scheduler_queue.events[0].tick
+                    ? (unsigned long long)scheduler_queue.events[0].dispatch_tick
                     : 0ULL);
 
       int count = collect_due_events(now);
@@ -613,8 +677,8 @@ void *scheduler_thread_fn(void *arg) {
     pthread_mutex_lock(&scheduler_mutex);
     if (scheduler_queue.size > 0) {
       SCHED_DBG("re-arming to next tick=%llu",
-                (unsigned long long)scheduler_queue.events[0].tick);
-      arm_timer(scheduler_queue.events[0].tick);
+                (unsigned long long)scheduler_queue.events[0].dispatch_tick);
+      arm_timer(scheduler_queue.events[0].dispatch_tick);
     } else {
       SCHED_DBG("heap empty, sleeping until next push");
     }
@@ -628,10 +692,10 @@ void *schedule_event(uint64_t now, double delay_seconds,
                      SchedulerCallback callback, void *userdata) {
   if (userdata == NULL)
     return userdata;
-  int delay_samps = delay_seconds * ctx_sample_rate();
-  SCHED_DBG("schedule_event: now=%llu delay_sec=%.6f sr=%d delay_samps=%d",
+  uint64_t delay_samps = scheduler_seconds_to_samples(delay_seconds);
+  SCHED_DBG("schedule_event: now=%llu delay_sec=%.6f sr=%d delay_samps=%llu",
             (unsigned long long)now, delay_seconds, ctx_sample_rate(),
-            delay_samps);
+            (unsigned long long)delay_samps);
   push_event(callback, userdata, delay_samps, now);
   return userdata;
 }
@@ -641,18 +705,18 @@ void *ylc_schedule_current_task_event(uint64_t now, double delay_seconds) {
     return NULL;
   }
 
-  uint64_t delay_samps = scheduler_seconds_to_samples(delay_seconds);
-
   pthread_mutex_lock(&scheduler_mutex);
   SchedulerTask *task = find_task(current_task);
   bool can_schedule = task && !task->cancelled && !task->completed;
+  uint64_t delay_samps =
+      can_schedule ? task_delay_samples(task, delay_seconds) : 0;
   pthread_mutex_unlock(&scheduler_mutex);
 
   if (!can_schedule) {
     return task;
   }
 
-  push_task_event(task, delay_samps, now);
+  push_task_event(task, delay_samps, now, now);
   return task;
 }
 
@@ -764,7 +828,7 @@ void *ylc_play_pattern_start(double quant, SchedulerCallback callback,
 
   uint64_t delay_samps = scheduler_seconds_to_samples(delay_seconds);
 
-  push_task_event(task, delay_samps, now);
+  push_task_event(task, delay_samps, now, get_sched_tick());
   return task;
 }
 

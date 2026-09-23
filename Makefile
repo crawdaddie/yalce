@@ -111,7 +111,7 @@ MIR_OPERAND_METADATA_TEST_TARGET := $(BUILD_DIR)/test_mir_operand_metadata
 JSON_C_CFLAGS := $(shell pkg-config --cflags json-c 2>/dev/null)
 JSON_C_LIBS := $(shell pkg-config --libs json-c 2>/dev/null)
 
-.PHONY: all clean engine audio_jit gui gfx test wasm serve_docs engine_bindings cor range_server lsp_server test_range_server test_range_server_tool test_lsp_server test_mir_pipeline test_mir_operand_metadata
+.PHONY: all clean engine audio_jit gui gfx test wasm serve_docs engine_bindings cor range_server lsp_server test_range_server test_range_server_tool test_lsp_server test_mir_pipeline test_mir_operand_metadata sample_timing_test
 
 all: $(BUILD_DIR)/ylc
 
@@ -209,6 +209,9 @@ clean:
 
 test:
 	$(MAKE) -C test
+
+sample_timing_test: $(BUILD_DIR)/ylc
+	bash test/test_sample_timing.sh
 
 test_parse:
 	$(MAKE) -C test test_parse

@@ -55,11 +55,11 @@ YLCModule *get_module(const char *key) { return ht_get(&module_registry, key); }
 YLCModule *init_import(YLCModule *mod) {
   ParsingContext _pctx = pctx;
   Ast *mod_ast = parse_input_script(mod->path);
+  custom_binops_t *custom_binops = pctx.custom_binops;
   pctx = _pctx;
 
   mod_ast = ast_lambda(NULL, mod_ast);
   mod_ast->tag = AST_MODULE;
-  custom_binops_t *custom_binops = pctx.custom_binops;
   mod->ast = mod_ast;
   mod->custom_binops = custom_binops;
 

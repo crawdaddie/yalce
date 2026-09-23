@@ -82,4 +82,8 @@ int process_msg_queue_pre(uint64_t current_tick, int frame_count,
 
 void process_msg_queue_post(uint64_t current_tick, int frame_count,
                             audio_instructions_queue *queue, int consumed);
+
+void process_audio_events_pre(uint64_t current_tick, int frame_count,
+                              audio_instructions_queue *queue);
+void process_audio_events_post(void);
 #endif
