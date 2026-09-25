@@ -557,6 +557,49 @@ static void test_task_lookahead_tick(void) {
   cancel_task(handle);
 }
 
+static void complete_only_cb(void *userdata, uint64_t tick);
+static int future_parent_steps;
+static uint64_t future_child_tick;
+
+static void record_child_tick(void *userdata, uint64_t tick) {
+  (void)userdata;
+  future_child_tick = tick;
+  ylc_complete_current_task();
+}
+
+static void fork_at_future_tick(void *userdata, uint64_t tick) {
+  (void)userdata;
+  future_parent_steps++;
+  if (future_parent_steps == 1) {
+    ylc_schedule_current_task_event(tick, 1.0);
+    return;
+  }
+
+  ylc_play_pattern_start(0.0, record_child_tick, &future_parent_steps);
+  ylc_complete_current_task();
+}
+
+static void test_fork_uses_logical_tick(void) {
+  reset_all();
+  ctx.sample_rate = 48000;
+  future_parent_steps = 0;
+  future_child_tick = 0;
+
+  void *parent =
+      ylc_play_pattern_start(0.0, fork_at_future_tick, &future_parent_steps);
+  assert(parent != NULL);
+
+  process_scheduler_events(0);
+  assert(scheduler_queue.size == 1);
+
+  atomic_store(&global_sample_position, 39808);
+  process_scheduler_events(39808);
+
+  assert(future_child_tick == 48000);
+
+  cancel_task(parent);
+}
+
 static int task_step_count = 0;
 static void *task_child_handle = NULL;
 
@@ -892,6 +935,66 @@ static void test_pre_post_full_buffer_coverage(void) {
   free(m);
 }
 
+static void test_cancel_task_audio_events(void) {
+  reset_all();
+  MockSynth *m = create_mock_synth(1);
+  void *task = (void *)(uintptr_t)1;
+
+  audio_instruction before = {
+      .type = NODE_SET_SCALAR, .tick = 10, .task = task};
+  before.payload.NODE_SET_SCALAR.target = &m->node;
+  before.payload.NODE_SET_SCALAR.input = 0;
+  before.payload.NODE_SET_SCALAR.value = 0.25;
+
+  audio_instruction after = {
+      .type = NODE_SET_SCALAR, .tick = 20, .task = task};
+  after.payload.NODE_SET_SCALAR.target = &m->node;
+  after.payload.NODE_SET_SCALAR.input = 0;
+  after.payload.NODE_SET_SCALAR.value = 0.75;
+
+  push_msg(&ctx.msg_queue, before);
+  push_msg(&ctx.msg_queue, after);
+  cancel_audio_task(&ctx.msg_queue, task, 15);
+
+  process_audio_events_pre(0, BUF_SIZE, &ctx.msg_queue);
+  process_audio_events_post();
+
+  for (int i = 0; i < BUF_SIZE; i++) {
+    assert(m->inlet_bufs[0][i] == 0.25);
+  }
+
+  free(m);
+}
+
+static void enqueue_task_audio(void *userdata, uint64_t tick) {
+  MockSynth *m = userdata;
+  audio_instruction msg = {.type = NODE_SET_SCALAR, .tick = tick + 10};
+  msg.payload.NODE_SET_SCALAR.target = &m->node;
+  msg.payload.NODE_SET_SCALAR.input = 0;
+  msg.payload.NODE_SET_SCALAR.value = 0.75;
+  push_msg(&ctx.msg_queue, msg);
+}
+
+static void test_cancel_task_tags_audio_events(void) {
+  reset_all();
+  MockSynth *m = create_mock_synth(1);
+  void *handle = ylc_play_pattern_start(0.0, enqueue_task_audio, m);
+  assert(handle != NULL);
+
+  process_scheduler_events(0);
+  cancel_task(handle);
+  cancel_task(handle);
+  assert(ctx.msg_queue.num_msgs == 2);
+  process_audio_events_pre(0, BUF_SIZE, &ctx.msg_queue);
+  process_audio_events_post();
+
+  for (int i = 0; i < BUF_SIZE; i++) {
+    assert(m->inlet_bufs[0][i] == 0.0);
+  }
+
+  free(m);
+}
+
 /* ══════════════════════════════════════════════════════════════
    LAYER 3: End-to-end scheduler → audio instruction tests
    ══════════════════════════════════════════════════════════════ */
@@ -980,6 +1083,7 @@ int main(void) {
   RUN_TEST(test_schedule_event_conversion);
   RUN_TEST(test_fractional_task_delay);
   RUN_TEST(test_task_lookahead_tick);
+  RUN_TEST(test_fork_uses_logical_tick);
   RUN_TEST(test_play_pattern_cancel_returned_handle);
   RUN_TEST(test_play_pattern_cancel_parent_cancels_child);
   RUN_TEST(test_cancelled_parent_rejects_child);
@@ -993,6 +1097,8 @@ int main(void) {
   RUN_TEST(test_pre_pipe_input_sets_dependency);
   RUN_TEST(test_pre_multiple_messages_ordering);
   RUN_TEST(test_pre_post_full_buffer_coverage);
+  RUN_TEST(test_cancel_task_audio_events);
+  RUN_TEST(test_cancel_task_tags_audio_events);
 
   printf("\n=== Layer 3: Scheduler → Audio Instructions ===\n");
   RUN_TEST(test_schedule_close_gate);

@@ -3564,8 +3564,16 @@ bool test_record_field_predicates() {
     "get_field (other: true, field: 1)",
     &t_int);
 
+  T("(1, 2, 3)@1", &t_int);
+  T("let get_field = fn x -> x@1;;\n"
+    "get_field (1, 2, 3)",
+    &t_int);
+
   TFAIL("let get_field = fn x -> x.field;;\n"
         "get_field (other: 1,)");
+
+  TFAIL("let get_field = fn x -> x@1;;\n"
+        "get_field (1,)");
 
   TFAIL("let get_field = fn x -> x.field;;\n"
         "get_field 1");

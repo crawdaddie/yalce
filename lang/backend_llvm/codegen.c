@@ -248,8 +248,11 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
   case AST_RECORD_ACCESS: {
     Ast *record = ast->data.AST_RECORD_ACCESS.record;
-    const char *member_name =
-        ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+    bool positional = ast->data.AST_RECORD_ACCESS.member->tag == AST_INT;
+    const char *member_name = positional
+                                  ? NULL
+                                  : ast->data.AST_RECORD_ACCESS.member
+                                        ->data.AST_IDENTIFIER.value;
 
     Type *record_type = specialize_type_for_codegen(record->type, ctx);
     Type *member_type = specialize_type_for_codegen(ast->type, ctx);
@@ -284,13 +287,19 @@ LLVMValueRef codegen(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
 
     bool has_named_fields = record_view && record_view->kind == T_CONS &&
                             record_view->data.T_CONS.names;
-    int member_idx = get_struct_member_idx(member_name, record_view);
+    int member_idx = positional ? ast->data.AST_RECORD_ACCESS.index
+                                : get_struct_member_idx(member_name, record_view);
     if (member_idx < 0 && !has_named_fields && !is_generic(record_view)) {
       member_idx = ast->data.AST_RECORD_ACCESS.index;
     }
 
     if (member_idx < 0) {
-      fprintf(stderr, "Error: no member %s in obj\n", member_name);
+      if (positional) {
+        fprintf(stderr, "Error: no member at index %d in obj\n",
+                ast->data.AST_RECORD_ACCESS.index);
+      } else {
+        fprintf(stderr, "Error: no member %s in obj\n", member_name);
+      }
       res = NULL;
       break;
     }

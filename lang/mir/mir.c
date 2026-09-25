@@ -6659,24 +6659,32 @@ static MirValueId mir_record_access(MirBuilder *builder, Ast *ast,
                                     MirCtx *ctx) {
   if (!builder || !builder->fn || !ast || ast->tag != AST_RECORD_ACCESS ||
       !ast->data.AST_RECORD_ACCESS.record ||
-      !ast->data.AST_RECORD_ACCESS.member ||
+      !ast->data.AST_RECORD_ACCESS.member) {
+    return MIR_NO_VALUE;
+  }
+
+  bool positional = ast->data.AST_RECORD_ACCESS.member->tag == AST_INT;
+  if (!positional &&
       ast->data.AST_RECORD_ACCESS.member->tag != AST_IDENTIFIER) {
     return MIR_NO_VALUE;
   }
 
-  MirSymbol *member = mir_resolve_ast_symbol(builder, ast, ctx);
-  MirValueId member_value =
-      mir_symbol_to_value(builder, ast, ctx, member, ast->type);
-  if (member_value != MIR_NO_VALUE) {
-    return member_value;
-  }
+  const char *member_name = NULL;
+  if (!positional) {
+    MirSymbol *member = mir_resolve_ast_symbol(builder, ast, ctx);
+    MirValueId member_value =
+        mir_symbol_to_value(builder, ast, ctx, member, ast->type);
+    if (member_value != MIR_NO_VALUE) {
+      return member_value;
+    }
 
-  const char *member_name =
-      ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
-  MirValueId constructor =
-      mir_constructor_call(builder, ast, ast->type, member_name, NULL, 0, ctx);
-  if (constructor != MIR_NO_VALUE) {
-    return constructor;
+    member_name =
+        ast->data.AST_RECORD_ACCESS.member->data.AST_IDENTIFIER.value;
+    MirValueId constructor = mir_constructor_call(
+        builder, ast, ast->type, member_name, NULL, 0, ctx);
+    if (constructor != MIR_NO_VALUE) {
+      return constructor;
+    }
   }
 
   Ast *record = ast->data.AST_RECORD_ACCESS.record;
@@ -6695,7 +6703,8 @@ static MirValueId mir_record_access(MirBuilder *builder, Ast *ast,
     record_view = value_view;
   }
   if (!record_view || record_view->kind != T_CONS) {
-    if (ast->type && member_name && (!record_view || is_generic(record_view))) {
+    if (ast->type && (positional || member_name) &&
+        (!record_view || is_generic(record_view))) {
       size_t unresolved_index = ast->data.AST_RECORD_ACCESS.index >= 0
                                     ? (size_t)ast->data.AST_RECORD_ACCESS.index
                                     : 0;
@@ -6703,6 +6712,21 @@ static MirValueId mir_record_access(MirBuilder *builder, Ast *ast,
                                unresolved_index, member_name);
     }
     return MIR_NO_VALUE;
+  }
+
+  if (positional) {
+    size_t member_index = (size_t)ast->data.AST_RECORD_ACCESS.index;
+    if (member_index >= (size_t)record_view->data.T_CONS.num_args) {
+      return MIR_NO_VALUE;
+    }
+
+    Type *member_type = ast->type;
+    if ((!member_type || is_generic(member_type)) &&
+        record_view->data.T_CONS.args) {
+      member_type = record_view->data.T_CONS.args[member_index];
+    }
+    return mir_extract_field(builder, member_type, ast, record_value,
+                             member_index, NULL);
   }
 
   bool has_named_fields = record_view->data.T_CONS.names != NULL;

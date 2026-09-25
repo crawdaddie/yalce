@@ -62,6 +62,7 @@ atomic_ullong global_sample_position = 0;
 
 typedef struct SchedulerTask {
   bool cancelled;
+  bool audio_cancel_sent;
   bool completed;
   double sample_remainder;
   struct SchedulerTask *parent;
@@ -468,6 +469,8 @@ uint64_t get_tl_tick() {
 }
 uint64_t get_sched_tick() { return sched_now; }
 
+void *get_current_task_token(void) { return current_task; }
+
 void scheduler_init_fds() {
   if (scheduler_fds_ready) {
     return;
@@ -743,7 +746,20 @@ void cancel_task(void *handle) {
   pthread_mutex_lock(&scheduler_mutex);
   SchedulerTask *task = find_task(handle);
   cancel_task_recursive(task);
+  uint64_t tick = current_task ? get_tl_tick() : get_current_sample();
   pthread_mutex_unlock(&scheduler_mutex);
+
+  if (!task) {
+    return;
+  }
+
+  for (size_t i = 0; i < scheduler_tasks_size; ++i) {
+    SchedulerTask *cancelled = scheduler_tasks[i];
+    if (cancelled->cancelled && !cancelled->audio_cancel_sent) {
+      cancel_audio_task(&ctx.msg_queue, cancelled, tick);
+      cancelled->audio_cancel_sent = true;
+    }
+  }
 }
 
 void defer_quant(double quant, DeferQuantCallback callback) {
@@ -810,7 +826,9 @@ void *ylc_play_pattern_start(double quant, SchedulerCallback callback,
     return NULL;
   }
 
-  uint64_t now = get_current_sample();
+  /* A fork created by an early callback inherits its logical event tick.
+     Top-level starts still use the live audio clock. */
+  uint64_t now = current_task ? get_tl_tick() : get_current_sample();
 
   double delay_seconds = 0.0;
 

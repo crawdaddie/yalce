@@ -1,5 +1,6 @@
 #include "./audio_instructions.h"
 #include "ctx.h"
+#include "scheduling.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -16,6 +17,14 @@ static AudioPending active_events[AUDIO_EVENT_HEAP_MAX];
 static int active_offsets[AUDIO_EVENT_HEAP_MAX];
 static int active_event_count;
 static uint64_t event_sequence;
+
+typedef struct {
+  void *task;
+  uint64_t tick;
+} AudioCancellation;
+
+static AudioCancellation cancellations[MSG_QUEUE_MAX_SIZE];
+static int cancellation_count;
 
 static int audio_event_before(AudioPending left, AudioPending right) {
   if (left.msg.tick != right.msg.tick) {
@@ -81,6 +90,42 @@ static AudioPending heap_pop(void) {
     heap_down(0);
   }
   return result;
+}
+
+static int event_cancelled(audio_instruction msg) {
+  if (!msg.task) {
+    return 0;
+  }
+
+  for (int i = 0; i < cancellation_count; i++) {
+    AudioCancellation cancellation = cancellations[i];
+    if (cancellation.task == msg.task && msg.tick >= cancellation.tick) {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+static void record_cancellation(audio_instruction msg) {
+  if (!msg.payload.AUDIO_CANCEL_TASK.task) {
+    return;
+  }
+
+  for (int i = 0; i < cancellation_count; i++) {
+    AudioCancellation *cancellation = &cancellations[i];
+    if (cancellation->task == msg.payload.AUDIO_CANCEL_TASK.task) {
+      if (msg.tick < cancellation->tick) {
+        cancellation->tick = msg.tick;
+      }
+      return;
+    }
+  }
+
+  if (cancellation_count < MSG_QUEUE_MAX_SIZE) {
+    cancellations[cancellation_count++] = (AudioCancellation){
+        .task = msg.payload.AUDIO_CANCEL_TASK.task, .tick = msg.tick};
+  }
 }
 
 void node_connect_input(int idx, NodeRef node, NodeRef input);
@@ -271,6 +316,16 @@ void process_audio_events_pre(uint64_t current_tick, int frame_count,
   uint64_t end_tick = current_tick + (uint64_t)frame_count;
   while (event_heap_size > 0 && event_heap[0].msg.tick < end_tick) {
     AudioPending event = heap_pop();
+
+    if (event.msg.type == AUDIO_CANCEL_TASK) {
+      record_cancellation(event.msg);
+      continue;
+    }
+
+    if (event_cancelled(event.msg)) {
+      continue;
+    }
+
     int offset = event.msg.tick < current_tick
                      ? 0
                      : (int)(event.msg.tick - current_tick);
@@ -347,9 +402,25 @@ void push_msg(audio_instructions_queue *queue, audio_instruction msg) {
     return;
   }
 
+  if (msg.type != AUDIO_CANCEL_TASK && !msg.task) {
+    msg.task = get_current_task_token();
+  }
+
   *(queue->buffer + queue->write_ptr) = msg;
   queue->write_ptr = (queue->write_ptr + 1) % MSG_QUEUE_MAX_SIZE;
   queue->num_msgs++;
+}
+
+void cancel_audio_task(audio_instructions_queue *queue, void *task,
+                       uint64_t tick) {
+  if (!queue || !task) {
+    return;
+  }
+
+  push_msg(queue, (audio_instruction){
+                         .type = AUDIO_CANCEL_TASK,
+                         .tick = tick,
+                         .payload.AUDIO_CANCEL_TASK = {.task = task}});
 }
 
 audio_instruction pop_msg(audio_instructions_queue *queue) {

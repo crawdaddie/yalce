@@ -81,9 +81,13 @@ static Predicate *freshen_map_apply_to_predicates(FreshenMap *map,
           freshen_map_apply_to_type(map, p->data.HAS_FIELD.record);
       Type *fresh_field =
           freshen_map_apply_to_type(map, p->data.HAS_FIELD.field_type);
-      result = predicate_append_has_field(result, fresh_record,
-                                          p->data.HAS_FIELD.field_name,
-                                          fresh_field);
+      result = p->data.HAS_FIELD.field_index >= 0
+                   ? predicate_append_has_index(
+                         result, fresh_record,
+                         p->data.HAS_FIELD.field_index, fresh_field)
+                   : predicate_append_has_field(
+                         result, fresh_record,
+                         p->data.HAS_FIELD.field_name, fresh_field);
     }
   }
   return result;

@@ -190,6 +190,14 @@ atom_expr:
                                         $$ = ast_record_access($1, member);
                                         SET_AST_LOC($$, @$);
                                       }
+
+  | atom_expr AT INTEGER         {
+                                        // Ast *member = ast_identifier($3);
+                                        Ast *member = AST_CONST(AST_INT, $3);
+                                        SET_AST_LOC(member, @3);
+                                        $$ = ast_record_access($1, member);
+                                        SET_AST_LOC($$, @$);
+                                      }
   ;
 
 simple_expr:

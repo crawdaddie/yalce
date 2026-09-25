@@ -455,6 +455,22 @@ static bool is_operator_name(const char *id) {
   return id && id[0] != '\0' && strchr(operator_chars, id[0]) != NULL;
 }
 
+static bool is_builtin_operator(const char *id) {
+  static const char *const names[] = {"+",  "-",  "*",  "/",  "%",
+                                      "<",  ">",  "&&", "||", ">=",
+                                      "<=", "!=", "==", "|>", ":",
+                                      "..", "::", "=",  "!"};
+  size_t count = sizeof(names) / sizeof(names[0]);
+
+  for (size_t i = 0; i < count; i++) {
+    if (strcmp(id, names[i]) == 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 bool is_custom_binop(const char *id) {
   custom_binops_t *bb = pctx.custom_binops;
   while (bb) {
@@ -469,7 +485,7 @@ bool is_custom_binop(const char *id) {
     bb = bb->next;
   }
 
-  return is_operator_name(id);
+  return is_operator_name(id) && !is_builtin_operator(id);
 }
 
 Ast *ast_application(Ast *func, Ast *arg) {

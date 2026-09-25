@@ -937,9 +937,15 @@ Type *instantiate_env(TypeEnv *entry, TICtx *ctx) {
         ctx->predicates = predicate_append_comparable(
             ctx->predicates, p->trait, p->data.COMPARABLE.witness, args);
       } else if (p->kind == PRED_HAS_FIELD) {
-        ctx->predicates = predicate_append_has_field(
-            ctx->predicates, p->data.HAS_FIELD.record,
-            p->data.HAS_FIELD.field_name, p->data.HAS_FIELD.field_type);
+        if (p->data.HAS_FIELD.field_index >= 0) {
+          ctx->predicates = predicate_append_has_index(
+              ctx->predicates, p->data.HAS_FIELD.record,
+              p->data.HAS_FIELD.field_index, p->data.HAS_FIELD.field_type);
+        } else {
+          ctx->predicates = predicate_append_has_field(
+              ctx->predicates, p->data.HAS_FIELD.record,
+              p->data.HAS_FIELD.field_name, p->data.HAS_FIELD.field_type);
+        }
       }
     }
     return entry->type;
@@ -993,8 +999,13 @@ Type *instantiate_env(TypeEnv *entry, TICtx *ctx) {
               ? freshen_map_apply_to_type(&base, p->data.HAS_FIELD.field_type)
               : p->data.HAS_FIELD.field_type;
       ctx->predicates =
-          predicate_append_has_field(ctx->predicates, fresh_record,
-                                     p->data.HAS_FIELD.field_name, fresh_field);
+          p->data.HAS_FIELD.field_index >= 0
+              ? predicate_append_has_index(
+                    ctx->predicates, fresh_record,
+                    p->data.HAS_FIELD.field_index, fresh_field)
+              : predicate_append_has_field(
+                    ctx->predicates, fresh_record,
+                    p->data.HAS_FIELD.field_name, fresh_field);
     }
   }
 
@@ -1414,6 +1425,32 @@ static Type *infer_expr_inner(Ast *ast, TICtx *ctx) {
     break;
   }
   case AST_RECORD_ACCESS: {
+    if (ast->data.AST_RECORD_ACCESS.member->tag == AST_INT) {
+      int field_index = ast->data.AST_RECORD_ACCESS.member->data.AST_INT.value;
+      Type *rec_type = infer_expr(ast->data.AST_RECORD_ACCESS.record, ctx);
+      if (!rec_type || field_index < 0) {
+        return NULL;
+      }
+
+      Type *rec_view = record_field_view(rec_type);
+      if (rec_view->kind == T_VAR) {
+        Type *field_type = next_tvar();
+        ctx->predicates = predicate_append_has_index(
+            ctx->predicates, rec_view, field_index, field_type);
+        ast->data.AST_RECORD_ACCESS.index = field_index;
+        type = field_type;
+        break;
+      }
+
+      if (rec_view->kind != T_CONS ||
+          field_index >= rec_view->data.T_CONS.num_args) {
+        return type_error(ast, "tuple index %d is out of bounds", field_index);
+      }
+
+      ast->data.AST_RECORD_ACCESS.index = field_index;
+      type = rec_view->data.T_CONS.args[field_index];
+      break;
+    }
 
     Type *rec_type = infer_expr(ast->data.AST_RECORD_ACCESS.record, ctx);
     if (!rec_type) {
@@ -1439,9 +1476,9 @@ static Type *infer_expr_inner(Ast *ast, TICtx *ctx) {
               te->type->kind == T_CONS && !is_sum_type(te->type)) {
             Type *decl_type =
                 resolve_type_in_env(deep_copy_type(te->type), ctx->env);
-            type = create_type_multi_param_fn(
-                decl_type->data.T_CONS.num_args, decl_type->data.T_CONS.args,
-                decl_type);
+            type = create_type_multi_param_fn(decl_type->data.T_CONS.num_args,
+                                              decl_type->data.T_CONS.args,
+                                              decl_type);
           } else {
             type = instantiate_env(te, ctx);
           }
@@ -1608,7 +1645,21 @@ Predicate *predicate_append_has_field(Predicate *list, Type *record,
                    .trait = NULL,
                    .data = {.HAS_FIELD = {.record = record,
                                           .field_name = field_name,
-                                          .field_type = field_type}},
+                                          .field_type = field_type,
+                                          .field_index = -1}},
+                   .next = list};
+  return p;
+}
+
+Predicate *predicate_append_has_index(Predicate *list, Type *record,
+                                      int field_index, Type *field_type) {
+  Predicate *p = t_alloc(sizeof(Predicate));
+  *p = (Predicate){.kind = PRED_HAS_FIELD,
+                   .trait = NULL,
+                   .data = {.HAS_FIELD = {.record = record,
+                                          .field_name = NULL,
+                                          .field_type = field_type,
+                                          .field_index = field_index}},
                    .next = list};
   return p;
 }
@@ -1641,9 +1692,13 @@ Predicate *predicate_apply_subst(Subst *subst, Predicate *preds) {
           apply_subst_to_type(subst, p->data.HAS_FIELD.record);
       Type *resolved_field =
           apply_subst_to_type(subst, p->data.HAS_FIELD.field_type);
-      result = predicate_append_has_field(result, resolved_record,
-                                          p->data.HAS_FIELD.field_name,
-                                          resolved_field);
+      result = p->data.HAS_FIELD.field_index >= 0
+                   ? predicate_append_has_index(
+                         result, resolved_record,
+                         p->data.HAS_FIELD.field_index, resolved_field)
+                   : predicate_append_has_field(
+                         result, resolved_record,
+                         p->data.HAS_FIELD.field_name, resolved_field);
     }
   }
   return result;
@@ -1666,9 +1721,15 @@ Predicate *predicate_duplicate(Predicate *preds) {
       result = predicate_append_comparable(result, p->trait,
                                            p->data.COMPARABLE.witness, args);
     } else if (p->kind == PRED_HAS_FIELD) {
-      result = predicate_append_has_field(result, p->data.HAS_FIELD.record,
-                                          p->data.HAS_FIELD.field_name,
-                                          p->data.HAS_FIELD.field_type);
+      result = p->data.HAS_FIELD.field_index >= 0
+                   ? predicate_append_has_index(
+                         result, p->data.HAS_FIELD.record,
+                         p->data.HAS_FIELD.field_index,
+                         p->data.HAS_FIELD.field_type)
+                   : predicate_append_has_field(
+                         result, p->data.HAS_FIELD.record,
+                         p->data.HAS_FIELD.field_name,
+                         p->data.HAS_FIELD.field_type);
     }
   }
   return result;
@@ -1946,19 +2007,28 @@ int resolve_predicates(Subst **subst_ptr, Predicate *preds) {
           continue;
         }
 
-        if (record_view->kind != T_CONS || !record_view->data.T_CONS.names) {
+        if (record_view->kind != T_CONS ||
+            (p->data.HAS_FIELD.field_index < 0 &&
+             !record_view->data.T_CONS.names)) {
           if (err_stream) {
             fprintf(err_stream, "Type Error: ");
             print_type_to_stream(record, err_stream);
-            fprintf(err_stream, " does not have field %s\n",
-                    p->data.HAS_FIELD.field_name);
+            if (p->data.HAS_FIELD.field_index >= 0) {
+              fprintf(err_stream, " does not have field at index %d\n",
+                      p->data.HAS_FIELD.field_index);
+            } else {
+              fprintf(err_stream, " does not have field %s\n",
+                      p->data.HAS_FIELD.field_name);
+            }
             fflush(err_stream);
           }
           return 1;
         }
 
-        int field_idx =
-            get_struct_member_idx(p->data.HAS_FIELD.field_name, record_view);
+        int field_idx = p->data.HAS_FIELD.field_index >= 0
+                            ? p->data.HAS_FIELD.field_index
+                            : get_struct_member_idx(
+                                  p->data.HAS_FIELD.field_name, record_view);
         if (field_idx < 0) {
           if (err_stream) {
             fprintf(err_stream, "Type Error: ");
@@ -1970,13 +2040,29 @@ int resolve_predicates(Subst **subst_ptr, Predicate *preds) {
           return 1;
         }
 
+        if (field_idx >= record_view->data.T_CONS.num_args) {
+          if (err_stream) {
+            fprintf(err_stream, "Type Error: ");
+            print_type_to_stream(record, err_stream);
+            fprintf(err_stream, " does not have field at index %d\n",
+                    field_idx);
+            fflush(err_stream);
+          }
+          return 1;
+        }
+
         Type *actual_field_type = record_view->data.T_CONS.args[field_idx];
         Subst *next_subst = NULL;
         if (unify_types(field_type, actual_field_type, subst, &next_subst) !=
             0) {
           if (err_stream) {
-            fprintf(err_stream, "Type Error: field %s has type ",
-                    p->data.HAS_FIELD.field_name);
+            fprintf(err_stream, "Type Error: field ");
+            if (p->data.HAS_FIELD.field_index >= 0) {
+              fprintf(err_stream, "at index %d has type ", field_idx);
+            } else {
+              fprintf(err_stream, "%s has type",
+                      p->data.HAS_FIELD.field_name);
+            }
             print_type_to_stream(actual_field_type, err_stream);
             fprintf(err_stream, ", not ");
             print_type_to_stream(field_type, err_stream);
@@ -2248,8 +2334,9 @@ Subst *solve_constraints(Constraint *constraints) {
         loc_info *loc = c->site ? c->site->loc_info : NULL;
         if (loc && loc->src_file && loc->src_content) {
           // Source next to the location; the caret pads past the header.
-          int header_len = fprintf(err_stream, "Type Error at %s %d:%d: ",
-                                   loc->src_file, loc->line, loc->col);
+          int header_len =
+              fprintf(err_stream, "Type Error at %s %d:%d: ", loc->src_file,
+                      loc->line, loc->col);
           print_source_caret(c->site, header_len);
         } else {
           fprintf(err_stream, "Type Error: ");

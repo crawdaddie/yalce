@@ -109,6 +109,8 @@ Predicate *predicate_append_comparable(Predicate *list, TypeClass *trait,
 Predicate *predicate_append_has_field(Predicate *list, Type *record,
                                       const char *field_name,
                                       Type *field_type);
+Predicate *predicate_append_has_index(Predicate *list, Type *record,
+                                      int field_index, Type *field_type);
 Predicate *predicate_apply_subst(Subst *subst, Predicate *preds);
 Predicate *predicate_duplicate(Predicate *preds);
 int resolve_predicates(Subst **subst, Predicate *preds);

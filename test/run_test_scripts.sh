@@ -1,10 +1,19 @@
 #!/bin/bash
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+cd "$SCRIPT_DIR" || exit 1
+
 # Build the project
-make -C ../
+make -C "$ROOT"
 
 # Set the path to the executable
-EXE=ylc
+EXE="$ROOT/build/ylc"
+
+if [ ! -x "$EXE" ]; then
+    echo "Error: $EXE does not exist"
+    exit 1
+fi
 
 # Check if the test_scripts directory exists
 if [ ! -d "./test_scripts" ]; then
@@ -37,19 +46,17 @@ NC='\033[0m'
 # Loop through each .ylc file and run the executable
 echo -e "Testing YLC lib"
 for file in $YLC_STDLIB_FILES; do
-    ylc --test $file
+    "$EXE" --test "$file"
     exit_code=$?
     if [ $exit_code -eq 139 ]; then  # 139 indicates segmentation fault
         echo -e "❌ - segfault running $file"
     fi
 done
 for file in $YLC_FILES; do
-    ylc --test $file
+    "$EXE" --test "$file"
     exit_code=$?
     if [ $exit_code -eq 139 ]; then  # 139 indicates segmentation fault
         echo -e "❌ - segfault running $file"
     fi
 done
-
-
 

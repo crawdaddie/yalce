@@ -12,6 +12,7 @@ typedef struct {
     NODE_SET_INPUT,
     NODE_PIPE_INPUT,
     NODE_MIX_INPUT,
+    AUDIO_CANCEL_TASK,
   } type;
   // int frame_offset;
   uint64_t tick;
@@ -59,7 +60,12 @@ typedef struct {
       Node *target;
     } NODE_REMOVE;
 
+    struct AUDIO_CANCEL_TASK {
+      void *task;
+    } AUDIO_CANCEL_TASK;
+
   } payload;
+  void *task;
 } audio_instruction;
 
 #define MSG_QUEUE_MAX_SIZE 256
@@ -74,6 +80,8 @@ typedef struct {
 
 void push_msg(audio_instructions_queue *queue, audio_instruction msg);
 audio_instruction pop_msg(audio_instructions_queue *queue);
+void cancel_audio_task(audio_instructions_queue *queue, void *task,
+                       uint64_t tick);
 audio_instruction *create_bundle(int length);
 void print_msg(audio_instruction *msg);
 

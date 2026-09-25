@@ -73,6 +73,7 @@ typedef struct Predicate {
       Type *record;
       const char *field_name;
       Type *field_type;
+      int field_index;
     } HAS_FIELD;
   } data;
   struct Predicate *next;

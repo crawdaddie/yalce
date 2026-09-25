@@ -24,6 +24,7 @@ extern atomic_ullong global_sample_position;
 uint64_t get_current_sample();
 uint64_t get_tl_tick();
 uint64_t get_sched_tick();
+void *get_current_task_token(void);
 
 void defer_quant(double quant, DeferQuantCallback callback);
 void defer_quant_offset(double quant, double offset,
