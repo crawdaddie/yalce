@@ -1,0 +1,453 @@
+open libs/audio_jit/DSP;
+import std/Math;
+
+import std/Arrays;
+import libs/audio_jit/SF;
+let bufs = [|
+  "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_nospace.flac",
+  "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_synther.flac",
+  "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_tecno.flac",
+  "~/Sounds/rns_samples/HiHats/Closed/ech_hat_verydirty.flac",
+  "~/Sounds/rns_samples/HiHats/Cymbal/dh_cym_ride_sweet.flac",
+  "~/Sounds/rns_samples/HiHats/Open/dh_ophat_long_ender.flac",
+  "~/Sounds/rns_samples/Kicks/dh_kick_mid_tighter.flac",
+  "~/Sounds/rns_samples/Kicks/ech_kick_resample.flac",
+  "~/Sounds/rns_samples/Snares/dh_snr_hi_grainy.flac",
+  "~/Sounds/rns_samples/Snares/dh_snr_hi_enveloper.flac",
+  "~/Sounds/rns_samples/Snares/dh_snr_syn_808er.flac",
+  "~/Sounds/rns_samples/Snares/dh_snr_syn_whitenoise.flac",
+  "~/Sounds/rns_samples/Snares/ech_snare_analog.flac",
+  "~/Sounds/rns_samples/Percussion/dh_perc_click_metal.flac",
+  "~/Sounds/rns_samples/Percussion/ech_perc_909tom.flac",
+  "~/Sounds/rns_samples/Toms/dh_perc_tom_wave.flac",
+  "~/Sounds/rns_samples/Claps/ech_clap_vinyl909.flac",
+|] |> Arrays.map (SF.load_sf);
+
+
+let kd = @Audio fn () -> 
+  let rate = 1.;
+  let f = bufs[7]; 
+  let t = trig 0;
+
+  t
+  |> bufplay f.data (f.samplerate * spf) 0.
+  |> (*) (t |> rect 0.1 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+  |> (*) (Math.db_amp 12.)
+  # |> Filter.lpf 500. 1.
+;;
+
+let snr = @Audio fn () -> 
+  let rate = 1.;
+  let f = bufs[8]; 
+  let t = trig 0;
+
+  t
+  |> bufplay f.data (f.samplerate * spf) 0.
+  |> (*) (t |> rect 0.1 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+  # |> (*) (Math.db_amp 12.)
+;;
+
+let hh = @Audio fn () -> 
+  let rate = 1.;
+  let f = bufs[1]; 
+  let t = trig 0;
+
+  t
+  |> bufplay f.data (f.samplerate * spf) 0.
+  |> (*) (t |> rect 0.05 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+  # |> (*) (Math.db_amp 12.)
+;;
+
+let hh2 = @Audio fn () -> 
+  let rate = 1.2;
+  let f = bufs[1]; 
+  let t = trig 0;
+
+  t
+  |> bufplay f.data (rate * f.samplerate * spf) 0.
+  |> (*) (t |> rect 0.05 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+  # |> (*) (Math.db_amp 12.)
+;;
+
+
+
+
+let cymbal = @Audio fn freq ->
+  let t = trig 0;
+  # t
+  # |> decay 0.5
+  # |> (*) (sin_osc (freq * ~[1., 1.5, 2.01, 3.5, 4.2]))
+  # |> (*) (~[1., 0.6, 0.8, 0.5, 0.3])
+  # |> sum
+
+  freq
+  |> pm_osc 1.01 1.2
+  |> (+) (pink () 
+    |> Filter.bpf freq 16.
+    |> (*) (Math.db_amp 40.)
+  )
+  # freq |> pm_osc 2.03 1.2 * (decay 0.1 t))
+  |> (*) (t |> rect 0.5 |> adsr 0. 0.1 0.2 1. |> kill_on_end)
+  |> (*) (Math.db_amp -15.)
+  
+;;
+
+let mels = @Audio fn freq dur ->
+  let t = trig 0;
+
+  freq * (~[ lfnoise 0.5 0.99 1.01, lfnoise 0.5 0.99 1.01])
+  |> saw_osc 
+  |> sum
+  |> Filter.lpf 5000. 1.
+  |> (*) (t |> rect dur |> adsr 0.01 0.1 0.5 0.5 |> kill_on_end)
+  |> (*) (Math.db_amp -16.)
+  
+;;
+
+let r = Reverb.cathedral 0. |> play_node;
+
+let beat = 60. / 90.;
+# cymbal 200. |> play_node
+let note = fn d n ->
+
+  cymbal (n |> midi_freq) ~> r;
+  d * beat
+;;
+
+let mel = fn d n ->
+  mels (n |> midi_freq) (d * beat) ~> r;
+  d * beat
+;;
+
+let notes =
+[|
+  47., 62., 59., 62.,
+  47., 62., 59., 62.,
+  49., 61., 49., 61., 49., 61.,
+  53., 54.,
+|];
+
+let m = fn () ->
+  yield mel 2. 59.;
+  yield mel 0.75 59.;
+  yield mel 0.75 59.;
+  yield mel .5 57.;
+  yield mel 2. 61.;
+  yield mel 0.75 61.; 
+  yield mel 1. 61.;
+  yield mel .25 62.
+
+;;
+let m2 = fn () ->
+  yield mel 1. 73.;
+  yield mel 2. 71.;
+  yield mel .25 71.;
+  yield mel .3 73.;
+  yield mel .3 71.;
+  yield mel 2. 71.;
+  yield 2.15 * beat
+;;
+
+let m3 = fn () ->
+  yield mel 1. 62.;
+  yield mel 0.75 61.;
+  yield mel 1.25 61.;
+  yield mel 5. 88.
+;;
+
+
+let c = fn () ->
+  yield note 0.5 @@ notes[0];
+  yield note 0.5 @@ notes[1];
+  yield note 0.5 @@ notes[2];
+
+  let sync = 0.25 * (Double (Math.rand_double () <= 0.3));
+  yield note (0.5 - sync) @@ notes[3];
+
+  yield note (0.5 + sync) @@ notes[4];
+  yield note 0.5 @@ notes[5];
+  yield note 0.5 @@ notes[6];
+  yield note 0.5 @@ notes[7];
+
+  yield note 0.5 @@ notes[8];
+  yield note 0.5 @@ notes[9];
+  yield note 0.5 @@ notes[10];
+  yield note 0.5 @@ notes[11];
+
+  yield note 0.5 @@ notes[12];
+  yield note 0.5 @@ notes[13];
+  yield note 0.5 @@ notes[14];
+  yield note 0.5 @@ notes[15]
+
+  # yield c ()
+;;
+let hhc = fn () ->
+  yield hhc ()
+;;
+let kick_durs = [|
+  3.5, 3.25, 1.75, 0.75, 5.5, 1.25,
+  # 3.5, 3.25, 1.75, 0.75, 5.5, 1.25,
+  # 8., 7., 0.5, 1.5, 1.5, 4.5,
+  # 1., 3.5, 1., 1., 2.5, 5.5,
+  # 1.5, 3.5, 3., 1., 1., 1.5,
+  # 1.5, 4., 1.5, 2., 2., 2., 2.,
+  # 7., 6.5, 3.5, 1.5, 11., 2.5,
+  # 2.5, 3., 1., 0.5, 2.5, 4.,
+  # 4., 1., 1., 10., 2.5
+|];
+
+let stutter = @Audio fn trig_sig active beat_length subdiv rate inp ->
+  let live = delay_line 4.;
+  let size = array_size live;
+  let segment = beat_length * subdiv;
+  let length = Math.max 8. (segment / spf);
+  let write_index = [| 0 |];
+  let start_index = [| 0. |];
+  let state = [| 0., 0. |];
+
+  let write = write_index[0];
+  let start = start_index[0];
+  let playhead = state[0];
+  live[write] := inp;
+
+  let retrigger = Double (trig_sig == 1.);
+  let capture = retrigger * write + (1. - retrigger) * start;
+  let position = retrigger * (length - 1.) + (1. - retrigger) * playhead;
+  let chunk = tabread_samp live (capture - length + 1. + position);
+  let playing = Double (active == 1.);
+  let output = playing * chunk + (1. - playing) * inp;
+
+  let next = position + rate;
+  let wraps = Math.floor (next / length);
+  let next_position = next - length * wraps;
+  start_index[0] := capture;
+  let keep_playing = Double (active >= 0.5);
+  state[0] := keep_playing * next_position + (1. - keep_playing) * playhead;
+  state[1] := trig_sig;
+  write_index[0] := (write + 1) % size;
+  output
+;;
+let fx = @Audio fn sel trigger subdiv beat_length rate inpp: (Stereo) ->
+  let inp = inpp + (inpp * (Double (sel == 5.)) |> Filter.hpf 800. 1. |> Reverb.concert);
+
+  let comb_short = inp
+  |> comb (lfnoise 1. 0.01 0.025) 0.1 0.5
+  |> disperser 100. 1. 1.
+  ;
+
+  let latch = sah inp (trig (rand_trig 4000. 8000. trigger))
+  ;
+
+
+  let shifted = inp
+    |> pitchshift 0.01 ((arr_choose [|0.5, 1., 1.2, 1.5, 2., 2., 4., 1.5|] trigger) * (lfnoise 1. 0.9 1.2)) 0. 0.
+    |> (*) (Math.db_amp 4.)
+    ;
+
+  let comb_long = inp
+    |> comb (lfnoise 0.5 0.01 0.1) 0.1 0.5
+    |> (*) (Math.db_amp (-1.))
+    |> disperser 100. 1. 1.
+
+    ;
+  let ring_source = inp |> Filter.lpf 1000. 0.707 ;
+
+  let ring = inp
+    |> (*) (sin_osc (ring_source |> zero_xing_freq |> lag 0.01))
+    |> (*) (Math.db_amp 4.)
+    ;
+
+  let stutt = stutter trigger
+    (Double (sel == 6.))
+    beat_length subdiv rate inp ;
+
+  (match sel with
+    | 0. -> comb_short
+    | 1. -> latch
+    | 2. -> shifted
+    | 3. -> comb_long
+    | 4. -> ring
+    | 5. -> inp
+    | 6. -> stutt
+    | _ -> inp)
+  |> glue -12. 4. 0.005 0.15 6. 3.
+  |> (*) (Math.db_amp -2.)
+  # |> Filter.lpf 10000. 0.2
+
+;;
+
+let fx_node = fx 9. 0. 1. (60. / 180.) 1. 0. |> play_node ;
+
+
+let set_fx_rand = fn () ->
+  set_input_scalar fx_node 0 @@ Double (Math.rand_int 9) ;
+  set_input_trig fx_node 1
+;;
+
+# let play_fx = fn selection node ->
+#   set_fx fx_node selection ;
+#   match selection with
+#   | 6. -> (
+#     set_input_scalar fx_node 2 @@ Math.array_choose [| 0.25, 0.25, 0.25, 0.125, 0.75, 0.5, 1.5 |];
+#     set_input_scalar fx_node 4 @@ Math.array_choose [| -1., 1., 2.|];
+#     ()
+#   )
+#   | _ -> ()
+#   ;
+#   node ~> fx_node
+# ;;
+#
+# let play_fx = fn selection node ->
+#   node ~> fx_node
+#   set_fx fx_node selection ;
+#   match selection with
+#   | 6. -> (
+#     set_input_scalar fx_node 2 @@ Math.array_choose [| 0.25, 0.25, 0.25, 0.125, 0.75, 0.5, 1.5 |];
+#     set_input_scalar fx_node 4 @@ Math.array_choose [| -1., 1., 2.|];
+#     ()
+#   )
+#   | _ -> ()
+#   ;
+# ;;
+
+
+let kick_routine = fn () ->
+  kick_durs
+  |> iter
+  |> cor_map (fn d ->
+    kd () |> play_node;
+    d
+  )
+;;
+
+# let kick_routine = fn () ->
+#   kd () |> play_node;
+#   yield 4.5 ;
+#   kd () |> play_node;
+#   yield 3.5;
+#   kd () |> play_node;
+#   yield 4.5 ;
+#   kd () |> play_node;
+#   yield 1.5;
+#   kd () |> play_node;
+#   yield 1.5;
+#
+#   yield 5.
+# ;;
+
+let snr_routine = fn () ->
+  yield 1.;
+  snr () ~> fx_node;
+  yield 2.;
+  snr () ~> fx_node;
+  yield 1.;
+
+  yield 1.;
+  snr () ~> fx_node;
+  yield 2.;
+
+  snr () ~> fx_node;
+  yield 1.;
+
+  yield 1.;
+
+  snr () ~> fx_node;
+  yield 2.;
+
+  snr () ~> fx_node;
+  yield 1.;
+
+  yield 1.;
+
+  snr () ~> fx_node;
+  yield 2.;
+
+  snr () ~> fx_node;
+  yield 1.
+;;
+
+let hh_routine = fn () ->
+  array_fill_const 64 0.25
+  |> iter
+  |> cor_map (fn d ->
+    Math.chance 0.6 (
+      \Math.chance2 0.5
+      (\hh () ~> fx_node)
+      (\hh2 () ~> fx_node)
+    );
+    d * beat * 0.5
+  )
+;;
+
+let drums = fn () ->
+  kick_routine () |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.; # 16 beats
+  snr_routine () |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.; # 16
+  hh_routine () |> play_pattern 0.; #16
+  yield 16. * beat * 0.5;
+
+  # snr_routine () |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.;
+  # yield 8. * beat * 0.5;
+  #
+  # kick_routine () |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.; # 16 beats
+  # hh_routine () |> play_pattern 0.;
+  # snr_routine () |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.;
+  # yield 8. * beat * 0.5;
+  #
+  # snr_routine () |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.;
+  # yield 8. * beat * 0.5;
+
+  yield drums ()
+;;
+
+let fx_set_routine = fn () ->
+  set_fx_rand ();
+  yield beat * 0.5 * Math.array_choose [|0.5, 1.5, 0.25, 1.|];
+  yield fx_set_routine ()
+;;
+
+let g = fn () ->
+  c () |> play_pattern 0.;
+  yield 8. * beat;
+
+  c () |> play_pattern 0.;
+  yield 8. * beat;
+  drums () |> play_pattern 0.;
+
+  c () |> play_pattern 0.;
+  yield 8. * beat;
+
+  c () |> play_pattern 0.;
+  yield 8. * beat;
+
+  let g2 = fn () ->
+    m () |> play_pattern 0.;
+    c () |> play_pattern 0.;
+    yield 8. * beat;
+
+
+    m () |> play_pattern 0.;
+    c () |> play_pattern 0.;
+    yield 8. * beat;
+
+    m2 () |> play_pattern 0.;
+    c () |> play_pattern 0.;
+    yield 8. * beat;
+
+    m2 () |> play_pattern 0.;
+    c () |> play_pattern 0.;
+    yield 8. * beat;
+
+
+    m3 () |> play_pattern 0.;
+    c () |> play_pattern 0.;
+    yield 8. * beat;
+    yield g2 ()
+  ;;
+
+  fx_set_routine () |> play_pattern 0.;
+  yield g2 ()
+;;
+
+g () |> play_pattern beat;
+
+record_start "vordhosbn_cover.wav" 121. ;

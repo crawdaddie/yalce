@@ -1,21 +1,11 @@
 open libs/audio_jit/DSP;
 import std/Math;
 
-let set_input_scalar = extern fn Ptr -> Int -> Double -> Ptr;
-let set_input_trig = extern fn Ptr -> Int -> Ptr;
 
-
-
-let perc = @Audio fn attack decay_time ->
-  decay decay_time 1.
-;;
-
-
-let rim = @Audio fn freq scale_factor duration ->
+let rim = @Audio fn freq duration ->
   let trigger = trig 0 ;
   let base_freq =
     freq
-    |> (*) scale_factor
     |> (*) (xline 1.3 1. 0.002);
   let f = base_freq |> (*) (~ [0.9, 1., 0.7, 0.5, 2.6]);
 
@@ -632,7 +622,7 @@ let play_fx = fn selection node ->
   )
   | _ -> ()
   ;
-  play_into fx_node node
+  node ~> fx_node
 ;;
 
 let g = r 0. |> play_node;
@@ -718,22 +708,22 @@ let play_kick = fn d ->
 ;;
 
 let play_kick2 = fn d ->
-  kick2 60. (d * beat) |> play_into fx_node;
+  kick2 60. (d * beat) ~> fx_node;
   d * beat
 ;;
 
 let play_rim = fn d ->
-  rim 1700. 1. 0.1 |> play_into fx_node ;
+  rim 1700. 0.1 ~> fx_node ;
   d * beat
 ;;
 
 let play_rim2 = fn d ->
-  rim2 2000. 1. 0.1 1. |> play_into fx_node  ;
+  rim2 2000. 1. 0.1 1. ~> fx_node  ;
   d * beat
 ;;
 
 let play_rim3 = fn d ->
-  rim3 3000. (d * beat) 1. |> play_into fx_node ;
+  rim3 3000. (d * beat) 1. ~> fx_node ;
   d * beat
 ;;
 
@@ -761,9 +751,9 @@ let drums = fn () ->
   |> iter
   |> cor_map (fn d -> 
     Math.chance 0.2 (fn () ->
-      rim (Math.rrand 1500. 1800.) 1. 0.05 |> play_into fx_node ;
+      rim (Math.rrand 1500. 1800.) (Math.rrand 0.05 0.5) ~> fx_node ;
     );
-    metal_hat (Math.rrand 0.01 0.05) |> play_into fx_node; 
+    metal_hat (Math.rrand 0.01 0.05) ~> fx_node; 
     d * beat
   )
   |> play_pattern 0.;
