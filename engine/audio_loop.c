@@ -519,10 +519,7 @@ int start_audio() {
 
   double actual_latency = outstream->software_latency;
   int output_buf_frames =
-      (int)(actual_latency * outstream->sample_rate + 0.999999);
-  if (output_buf_frames < BUF_SIZE) {
-    output_buf_frames = BUF_SIZE;
-  }
+      get_output_buf_frames(actual_latency, outstream->sample_rate);
   double *new_output_buf =
       realloc(ctx.output_buf, sizeof(double) * output_buf_frames * LAYOUT);
   if (!new_output_buf) {
@@ -570,6 +567,9 @@ int start_audio() {
 
   print_routing_setup(outstream, instream, ring_buffer);
 
+  ctx.sample_rate = outstream->sample_rate;
+  ctx.spf = 1.0 / outstream->sample_rate;
+
   fprintf(stderr, "\nStarting streams...\n");
 
   if (instream && (err = soundio_instream_start(instream))) {
@@ -579,9 +579,6 @@ int start_audio() {
   if ((err = soundio_outstream_start(outstream))) {
     panic("unable to start output device: %s", soundio_strerror(err));
   }
-  ctx.sample_rate = outstream->sample_rate;
-  ctx.spf = 1.0 / outstream->sample_rate;
-
   set_block_time(&start_time);
   return 0;
 }

@@ -1,6 +1,9 @@
 #include "./config.h"
 #include <stdio.h>
 
+#if defined(YLC_CONFIG_WEAK) && defined(__GNUC__)
+__attribute__((weak))
+#endif
 RTConfig ylc_config = {
     .interactive_mode = false,
     .test_mode = false,

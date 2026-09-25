@@ -1,6 +1,19 @@
 #include "./audio_loop_utils.h"
+#include "common.h"
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+
+int get_output_buf_frames(double latency, int sample_rate) {
+  int frames = (int)ceil(latency * (double)sample_rate);
+
+  if (frames < BUF_SIZE) {
+    frames = BUF_SIZE;
+  }
+
+  // The callback may request a full block beyond the latency estimate.
+  return frames + BUF_SIZE;
+}
 void write_sample_s16ne(char *ptr, double sample) {
   int16_t *buf = (int16_t *)ptr;
   double range = (double)INT16_MAX - (double)INT16_MIN;

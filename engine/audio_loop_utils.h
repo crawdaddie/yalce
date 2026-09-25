@@ -5,6 +5,8 @@
 
 typedef void (*write_sample_func_t)(char *ptr, double sample);
 
+int get_output_buf_frames(double latency, int sample_rate);
+
 void write_sample_s16ne(char *ptr, double sample);
 void write_sample_s32ne(char *ptr, double sample);
 void write_sample_float32ne(char *ptr, double sample);

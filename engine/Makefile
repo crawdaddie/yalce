@@ -8,7 +8,24 @@ CONFIG_OBJ := $(BUILD_DIR)/ylc_config.o
 OBJS += $(CONFIG_OBJ)
 COMPILER_OPTIONS := -g -fPIC
 
+ifeq ($(ASAN),1)
+    COMPILER_OPTIONS += -fsanitize=address -fno-omit-frame-pointer \
+                        -DYLC_CONFIG_WEAK
+endif
+
+ifeq ($(TSAN),1)
+    COMPILER_OPTIONS += -fsanitize=thread -fno-omit-frame-pointer
+endif
+
 LDFLAGS := -lsoundio -lm -lsndfile -lfftw3 -lxml2
+
+ifeq ($(ASAN),1)
+    LDFLAGS += -fsanitize=address
+endif
+
+ifeq ($(TSAN),1)
+    LDFLAGS += -fsanitize=thread
+endif
 
 ifeq ($(shell uname -s),Darwin)
     LDFLAGS += -lpthread
@@ -56,6 +73,9 @@ endif
 test: | $(BUILD_DIR)
 	$(CC) -g -I. -I../lang/ -o $(BUILD_DIR)/test_scheduling test/test_scheduling.c -lm -lpthread
 	$(BUILD_DIR)/test_scheduling
+	$(CC) -g -I. -o $(BUILD_DIR)/test_audio_loop_utils \
+		test/test_audio_loop_utils.c audio_loop_utils.c -lsoundio -lm
+	$(BUILD_DIR)/test_audio_loop_utils
 
 audio_test: $(OBJS)
 	$(CC) $(LDFLAGS) $(FRAMEWORKS) $(OBJS) -o $(BUILD_DIR)/engine_test
