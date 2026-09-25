@@ -154,6 +154,7 @@ static bool mir_escape_is_alloc_site(MirInstr *instr) {
     switch (instr->data.construct.kind) {
     case MIR_CONSTRUCT_ARRAY_LITERAL:
     case MIR_CONSTRUCT_ARRAY_FILL_CONST:
+    case MIR_CONSTRUCT_ARRAY_FILL_ZEROES:
     case MIR_CONSTRUCT_ARRAY_FILL:
     case MIR_CONSTRUCT_LIST_CONS:
       return true;
@@ -339,6 +340,8 @@ static bool mir_escape_propagate_from_result(MirFunction *fn, MirInstr *instr,
     case MIR_CONSTRUCT_ARRAY_FILL_CONST:
       changed |= mir_escape_mark(state->escaped, fn,
                                  instr->data.construct.operands[1]);
+      break;
+    case MIR_CONSTRUCT_ARRAY_FILL_ZEROES:
       break;
     case MIR_CONSTRUCT_ARRAY_RANGE:
       changed |= mir_escape_mark(state->escaped, fn,

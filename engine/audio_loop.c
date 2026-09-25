@@ -162,6 +162,8 @@ static void write_callback(struct SoundIoOutStream *outstream,
   struct SoundIoChannelArea *areas;
   Ctx *ctx = outstream->userdata;
 
+  static int callback_count = 0;
+
   double float_sample_rate = outstream->sample_rate;
   double seconds_per_frame = 1.0 / float_sample_rate;
   int frames_left;

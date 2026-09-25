@@ -4,15 +4,15 @@ import std/Math;
 import std/Arrays;
 import libs/audio_jit/SF;
 let bufs = [|
-  "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_nospace.flac",
   "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_synther.flac",
+  "~/Sounds/rns_samples/Kicks/ech_kick_resample.flac",
+  "~/Sounds/rns_samples/Snares/dh_snr_hi_grainy.flac",
+  "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_nospace.flac",
   "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_tecno.flac",
   "~/Sounds/rns_samples/HiHats/Closed/ech_hat_verydirty.flac",
   "~/Sounds/rns_samples/HiHats/Cymbal/dh_cym_ride_sweet.flac",
   "~/Sounds/rns_samples/HiHats/Open/dh_ophat_long_ender.flac",
   "~/Sounds/rns_samples/Kicks/dh_kick_mid_tighter.flac",
-  "~/Sounds/rns_samples/Kicks/ech_kick_resample.flac",
-  "~/Sounds/rns_samples/Snares/dh_snr_hi_grainy.flac",
   "~/Sounds/rns_samples/Snares/dh_snr_hi_enveloper.flac",
   "~/Sounds/rns_samples/Snares/dh_snr_syn_808er.flac",
   "~/Sounds/rns_samples/Snares/dh_snr_syn_whitenoise.flac",
@@ -24,9 +24,10 @@ let bufs = [|
 |] |> Arrays.map (SF.load_sf);
 
 
+
 let kd = @Audio fn () -> 
   let rate = 1.;
-  let f = bufs[7]; 
+  let f = bufs[1]; 
   let t = trig 0;
 
   t
@@ -38,7 +39,7 @@ let kd = @Audio fn () ->
 
 let snr = @Audio fn () -> 
   let rate = 1.;
-  let f = bufs[8]; 
+  let f = bufs[2]; 
   let t = trig 0;
 
   t
@@ -49,18 +50,16 @@ let snr = @Audio fn () ->
 
 let hh = @Audio fn () -> 
   let rate = 1.;
-  let f = bufs[1]; 
+  let hbuf = bufs[0]; 
   let t = trig 0;
-
   t
-  |> bufplay f.data (f.samplerate * spf) 0.
+  |> bufplay hbuf.data (hbuf.samplerate * spf) 0.
   |> (*) (t |> rect 0.05 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
-  # |> (*) (Math.db_amp 12.)
 ;;
 
 let hh2 = @Audio fn () -> 
-  let rate = 1.2;
-  let f = bufs[1]; 
+  let rate = 1.5;
+  let f = bufs[0]; 
   let t = trig 0;
 
   t
@@ -153,6 +152,11 @@ let m3 = fn () ->
   yield mel 0.75 61.;
   yield mel 1.25 61.;
   yield mel 5. 88.
+
+  # yield mel 1. 62.;
+  # yield mel 0.75 61.;
+  # yield mel 1.25 61.;
+  # yield mel 5. 88.
 ;;
 
 
@@ -229,6 +233,7 @@ let stutter = @Audio fn trig_sig active beat_length subdiv rate inp ->
 ;;
 let fx = @Audio fn sel trigger subdiv beat_length rate inpp: (Stereo) ->
   let inp = inpp + (inpp * (Double (sel == 5.)) |> Filter.hpf 800. 1. |> Reverb.concert);
+  # let inp = inpp;
 
   let comb_short = inp
   |> comb (lfnoise 1. 0.01 0.025) 0.1 0.5
@@ -280,7 +285,15 @@ let fx_node = fx 9. 0. 1. (60. / 180.) 1. 0. |> play_node ;
 
 
 let set_fx_rand = fn () ->
-  set_input_scalar fx_node 0 @@ Double (Math.rand_int 9) ;
+  let selection = Double (Math.rand_int 7);
+  match selection with
+  | 6. -> (
+    set_input_scalar fx_node 2 @@ Math.array_choose [| 0.25, 0.25, 0.25, 0.125, 0.75, 0.5, 1.5 |];
+    set_input_scalar fx_node 4 @@ Math.array_choose [| -1., 1., 2.|];
+    ()
+  )
+  | _ -> ();
+  set_input_scalar fx_node 0 selection;
   set_input_trig fx_node 1
 ;;
 
@@ -370,7 +383,8 @@ let hh_routine = fn () ->
   array_fill_const 64 0.25
   |> iter
   |> cor_map (fn d ->
-    Math.chance 0.6 (
+    # print `hihats!!!{d}\n`;
+    Math.chance 0.8 (
       \Math.chance2 0.5
       (\hh () ~> fx_node)
       (\hh2 () ~> fx_node)
@@ -450,4 +464,4 @@ let g = fn () ->
 
 g () |> play_pattern beat;
 
-record_start "vordhosbn_cover.wav" 121. ;
+# record_start "vordhosbn_cover.wav" 121. ;

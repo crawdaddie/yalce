@@ -31,6 +31,10 @@ LLVMValueRef ArrayFillConstHandler(Ast *ast, JITLangCtx *ctx,
                                    LLVMModuleRef module,
                                    LLVMBuilderRef builder);
 
+LLVMValueRef ArrayFillZeroesHandler(Ast *ast, JITLangCtx *ctx,
+                                    LLVMModuleRef module,
+                                    LLVMBuilderRef builder);
+
 LLVMValueRef ArraySuccHandler(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
                               LLVMBuilderRef builder);
 

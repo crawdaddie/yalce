@@ -30,6 +30,7 @@ typedef struct BuiltinEnvRefs {
   TypeEnv *array_size;
   TypeEnv *array_set;
   TypeEnv *array_fill_const;
+  TypeEnv *array_fill_zeroes;
   TypeEnv *array_uninit;
   TypeEnv *array_fill;
   TypeEnv *array_range;
@@ -100,6 +101,7 @@ extern Type array_range_scheme;
 extern Type array_at_scheme;
 extern Type array_set_scheme;
 extern Type array_fill_const_scheme;
+extern Type array_fill_zeroes_scheme;
 extern Type array_fill_scheme;
 extern Type array_offset_scheme;
 extern Type cstr_scheme;

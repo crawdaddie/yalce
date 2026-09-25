@@ -30,8 +30,8 @@ let foldi = fn f res a -> foldi__ 0 f res a;;
 
 # let map = fn f: (T -> R) a: (Array of T) ->
 let map = fn f a ->
-  let res = array_fill_const (array_size a) (f (a[0]));
-  for i = 1 .. (array_size a) in (
+  let res = array_fill_zeroes (array_size a) (f (a[0]));
+  for i = 0 .. (array_size a) in (
     let v = f (a [i]);
     res[i] :=  v
   );

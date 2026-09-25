@@ -1792,6 +1792,7 @@ TypeEnv *initialize_builtin_funcs(JITLangCtx *ctx, LLVMModuleRef module,
   GENERIC_FN_ENV(builtin_envs.array_succ, ArraySuccHandler);
   GENERIC_FN_ENV(builtin_envs.array_set, ArraySetHandler);
   GENERIC_FN_ENV(builtin_envs.array_fill_const, ArrayFillConstHandler);
+  GENERIC_FN_ENV(builtin_envs.array_fill_zeroes, ArrayFillZeroesHandler);
   GENERIC_FN_ENV(builtin_envs.array_fill, ArrayFillHandler);
   GENERIC_FN_ENV(builtin_envs.array_range, ArrayRangeHandler);
   GENERIC_FN_ENV(builtin_envs.array_offset, ArrayOffsetHandler);

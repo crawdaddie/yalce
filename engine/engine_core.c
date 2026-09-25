@@ -37,7 +37,9 @@ int record_start(_String filename, double seconds) {
   info.channels = LAYOUT;
   info.format = SF_FORMAT_WAV | SF_FORMAT_FLOAT;
 
+  fprintf(stderr, "record: opening `%s`\n", filename.chars);
   SNDFILE *file = sf_open(filename.chars, SFM_WRITE, &info);
+  fprintf(stderr, "record: sf_open returned %p\n", (void *)file);
   if (!file) {
     fprintf(stderr, "record_start: %s\n", sf_strerror(NULL));
     return 0;

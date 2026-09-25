@@ -2145,7 +2145,8 @@ static LLVMValueRef lower_mir_array_fill_data(MirFunction *fn, MirInstr *instr,
                                               LLVMModuleRef module,
                                               LLVMBuilderRef builder,
                                               JITLangCtx *ctx,
-                                              bool call_fill_fn) {
+                                              bool call_fill_fn,
+                                              bool zero_fill) {
   if (!fn || !instr || !values || !instr->type || !is_array_type(instr->type) ||
       !instr->type->data.T_CONS.args || instr->type->data.T_CONS.num_args < 1) {
     return NULL;
@@ -2156,9 +2157,12 @@ static LLVMValueRef lower_mir_array_fill_data(MirFunction *fn, MirInstr *instr,
       lower_mir_value_storage_type(element_type_ref, ctx, module);
   LLVMValueRef size = mir_llvm_value_get_rvalue(
       values, instr->data.construct.operands[0], builder);
-  LLVMValueRef fill_source = mir_llvm_value_get_rvalue(
-      values, instr->data.construct.operands[1], builder);
-  if (!element_type || !size || !fill_source) {
+  LLVMValueRef fill_source = NULL;
+  if (!zero_fill) {
+    fill_source = mir_llvm_value_get_rvalue(
+        values, instr->data.construct.operands[1], builder);
+  }
+  if (!element_type || !size || (!zero_fill && !fill_source)) {
     return NULL;
   }
 
@@ -2194,15 +2198,18 @@ static LLVMValueRef lower_mir_array_fill_data(MirFunction *fn, MirInstr *instr,
   LLVMValueRef index = LLVMBuildPhi(builder, i32, "array.fill.index");
   LLVMAddIncoming(index, &zero, &entry_block, 1);
 
-  LLVMValueRef element = fill_source;
+  LLVMValueRef element = zero_fill ? LLVMConstNull(element_type) : fill_source;
   if (call_fill_fn) {
     LLVMTypeRef fill_fn_type = LLVMFunctionType(element_type, &i32, 1, 0);
     element = LLVMBuildCall2(builder, fill_fn_type, fill_source, &index, 1,
                              "array.fill.element");
   }
-  Type *fill_type =
-      mir_function_value_type(fn, instr->data.construct.operands[1]);
-  if (!call_fill_fn) {
+  Type *fill_type = NULL;
+  if (!call_fill_fn && !zero_fill) {
+    fill_type =
+        mir_function_value_type(fn, instr->data.construct.operands[1]);
+  }
+  if (!call_fill_fn && !zero_fill) {
     element = lower_mir_cast_value_to_storage(element, fill_type, ctx, module,
                                               builder, "array.fill.cast");
   }
@@ -4561,10 +4568,13 @@ static LLVMValueRef lower_mir_construct(MirFunction *fn, MirInstr *instr,
     return lower_mir_closure(instr, values, module, builder, ctx);
   case MIR_CONSTRUCT_ARRAY_FILL_CONST:
     return lower_mir_array_fill_data(fn, instr, values, module, builder, ctx,
-                                     false);
+                                     false, false);
+  case MIR_CONSTRUCT_ARRAY_FILL_ZEROES:
+    return lower_mir_array_fill_data(fn, instr, values, module, builder, ctx,
+                                     false, true);
   case MIR_CONSTRUCT_ARRAY_FILL:
     return lower_mir_array_fill_data(fn, instr, values, module, builder, ctx,
-                                     true);
+                                     true, false);
   case MIR_CONSTRUCT_ARRAY_RANGE:
     return lower_mir_array_range(fn, instr, values, module, builder, ctx);
   }

@@ -1743,6 +1743,12 @@ static bool mir_construct_for_each_operand(MirInstr *instr,
                              mir_make_operand(instr->data.construct.operands[1],
                                               MIR_OPERAND_ROLE_ELEMENT,
                                               MIR_OPERAND_USE_CONSUME, 1),
+           ctx);
+  case MIR_CONSTRUCT_ARRAY_FILL_ZEROES:
+    return mir_visit_operand(instr, visitor,
+                             mir_make_operand(instr->data.construct.operands[0],
+                                              MIR_OPERAND_ROLE_VALUE,
+                                              MIR_OPERAND_USE_BORROW, 0),
                              ctx);
   case MIR_CONSTRUCT_ARRAY_FILL:
     return mir_visit_operand(instr, visitor,
@@ -2039,6 +2045,13 @@ static void mir_rewrite_construct_operands(MirInstr *instr,
         instr, rewriter,
         mir_make_operand(instr->data.construct.operands[1],
                          MIR_OPERAND_ROLE_ELEMENT, MIR_OPERAND_USE_CONSUME, 1),
+        ctx);
+    break;
+  case MIR_CONSTRUCT_ARRAY_FILL_ZEROES:
+    instr->data.construct.operands[0] = mir_rewrite_operand(
+        instr, rewriter,
+        mir_make_operand(instr->data.construct.operands[0],
+                         MIR_OPERAND_ROLE_VALUE, MIR_OPERAND_USE_BORROW, 0),
         ctx);
     break;
   case MIR_CONSTRUCT_ARRAY_FILL:
@@ -8500,6 +8513,8 @@ static const char *mir_construct_kind_name(MirConstructKind kind) {
     return "construct.array_literal";
   case MIR_CONSTRUCT_ARRAY_FILL_CONST:
     return "construct.array_fill_const";
+  case MIR_CONSTRUCT_ARRAY_FILL_ZEROES:
+    return "construct.array_fill_zeroes";
   case MIR_CONSTRUCT_ARRAY_FILL:
     return "construct.array_fill";
   case MIR_CONSTRUCT_ARRAY_RANGE:
@@ -9052,6 +9067,9 @@ static void dump_instr(FILE *stream, const MirFunction *fn,
       dump_value(stream, instr->data.construct.operands[0]);
       fputs(", ", stream);
       dump_value(stream, instr->data.construct.operands[1]);
+      break;
+    case MIR_CONSTRUCT_ARRAY_FILL_ZEROES:
+      dump_value(stream, instr->data.construct.operands[0]);
       break;
     case MIR_CONSTRUCT_ARRAY_RANGE:
       dump_value(stream, instr->data.construct.operands[0]);

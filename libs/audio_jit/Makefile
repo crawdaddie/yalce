@@ -20,6 +20,14 @@ LLVM_CONFIG = $(shell \
 CLANG       = $(dir $(LLVM_CONFIG))clang
 
 CFLAGS  = -Wall -Wextra -fPIC -g
+
+ifeq ($(ASAN),1)
+    CFLAGS += -fsanitize=address -fno-omit-frame-pointer
+endif
+
+ifeq ($(TSAN),1)
+    CFLAGS += -fsanitize=thread -fno-omit-frame-pointer
+endif
 CFLAGS += -I../../lang
 CFLAGS += -I../../lang/backend_llvm
 CFLAGS += -I../../engine
@@ -33,6 +41,14 @@ CXXFLAGS  = $(CFLAGS)
 CXXFLAGS += -std=c++17
 
 LDFLAGS   = -shared
+
+ifeq ($(ASAN),1)
+LDFLAGS += -fsanitize=address
+endif
+
+ifeq ($(TSAN),1)
+LDFLAGS += -fsanitize=thread
+endif
 LDFLAGS  += -L`$(LLVM_CONFIG) --libdir`
 LDFLAGS  += `$(LLVM_CONFIG) --ldflags --libs core linker passes`
 LDFLAGS  += `$(LLVM_CONFIG) --system-libs`

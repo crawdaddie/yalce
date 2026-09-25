@@ -304,6 +304,20 @@ static MirValueId mir_array_fill_const(MirBuilder *builder, Type *type,
                                  origin, size, value);
 }
 
+static MirValueId mir_array_fill_zeroes(MirBuilder *builder, Type *type,
+                                        Ast *origin, MirValueId size) {
+  if (size == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirInstr instr = mir_make_instr(MIR_CONSTRUCT, type, origin);
+  instr.data.construct.kind = MIR_CONSTRUCT_ARRAY_FILL_ZEROES;
+  instr.data.construct.operands[0] = size;
+  instr.data.construct.operands[1] = MIR_NO_VALUE;
+  instr.data.construct.reuse_token = MIR_NO_VALUE;
+  return mir_builder_append_instr(builder, instr);
+}
+
 static MirValueId mir_array_fill(MirBuilder *builder, Type *type, Ast *origin,
                                  MirValueId size, MirValueId fill_fn) {
   return mir_emit_construct_ops2(builder, MIR_CONSTRUCT_ARRAY_FILL, type,
@@ -1759,6 +1773,18 @@ static MirValueId MirArrayFillConstHandler(MirBuilder *builder, Ast *app,
       mir_expr(builder, app->data.AST_APPLICATION.args + 1, ctx));
 }
 
+static MirValueId MirArrayFillZeroesHandler(MirBuilder *builder, Ast *app,
+                                            MirCtx *ctx,
+                                            MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!mir_builtin_arity(app, 2)) {
+    return MIR_NO_VALUE;
+  }
+  return mir_array_fill_zeroes(
+      builder, app->type, app,
+      mir_expr(builder, app->data.AST_APPLICATION.args, ctx));
+}
+
 static MirValueId MirArrayFillHandler(MirBuilder *builder, Ast *app,
                                       MirCtx *ctx, MirBuiltinSymbol *symbol) {
   (void)symbol;
@@ -2483,6 +2509,12 @@ void mir_register_core_builtins(MirProgram *program) {
       program, builtin_envs.array_fill_const, MirArrayFillConstHandler,
       MIR_BUILTIN_SYMBOL_CORE,
       (const MirOperandUse[]){MIR_OPERAND_USE_BORROW, MIR_OPERAND_USE_CONSUME},
+      2, MIR_RESULT_OWNED);
+
+  mir_register_builtin(
+      program, builtin_envs.array_fill_zeroes, MirArrayFillZeroesHandler,
+      MIR_BUILTIN_SYMBOL_CORE,
+      (const MirOperandUse[]){MIR_OPERAND_USE_BORROW, MIR_OPERAND_USE_BORROW},
       2, MIR_RESULT_OWNED);
 
   mir_register_builtin(program, builtin_envs.array_succ, MirArraySuccHandler,

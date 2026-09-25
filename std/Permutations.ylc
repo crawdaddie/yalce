@@ -1,0 +1,93 @@
+let _swap_els = fn i j arr ->
+  let tmp = arr[i];
+  arr[i] := arr[j];
+  arr[j] := tmp;
+  arr
+;;
+
+let permute_n = fn k arr ->
+  if k < 2 then (
+    arr
+  ) else (
+    permute_n (k - 1) arr;
+
+    for i = 0 .. (k - 1) in (
+      if k % 2 == 0 then (
+        _swap_els i (k - 1) arr
+      ) else (
+        _swap_els 0 (k - 1) arr
+      );
+
+      permute_n (k - 1) arr
+    );
+
+    arr
+  )
+;;
+
+# Walk every permutation of arr in place.
+#
+# This mutates arr and returns the same array.
+let permute = fn arr ->
+  permute_n (array_size arr) arr
+;;
+
+let fold_ref_n = fn f acc k arr ->
+  if k < 2 then (
+    acc[0] := f (acc[0]) arr;
+    acc
+  ) else (
+    fold_ref_n f acc (k - 1) arr;
+
+    for i = 0 .. (k - 1) in (
+      if k % 2 == 0 then (
+        _swap_els i (k - 1) arr
+      ) else (
+        _swap_els 0 (k - 1) arr
+      );
+
+      fold_ref_n f acc (k - 1) arr
+    );
+
+    acc
+  )
+;;
+
+let fold_ref = fn f acc arr ->
+  fold_ref_n f acc (array_size arr) arr
+;;
+
+# Fold over every permutation of arr.
+#
+# f receives the current accumulator and permutation.
+# The accumulator type can differ from the item type.
+# arr is permuted in place while folding.
+let fold = fn f init arr ->
+  let acc = [| init |];
+  fold_ref f acc arr;
+  acc[0]
+;;
+
+
+let test = module () ->
+  let test_count =
+    fold (fn acc _ -> acc + 1) 0 [| 1, 2, 3 |] == 6;
+
+  let test_values =
+    fold (fn acc xs -> acc + xs[0] * 100 + xs[1] * 10 + xs[2]) 0 [| 1, 2, 3 |] == 1332;
+
+  let test_bool_acc =
+    fold (fn acc xs -> acc || (xs[0] == 2)) false [| 1, 2, 3 |] == true;
+
+  let test_permute =
+    let xs = [| 1, 2, 3 |] in (
+      permute xs;
+      xs == [| 3, 2, 1 |]
+    );
+
+  let test_ref =
+    let acc = [| 0 |] in (
+      fold_ref (fn n _ -> n + 1) acc [| 1, 2, 3 |];
+      acc[0] == 6
+    )
+;

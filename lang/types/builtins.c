@@ -38,6 +38,7 @@ Type array_range_scheme = {0};
 Type array_at_scheme = {0};
 Type array_set_scheme = {0};
 Type array_fill_const_scheme = {0};
+Type array_fill_zeroes_scheme = {0};
 Type array_fill_scheme = {0};
 Type array_offset_scheme = {0};
 Type cstr_scheme = {0};
@@ -583,6 +584,28 @@ static TypeEnv *make_array_fill_const_env(void) {
   return entry;
 }
 
+static TypeEnv *make_array_fill_zeroes_env(void) {
+  // array_fill_zeroes : Int -> a -> Array of a
+  Type *a = tvar("a");
+  Type *arr = create_array_type(a);
+
+  Type *f = arr;
+  f = type_fn(a, f);
+  f = type_fn(&t_int, f);
+  f->data.T_FN.attributes =
+      set_attr(f->data.T_FN.attributes, FN_ATTR_ALLOCATES);
+
+  TypeList *tl_a = vlist_of_typevar(a);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "array_fill_zeroes",
+                     .type = f,
+                     .scheme_vars = tl_a,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
 static TypeEnv *make_array_fill_env(void) {
   // array_fill : Int -> (Int -> a) -> Array of a
   Type *a = tvar("a");
@@ -977,6 +1000,8 @@ void initialize_builtin_types() {
   add_builtin_env("array_set", builtin_envs.array_set);
   builtin_envs.array_fill_const = make_array_fill_const_env();
   add_builtin_env("array_fill_const", builtin_envs.array_fill_const);
+  builtin_envs.array_fill_zeroes = make_array_fill_zeroes_env();
+  add_builtin_env("array_fill_zeroes", builtin_envs.array_fill_zeroes);
 
   // builtin_envs.array_uninit = make_array_fill_const_env();
   // add_builtin_env("array_uninit", builtin_envs.array_uninit);
@@ -1065,6 +1090,7 @@ void initialize_builtin_types() {
   array_at_scheme = *lookup_builtin_env("array_at")->type;
   array_set_scheme = *lookup_builtin_env("array_set")->type;
   array_fill_const_scheme = *lookup_builtin_env("array_fill_const")->type;
+  array_fill_zeroes_scheme = *lookup_builtin_env("array_fill_zeroes")->type;
   array_fill_scheme = *lookup_builtin_env("array_fill")->type;
   array_id_scheme = *lookup_builtin_env("array_succ")->type;
   list_concat_scheme = *lookup_builtin_env("list_concat")->type;

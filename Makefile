@@ -31,6 +31,9 @@ endif
 CC ?= clang
 CXX ?= clang++
 
+ASAN_FLAGS := -fsanitize=address -fno-omit-frame-pointer
+TSAN_FLAGS := -fsanitize=thread -fno-omit-frame-pointer
+
 # macOS-specific settings
 READLINE_PREFIX := ${READLINE_PREFIX}
 
@@ -58,6 +61,13 @@ CFLAGS += -I./lang/runtime
 CFLAGS += `$(LLVM_CONFIG) --cflags`
 CFLAGS += -I`$(LLVM_CONFIG) --includedir`
 
+ifeq ($(ASAN),1)
+    CFLAGS += $(ASAN_FLAGS)
+endif
+
+ifeq ($(TSAN),1)
+    CFLAGS += $(TSAN_FLAGS)
+endif
 
 LANG_CC := $(CC) $(CFLAGS)
 LANG_CC += -g
@@ -81,6 +91,14 @@ endif
 LANG_CC += -DLLVM_BACKEND
 LANG_LD_FLAGS += -L`$(LLVM_CONFIG) --libdir`
 LANG_LD_FLAGS += `$(LLVM_CONFIG) --libs --cflags --ldflags core linker bitreader analysis executionengine mcjit interpreter native`
+
+ifeq ($(ASAN),1)
+    LANG_LD_FLAGS += -fsanitize=address
+endif
+
+ifeq ($(TSAN),1)
+    LANG_LD_FLAGS += -fsanitize=thread
+endif
 
 ifeq ($(MAKECMDGOALS),debug)
   LANG_LD_FLAGS += -lz -lzstd -lc++ -lc++abi -lncurses 
@@ -111,9 +129,15 @@ MIR_OPERAND_METADATA_TEST_TARGET := $(BUILD_DIR)/test_mir_operand_metadata
 JSON_C_CFLAGS := $(shell pkg-config --cflags json-c 2>/dev/null)
 JSON_C_LIBS := $(shell pkg-config --libs json-c 2>/dev/null)
 
-.PHONY: all clean engine audio_jit gui gfx test wasm serve_docs engine_bindings cor range_server lsp_server test_range_server test_range_server_tool test_lsp_server test_mir_pipeline test_mir_operand_metadata sample_timing_test
+.PHONY: all asan tsan clean engine audio_jit gui gfx test wasm serve_docs engine_bindings cor range_server lsp_server test_range_server test_range_server_tool test_lsp_server test_mir_pipeline test_mir_operand_metadata sample_timing_test
 
 all: $(BUILD_DIR)/ylc
+
+asan:
+	$(MAKE) ASAN=1 -B all
+
+tsan:
+	$(MAKE) TSAN=1 -B all
 
 debug: all
 

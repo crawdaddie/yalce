@@ -146,9 +146,8 @@ static SchedulerTask *create_task(SchedulerCallback callback, void *userdata,
   }
 
   if (scheduler_tasks_size >= scheduler_tasks_cap) {
-    size_t next_cap =
-        scheduler_tasks_cap > 0 ? scheduler_tasks_cap * 2
-                                : INITIAL_TASK_CAPACITY;
+    size_t next_cap = scheduler_tasks_cap > 0 ? scheduler_tasks_cap * 2
+                                              : INITIAL_TASK_CAPACITY;
     SchedulerTask **tasks =
         realloc(scheduler_tasks, sizeof(SchedulerTask *) * next_cap);
     if (!tasks) {
@@ -513,6 +512,7 @@ void scheduler_init_fds() {
 // Batch of events to fire outside the lock
 #define MAX_BATCH 64
 static SchedulerEvent pending_batch[MAX_BATCH];
+static int scheduler_trace_count;
 
 // Caller must hold scheduler_mutex. Returns count of events collected.
 static int collect_due_events(uint64_t current_sample) {
@@ -530,6 +530,17 @@ static int collect_due_events(uint64_t current_sample) {
 static void fire_events(int count) {
   for (int i = 0; i < count; i++) {
     SchedulerEvent event = pending_batch[i];
+
+    // if (scheduler_trace_count < 16) {
+    //   fprintf(stderr,
+    //           "scheduler: fire[%d] callback=%p userdata=%p task=%p "
+    //           "tick=%llu dispatch=%llu\n",
+    //           scheduler_trace_count, (void *)event.callback, event.userdata,
+    //           (void *)event.task, (unsigned long long)event.tick,
+    //           (unsigned long long)event.dispatch_tick);
+    //   scheduler_trace_count++;
+    // }
+
     if (event.task) {
       pthread_mutex_lock(&scheduler_mutex);
       bool cancelled = task_is_done(event.task);
@@ -558,17 +569,11 @@ uint64_t get_current_sample() { return atomic_load(&global_sample_position); }
 void *scheduler_thread_fn(void *arg) {
 #ifndef __APPLE__
   struct sched_param param = {.sched_priority = scheduler_rt_priority};
-  int priority_result =
-      pthread_setschedparam(pthread_self(), SCHED_RR, &param);
-  if (priority_result != 0) {
-    fprintf(stderr, "scheduler: real-time priority unavailable: %s\n",
-            strerror(priority_result));
-  }
+  int priority_result = pthread_setschedparam(pthread_self(), SCHED_RR, &param);
 #endif
 
 #ifdef __APPLE__
-  SCHED_DBG("thread started, kqueue_fd=%d wake_fd=%d", kqueue_fd,
-            wake_pipe[0]);
+  SCHED_DBG("thread started, kqueue_fd=%d wake_fd=%d", kqueue_fd, wake_pipe[0]);
   struct kevent events[2];
   for (;;) {
     struct timespec timeout;
@@ -582,12 +587,10 @@ void *scheduler_thread_fn(void *arg) {
       if (sample_rate <= 0) {
         sample_rate = 48000;
       }
-      double seconds = target <= now
-                           ? 0.0
-                           : (double)(target - now) / sample_rate;
+      double seconds =
+          target <= now ? 0.0 : (double)(target - now) / sample_rate;
       timeout.tv_sec = (time_t)seconds;
-      timeout.tv_nsec =
-          (long)((seconds - (double)timeout.tv_sec) * 1e9);
+      timeout.tv_nsec = (long)((seconds - (double)timeout.tv_sec) * 1e9);
       if (timeout.tv_sec == 0 && timeout.tv_nsec == 0) {
         timeout.tv_nsec = 1;
       }
@@ -659,11 +662,12 @@ void *scheduler_thread_fn(void *arg) {
     // same-tick events and new events pushed by callbacks
     for (;;) {
       pthread_mutex_lock(&scheduler_mutex);
-      SCHED_DBG("processing: now=%llu, heap size=%zu, earliest=%llu",
-                (unsigned long long)now, scheduler_queue.size,
-                scheduler_queue.size > 0
-                    ? (unsigned long long)scheduler_queue.events[0].dispatch_tick
-                    : 0ULL);
+      SCHED_DBG(
+          "processing: now=%llu, heap size=%zu, earliest=%llu",
+          (unsigned long long)now, scheduler_queue.size,
+          scheduler_queue.size > 0
+              ? (unsigned long long)scheduler_queue.events[0].dispatch_tick
+              : 0ULL);
 
       int count = collect_due_events(now);
       pthread_mutex_unlock(&scheduler_mutex);
