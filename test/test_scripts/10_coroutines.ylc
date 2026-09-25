@@ -402,3 +402,18 @@ let test_coroutine_instance_param = fn () ->
   && x () == None
 
 ;;
+
+let test_conditional_end = fn () ->
+  let x = fn () ->
+    yield 1;
+    yield 2
+  ;;
+
+  let xr = cor_repeat 2 (x ());
+  xr () == Some 1
+  && xr () == Some 2
+  && xr () == Some 1
+  && xr () == Some 2
+  && xr () == None
+
+;;

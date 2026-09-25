@@ -1,0 +1,27 @@
+import std/Arrays;
+
+type ManagedRecord = (data: Array of Double, value: Int);
+
+let make_record = fn value ->
+  ManagedRecord [| Double value |] value
+;;
+
+let test = module () ->
+  let test_array_fill_const = fn () ->
+    let values = array_fill_const 64 0.25;
+    values[0] == 0.25 && values[63] == 0.25
+  ;;
+
+  let test_map_managed_record = fn () ->
+    let values = Arrays.map make_record [| 1, 2, 3 |];
+    let first = values[0];
+    let second = values[1];
+    let third = values[2];
+    first.value == 1 &&
+    second.value == 2 &&
+    third.value == 3 &&
+    first.data[0] == 1. &&
+    second.data[0] == 2. &&
+    third.data[0] == 3.
+  ;;
+;

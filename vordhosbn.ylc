@@ -240,8 +240,8 @@ let fx = @Audio fn sel trigger subdiv beat_length rate inpp: (Stereo) ->
   |> disperser 100. 1. 1.
   ;
 
-  let latch = sah inp (trig (rand_trig 4000. 8000. trigger))
-  ;
+  # let latch = sah inp (trig (rand_trig 4000. 8000. trigger))
+  # ;
 
 
   let shifted = inp
@@ -267,8 +267,8 @@ let fx = @Audio fn sel trigger subdiv beat_length rate inpp: (Stereo) ->
     beat_length subdiv rate inp ;
 
   (match sel with
-    | 0. -> comb_short
-    | 1. -> latch
+    | 0. -> inp
+    | 1. -> comb_short 
     | 2. -> shifted
     | 3. -> comb_long
     | 4. -> ring
@@ -333,48 +333,10 @@ let kick_routine = fn () ->
   )
 ;;
 
-# let kick_routine = fn () ->
-#   kd () |> play_node;
-#   yield 4.5 ;
-#   kd () |> play_node;
-#   yield 3.5;
-#   kd () |> play_node;
-#   yield 4.5 ;
-#   kd () |> play_node;
-#   yield 1.5;
-#   kd () |> play_node;
-#   yield 1.5;
-#
-#   yield 5.
-# ;;
-
 let snr_routine = fn () ->
   yield 1.;
   snr () ~> fx_node;
   yield 2.;
-  snr () ~> fx_node;
-  yield 1.;
-
-  yield 1.;
-  snr () ~> fx_node;
-  yield 2.;
-
-  snr () ~> fx_node;
-  yield 1.;
-
-  yield 1.;
-
-  snr () ~> fx_node;
-  yield 2.;
-
-  snr () ~> fx_node;
-  yield 1.;
-
-  yield 1.;
-
-  snr () ~> fx_node;
-  yield 2.;
-
   snr () ~> fx_node;
   yield 1.
 ;;
@@ -383,7 +345,6 @@ let hh_routine = fn () ->
   array_fill_const 64 0.25
   |> iter
   |> cor_map (fn d ->
-    # print `hihats!!!{d}\n`;
     Math.chance 0.8 (
       \Math.chance2 0.5
       (\hh () ~> fx_node)
@@ -395,20 +356,9 @@ let hh_routine = fn () ->
 
 let drums = fn () ->
   kick_routine () |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.; # 16 beats
-  snr_routine () |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.; # 16
+  snr_routine () |> cor_repeat 4 |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.; # 16
   hh_routine () |> play_pattern 0.; #16
   yield 16. * beat * 0.5;
-
-  # snr_routine () |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.;
-  # yield 8. * beat * 0.5;
-  #
-  # kick_routine () |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.; # 16 beats
-  # hh_routine () |> play_pattern 0.;
-  # snr_routine () |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.;
-  # yield 8. * beat * 0.5;
-  #
-  # snr_routine () |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.;
-  # yield 8. * beat * 0.5;
 
   yield drums ()
 ;;

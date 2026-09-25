@@ -395,6 +395,22 @@ static TypeEnv *make_cor_loop_env(void) {
   return entry;
 }
 
+static TypeEnv *make_cor_repeat_env(void) {
+  Type *a = tvar("a");
+  Type *cor = create_coroutine_instance_type(a);
+  Type *fn_type = type_fn(&t_int, type_fn(cor, cor));
+
+  TypeList *tl_a = vlist_of_typevar(a);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "cor_repeat",
+                     .type = fn_type,
+                     .scheme_vars = tl_a,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
 static TypeEnv *make_cor_zip_env(void) {
   Type *a = tvar("a");
   Type *b = tvar("b");
@@ -985,6 +1001,8 @@ void initialize_builtin_types() {
   add_builtin_env("cor_map_opt", builtin_envs.cor_map_opt);
   builtin_envs.cor_loop = make_cor_loop_env();
   add_builtin_env("cor_loop", builtin_envs.cor_loop);
+  builtin_envs.cor_repeat = make_cor_repeat_env();
+  add_builtin_env("cor_repeat", builtin_envs.cor_repeat);
 
   builtin_envs.cor_zip = make_cor_zip_env();
   add_builtin_env("cor_zip", builtin_envs.cor_zip);

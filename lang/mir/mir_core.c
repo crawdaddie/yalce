@@ -451,6 +451,13 @@ static const char *mir_cor_loop_wrapper_name(MirProgram *program) {
   return mir_arena_strdup(program->arena, name);
 }
 
+static const char *mir_cor_repeat_wrapper_name(MirProgram *program) {
+  char name[64];
+  snprintf(name, sizeof(name), "$builtin.cor_repeat.%u",
+           program ? (unsigned)program->functions.len : 0);
+  return mir_arena_strdup(program->arena, name);
+}
+
 static const char *mir_cor_map_wrapper_name(MirProgram *program) {
   char name[64];
   snprintf(name, sizeof(name), "$builtin.cor_map.%u",
@@ -1111,6 +1118,155 @@ static MirValueId MirCorLoopHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
   MirValueId wrapper_ref = mir_fn_ref(builder, wrapper->type, app, wrapper);
   return mir_coro_new_call(builder, app->type, app, wrapper_ref, wrapper->type,
                            source);
+}
+
+static MirFunction *mir_build_cor_repeat_wrapper(MirBuilder *builder, Ast *app,
+                                                 Type *coro_type) {
+  MirArena *wrapper_arena = mir_generated_fn_arena(builder);
+  coro_type = mir_generated_type(builder, coro_type);
+
+  Type *yield_type = mir_coro_yield_type(coro_type);
+  Type *next_type = yield_type ? create_option_type(yield_type) : NULL;
+  Type *some_type = next_type && next_type->data.T_CONS.args
+                        ? next_type->data.T_CONS.args[0]
+                        : NULL;
+  if (!some_type) {
+    return NULL;
+  }
+
+  Type *wrapper_type = type_fn(&t_int, type_fn(coro_type, coro_type));
+  wrapper_type->data.T_FN.attributes = set_attr(
+      wrapper_type->data.T_FN.attributes, FN_ATTR_COROUTINE_CONSTRUCTOR);
+  MirFunction *wrapper = mir_program_add_function_arena(
+      builder->program, mir_cor_repeat_wrapper_name(builder->program),
+      wrapper_type, app, wrapper_arena);
+  if (!wrapper) {
+    return NULL;
+  }
+
+  MirValueId count = mir_function_add_param(wrapper, "count", &t_int, app);
+  MirValueId source = mir_function_add_param(wrapper, "source", coro_type, app);
+  if (count == MIR_NO_VALUE || source == MIR_NO_VALUE) {
+    return NULL;
+  }
+
+  MirBlock *entry = mir_function_add_block(wrapper, "entry");
+  MirBlock *check = mir_function_add_block(wrapper, "cor_repeat.check");
+  MirBlock *advance = mir_function_add_block(wrapper, "cor_repeat.advance");
+  MirBlock *value = mir_function_add_block(wrapper, "cor_repeat.value");
+  MirBlock *resume = mir_function_add_block(wrapper, "cor_repeat.resume");
+  MirBlock *reset = mir_function_add_block(wrapper, "cor_repeat.reset");
+  MirBlock *done = mir_function_add_block(wrapper, "cor_repeat.done");
+  if (!entry || !check || !advance || !value || !resume || !reset || !done) {
+    return NULL;
+  }
+
+  MirBuilder wrapper_builder;
+  mir_builder_init(&wrapper_builder, builder->program, wrapper);
+
+  mir_builder_position_at_end(&wrapper_builder, entry);
+  mir_builder_set_br(&wrapper_builder, check->id);
+
+  mir_builder_position_at_end(&wrapper_builder, check);
+  MirPhiIncomingVec count_incoming = {0};
+  mir_phi_incoming_vec_push(wrapper->arena, &count_incoming,
+                            (MirPhiIncoming){entry->id, count});
+  MirValueId current_count = mir_phi(&wrapper_builder, &t_int, app,
+                                     count_incoming);
+  MirInstr *count_phi = mir_function_find_def_instr(wrapper, current_count);
+
+  MirPhiIncomingVec source_incoming = {0};
+  mir_phi_incoming_vec_push(wrapper->arena, &source_incoming,
+                            (MirPhiIncoming){entry->id, source});
+  MirValueId current_source = mir_phi(&wrapper_builder, coro_type, app,
+                                      source_incoming);
+  MirInstr *source_phi = mir_function_find_def_instr(wrapper, current_source);
+  MirValueId zero = mir_const_int(&wrapper_builder, &t_int, app, 0);
+  MirValueId has_repeats = mir_primitive_instr(
+      &wrapper_builder, MIR_OP_IGT, &t_bool, app,
+      (MirValueId[]){current_count, zero}, 2);
+  if (!count_phi || !source_phi || current_count == MIR_NO_VALUE ||
+      current_source == MIR_NO_VALUE || zero == MIR_NO_VALUE ||
+      has_repeats == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_builder_set_cond(&wrapper_builder, has_repeats, advance->id, done->id);
+
+  mir_builder_position_at_end(&wrapper_builder, advance);
+  MirValueId next = mir_coro_next(&wrapper_builder, app, current_source,
+                                  coro_type);
+  MirValueId tag = mir_variant_tag(&wrapper_builder, app, next);
+  MirValueId is_some =
+      mir_tag_eq(&wrapper_builder, app, tag, 0, TYPE_NAME_SOME);
+  if (next == MIR_NO_VALUE || tag == MIR_NO_VALUE || is_some == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_builder_set_cond(&wrapper_builder, is_some, value->id, reset->id);
+
+  mir_builder_position_at_end(&wrapper_builder, value);
+  MirValueId payload = mir_variant_payload(&wrapper_builder, app, next,
+                                           some_type, 0, TYPE_NAME_SOME);
+  MirValueId yielded =
+      mir_tuple_get(&wrapper_builder, yield_type, app, payload, 0);
+  if (payload == MIR_NO_VALUE || yielded == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_builder_set_yield(&wrapper_builder, yielded, resume->id);
+
+  mir_builder_position_at_end(&wrapper_builder, resume);
+  mir_builder_set_br(&wrapper_builder, advance->id);
+
+  mir_builder_position_at_end(&wrapper_builder, reset);
+  MirValueId one = mir_const_int(&wrapper_builder, &t_int, app, 1);
+  MirValueId next_count =
+      mir_isub(&wrapper_builder, &t_int, app, current_count, one);
+  MirValueId reset_source =
+      mir_coro_reset(&wrapper_builder, app, current_source, coro_type);
+  if (one == MIR_NO_VALUE || next_count == MIR_NO_VALUE ||
+      reset_source == MIR_NO_VALUE) {
+    return NULL;
+  }
+  mir_phi_incoming_vec_push(wrapper->arena, &count_phi->data.phi.incoming,
+                            (MirPhiIncoming){reset->id, next_count});
+  mir_phi_incoming_vec_push(wrapper->arena, &source_phi->data.phi.incoming,
+                            (MirPhiIncoming){reset->id, reset_source});
+  mir_builder_set_br(&wrapper_builder, check->id);
+
+  mir_builder_position_at_end(&wrapper_builder, done);
+  mir_builder_set_coro_done(&wrapper_builder);
+
+  return wrapper;
+}
+
+static MirValueId MirCorRepeatHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
+                                      MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!mir_builtin_arity(app, 2) || !is_coroutine_type(app->type)) {
+    return MIR_NO_VALUE;
+  }
+
+  Ast *count_arg = app->data.AST_APPLICATION.args;
+  Ast *source_arg = count_arg + 1;
+  if (!is_coroutine_type(source_arg->type)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId count = mir_expr(builder, count_arg, ctx);
+  MirValueId source = mir_expr(builder, source_arg, ctx);
+  if (count == MIR_NO_VALUE || source == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirFunction *wrapper =
+      mir_build_cor_repeat_wrapper(builder, app, source_arg->type);
+  if (!wrapper) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId wrapper_ref = mir_fn_ref(builder, wrapper->type, app, wrapper);
+  MirValueId args[] = {count, source};
+  return mir_coro_new_call_args(builder, app->type, app, wrapper_ref,
+                                wrapper->type, args, 2);
 }
 
 static MirFunction *mir_build_cor_map_wrapper(MirBuilder *builder, Ast *app,
@@ -2436,6 +2592,12 @@ void mir_register_core_builtins(MirProgram *program) {
                        MIR_BUILTIN_SYMBOL_CORE,
                        (const MirOperandUse[]){MIR_OPERAND_USE_CONSUME}, 1,
                        MIR_RESULT_OWNED);
+
+  mir_register_builtin(program, builtin_envs.cor_repeat, MirCorRepeatHandler,
+                       MIR_BUILTIN_SYMBOL_CORE,
+                       (const MirOperandUse[]){MIR_OPERAND_USE_CONSUME,
+                                               MIR_OPERAND_USE_CONSUME},
+                       2, MIR_RESULT_OWNED);
 
   mir_register_builtin(
       program, builtin_envs.cor_map, MirCorMapHandler, MIR_BUILTIN_SYMBOL_CORE,
