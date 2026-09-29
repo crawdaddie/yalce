@@ -116,7 +116,7 @@ let disperser = extern fn Double -> Double -> Double -> Double -> Double;
 # Args: threshold dB, ratio, attack secs, release secs, knee dB, makeup dB, input.
 let glue = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double;
 
-# Buffer playback. Args: buffer, rate, start position, trigger.
+# Mono Buffer playback. Args: buffer, rate, start position, trigger.
 let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;
 # Multichannel buffer playback. Args: channel count, buffer, rate, start position, trigger.
 # Compile-time constant: arg 1 (`channel count`) must be a constant integer > 0.

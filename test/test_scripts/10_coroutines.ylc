@@ -417,3 +417,12 @@ let test_conditional_end = fn () ->
   && xr () == None
 
 ;;
+
+let test_iter_array_builtin = fn () ->
+  let x = iter [|1, 2, 3|];
+  x () == Some 1
+  && x () == Some 2
+  && x () == Some 3
+  && x () == None
+
+;;

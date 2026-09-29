@@ -13,3 +13,43 @@ let split_at = fn str delim ->
       array_range (spl + delim_len) (len - spl - delim_len) str
     )
 ;;
+
+let find_first_idx = fn idx a delim ->
+  if idx >= (array_size a) then (None) else (
+    match a[idx] with 
+    | xx if xx == delim -> Some idx
+    | _ -> find_first_idx (idx + 1) a delim 
+  )
+;;
+
+let split_on = fn st delim ->
+
+  if (array_size st <= 0) then (None) else (
+    match find_first_idx 0 st delim with
+    | Some idx -> Some (st[0 .. idx], st[(idx + 1) ..])
+    | None if (array_size st > 0) -> Some (st, "")
+    | None -> None
+  )
+;;
+
+# let split_on_inc = fn str delim ->
+#   match find_first_idx 0 str delim with
+#   | Some idx -> Some (str[0 .. idx], str[(idx + 1) ..])
+#   | None -> Some (str, "")
+# ;;
+
+let trim_l = fn st ->
+  if array_size st <= 0 then st else (
+    match st[0] with
+    | ' ' -> st[1 ..] |> trim_l
+    | _ -> st
+  )
+;;
+
+let trim_nl = fn st ->
+  if array_size st <= 0 then st else (
+    match st[0] with
+    | '\n' -> st[1 ..] |> trim_l
+    | _ -> st
+  )
+;;

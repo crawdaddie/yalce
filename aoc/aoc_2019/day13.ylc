@@ -1,0 +1,225 @@
+open day13_input;
+import Int64code;
+open Int64code;
+
+let SCREEN_W = 40;
+let SCREEN_H = 25;
+let GRID_SIZE = SCREEN_W * SCREEN_H;
+
+
+type TILE_TYPE =
+  | TILE_EMPTY
+  | TILE_WALL
+  | TILE_BLOCK
+  | TILE_PADDLE
+  | TILE_BALL
+  | TILE_UNKNOWN
+  ;
+
+# Intcode tile id -> TILE_TYPE
+let tile_of_int = fn n ->
+  match n with
+  | 0 -> TILE_EMPTY
+  | 1 -> TILE_WALL
+  | 2 -> TILE_BLOCK
+  | 3 -> TILE_PADDLE
+  | 4 -> TILE_BALL
+  | _ -> TILE_UNKNOWN
+;;
+
+let RGBA_BYTES = 4;
+let RGBA_EMPTY = [|0x05, 0x07, 0x0a, 0xff|];
+let RGBA_WALL = [|0x33, 0x41, 0x55, 0xff|];
+let RGBA_BLOCK = [|0x38, 0xbd, 0xf8, 0xff|];
+let RGBA_PADDLE = [|0x6e, 0xe7, 0xb7, 0xff|];
+let RGBA_BALL = [|0x7d, 0xd3, 0xfc, 0xff|];
+let RGBA_UNKNOWN = [|0x64, 0x74, 0x8b, 0xff|];
+
+let tile_rgba = fn tile ->
+  match tile with
+  | TILE_EMPTY -> RGBA_EMPTY
+  | TILE_WALL -> RGBA_WALL
+  | TILE_BLOCK -> RGBA_BLOCK
+  | TILE_PADDLE -> RGBA_PADDLE
+  | TILE_BALL -> RGBA_BALL
+  | TILE_UNKNOWN -> RGBA_UNKNOWN
+;;
+
+
+let new_grid = fn () ->
+  array_fill_const GRID_SIZE TILE_EMPTY
+;;
+
+let grid = new_grid ();
+let prog1 = Int64code.copy_prog_sized inp Int64code.MEM_SIZE;
+
+let proc_out = fn b ->
+  ()
+;;
+
+let run = fn vm out_idx out_buf ->
+  let nvm = step_vm vm;
+  match nvm.event with
+  | Continue -> run nvm out_idx out_buf
+  # | Continue -> run nvm
+  | Halted -> ()
+  | Output v -> (
+    if (out_idx == 2) then (
+      out_buf[2] := v;
+      proc_out out_buf;
+      run (Vm nvm.pc nvm.rb nvm.prog Continue) 0 out_buf
+    ) else (
+      out_buf[out_idx] := v;
+      run (Vm nvm.pc nvm.rb nvm.prog Continue) (out_idx + 1) out_buf
+    )
+  )
+;;
+
+run (Int64code.new_vm64 prog1) 0 [|
+  Int64code.int64_from_int 0,
+  Int64code.int64_from_int 0,
+  Int64code.int64_from_int 0
+|]
+
+
+# prog1[0] := (int64_from_int 2);
+#
+# # Frame-persistent game state; vm resumes from pc/rb between frames
+# let pc_cell = [|0|];
+# let rb_cell = [| int64_from_int 0 |];
+# let buf = [|0,0,0|];
+# let buf_idx = [|0|];
+# let done = [|0|];
+# let score = [|0|];
+#
+# # Advance the game until it asks for its next input sample or halts.
+# # Exactly one joystick value is consumed per frame.
+# let step_game = fn pc rb ->
+#   if (done[0] == 1) then ()
+#   else (
+#     let nvm = Int64code.step_vm (Int64code.Vm pc rb prog1 Int64code.Continue);
+#
+#     match nvm.event with
+#     | Int64code.NeedsInput ref -> (
+#       ref[0] := Int64code.int64_from_int (joystick[0]);
+#       pc_cell[0] := nvm.pc;
+#       rb_cell[0] := nvm.rb;
+#       ()
+#     )
+#     | Int64code.Output v -> (
+#       let out = Int64code.int64_to_int v;
+#
+#       if buf_idx[0] == 2 then (
+#         if buf[0] < 0 then (
+#           score[0] := out;
+#           ()
+#         ) else (
+#           draw_tile (buf[0]) (buf[1]) out grid
+#         );
+#
+#         buf_idx[0] := 0
+#       ) else (
+#         buf[buf_idx[0]] := out;
+#         buf_idx[0] := buf_idx[0] + 1
+#       );
+#
+#       step_game nvm.pc nvm.rb
+#     )
+#     | Int64code.Halted -> (
+#       done[0] := 1;
+#       print `game over, score: {score[0]}\n`;
+#       ()
+#     )
+#   )
+# ;;
+#
+# # Flat RGBA byte buffer: 4 bytes per grid cell
+# let pixels = array_fill_const (GRID_SIZE * RGBA_BYTES) 0x00;
+# let fb = gfx_framebuffer SCREEN_W SCREEN_H;
+#
+# # One joystick sample per game tick, not per rendered frame
+# let TICK_RATE = 8.;
+# let next_tick = [|0.|];
+#
+# let frame = fn () ->
+#   let now = gfx_time ();
+#
+#   # Schedule the next tick from now, so pauses (game-over idle,
+#   # unfocused window) never create a burst of catch-up ticks
+#   if now >= next_tick[0] then (
+#     next_tick[0] := now + (1. / TICK_RATE);
+#     step_game (pc_cell[0]) (rb_cell[0]);
+#     ()
+#   ) else ();
+#
+#   grid_pixels grid pixels;
+#
+#   gfx_begin_frame ();
+#   gfx_clear 0.0 0.0 0.0 1.0;
+#   gfx_framebuffer_write fb pixels;
+#   gfx_framebuffer_draw fb TILE_SCALE;
+#   gfx_end_frame ()
+# ;;
+#
+# let SDL_KEY_DOWN = 768;
+# let SDL_KEY_UP = 769;
+# let SDL_KEY_LEFT = 1073741904;
+# let SDL_KEY_RIGHT = 1073741903;
+#
+# # Reset every piece of game state for a fresh run
+# let reset_game = fn () ->
+#   for i = 0 .. GRID_SIZE in (
+#     grid[i] := TILE_EMPTY
+#   );
+#
+#   # Reload the program: the vm mutates prog1 as it runs
+#   for i = 0 .. array_size inp in (
+#     prog1[i] := int64_from_int (inp[i])
+#   );
+#
+#   prog1[0] := int64_from_int 2;
+#
+#   for i = array_size inp .. MEM_SIZE in (
+#     prog1[i] := int64_from_int 0
+#   );
+#
+#   pc_cell[0] := 0;
+#   rb_cell[0] := int64_from_int 0;
+#   buf_idx[0] := 0;
+#   score[0] := 0;
+#   done[0] := 0;
+#   joystick[0] := 0
+# ;;
+#
+# let on_event = fn event ->
+#   let etype = gfx_event_type event;
+#   let ekey = gfx_event_key event;
+#
+#   if done[0] == 1 then (
+#     # Any key restarts a finished game
+#     if etype == SDL_KEY_DOWN then (reset_game (); ()) else ();
+#     ()
+#   ) else (
+#     if etype == SDL_KEY_DOWN && ekey == SDL_KEY_LEFT then (joystick[0] := -1; ())
+#     else if etype == SDL_KEY_DOWN && ekey == SDL_KEY_RIGHT then (joystick[0] := 1; ())
+#     else if etype == SDL_KEY_UP && (ekey == SDL_KEY_LEFT || ekey == SDL_KEY_RIGHT) then (joystick[0] := 0; ())
+#     else ()
+#   )
+# ;;
+#
+# let _ = gfx_register_sdl_event_handler "debug" on_event;
+#
+# gfx_run frame;
+# let joystick = [|0|];
+# let grid_pixels = fn grid pixels ->
+#   for i = 0 .. GRID_SIZE in (
+#     let rgba = tile_rgba (grid[i]);
+#     let o = i * RGBA_BYTES;
+#
+#     pixels[o] := rgba[0];
+#     pixels[o + 1] := rgba[1];
+#     pixels[o + 2] := rgba[2];
+#     pixels[o + 3] := rgba[3]
+#   )
+# ;;
+#

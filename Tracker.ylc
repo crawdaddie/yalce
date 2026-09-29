@@ -1,0 +1,173 @@
+import std/Math;
+import std/Str;
+
+import std/Lists;
+
+let parse_hex_digits = fn num_digits x ->
+  let acc = [| 0 |];
+  for _i = 0 .. num_digits in (
+    let i = num_digits - _i - 1;
+    let c = x[i];
+    let ci = match c with
+    | '0' -> 0
+    | '1' -> 1
+    | '2' -> 2
+    | '3' -> 3
+    | '4' -> 4
+    | '5' -> 5
+    | '6' -> 6
+    | '7' -> 7
+    | '8' -> 8
+    | '9' -> 9
+    | 'A' -> 10
+    | 'B' -> 11
+    | 'C' -> 12
+    | 'D' -> 13
+    | 'E' -> 14
+    | 'F' -> 15
+    | 'a' -> 10
+    | 'b' -> 11
+    | 'c' -> 12
+    | 'd' -> 13
+    | 'e' -> 14
+    | 'f' -> 15
+    | _ -> 0
+    ;
+    acc[0] := acc[0] + ci * (Math.ipow 16 _i)
+  );
+  acc[0]
+;;
+
+let parse_midi = fn s ->
+  let base = match s[0] with
+    | 'c' -> 0
+    | 'C' -> 0
+    | 'd' -> 2
+    | 'D' -> 2
+    | 'e' -> 4
+    | 'E' -> 4
+    | 'f' -> 5
+    | 'F' -> 5
+    | 'g' -> 7
+    | 'G' -> 7
+    | 'a' -> 9
+    | 'A' -> 9
+    | 'b' -> 11
+    | 'B' -> 11
+    | _ -> -1
+    ;
+  let (acc, octave_start) = match array_size s with
+    | 1 -> (0, 0)
+    | _ -> match s[1] with
+      | '#' -> (1, 2)
+      | '_' -> (-1, 2)
+      | '-' -> (-1, 2)
+      | _ -> (0, 1)
+    ;
+  let octave_char = match octave_start with
+    | 2 -> s[2]
+    | 1 -> s[1]
+    | _ -> '4'
+    ;
+  let octave = match octave_char with
+    | '0' -> 0
+    | '1' -> 1
+    | '2' -> 2
+    | '3' -> 3
+    | '4' -> 4
+    | '5' -> 5
+    | '6' -> 6
+    | '7' -> 7
+    | '8' -> 8
+    | '9' -> 9
+    | _ -> 0
+    ;
+  let result = (octave + 1) * 12 + base + acc;
+  result
+;;
+
+let parse_chunk = fn st ->
+  let empty_params = fn xs: (List of (String, Int)) -> xs ;;
+
+  let proc_params = fn (note, instr, plist) comp ->
+    match Str.split_on comp ' ' with
+    | Some (c, r) -> (
+      let p = c[1 .. 3] |> parse_hex_digits 2;
+      let a = match c[0] with
+        | 'p' -> (note, instr, ("pan", p)::plist)
+        | 'P' -> (note, instr, ("pan", p)::plist)
+        | 'v' -> (note, instr, ("vel", p)::plist)
+        | 'V' -> (note, instr, ("vel", p)::plist)
+        | 's' -> (note, instr, ("pos", p)::plist)
+        | 'S' -> (note, instr, ("pos", p)::plist)
+        | 'r' -> (note, instr, ("retrig", p)::plist)
+        | 'R' -> (note, instr, ("retrig", p)::plist)
+        | 'd' -> (note, instr, ("dur", p)::plist)
+        | 'D' -> (note, instr, ("dur", p)::plist)
+        | 'b' -> (note, instr, ("back", p)::plist)
+        | 'B' -> (note, instr, ("back", p)::plist)
+        | _ -> (note, instr, plist)
+        ; 
+      proc_params a r
+    )
+    | None -> (note, instr, plist)
+  ;;
+
+  match Str.split_on st ' ' with
+  | Some (head, rest) -> (
+    let note = match array_size head with
+      | 2 -> parse_midi "C"
+      | _ -> parse_midi (head[2 .. array_size head])
+      ;
+    let instr = head[0 .. 2] |> parse_hex_digits 2;
+    proc_params (note, instr, empty_params []) rest
+  )
+  | None -> (-1, -1, empty_params [])
+;;
+
+let parse_line = fn s num evs ->
+  match Str.split_on s ';' with
+  | Some (m, rest) -> (
+    let event = m |> Str.trim_l |> parse_chunk;
+    parse_line rest (num + 1) (event::evs)
+  )
+  | None -> (num, evs)
+;;
+
+
+let skip_nls = fn acc rest ->
+  if array_size rest <= 0 then (acc, rest) else (
+    match rest[0] with
+    | '\n' -> skip_nls (acc + 1) (rest[1 ..])
+    | _ -> (acc, rest)
+  )
+;;
+
+let cor_lines = fn rest ->
+  match Str.split_on rest '\n' with
+  | Some (line, next) -> (
+    let nls, tail = skip_nls 1 next;
+    yield (nls, line);
+    if array_size tail > 0 then (
+      yield cor_lines tail;
+      ()
+    ) else ()
+  )
+  | None -> ()
+;;
+
+let pat_to_coroutine = fn p spl: (Double) cb: (Int -> (Double -> (Int ->
+  (Int -> (List of (String, Int) -> ())))) ) ->
+  p
+  |> Str.trim_nl
+  |> cor_lines
+  |> cor_map (fn (dur, line) -> 
+    let (len, evs) = parse_line line 0 [];
+    let sd = dur * spl;
+    Lists.fold (fn i (note, instr, plist) ->
+      cb i sd note instr plist;
+      i - 1
+    ) (len - 1) evs;
+    sd
+  )
+;;

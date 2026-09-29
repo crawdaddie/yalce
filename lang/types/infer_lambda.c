@@ -62,6 +62,14 @@ Type *infer_lambda(Ast *ast, TICtx *ctx) {
   ctx->predicates = child.predicates;
   ctx->subst = child.subst;
 
+  // The body can constrain parameters during inference. Apply those
+  // bindings before constructing the function type used by its caller.
+  for (size_t i = 0; i < len; i++) {
+    param_types[i] = apply_subst_to_type(ctx->subst, param_types[i]);
+  }
+  body_type = apply_subst_to_type(ctx->subst, body_type);
+  child.yielded_type = apply_subst_to_type(ctx->subst, child.yielded_type);
+
   Type *fn_type = body_type;
   if (child.yielded_type) {
     // The coroutine's yield type is the type unified across all `yield`

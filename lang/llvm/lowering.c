@@ -3946,6 +3946,10 @@ static bool lower_mir_coro_new_attach_reset(
         LLVMPositionBuilderAtEnd(builder, prev);
         return false;
       }
+    } else {
+      /* The reset record retains this argument across fresh instances. */
+      lower_mir_emit_value_rc_marker(builder, arg, arg_mir_type, module,
+                                     &lctx->jit_ctx, true);
     }
     reset_args[i + 1] = arg;
   }

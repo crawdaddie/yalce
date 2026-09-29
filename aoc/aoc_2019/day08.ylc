@@ -1,0 +1,97 @@
+let open_file = extern fn String -> String -> Option of Ptr;
+let read_bytes = extern fn Ptr -> String;
+let img_raw = match open_file "~/projects/yalce/aoc/aoc_2019/day08.txt" "rb" with
+  | Some fd -> (
+    let bytes = read_bytes fd;
+    if (bytes[(array_size bytes) - 1] == '\n') then (
+      # trim trailing newline from bytes
+      let sz = (array_size bytes) - 1;
+      bytes[0 .. sz]
+    ) else (
+      bytes
+    )
+  )
+  | None -> ""
+  ;
+
+let W = 25;
+let H = 6;
+# print `{array_size img_raw}`;
+import std/Arrays;
+
+let num_digits = fn layer ->
+  Arrays.fold (fn (d0, d1, d2) pix ->
+    match pix with
+    | '0' -> (d0 + 1, d1, d2)
+    | '1' -> (d0, d1 + 1, d2)
+    | '2' -> (d0, d1, d2 + 1)
+  ) (0, 0, 0) layer
+;;
+
+let iter_layers = fn l0s img ->
+  match array_size img <= 0 with
+  | true -> l0s
+  | _ -> (
+    let layer = array_range 0 (W * H) img;
+    let (n0, n1, n2) = num_digits layer;
+    let l0, _, _ = l0s;
+    if n0 <= l0 then (
+      iter_layers (n0, n1, n2) (img[(W * H) ..])
+    ) else (
+      iter_layers l0s (img[(W * H) ..])
+    ) 
+
+    # print `layer: [{layer}]\n`;
+  )
+;;
+
+import std/Math;
+import libs/Gnuplot/Gnuplot;
+let (n0, n1, n2) = iter_layers (Math.MAX_INT, 0, 0) img_raw;
+print `{n0}:{n1}:{n2}\n`;
+
+# part 2:
+let L = (array_size img_raw) / (W * H);
+
+
+let final_layer = (
+  let cpy = array_fill_const (W * H) '0';
+  for i = 0 .. (W * H) in (
+    cpy[i] := ((img_raw[((L - 1) * (W * H)) ..]) [i])
+  );
+  cpy
+); 
+
+for _l = 0 .. (L - 1) in (
+  let l = L - _l - 2 ;
+  let layer = array_range (l * W * H) (W * H) img_raw;
+  for i = 0 .. (W * H) in (
+    let p = final_layer[i];
+    let pp = layer[i];
+    let res = match pp with
+      | '2' -> p
+      | _ -> pp
+      ;
+    final_layer[i] := res
+  )
+);
+
+let pixel_value = fn p ->
+  match p with
+  | '1' -> 1
+  | _ -> 0
+;;
+
+let pixel_values = fn img ->
+  let vals = array_fill_const (W * H) 0;
+  for i = 0 .. (W * H) in (
+    vals[i] := pixel_value (img[i])
+  );
+  vals
+;;
+
+let plot_image = fn img ->
+  Gnuplot.plot_matrix_kitty 800 220 W H (pixel_values img)
+;;
+
+plot_image final_layer;

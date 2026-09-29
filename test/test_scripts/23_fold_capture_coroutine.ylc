@@ -1,0 +1,19 @@
+import std/Lists;
+
+let events = fn () ->
+  yield (3, [1, 2])
+;;
+
+let step = fn base e ->
+  base + e
+;;
+
+let play_events = fn num evs ->
+  Lists.fold step num evs
+;;
+
+let test = module () ->
+  let co = events () |> cor_map (fn (num, evs) -> play_events num evs);
+  let test_capture = co () == Some 6;
+  let test_end = co () == None;
+;

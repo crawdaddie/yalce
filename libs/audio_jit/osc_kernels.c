@@ -491,7 +491,36 @@ ylc_audio_mbufplay_kernel(BufplayState *state, double spf, int32_t channels,
                           int32_t channel, int32_t size, int32_t offset,
                           double *data, double rate, double start_pos,
                           double trig) {
-  return 0.0;
+  if (!state || !data || channels <= 0 || channel < 0 || channel >= channels ||
+      size < channels) {
+    return 0.0;
+  }
+
+  int32_t frames = size / channels;
+  int rising = audio_jit_rising_edge(trig, state->prev_trig);
+  double phase = rising ? start_pos : state->phase;
+  double frame = audio_jit_wrap_index(phase * (double)frames,
+                                      (double)frames);
+  int32_t frame0 = (int32_t)floor(frame);
+  int32_t frame1 = frame0 + 1;
+  if (frame1 >= frames) {
+    frame1 = 0;
+  }
+
+  double frac = frame - (double)frame0;
+  double *base = data + offset;
+  double sample0 = base[frame0 * channels + channel];
+  double sample1 = base[frame1 * channels + channel];
+  double sample = audio_jit_lerp(sample0, sample1, frac);
+
+  double next_phase = fmod(phase + rate / (double)frames, 1.0);
+  if (next_phase < 0.0) {
+    next_phase += 1.0;
+  }
+  state->phase = next_phase;
+  state->prev_trig = trig;
+  (void)spf;
+  return sample;
 }
 
 static inline double audio_jit_clamp_feedback(double value) {

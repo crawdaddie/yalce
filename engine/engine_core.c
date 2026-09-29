@@ -1,6 +1,7 @@
 #include "./engine_core.h"
 #include "./audio_loop.h"
 #include "./scheduling.h"
+#include "../lang/runtime/ylc_stdlib.h"
 #include <math.h>
 #include <pthread.h>
 #include <sndfile.h>
@@ -847,6 +848,150 @@ typedef struct _SF_Open_Opt {
   char status;
   _SF_Open_Payload payload;
 } _SF_Open_Opt;
+
+typedef struct {
+  YlcRcHeader rc;
+  double data[];
+} SfArrayPayload;
+
+typedef struct SfBuffer {
+  SfArrayPayload *array;
+  int index;
+  int frames;
+  int channels;
+  int samplerate;
+  struct SfBuffer *next;
+} SfBuffer;
+
+static SfBuffer *sf_buffers;
+static int sf_buffer_next;
+
+static char *sf_path(_String path) {
+  if (!path.chars || path.size <= 0) {
+    return NULL;
+  }
+
+  if (path.chars[0] != '~') {
+    return strndup(path.chars + path.offset, (size_t)path.size);
+  }
+
+  const char *home = getenv("HOME");
+  if (!home) {
+    return NULL;
+  }
+
+  size_t suffix_size = (size_t)path.size - 1;
+  size_t home_size = strlen(home);
+  char *result = malloc(home_size + suffix_size + 1);
+  if (!result) {
+    return NULL;
+  }
+
+  memcpy(result, home, home_size);
+  memcpy(result + home_size, path.chars + path.offset + 1, suffix_size);
+  result[home_size + suffix_size] = '\0';
+  return result;
+}
+
+int load_sf_buffer(_String path) {
+  char *filename = sf_path(path);
+  if (!filename) {
+    return -1;
+  }
+
+  SF_INFO info = {0};
+  SNDFILE *file = sf_open(filename, SFM_READ, &info);
+  free(filename);
+  if (!file || info.frames <= 0 || info.channels <= 0) {
+    if (file) {
+      sf_close(file);
+    }
+    return -1;
+  }
+
+  uint64_t samples = (uint64_t)info.frames * (uint64_t)info.channels;
+  if (samples > SIZE_MAX / sizeof(double) || samples > INT32_MAX) {
+    sf_close(file);
+    return -1;
+  }
+
+  size_t bytes = sizeof(SfArrayPayload) + (size_t)samples * sizeof(double);
+  SfArrayPayload *array = malloc(bytes);
+  SfBuffer *buffer = malloc(sizeof(*buffer));
+  if (!array || !buffer) {
+    free(array);
+    free(buffer);
+    sf_close(file);
+    return -1;
+  }
+
+  array->rc.rc = 1;
+  array->rc.tag_or_size_class = 0;
+  sf_count_t read = sf_read_double(file, array->data, (sf_count_t)samples);
+  sf_close(file);
+  if (read != (sf_count_t)samples) {
+    free(array);
+    free(buffer);
+    return -1;
+  }
+
+  *buffer = (SfBuffer){
+      .array = array,
+      .index = sf_buffer_next++,
+      .frames = (int)info.frames,
+      .channels = info.channels,
+      .samplerate = info.samplerate,
+      .next = sf_buffers,
+  };
+  sf_buffers = buffer;
+  return buffer->index;
+}
+
+void *load_sf_buffer_path(_String path) {
+  int index = load_sf_buffer(path);
+  return index < 0 ? NULL : sf_buffer(index);
+}
+
+void *sf_buffer(int index) {
+  if (index < 0) {
+    return NULL;
+  }
+
+  SfBuffer *buffer = sf_buffers;
+  while (buffer && buffer->index != index) {
+    buffer = buffer->next;
+  }
+  return buffer;
+}
+
+_DoubleArray sf_buffer_data(void *raw_buffer) {
+  SfBuffer *buffer = raw_buffer;
+  if (!buffer || !buffer->array) {
+    return (_DoubleArray){0, 0, NULL};
+  }
+
+  __ylc_dup(buffer->array->data);
+  return (_DoubleArray){
+      .size = buffer->frames * buffer->channels,
+      .offset = 0,
+      .data = buffer->array->data,
+  };
+}
+
+int sf_buffer_frames(void *raw_buffer) {
+  SfBuffer *buffer = raw_buffer;
+  return buffer ? buffer->frames : 0;
+}
+
+int sf_buffer_channels(void *raw_buffer) {
+  SfBuffer *buffer = raw_buffer;
+  return buffer ? buffer->channels : 0;
+}
+
+int sf_buffer_samplerate(void *raw_buffer) {
+  SfBuffer *buffer = raw_buffer;
+  return buffer ? buffer->samplerate : 0;
+}
 
 _Static_assert(sizeof(_SF_Open_Payload) == 24,
                "SFInfo payload ABI must match YLC tuple payload size");

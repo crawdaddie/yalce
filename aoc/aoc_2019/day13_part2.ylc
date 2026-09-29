@@ -1,0 +1,225 @@
+open day13_input;
+import Int64code;
+open Int64code;
+
+let SCREEN_W = 40;
+let SCREEN_H = 25;
+let GRID_SIZE = SCREEN_W * SCREEN_H;
+
+type TILE_TYPE =
+  | TILE_EMPTY
+  | TILE_WALL
+  | TILE_BLOCK
+  | TILE_PADDLE
+  | TILE_BALL
+  | TILE_UNKNOWN
+  ;
+
+# Intcode tile id -> TILE_TYPE
+let tile_of_int = fn n ->
+  match n with
+  | 0 -> TILE_EMPTY
+  | 1 -> TILE_WALL
+  | 2 -> TILE_BLOCK
+  | 3 -> TILE_PADDLE
+  | 4 -> TILE_BALL
+  | _ -> TILE_UNKNOWN
+;;
+
+let tile_idx = fn x y ->
+  y * SCREEN_W + x
+;;
+
+let draw_tile = fn x y t grid ->
+  grid[tile_idx x y] := tile_of_int t;
+  ()
+;;
+
+let count_blocks = fn grid ->
+  let total = [|0|];
+
+  for i = 0 .. GRID_SIZE in (
+    match grid[i] with
+    | TILE_BLOCK -> (
+        total[0] := total[0] + 1;
+        ()
+    )
+    | _ -> ()
+  );
+
+  total[0]
+;;
+
+let grid = array_fill_const GRID_SIZE TILE_EMPTY;
+let joystick = [|0|];
+
+let prog = Int64code.copy_prog_sized inp Int64code.MEM_SIZE;
+prog[0] := int64_from_int 2;
+
+# Game state; the vm resumes from pc/rb between inputs
+let pc_cell = [|0|];
+let rb_cell = [| int64_from_int 0 |];
+let buf = [|0,0,0|];
+let buf_idx = [|0|];
+let done = [|0|];
+let score = [|0|];
+
+# Advance the game until its next input request or halt;
+# exactly one joystick value is consumed per call
+let step_game = fn pc rb ->
+  if done[0] == 1 then ()
+  else (
+    let nvm = Int64code.step_vm (Int64code.Vm pc rb prog Int64code.Continue);
+
+    match nvm.event with
+    | Int64code.NeedsInput ref -> (
+      ref[0] := Int64code.int64_from_int (joystick[0]);
+      pc_cell[0] := nvm.pc;
+      rb_cell[0] := nvm.rb;
+      ()
+    )
+    | Int64code.Output v -> (
+      let out = Int64code.int64_to_int v;
+
+      if buf_idx[0] == 2 then (
+        if buf[0] < 0 then (
+          score[0] := out;
+          ()
+        ) else (
+          draw_tile (buf[0]) (buf[1]) out grid
+        );
+
+        buf_idx[0] := 0
+      ) else (
+        buf[buf_idx[0]] := out;
+        buf_idx[0] := buf_idx[0] + 1
+      );
+
+      step_game nvm.pc nvm.rb
+    )
+    | Int64code.Halted -> (
+      done[0] := 1;
+      print `game over, score: {score[0]}\n`
+    )
+  )
+;;
+
+# Paddle (x, y) by scanning the grid
+let find_paddle = fn i px py ->
+  if i == GRID_SIZE then (px, py)
+  else (
+    let x, y = find_paddle (i + 1) px py;
+
+    match grid[i] with
+    | TILE_PADDLE -> (i % SCREEN_W, i / SCREEN_W)
+    | _ -> (x, y)
+  )
+;;
+
+# Ball (x, y) by scanning the grid
+let find_ball = fn i bx by ->
+  if i == GRID_SIZE then (bx, by)
+  else (
+    let x, y = find_ball (i + 1) bx by;
+
+    match grid[i] with
+    | TILE_BALL -> (i % SCREEN_W, i / SCREEN_W)
+    | _ -> (x, y)
+  )
+;;
+
+# The ball moves at most 1 tile per tick; clamping also keeps the
+# first prediction sane (prev=0 before the initial screen is drawn)
+let clamp1 = fn dx ->
+  if dx > 1 then 1 else if dx < -1 then -1 else dx
+;;
+
+# Solid tiles deflect the ball: walls and unbroken blocks
+let solid = fn x y ->
+  match grid[(y * SCREEN_W) + x] with
+  | TILE_WALL -> true
+  | TILE_BLOCK -> true
+  | _ -> false
+;;
+
+# Walk the ball's diagonal path to the paddle row and return the
+# (landing column, arrival dx). Bounces mirror the game: flip dy
+# when blocked vertically, dx when blocked horizontally, both on a
+# free corner. Blocks that break only affect later passes, which
+# re-predict from the fresh grid every tick anyway.
+let predict = fn x y dx dy row steps ->
+  if steps == 0 then (x, dx)
+  else (
+    let nx = x + dx;
+    let ny = y + dy;
+
+    if ny >= row then (nx, dx)
+    else (
+      let blocked_v = solid x ny;
+      let blocked_h = solid nx y;
+
+      if blocked_v || blocked_h then
+        predict x y
+               (if blocked_h then 0 - dx else dx)
+               (if blocked_v then 0 - dy else dy)
+               row (steps - 1)
+      else if solid nx ny then
+        predict x y (0 - dx) (0 - dy) row (steps - 1)
+      else
+        predict nx ny dx dy row (steps - 1)
+    )
+  )
+;;
+
+# Last fed input: the paddle applies it on the next tick, so the
+# drawn paddle is one move behind its real position
+let pend_joy = [|0|];
+
+# Auto-play: predict the ball's landing each tick. The catch rule:
+# the paddle column must lie inside the ball's x-interval on the
+# arrival tick, so a right-arriving ball needs px = landing - 1 and
+# a left-arriving ball px = landing. On the final approach, choose
+# between the two legal catch tiles by predicting the rebound:
+# catching at the ball mirrors its dx, catching one behind keeps
+# it. Input fed this tick moves the paddle next tick, so compare
+# against the pending position.
+let play = fn prev_bx prev_by ->
+  if done[0] == 1 then ()
+  else (
+    let px, py = find_paddle 0 0 0;
+    let bx, by = find_ball 0 0 0;
+    let dx = clamp1 (bx - prev_bx);
+    let dy = clamp1 (by - prev_by);
+    let land, adx = predict bx by dx dy py 100;
+
+    let base = if adx == 1 then land - 1 else land;
+
+    let target =
+      if px == 0 && bx == 0 then 0
+      else if by == py - 1 && dy == 1 then (
+        # Catch at the ball's tile: rebound mirrors dx. Catch one
+        # off (either side): rebound goes right (observed).
+        # Rebound starts at (land - adx + rdx, py - 2).
+        let m_rdx = 0 - adx;
+        let m_land, _ = predict (land - adx + m_rdx) (py - 2) m_rdx (-1) py 100;
+
+        let o_px = if adx == 1 then land - 1 else land + 1;
+        let o_land, _ = predict (land - adx + 1) (py - 2) 1 (-1) py 100;
+
+        if (m_land - land) < (o_land - o_px) then land else o_px
+      )
+      else base
+    ;
+    let pending = px + (pend_joy[0]);
+    let j = if target > pending then 1 else if target < pending then -1 else 0;
+
+    joystick[0] := j;
+    pend_joy[0] := j;
+    step_game (pc_cell[0]) (rb_cell[0]);
+    play bx by
+  )
+;;
+
+play 0 0;
+
+print `blocks left: {count_blocks grid}\n`;

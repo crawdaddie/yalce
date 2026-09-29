@@ -1,0 +1,33 @@
+import std/Str;
+
+let lines = fn rest ->
+  match Str.split_on rest '\n' with
+  | Some (line, next) -> (
+    yield line;
+    if array_size next > 0 then (
+      yield lines next;
+      ()
+    ) else ()
+  )
+  | None -> ()
+;;
+
+let text = `one
+
+three
+`;
+let co = lines text |> cor_loop |> cor_map (fn line -> line);
+
+let show = fn () ->
+  match co () with
+  | Some line -> (print line; print "\n")
+  | None -> print "done\n"
+;;
+
+show ();
+show ();
+show ();
+show ();
+show ();
+show ();
+show ();

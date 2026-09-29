@@ -512,8 +512,6 @@ void scheduler_init_fds() {
 // Batch of events to fire outside the lock
 #define MAX_BATCH 64
 static SchedulerEvent pending_batch[MAX_BATCH];
-static int scheduler_trace_count;
-
 // Caller must hold scheduler_mutex. Returns count of events collected.
 static int collect_due_events(uint64_t current_sample) {
   int count = 0;
@@ -530,16 +528,6 @@ static int collect_due_events(uint64_t current_sample) {
 static void fire_events(int count) {
   for (int i = 0; i < count; i++) {
     SchedulerEvent event = pending_batch[i];
-
-    // if (scheduler_trace_count < 16) {
-    //   fprintf(stderr,
-    //           "scheduler: fire[%d] callback=%p userdata=%p task=%p "
-    //           "tick=%llu dispatch=%llu\n",
-    //           scheduler_trace_count, (void *)event.callback, event.userdata,
-    //           (void *)event.task, (unsigned long long)event.tick,
-    //           (unsigned long long)event.dispatch_tick);
-    //   scheduler_trace_count++;
-    // }
 
     if (event.task) {
       pthread_mutex_lock(&scheduler_mutex);

@@ -1,0 +1,16 @@
+let c = fn () ->
+  yield (1, "x");
+  yield (2, "y")
+;;
+
+let x = c () |> cor_loop |> cor_map (fn (n, line) -> n);
+let bpl = 60. / (150. * 4.);
+let y = c () |> cor_loop |> cor_map (fn (n, line) -> n * bpl);
+let parse_line = fn line -> ();
+let z = c () |> cor_loop |> cor_map (fn (n, line) ->
+  let evs = parse_line line;
+  n * bpl
+);
+x ();
+x ();
+x ();

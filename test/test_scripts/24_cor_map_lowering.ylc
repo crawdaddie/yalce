@@ -1,0 +1,89 @@
+import std/Lists;
+
+let test = module () ->
+  let test_conversion = fn () ->
+    let source = fn () -> yield (1, "x");;
+    let co = source () |> cor_map (fn (n, _s) -> Double n);
+    match co () with
+    | Some 1. -> true
+    | _ -> false
+  ;;
+
+  let test_mixed_arithmetic = fn () ->
+    let source = fn () -> yield (4, "x");;
+    let co = source () |> cor_map (fn (n, _s) -> 0.25 * (Double n));
+    match co () with
+    | Some 1. -> true
+    | _ -> false
+  ;;
+
+  let test_implicit_numeric_cor_map = fn () ->
+    let source = fn () -> yield (4, "x");;
+    let co = source () |> cor_map (fn (n, _s) -> n * 0.25);
+    match co () with
+    | Some 1. -> true
+    | _ -> false
+  ;;
+
+  let test_implicit_numeric_cor_map_fold = fn () ->
+    let source = fn () -> yield (3, [1, 2]);;
+    let co = source () |> cor_map (fn (n, xs) ->
+      let scale = 0.5;
+      Lists.fold (fn acc x -> acc + x) 0 xs;
+      n * scale
+    );
+    match co () with
+    | Some 1.5 -> true
+    | _ -> false
+  ;;
+
+  let test_capture_free_fold = fn () ->
+    let source = fn () -> yield (3, [1, 2]);;
+    let co = source () |> cor_map (fn (n, xs) ->
+      Lists.fold (fn acc x -> acc + x) 0 xs
+    );
+    match co () with
+    | Some 3 -> true
+    | _ -> false
+  ;;
+
+  let test_captured_fold = fn () ->
+    let source = fn () -> yield (3, [1, 2]);;
+    let co = source () |> cor_map (fn (n, xs) ->
+      let scale = Double n * 0.5;
+      Lists.fold (fn acc x:(Int) -> acc + scale + (Double x * 0.)) 0. xs
+    );
+    match co () with
+    | Some 3. -> true
+    | _ -> false
+  ;;
+
+let test_fold_int_accumulator = fn () ->
+  let source = fn () -> yield (3, [(1, 0, [("d", 1)])]);;
+  let co = source () |> cor_map (fn (n, xs) ->
+    Lists.fold (fn i (_note, _instr, _plist) -> i - 1) (n - 1) xs;
+    Double n
+  );
+  match co () with
+  | Some 3. -> true
+  | _ -> false
+;; 
+
+let test_print_int_string = fn () ->
+  print (str 1318715533);
+  true
+;;
+
+let test_cor_map_keeps_yielded_list = fn () ->
+  let source = fn () -> yield (3, [1, 2]);;
+  let co = source () |> cor_map (fn value -> value);
+  match co () with
+  | Some (_n, xs) -> Lists.fold (+) 0 xs == 3
+  | _ -> false
+;;
+
+  # let test_all = conversion ()
+  # && mixed_arithmetic ()
+  # && capture_free_fold ()
+  # && captured_fold ()
+;

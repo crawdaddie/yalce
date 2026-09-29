@@ -3149,7 +3149,7 @@ static const char *mir_type_symbol_fragment(MirArena *arena, Type *type) {
     return fragment;
   }
   case T_FN: {
-    const char *fragment = "Fn";
+    const char *fragment = type->closure_meta ? "Closure" : "Fn";
     Type *cur = type;
     while (cur && cur->kind == T_FN) {
       const char *arg_fragment =
@@ -3237,6 +3237,8 @@ static void mir_call_apply_callee_summary(MirBuilder *builder, MirInstr *call);
 static Type *mir_call_type_from_operand_values(MirBuilder *builder,
                                                MirInstr *call,
                                                Type *result_type);
+static Type *mir_call_type_from_expected_operands(MirBuilder *builder,
+                                                  MirInstr *call);
 
 typedef struct MirTypeSubst {
   int id;
@@ -3306,9 +3308,12 @@ static bool mir_collect_type_subst(MirArena *arena, MirTypeSubst **subst,
 
   switch (generic->kind) {
   case T_FN:
-    return mir_collect_type_subst(arena, subst, generic->closure_meta,
-                                  concrete->closure_meta) &&
-           mir_collect_type_subst(arena, subst, generic->data.T_FN.from,
+    if (generic->closure_meta &&
+        !mir_collect_type_subst(arena, subst, generic->closure_meta,
+                                concrete->closure_meta)) {
+      return false;
+    }
+    return mir_collect_type_subst(arena, subst, generic->data.T_FN.from,
                                   concrete->data.T_FN.from) &&
            mir_collect_type_subst(arena, subst, generic->data.T_FN.to,
                                   concrete->data.T_FN.to);
@@ -3753,6 +3758,7 @@ static void mir_remap_deferred_phi_incomings(MirFunction *fn,
 }
 
 static void mir_predict_clone_value_ids(MirFunction *source, MirFunction *fn,
+                                        MirTypeSubst *subst,
                                         MirValueId *value_map,
                                         size_t value_map_len) {
   if (!source || !fn || !value_map) {
@@ -3768,6 +3774,23 @@ static void mir_predict_clone_value_ids(MirFunction *source, MirFunction *fn,
 
     for (size_t j = 0; j < block->instrs.len; j++) {
       MirInstr *instr = &block->instrs.items[j];
+      if (instr->kind == MIR_CALL &&
+          instr->data.call.callee != MIR_NO_VALUE) {
+        MirValueId mapped_callee =
+            mir_remap_value(value_map, value_map_len,
+                            instr->data.call.callee);
+        Type *callee_type = mir_function_value_type(fn, mapped_callee);
+        if (!callee_type) {
+          callee_type = mir_function_value_type(source,
+                                                instr->data.call.callee);
+          callee_type = mir_substitute_type(fn->arena, subst, callee_type);
+        }
+        if (callee_type && is_closure(callee_type) &&
+            callee_type->closure_meta &&
+            !mir_type_has_type_vars(callee_type)) {
+          next_value += 2;
+        }
+      }
       if (instr->result < value_map_len &&
           value_map[instr->result] == MIR_NO_VALUE) {
         value_map[instr->result] = next_value++;
@@ -3866,7 +3889,7 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
     }
   }
 
-  mir_predict_clone_value_ids(source, fn, value_map, value_map_len);
+  mir_predict_clone_value_ids(source, fn, subst, value_map, value_map_len);
 
   for (size_t i = 0; i < source->blocks.len; i++) {
     MirBlock *source_block = source->blocks.items[i];
@@ -3886,6 +3909,10 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
           fn_arena, subst, value_map, value_map_len, instr);
 
       MirValueId result = MIR_NO_VALUE;
+      if (clone.kind == MIR_FN_REF && clone.data.fn_ref.fn == source &&
+          !mir_type_has_type_vars(fn_type)) {
+        clone.type = fn_type;
+      }
       if (clone.kind == MIR_FN_REF && clone.type &&
           !mir_type_has_type_vars(clone.type)) {
         mir_specialize_fn_ref_instr(program, &clone, clone.type);
@@ -3916,9 +3943,72 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
           (!clone.data.call.callee_type ||
            mir_type_has_type_vars(clone.data.call.callee_type))) {
         Type *callee_type =
-            mir_call_type_from_operand_values(&builder, &clone, clone.type);
+            mir_call_type_from_expected_operands(&builder, &clone);
+        if (!callee_type) {
+          callee_type =
+              mir_call_type_from_operand_values(&builder, &clone, clone.type);
+        }
         if (callee_type && !mir_type_has_type_vars(callee_type)) {
           clone.data.call.callee_type = callee_type;
+        }
+      }
+      if (clone.kind == MIR_CALL && clone.data.call.callee != MIR_NO_VALUE) {
+        Type *callee_value_type =
+            mir_function_value_type(fn, clone.data.call.callee);
+        if (callee_value_type && is_closure(callee_value_type) &&
+            !mir_type_has_type_vars(callee_value_type)) {
+          Type *callable_type =
+              mir_closure_callable_type(fn_arena, callee_value_type);
+          MirValueId env = mir_closure_get_env(
+              &builder, callee_value_type->closure_meta, clone.origin,
+              clone.data.call.callee);
+          MirValueId closure_fn = mir_closure_fn(
+              &builder, callable_type, clone.origin, clone.data.call.callee);
+          if (callable_type && env != MIR_NO_VALUE &&
+              closure_fn != MIR_NO_VALUE) {
+            MirValueIdVec operands = {0};
+            MirOperandUseVec operand_uses = {0};
+            mir_value_id_vec_push(fn_arena, &operands, env);
+            mir_operand_use_vec_push(fn_arena, &operand_uses,
+                                     MIR_OPERAND_USE_BORROW);
+            for (size_t k = 0; k < clone.data.call.operands.len; k++) {
+              mir_value_id_vec_push(fn_arena, &operands,
+                                    clone.data.call.operands.items[k]);
+              mir_operand_use_vec_push(
+                  fn_arena, &operand_uses,
+                  k < clone.data.call.operand_uses.len
+                      ? clone.data.call.operand_uses.items[k]
+                      : MIR_OPERAND_USE_CONSUME);
+            }
+            clone.data.call.callee = closure_fn;
+            clone.data.call.callee_type = callable_type;
+            clone.data.call.operands = operands;
+            clone.data.call.operand_uses = operand_uses;
+          }
+        }
+      }
+      if (clone.kind == MIR_CALL && !clone.data.call.builtin &&
+          clone.origin && clone.origin->tag == AST_BINOP) {
+        const char *name = NULL;
+        switch (clone.origin->data.AST_BINOP.op) {
+        case TOKEN_PLUS:
+          name = "+";
+          break;
+        case TOKEN_MINUS:
+          name = "-";
+          break;
+        case TOKEN_STAR:
+          name = "*";
+          break;
+        case TOKEN_SLASH:
+          name = "/";
+          break;
+        default:
+          break;
+        }
+        if (name) {
+          clone.data.call.builtin =
+              mir_program_lookup_builtin(builder.program, name);
         }
       }
       if (clone.kind == MIR_CALL && clone.data.call.builtin) {
@@ -4583,6 +4673,34 @@ static Type *mir_call_type_from_operand_values(MirBuilder *builder,
 
   return mir_fn_type_from_args(builder->program->arena, operand_types,
                                operand_count, result_type);
+}
+
+static Type *mir_call_type_from_expected_operands(MirBuilder *builder,
+                                                  MirInstr *call) {
+  if (!builder || !builder->program || !builder->fn || !call ||
+      !call->data.call.callee_type ||
+      !mir_type_has_type_vars(call->data.call.callee_type)) {
+    return NULL;
+  }
+
+  MirTypeSubst *subst = NULL;
+  Type *cursor = call->data.call.callee_type;
+  for (size_t i = 0;
+       i < call->data.call.operands.len && cursor && cursor->kind == T_FN;
+       i++, cursor = cursor->data.T_FN.to) {
+    Type *actual = mir_function_value_type(
+        builder->fn, call->data.call.operands.items[i]);
+    Type *expected = cursor->data.T_FN.from;
+    if (actual && expected && !mir_type_has_type_vars(actual) &&
+        !mir_collect_type_subst(builder->program->arena, &subst, expected,
+                                actual)) {
+      return NULL;
+    }
+  }
+
+  Type *type = mir_substitute_type(builder->program->arena, subst,
+                                   call->data.call.callee_type);
+  return type && !mir_type_has_type_vars(type) ? type : NULL;
 }
 
 static void mir_update_call_result_type(MirBuilder *builder, MirInstr *call,
@@ -8132,6 +8250,11 @@ MirValueId mir_expr(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
   case AST_STRING:
     return mir_const_string(builder, ast->type, ast, ast->data.AST_STRING.value,
                             ast->data.AST_STRING.length);
+  case AST_FMT_STRING:
+    if (ast->data.AST_LIST.len == 1) {
+      return mir_expr(builder, ast->data.AST_LIST.items, ctx);
+    }
+    return MIR_NO_VALUE;
   case AST_VOID:
     return mir_const_void(builder, ast->type, ast);
   case AST_TYPE_DECL:
@@ -9643,9 +9766,7 @@ MirProgram *mir_build_program(MirArena *arena, Ast *prog_ast, MirCtx *ctx) {
   }
 
   MirFunction *top = mir_program_add_function(
-      program, "$top",
-      ylc_config.test_mode ? &t_bool : (prog_ast ? prog_ast->type : NULL),
-      prog_ast);
+      program, "$top", ylc_config.test_mode ? &t_bool : &t_void, prog_ast);
   MirBlock *entry = mir_function_add_block(top, "entry");
 
   if (!top || !entry) {
@@ -9707,8 +9828,10 @@ MirProgram *mir_build_program(MirArena *arena, Ast *prog_ast, MirCtx *ctx) {
   } else if (result != MIR_NO_VALUE && builder.block &&
              builder.block->term.kind == MIR_TERM_NONE) {
     mir_builder_set_return(&builder, result);
-  } else if (result == MIR_NO_VALUE) {
-    mir_builder_set_unreachable_if_open(&builder);
+  } else if (result == MIR_NO_VALUE && builder.block &&
+             (builder.block->term.kind == MIR_TERM_NONE ||
+              builder.block->term.kind == MIR_TERM_UNREACHABLE)) {
+    mir_builder_set_return(&builder, MIR_NO_VALUE);
   }
 
   return program;

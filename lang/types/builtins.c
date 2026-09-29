@@ -444,6 +444,23 @@ static TypeEnv *make_iter_env(void) {
   return entry;
 }
 
+static TypeEnv *make_iter_array_env(void) {
+  Type *a = tvar("a");
+  Type *array = create_array_type(a);
+  Type *cor = create_coroutine_instance_type(a);
+  Type *fn_type = type_fn(array, cor);
+
+  TypeList *tl_a = vlist_of_typevar(a);
+
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "iter_array",
+                     .type = fn_type,
+                     .scheme_vars = tl_a,
+                     .predicates = NULL,
+                     .next = NULL};
+  return entry;
+}
+
 static TypeEnv *make_cor_map_env(void) {
   Type *a = tvar("a");
   Type *b = tvar("b");
@@ -1009,6 +1026,8 @@ void initialize_builtin_types() {
 
   builtin_envs.iter = make_iter_env();
   add_builtin_env("iter", builtin_envs.iter);
+  builtin_envs.iter_array = make_iter_array_env();
+  add_builtin_env("iter_array", builtin_envs.iter_array);
 
   builtin_envs.array_size = make_array_size_env();
   add_builtin_env("array_size", builtin_envs.array_size);

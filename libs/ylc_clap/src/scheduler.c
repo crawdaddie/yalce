@@ -140,8 +140,8 @@ static void ylc_clap_sched_push(ylc_clap_scheduler_t *sched,
 
   if (sched->size >= sched->capacity) {
     sched->capacity *= 2;
-    ylc_clap_sched_event_t *events =
-        realloc(sched->events, sizeof(ylc_clap_sched_event_t) * sched->capacity);
+    ylc_clap_sched_event_t *events = realloc(
+        sched->events, sizeof(ylc_clap_sched_event_t) * sched->capacity);
     if (!events) {
       sched->capacity /= 2;
       pthread_mutex_unlock(&sched->lock);
@@ -207,9 +207,8 @@ static void ylc_clap_task_add_child(ylc_clap_task_t *parent,
   if (parent->num_children >= parent->children_cap) {
     parent->children_cap =
         parent->children_cap > 0 ? parent->children_cap * 2 : 4;
-    ylc_clap_task_t **children =
-        realloc(parent->children,
-                sizeof(ylc_clap_task_t *) * parent->children_cap);
+    ylc_clap_task_t **children = realloc(
+        parent->children, sizeof(ylc_clap_task_t *) * parent->children_cap);
     if (!children) {
       parent->children_cap =
           parent->children_cap > 4 ? parent->children_cap / 2 : 0;
@@ -221,7 +220,7 @@ static void ylc_clap_task_add_child(ylc_clap_task_t *parent,
 }
 
 static void ylc_clap_task_cancel_recursive(ylc_clap_scheduler_t *sched,
-                                            ylc_clap_task_t *task) {
+                                           ylc_clap_task_t *task) {
   if (!task || task->cancelled) {
     return;
   }
@@ -237,13 +236,13 @@ static void ylc_clap_task_cancel_recursive(ylc_clap_scheduler_t *sched,
 }
 
 static bool ylc_clap_task_is_cancelled(ylc_clap_scheduler_t *sched,
-                                        void *handle) {
+                                       void *handle) {
   ylc_clap_task_t *task = ylc_clap_task_find(sched, handle);
   return task != NULL && (task->cancelled || task->completed);
 }
 
-static void ylc_clap_sched_push_task(ylc_clap_scheduler_t *sched,
-                                     uint64_t now, double delay_seconds,
+static void ylc_clap_sched_push_task(ylc_clap_scheduler_t *sched, uint64_t now,
+                                     double delay_seconds,
                                      ylc_clap_task_t *task) {
   if (!sched || !task || task->cancelled || task->completed) {
     return;
@@ -265,8 +264,7 @@ static void ylc_clap_sched_push_task(ylc_clap_scheduler_t *sched,
   ylc_clap_sched_push(sched, event);
 }
 
-void ylc_clap_scheduler_advance(ylc_clap_scheduler_t *sched,
-                                uint32_t frames) {
+void ylc_clap_scheduler_advance(ylc_clap_scheduler_t *sched, uint32_t frames) {
   if (!sched) {
     return;
   }
@@ -279,8 +277,8 @@ void ylc_clap_scheduler_drain(ylc_clap_scheduler_t *sched) {
     return;
   }
 
-  uint64_t now = atomic_load_explicit(&sched->sample_position,
-                                      memory_order_relaxed);
+  uint64_t now =
+      atomic_load_explicit(&sched->sample_position, memory_order_relaxed);
 
   for (;;) {
     pthread_mutex_lock(&sched->lock);
@@ -292,9 +290,8 @@ void ylc_clap_scheduler_drain(ylc_clap_scheduler_t *sched) {
       has_event = true;
     }
 
-    bool cancelled =
-        has_event && event.task &&
-        ylc_clap_task_is_cancelled(sched, event.task);
+    bool cancelled = has_event && event.task &&
+                     ylc_clap_task_is_cancelled(sched, event.task);
 
     pthread_mutex_unlock(&sched->lock);
 
@@ -433,9 +430,7 @@ uint64_t ylc_clap_get_tl_tick(void) {
   return sched->cur_tick != 0 ? sched->cur_tick : ylc_clap_get_current_sample();
 }
 
-uint64_t ylc_clap_get_sched_tick(void) {
-  return ylc_clap_get_current_sample();
-}
+uint64_t ylc_clap_get_sched_tick(void) { return ylc_clap_get_current_sample(); }
 
 int ylc_clap_ctx_sample_rate(void) {
   ylc_clap_scheduler_t *sched = ylc_clap_scheduler_get_active();

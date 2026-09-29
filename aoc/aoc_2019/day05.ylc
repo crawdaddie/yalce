@@ -1,0 +1,5 @@
+open day05_input;
+
+import Intcode;
+Intcode.Run inp
+

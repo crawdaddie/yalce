@@ -8931,8 +8931,10 @@ static MirValueId MirStandalonePlayPatternHandler(MirBuilder *builder, Ast *app,
     return MIR_NO_VALUE;
   }
 
-  Type *coro_type =
-      is_coroutine_type(coro_ast->type) ? coro_ast->type : app->type;
+  Type *coro_type = mir_function_value_type(builder->fn, cor);
+  if (!is_coroutine_type(coro_type)) {
+    coro_type = is_coroutine_type(coro_ast->type) ? coro_ast->type : app->type;
+  }
   if (!is_coroutine_type(coro_type)) {
     return MIR_NO_VALUE;
   }

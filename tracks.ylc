@@ -1,0 +1,113 @@
+open libs/audio_jit/DSP;
+import libs/audio_jit/SF;
+import std/Lists;
+import Tracker;
+
+
+let pat = `
+00 s00
+00 s10
+
+00 s30
+00 s40
+00 s50 
+00 s60 
+00 s70 
+00 s80 
+00 s90 
+00 sa0 
+00 sb0 
+00 sc0 
+00 sd0 
+00 se0 
+00 sf0 
+00 s00
+00 s10
+00 s40
+00 s30
+00 s40
+00 s50 
+00 s60 
+00 s70 
+00 s40 r06 
+
+
+
+00 sc0 
+00 sd0 
+00 se0 
+00 sf0 
+00 sc0 
+00 sd0 
+00 se0 
+00 s40
+00c#4   s40
+00d4    s40
+00d#4   s40
+00 s70 
+00 s80 
+00 s90 
+00 sa0 
+00 sb0 
+00 sc0 
+00 sd0 
+00 se0 
+00 sf0 
+00 s00 d80
+
+00 s40 
+00 s50 b01 
+00 s40 
+00 s50 b01 
+00 sd0 
+00 s50 b01 
+00 s80 r08
+00 s90 
+00 sa0 
+00 sb0 r08
+00 sc0 
+00 sd0 
+00 se0 r08
+00 sf0 
+`
+;
+
+let instr0 = module () ->
+  let amen_buf = SF.load_sf "~/projects/yalce/fat_amen_mono_48000.wav";
+  let synth = @Audio fn dur sp retrig_freq rate rev_dir -> 
+    let t = trig retrig_freq;
+    let t0 = trig 0;
+    bufplay (amen_buf.data) (rev_dir * rate * amen_buf.samplerate * spf) sp t |> pan 2 0.5
+    |> (*) (t0 |> rect dur |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+  ;;
+
+  let defaults = fn () -> [|1., 0., 0., 1., 1.|];;
+
+  let play = fn dur note plist ->
+    let ps = Lists.fold (fn acc p ->
+      let name, v = p;
+      match name[0] with
+      | 'p' -> (acc[1] := (Double v) / 256.; acc)
+      | 'r' -> (acc[2] := Double v; acc)
+      | 'd' -> (acc[0] := (Double v) / 256.; acc)
+      | 'b' -> (acc[4] := (if v > 0 then -1. else 1.); acc)
+      | _ -> acc
+    ) (defaults ()) plist;
+    synth (dur * ps[0]) (ps[1]) (ps[2] / dur) (((Double note) - 60.) |> midiratio) (ps[4]) |> play_node;
+    ()
+  ;;
+;
+
+let beat = 60. / 170.;
+let spl = beat / 4.;
+let x = Tracker.pat_to_coroutine
+  pat 
+  spl
+  (fn _ dur note instr plist ->
+      match instr with
+      | 0 -> instr0.play dur note plist
+      | _ -> ()
+  )
+|> cor_loop
+|> play_pattern beat
+;

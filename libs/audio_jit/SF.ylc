@@ -1,8 +1,18 @@
 type SFInfo = (fd: Ptr, frames: Uint64, samplerate: Int, channels: Int);
 type SF = (data: Array of Double, channels: Int, samplerate: Int);
+type SFB = (data: Array of Double, channels: Int, samplerate: Int);
+let load_sf_buffer = extern fn String -> Int;
+let sf_buffer = extern fn Int -> Ptr;
+# let load_sf_buffer = fn p ->
+#   load_sf_buffer_extern p
+# ;;
 let sf_open_opt = extern fn String -> Option of SFInfo;
 let sf_close = extern fn Ptr -> Int; 
 let u64_to_int = extern fn Uint64 -> Int;
+let sf_buffer_data = extern fn Ptr -> Array of Double;
+let sf_buffer_frames = extern fn Ptr -> Int;
+let sf_buffer_channels = extern fn Ptr -> Int;
+let sf_buffer_samplerate = extern fn Ptr -> Int;
 
 let sf_read_double = extern fn Ptr -> Ptr -> Uint64 -> Uint64;
 

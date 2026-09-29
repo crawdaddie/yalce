@@ -70,4 +70,12 @@ void record_stop(void);
 void record_write(const double *samples, int frames, double volume);
 
 NodeRef load_soundfile(_String filename);
+
+int load_sf_buffer(_String filename);
+void *load_sf_buffer_path(_String filename);
+void *sf_buffer(int index);
+_DoubleArray sf_buffer_data(void *buffer);
+int sf_buffer_frames(void *buffer);
+int sf_buffer_channels(void *buffer);
+int sf_buffer_samplerate(void *buffer);
 #endif

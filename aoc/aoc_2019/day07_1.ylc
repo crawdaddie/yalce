@@ -1,0 +1,168 @@
+open day07_input;
+import Intcode;
+open Intcode;
+
+type AmpResult = (
+  pc: Int,
+  rb: Int,
+  input_used: Int,
+  halted: Int,
+  output: Int
+);
+
+let step_direct = fn pc rb arr ->
+  match arr[pc] % 100 with
+  | 1 -> add pc rb arr
+  | 2 -> mul pc rb arr
+  | 3 -> get_input pc rb arr
+  | 4 -> output pc rb arr
+  | 5 -> jump_true pc rb arr
+  | 6 -> jump_false pc rb arr
+  | 7 -> lt pc rb arr
+  | 8 -> eq pc rb arr
+  | 9 -> adjust_rb pc rb arr
+  | 99 -> terminate pc rb arr
+  | _ -> (pc + 1, rb, Continue)
+;;
+
+let run_amp_halt = fn pc rb arr phase signal input_idx last ->
+  let pcn, rbn, ev = step_direct pc rb arr;
+
+  match ev with
+  | Continue -> run_amp_halt pcn rbn arr phase signal input_idx last
+  | NeedsInput ref -> (
+    ref[0] := if input_idx == 0 then phase else signal;
+    run_amp_halt pcn rbn arr phase signal (input_idx + 1) last
+  )
+  | Output v -> run_amp_halt pcn rbn arr phase signal input_idx v
+  | Halted -> last
+;;
+
+let run_amp_once = fn prog phase signal ->
+  run_amp_halt 0 0 (copy_prog prog) phase signal 0 0
+;;
+
+let phase_sequence = fn prog phases ->
+  run_amp_once prog (phases[0]) 0
+  |> run_amp_once prog (phases[1])
+  |> run_amp_once prog (phases[2])
+  |> run_amp_once prog (phases[3])
+  |> run_amp_once prog (phases[4])
+;;
+
+# print `43210: {phase_sequence [|3,15,3,16,1002,16,10,16,1,16,15,15,4,15,99,0,0|] [|4,3,2,1,0|]}\n`;
+# print `54321: {phase_sequence [|
+# 3,23,3,24,1002,24,10,24,1002,23,-1,23,101,5,23,23,1,24,23,23,4,23,99,0,0|] [|0,1,2,3,4|]}\n`;
+# print `65210: {phase_sequence [|3,31,3,32,1002,32,10,32,1001,31,-2,31,1007,31,0,33,1002,33,7,33,1,33,31,31,1,32,31,31,4,31,99,0,0,0   |] [|1,0,4,3,2|]}\n`;
+
+let swap = fn arr i j ->
+  let tmp = arr[i];
+  arr[i] := arr[j];
+  arr[j] := tmp
+;;
+
+let print_perm = fn arr ->
+  for i = 0 .. array_size arr in (
+    print `{arr[i]}`
+  );
+  print "\n"
+;;
+import std/Math;
+let fold_permutations = fn f acc k arr ->
+  if k == 1 then (
+    # compute final output and compare with acc ??
+    # print_perm arr
+    acc[0] := f (acc[0]) arr ;
+    # Math.max (acc[0]) (phase_sequence inp arr);
+    ()
+  ) else (
+    fold_permutations f acc (k - 1) arr;
+    for i = 0 .. (k - 1) in (
+      if k % 2 == 0 then (
+        swap arr i (k - 1)
+      ) else (
+        swap arr 0 (k - 1)
+      );
+
+      fold_permutations f acc (k - 1) arr
+    )
+  )
+;;
+
+let run_amp_out = fn pc rb prog phase signal input_used ->
+  let pcn, rbn, ev = step_direct pc rb prog;
+
+  match ev with
+  | Continue -> run_amp_out pcn rbn prog phase signal input_used
+  | NeedsInput ref -> (
+    ref[0] := if input_used == 0 then phase else signal;
+    run_amp_out pcn rbn prog phase signal 1
+  )
+  | Output v -> AmpResult pcn rbn input_used 0 v
+  | Halted -> AmpResult pcn rbn input_used 1 signal
+;;
+
+let step_amp = fn idx phases pcs rbs used progs halted signal ->
+  let res = run_amp_out (pcs[idx]) (rbs[idx]) (progs[idx]) (phases[idx]) signal (used[idx]);
+
+  pcs[idx] := res.pc;
+  rbs[idx] := res.rb;
+  used[idx] := res.input_used;
+  halted[0] := res.halted;
+
+  res.output
+;;
+
+
+let run_fb_vms = fn last signal phases pcs rbs used progs ->
+  let halted = [|0|];
+  let out = signal
+    |> step_amp 0 phases pcs rbs used progs halted
+    |> step_amp 1 phases pcs rbs used progs halted
+    |> step_amp 2 phases pcs rbs used progs halted
+    |> step_amp 3 phases pcs rbs used progs halted
+    |> step_amp 4 phases pcs rbs used progs halted
+    ;
+
+  if halted[0] == 1 then last else (
+    run_fb_vms out out phases pcs rbs used progs
+  )
+;;
+
+let phase_sequence_fb = fn prog phases ->
+  let pcs = [|0, 0, 0, 0, 0|];
+  let rbs = [|0, 0, 0, 0, 0|];
+  let used = [|0, 0, 0, 0, 0|];
+  let progs = [|
+    copy_prog prog,
+    copy_prog prog,
+    copy_prog prog,
+    copy_prog prog,
+    copy_prog prog
+  |];
+
+  run_fb_vms 0 0 phases pcs rbs used progs
+;;
+
+# let phases = [|0,1,2,3,4|];
+let phases = [|0,1,2,3,4|];
+let phases2 = [|5,6,7,8,9|];
+let best = [|0|];
+let best2 = [|0|];
+fold_permutations (fn acc arr -> 
+  Math.max acc (phase_sequence inp arr)
+) best (array_size phases) phases;
+
+print `{best[0]}\n`;
+
+print `part2 test1: {phase_sequence_fb [|3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5|] [|9,8,7,6,5|]}\n`;
+print `part2 test2: {phase_sequence_fb [|
+3,52,1001,52,-5,52,3,53,1,52,56,54,1007,54,5,55,1005,55,26,1001,54,
+-5,54,1105,1,12,1,53,54,53,1008,54,0,55,1001,55,1,55,2,53,55,53,4,
+53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10
+|] [|9,7,8,5,6|]}\n`;
+
+fold_permutations (fn acc arr ->
+  Math.max acc (phase_sequence_fb inp arr)
+) best2 (array_size phases2) phases2;
+print `{best2[0]}\n`;
