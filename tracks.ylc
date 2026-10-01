@@ -1,76 +1,63 @@
 open libs/audio_jit/DSP;
 import libs/audio_jit/SF;
-import std/Lists;
 import Tracker;
-
+import std/Lists;
 
 let pat = `
 00 s00
 00 s10
-
+00 s20
 00 s30
+(00 s40; 00 s40 r02; 00d4 s40; 00 s50 b01)
+00 s50
+00 s60
+00 s70
+00 s80
+00 s90
+00 sa0
+00 sb0
+00 sc0
+00 sd0
+00 se0
+00 sf0
+# 00 s40
+# 00c#4 s40
+# 00d4 s40
+# 00d#4 s40
+# 00e4 s40
+# 00f4 s40
+# 00f#4 s40
+# 00g4 s40
+# 00g#4 s40
+# 00a4 s40
+# 00a#4 s40
+# 00c5 s40 r03
+#
+00 sd0
+00 se0
+00 sf0
 00 s40
-00 s50 
-00 s60 
-00 s70 
-00 s80 
-00 s90 
-00 sa0 
-00 sb0 
-00 sc0 
-00 sd0 
-00 se0 
-00 sf0 
-00 s00
-00 s10
-00 s40
-00 s30
-00 s40
-00 s50 
-00 s60 
-00 s70 
-00 s40 r06 
+#
+00 sc0
+00 sd0
+00 se0
+00 sf0
+#
+00 sc0
+00 sd0
+00 se0
+00 sf0
 
+#
+00 se0
+00 se0
+00 se0
+00 se0
+`;
 
-
-00 sc0 
-00 sd0 
-00 se0 
-00 sf0 
-00 sc0 
-00 sd0 
-00 se0 
-00 s40
-00c#4   s40
-00d4    s40
-00d#4   s40
-00 s70 
-00 s80 
-00 s90 
-00 sa0 
-00 sb0 
-00 sc0 
-00 sd0 
-00 se0 
-00 sf0 
-00 s00 d80
-
-00 s40 
-00 s50 b01 
-00 s40 
-00 s50 b01 
-00 sd0 
-00 s50 b01 
-00 s80 r08
-00 s90 
-00 sa0 
-00 sb0 r08
-00 sc0 
-00 sd0 
-00 se0 r08
-00 sf0 
-`
-;
+let bpm = 150.;
+let beat = 60. / bpm;
+let spl = beat / 4.;
 
 let instr0 = module () ->
   let amen_buf = SF.load_sf "~/projects/yalce/fat_amen_mono_48000.wav";
@@ -86,28 +73,35 @@ let instr0 = module () ->
   let play = fn dur note plist ->
     let ps = Lists.fold (fn acc p ->
       let name, v = p;
-      match name[0] with
-      | 'p' -> (acc[1] := (Double v) / 256.; acc)
+      match name with
+      | 's' -> (acc[1] := (Double v) / 256.; acc)
       | 'r' -> (acc[2] := Double v; acc)
       | 'd' -> (acc[0] := (Double v) / 256.; acc)
       | 'b' -> (acc[4] := (if v > 0 then -1. else 1.); acc)
       | _ -> acc
     ) (defaults ()) plist;
-    synth (dur * ps[0]) (ps[1]) (ps[2] / dur) (((Double note) - 60.) |> midiratio) (ps[4]) |> play_node;
+    synth (dur * ps[0]) (ps[1]) (ps[2] / dur) (((Double note) - 60.) |> midiratio |> (*) (bpm / 170.)) (ps[4]) |> play_node;
     ()
   ;;
 ;
 
-let beat = 60. / 170.;
-let spl = beat / 4.;
-let x = Tracker.pat_to_coroutine
-  pat 
-  spl
-  (fn _ dur note instr plist ->
-      match instr with
-      | 0 -> instr0.play dur note plist
-      | _ -> ()
+import std/Math;
+
+
+let a = Tracker.parse_pattern pat
+  |> Tracker.pattern_cor 0
+  |> cor_map (fn (d, ev) ->
+    let dur = d* spl; 
+    Tracker.handle_ev 
+      (fn dur note instr plist ->
+        match instr with
+        | 0 -> instr0.play dur note plist
+        | _ -> ()
+      )
+      dur
+      ev
   )
-|> cor_loop
-|> play_pattern beat
-;
+  |> cor_loop
+  ;
+
+play_pattern beat a 

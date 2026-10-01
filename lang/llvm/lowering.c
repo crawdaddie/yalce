@@ -2330,18 +2330,35 @@ static LLVMValueRef lower_mir_tuple(MirFunction *fn, MirInstr *instr,
   }
 
   LLVMTypeRef tuple_type =
-      lower_mir_aggregate_type(instr->type, ctx, module, NULL);
+      lower_mir_abi_value_type(instr->type, ctx, module, NULL);
   if (!tuple_type) {
     return NULL;
+  }
+
+  size_t item_count = instr->data.construct.items.len;
+  LLVMValueRef item_values[item_count];
+  for (size_t i = 0; i < item_count; i++) {
+    item_values[i] = mir_llvm_value_get_rvalue(
+        values, instr->data.construct.items.items[i], builder);
+    if (!item_values[i]) {
+      return NULL;
+    }
+  }
+
+  if (is_tuple_type(instr->type) &&
+      lower_mir_type_has_unresolved_vars(instr->type)) {
+    LLVMTypeRef fields[item_count];
+    for (size_t i = 0; i < item_count; i++) {
+      fields[i] = LLVMTypeOf(item_values[i]);
+    }
+    tuple_type = LLVMStructTypeInContext(LLVMGetModuleContext(module), fields,
+                                         (unsigned)item_count, 0);
   }
 
   LLVMValueRef tuple = LLVMGetUndef(tuple_type);
   for (size_t i = 0; i < instr->data.construct.items.len; i++) {
     MirValueId item_id = instr->data.construct.items.items[i];
-    LLVMValueRef item = mir_llvm_value_get_rvalue(values, item_id, builder);
-    if (!item) {
-      return NULL;
-    }
+    LLVMValueRef item = item_values[i];
 
     Type *item_type = mir_function_value_type(fn, item_id);
     if (item_type && item_type->kind == T_FN) {
@@ -4366,13 +4383,23 @@ static LLVMValueRef lower_mir_call(MirFunction *fn, MirInstr *instr,
              : result;
 }
 
-static LLVMValueRef lower_mir_phi(MirInstr *instr, LLVMModuleRef module,
+static LLVMValueRef lower_mir_phi(MirFunction *fn, MirInstr *instr,
+                                  LLVMModuleRef module,
                                   JITLangCtx *ctx, LLVMBuilderRef builder) {
   if (!instr || !instr->type) {
     return NULL;
   }
 
-  LLVMTypeRef type = lower_mir_abi_value_type(instr->type, ctx, module, NULL);
+  Type *type_ref = instr->type;
+  if (instr->data.phi.incoming.len > 0) {
+    Type *incoming_type = mir_function_value_type(
+        fn, instr->data.phi.incoming.items[0].value);
+    if (incoming_type && !lower_mir_type_has_unresolved_vars(incoming_type)) {
+      type_ref = incoming_type;
+    }
+  }
+
+  LLVMTypeRef type = lower_mir_abi_value_type(type_ref, ctx, module, NULL);
   if (!type || LLVMGetTypeKind(type) == LLVMVoidTypeKind) {
     return NULL;
   }
@@ -6482,7 +6509,7 @@ static LLVMValueRef lower_mir_instr(MirInstr *instr, MirLlvmValueMap *values,
     return lower_mir_op(fn, instr, values, lctx, module, builder, ctx);
 
   case MIR_PHI:
-    return lower_mir_phi(instr, module, ctx, builder);
+    return lower_mir_phi(fn, instr, module, ctx, builder);
 
   case MIR_EXTRACT:
     return lower_mir_extract(fn, instr, values, module, builder, ctx);

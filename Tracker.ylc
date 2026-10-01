@@ -1,7 +1,116 @@
-import std/Math;
-import std/Str;
-
 import std/Lists;
+import std/Str;
+import std/Arrays;
+import std/Math;
+
+# take a list in reverse order and write it to a pre-alloced array
+let rlist_to_arr = fn l res i ->
+  match l with
+  | x::rest -> (
+    res[i] := x;
+    match i with
+    | 0 -> res
+    | _ -> rlist_to_arr rest res (i - 1)
+  )
+  | [] -> res
+;;
+
+# list_to_arr (l[0]) res (s[0] - 1)
+
+let proc_pat_list = fn p l n ->
+  match Str.split_on p '\n' with
+  | Some (x, rest) -> (
+    if array_size x == 0 then (
+      match l with
+      | d::r -> (
+        let (nn, last_ev) = d;
+        proc_pat_list rest ((nn + 1, last_ev)::r) n
+      )
+      | [] -> proc_pat_list rest l n
+    )
+
+    else if x[0] == '#' then
+      proc_pat_list rest l n
+    else
+      proc_pat_list rest ((1, x)::l) (n + 1)
+    )
+  | None -> (n, l)
+;;
+
+
+let parse_pat = fn pat ->
+  let (n, l) = proc_pat_list pat [] 0;
+  match l with
+    | x::_ -> (
+      let res = array_fill_const n x;
+      rlist_to_arr l res (n - 1)
+    )
+    | [] -> [| |]
+;;
+type Atom =
+  | Rest
+  | Note of (Int, Int, List of (Char, Int))
+  | Group of Array of Atom
+  | Choice of Array of Atom
+  | Jump of (Int, Int)
+  ;
+
+let atoms_to_arr_fill =
+  fn evs: (List of Atom)
+     result: (Array of Atom)
+     i: (Int) ->
+  match evs with
+  | [] -> result
+  | x::rest -> (
+    result[i] := x;
+    atoms_to_arr_fill rest result (i + 1)
+  )
+;;
+
+let atoms_to_arr = fn evs ->
+  let count = Lists.fold (fn n _ -> n + 1) 0 evs;
+  let result = array_fill_const count Rest;
+  atoms_to_arr_fill evs result 0
+;;
+
+let scan_atom = fn st i ->
+  if i >= array_size st then i else
+  match st[i] with
+  | ';' -> i
+  | ')' -> i
+  | _ -> scan_atom st (i + 1)
+;;
+
+let char_to_lower = fn c: (Char) ->
+  match c with
+  | 'A' -> 'a'
+  | 'B' -> 'b'
+  | 'C' -> 'c'
+  | 'D' -> 'd'
+  | 'E' -> 'e'
+  | 'F' -> 'f'
+  | 'G' -> 'g'
+  | 'H' -> 'h'
+  | 'I' -> 'i'
+  | 'J' -> 'j'
+  | 'K' -> 'k'
+  | 'L' -> 'l'
+  | 'M' -> 'm'
+  | 'N' -> 'n'
+  | 'O' -> 'o'
+  | 'P' -> 'p'
+  | 'Q' -> 'q'
+  | 'R' -> 'r'
+  | 'S' -> 's'
+  | 'T' -> 't'
+  | 'U' -> 'u'
+  | 'V' -> 'v'
+  | 'W' -> 'w'
+  | 'X' -> 'x'
+  | 'Y' -> 'y'
+  | 'Z' -> 'z'
+  | _ -> c
+;;
 
 let parse_hex_digits = fn num_digits x ->
   let acc = [| 0 |];
@@ -86,33 +195,35 @@ let parse_midi = fn s ->
   result
 ;;
 
-let parse_chunk = fn st ->
-  let empty_params = fn xs: (List of (String, Int)) -> xs ;;
+let parse_chunk_chars = fn st ->
+  let empty_params = fn xs: (List of (Char, Int)) -> xs ;;
 
-  let proc_params = fn (note, instr, plist) comp ->
+  let parse_params = fn (note, instr, plist) comp ->
     match Str.split_on comp ' ' with
     | Some (c, r) -> (
       let p = c[1 .. 3] |> parse_hex_digits 2;
-      let a = match c[0] with
-        | 'p' -> (note, instr, ("pan", p)::plist)
-        | 'P' -> (note, instr, ("pan", p)::plist)
-        | 'v' -> (note, instr, ("vel", p)::plist)
-        | 'V' -> (note, instr, ("vel", p)::plist)
-        | 's' -> (note, instr, ("pos", p)::plist)
-        | 'S' -> (note, instr, ("pos", p)::plist)
-        | 'r' -> (note, instr, ("retrig", p)::plist)
-        | 'R' -> (note, instr, ("retrig", p)::plist)
-        | 'd' -> (note, instr, ("dur", p)::plist)
-        | 'D' -> (note, instr, ("dur", p)::plist)
-        | 'b' -> (note, instr, ("back", p)::plist)
-        | 'B' -> (note, instr, ("back", p)::plist)
-        | _ -> (note, instr, plist)
-        ; 
-      proc_params a r
+      # let next = match c[0] with
+      #   | 'p' -> (note, instr, ('p', p)::plist)
+      #   | 'P' -> (note, instr, ('p', p)::plist)
+      #   | 'v' -> (note, instr, ('v', p)::plist)
+      #   | 'V' -> (note, instr, ('v', p)::plist)
+      #   | 's' -> (note, instr, ('s', p)::plist)
+      #   | 'S' -> (note, instr, ('s', p)::plist)
+      #   | 'r' -> (note, instr, ('r', p)::plist)
+      #   | 'R' -> (note, instr, ('r', p)::plist)
+      #   | 'd' -> (note, instr, ('d', p)::plist)
+      #   | 'D' -> (note, instr, ('d', p)::plist)
+      #   | 'b' -> (note, instr, ('b', p)::plist)
+      #   | 'B' -> (note, instr, ('b', p)::plist)
+      #   | _ -> (note, instr, plist)
+      #   ;
+      let next = (note, instr, (c[0] |> char_to_lower, p)::plist);
+      parse_params next r
     )
     | None -> (note, instr, plist)
   ;;
 
+  if st[0] == '_' then (-1, -1, empty_params []) else
   match Str.split_on st ' ' with
   | Some (head, rest) -> (
     let note = match array_size head with
@@ -120,54 +231,172 @@ let parse_chunk = fn st ->
       | _ -> parse_midi (head[2 .. array_size head])
       ;
     let instr = head[0 .. 2] |> parse_hex_digits 2;
-    proc_params (note, instr, empty_params []) rest
+    parse_params (note, instr, empty_params []) rest
   )
   | None -> (-1, -1, empty_params [])
 ;;
 
-let parse_line = fn s num evs ->
-  match Str.split_on s ';' with
-  | Some (m, rest) -> (
-    let event = m |> Str.trim_l |> parse_chunk;
-    parse_line rest (num + 1) (event::evs)
-  )
-  | None -> (num, evs)
+let scan_for_maybe = fn plist ->
+  match plist with
+  | [] -> None
+  | ('m', p)::rest -> Some p
+  | x::rest -> scan_for_maybe rest
 ;;
 
-
-let skip_nls = fn acc rest ->
-  if array_size rest <= 0 then (acc, rest) else (
-    match rest[0] with
-    | '\n' -> skip_nls (acc + 1) (rest[1 ..])
-    | _ -> (acc, rest)
+let parse_atom = fn st start stop ->
+  let atom = Str.trim_l (array_range start (stop - start) st);
+  if array_size atom <= 0 || atom[0] == '_' then Rest else (
+    if array_size atom >= 4 && atom[0] == 'J' &&
+        (atom[1] == 'F' || atom[1] == 'B') then (
+      let amount = parse_hex_digits 2 (atom[2 .. 4]);
+      let steps = if atom[1] == 'F' then amount else (0 - amount);
+      let _, _, params = parse_chunk_chars atom;
+      let probability = scan_for_maybe params;
+      let chance = match probability with
+        | Some p -> p
+        | None -> -1
+        ;
+      Jump (steps, chance)
+    ) else (
+      let note, instr, params = parse_chunk_chars atom;
+      Note (note, instr, params)
+    )
   )
 ;;
 
-let cor_lines = fn rest ->
-  match Str.split_on rest '\n' with
-  | Some (line, next) -> (
-    let nls, tail = skip_nls 1 next;
-    yield (nls, line);
-    if array_size tail > 0 then (
-      yield cor_lines tail;
+let parse_atoms = fn st i closing acc ->
+  if i >= array_size st then (acc, i) else
+  if st[i] == closing then (acc, i + 1) else (
+    let atom, stop = if st[i] == '(' then (
+      let choices, after = parse_atoms st (i + 1) ')' [];
+      (Choice (atoms_to_arr (Lists.rev choices)), after)
+    ) else (
+      let stop = scan_atom st i;
+      (parse_atom st i stop, stop)
+    );
+    let next = if stop < array_size st && st[stop] == ';'
+      then stop + 1 else stop;
+    parse_atoms st next closing (atom::acc)
+  )
+;;
+
+let parse_line = fn st ->
+  let rev_atoms, _ = parse_atoms st 0 '\000' [];
+  let atoms = Lists.rev rev_atoms;
+  match atoms with
+  | [] -> Group [| |]
+  | x::[] -> x
+  | _ -> Group (atoms_to_arr atoms)
+;;
+
+let ev_to_str = fn ev ->
+  match ev with
+  | Rest -> "Rest"
+  | Note _ -> "Note"
+  | Group _ -> "Group"
+  | Choice _ -> "Choice"
+  | _ -> "ev"
+;;
+
+let parse_pattern = fn p: (String) ->
+  parse_pat p |> Arrays.map (fn (d, x) -> (d, parse_line x))
+;;
+
+let pat_line_iter = fn counter arr ->
+  let dur, ev = arr[counter];
+  match ev with
+  | Jump (steps, probability) -> (
+    let succeeds = if probability < 0 then true else
+      Math.rand_double () <= (Double probability / 256.);
+    let offset = if succeeds then steps else 1;
+    let next_counter = counter + offset;
+    if next_counter < 0 || next_counter >= array_size arr then
+      (array_size arr, (dur, Rest))
+    else
+      pat_line_iter next_counter arr
+  )
+  | _ -> (counter + 1, (dur, ev))
+;;
+
+let pattern_cor = fn counter arr ->
+  let (c, ev) = pat_line_iter counter arr;
+  yield ev;
+  if (c < array_size arr) then (yield pattern_cor c arr; ()) else ()
+;;
+
+# let pattern_cor = fn counter: (Int) arr: (Array of (Int, Atom)) ->
+#   let (c, ev) = pat_line_iter counter arr;
+#   yield ev;
+#   match c >= array_size arr with 
+#   | false -> (yield pattern_cor c arr; ())
+#   | true -> ()
+# ;;
+#
+
+let handle_ev = fn
+  note_cb
+  dur
+  ev ->
+    match ev with
+    | Note (note, instr, plist) -> (
+      match scan_for_maybe plist with
+      | Some p -> (if Math.rand_double () <= (Double p / 256.) then (note_cb dur note instr plist) else ())
+      | None -> (note_cb dur note instr plist; ())
+    )
+    | Group evs -> (
+      for i = 0 .. array_size evs in (
+        let e = evs[i];
+        handle_ev note_cb dur e
+      );
       ()
-    ) else ()
-  )
-  | None -> ()
+    )
+    | Choice evs -> (
+      let ev = evs[Math.rand_int (array_size evs)];
+      handle_ev note_cb dur ev;
+      ()
+    )
+    | _ -> ()
+    ;
+    dur
 ;;
+# let a = parse_pat `
 
-let pat_to_coroutine = fn p spl: (Double) cb: (Int -> (Double -> (Int ->
-  (Int -> (List of (String, Int) -> ())))) ) ->
-  p
-  |> Str.trim_nl
-  |> cor_lines
-  |> cor_map (fn (dur, line) -> 
-    let (len, evs) = parse_line line 0 [];
-    let sd = dur * spl;
-    Lists.fold (fn i (note, instr, plist) ->
-      cb i sd note instr plist;
-      i - 1
-    ) (len - 1) evs;
-    sd
-  )
-;;
+# 00
+# 00; 00 s10
+# _
+#
+# # comment
+# (00; 00; 00);
+#
+# 00
+# `
+# |> Arrays.map (fn (d, x) -> (d, parse_line x))
+# |> iter
+# |> cor_loop
+# ;
+# print `
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# {a ()}
+# `
+#
+# # let shown = Arrays.map (fn (d, x) -> (d, ev_to_str x)) a;
+# #
+# # Arrays.print_arr shown;
+# # print `{shown[0]}, {shown[1]}, {shown[2]}, {shown[3]}`

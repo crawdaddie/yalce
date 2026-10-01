@@ -55,6 +55,7 @@ let hh = @Audio fn () ->
   t
   |> bufplay hbuf.data (hbuf.samplerate * spf) 0.
   |> (*) (t |> rect 0.05 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+  |> pan 2 (rand_trig 0. 1. t)
 ;;
 
 let hh2 = @Audio fn () -> 
@@ -65,6 +66,8 @@ let hh2 = @Audio fn () ->
   t
   |> bufplay f.data (rate * f.samplerate * spf) 0.
   |> (*) (t |> rect 0.05 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+
+  |> pan 2 (rand_trig 0. 1. t)
   # |> (*) (Math.db_amp 12.)
 ;;
 
@@ -73,22 +76,24 @@ let hh2 = @Audio fn () ->
 
 let cymbal = @Audio fn freq ->
   let t = trig 0;
-  # t
-  # |> decay 0.5
-  # |> (*) (sin_osc (freq * ~[1., 1.5, 2.01, 3.5, 4.2]))
-  # |> (*) (~[1., 0.6, 0.8, 0.5, 0.3])
-  # |> sum
 
-  freq
-  |> pm_osc 1.01 1.2
-  |> (+) (pink () 
+  (pink () 
     |> Filter.bpf freq 16.
     |> (*) (Math.db_amp 40.)
   )
-  # freq |> pm_osc 2.03 1.2 * (decay 0.1 t))
   |> (*) (t |> rect 0.5 |> adsr 0. 0.1 0.2 1. |> kill_on_end)
   |> (*) (Math.db_amp -15.)
-  
+;;
+
+
+let pmsynth = @Audio fn freq ->
+  let t = trig 0;
+
+  freq * (~[1., 0.5])
+  |> pm_osc 1.01 1.2
+  |> sum
+  |> (*) (t |> rect 0.5 |> adsr 0. 0.1 0.2 1. |> kill_on_end)
+  |> (*) (Math.db_amp -10.)
 ;;
 
 let mels = @Audio fn freq dur ->
@@ -99,7 +104,7 @@ let mels = @Audio fn freq dur ->
   |> sum
   |> Filter.lpf 5000. 1.
   |> (*) (t |> rect dur |> adsr 0.01 0.1 0.5 0.5 |> kill_on_end)
-  |> (*) (Math.db_amp -16.)
+  |> (*) (Math.db_amp -20.)
   
 ;;
 
@@ -108,6 +113,12 @@ let r = Reverb.cathedral 0. |> play_node;
 let beat = 60. / 90.;
 # cymbal 200. |> play_node
 let note = fn d n ->
+
+  pmsynth (n |> midi_freq) ~> r;
+  d * beat
+;;
+
+let intro_note = fn d n ->
 
   cymbal (n |> midi_freq) ~> r;
   d * beat
@@ -185,21 +196,48 @@ let c = fn () ->
 
   # yield c ()
 ;;
+
+let c1 = fn () ->
+  yield intro_note 0.5 @@ notes[0];
+  yield intro_note 0.5 @@ notes[1];
+  yield intro_note 0.5 @@ notes[2];
+
+  let sync = 0.25 * (Double (Math.rand_double () <= 0.3));
+  yield intro_note (0.5 - sync) @@ notes[3];
+
+  yield intro_note (0.5 + sync) @@ notes[4];
+  yield intro_note 0.5 @@ notes[5];
+  yield intro_note 0.5 @@ notes[6];
+  yield intro_note 0.5 @@ notes[7];
+
+  yield intro_note 0.5 @@ notes[8];
+  yield intro_note 0.5 @@ notes[9];
+  yield intro_note 0.5 @@ notes[10];
+  yield intro_note 0.5 @@ notes[11];
+
+  yield intro_note 0.5 @@ notes[12];
+  yield intro_note 0.5 @@ notes[13];
+  yield intro_note 0.5 @@ notes[14];
+  yield intro_note 0.5 @@ notes[15]
+
+  # yield c ()
+;;
 let hhc = fn () ->
   yield hhc ()
 ;;
-let kick_durs = [|
-  3.5, 3.25, 1.75, 0.75, 5.5, 1.25,
-  # 3.5, 3.25, 1.75, 0.75, 5.5, 1.25,
-  # 8., 7., 0.5, 1.5, 1.5, 4.5,
-  # 1., 3.5, 1., 1., 2.5, 5.5,
-  # 1.5, 3.5, 3., 1., 1., 1.5,
-  # 1.5, 4., 1.5, 2., 2., 2., 2.,
-  # 7., 6.5, 3.5, 1.5, 11., 2.5,
-  # 2.5, 3., 1., 0.5, 2.5, 4.,
-  # 4., 1., 1., 10., 2.5
-|];
 
+let kick_durs = [|
+  [|3.5, 3.25, 1.75, 0.75, 5.5, 1.25|],
+  [|3.5, 3.25, 1.75, 0.75, 5.5, 1.25|],
+  [|3.5, 3.25, 1.75, 0.75, 5.5, 1.25|],
+  [|3.5, 3.25, 1.75, 0.75, 5.5, 1.25|],
+  [|3.5, 3.25, 1.75, 0.75, 5.5, 1.25|],
+  [|3.5, 3.25, 1.75, 0.75, 5.5, 1.25|],
+  [|4., 3.5, 0.25, 0.75, 0.75, 2.25, 0.5, 1.75, 0.5, 0.5, 1.25|],
+  [|2.75, 0.75, 1.75, 1.5, 0.5, 0.5, 0.75, 0.75, 2., 0.75, 1., 1., 1., 1.|],
+  [|3.5, 3.25, 1.75, 0.75, 5.5, 1.25|],
+  [|1.25, 1.5, 0.5, 0.25, 1.25, 2., 2., 0.5, 0.5, 5., 1.25|]
+|];
 let stutter = @Audio fn trig_sig active beat_length subdiv rate inp ->
   let live = delay_line 4.;
   let size = array_size live;
@@ -232,13 +270,19 @@ let stutter = @Audio fn trig_sig active beat_length subdiv rate inp ->
   output
 ;;
 let fx = @Audio fn sel trigger subdiv beat_length rate inpp: (Stereo) ->
-  let inp = inpp + (inpp * (Double (sel == 5.)) |> Filter.hpf 800. 1. |> Reverb.concert);
+  let inp = inpp + (
+    inpp
+    |> (*) (Double (sel == 5.))
+    |> Filter.hpf 800. 1.
+    |> Reverb.concert
+    |> (*) (Math.db_amp -6)
+  );
   # let inp = inpp;
 
   let comb_short = inp
-  |> comb (lfnoise 1. 0.01 0.025) 0.1 0.5
-  |> disperser 100. 1. 1.
-  ;
+    |> comb (lfnoise 1. 0.01 0.025) 0.1 0.5
+    |> disperser 100. 1. 1.
+    ;
 
   # let latch = sah inp (trig (rand_trig 4000. 8000. trigger))
   # ;
@@ -324,14 +368,14 @@ let set_fx_rand = fn () ->
 # ;;
 
 
-let kick_routine = fn () ->
-  kick_durs
-  |> iter
-  |> cor_map (fn d ->
-    kd () |> play_node;
-    d
-  )
-;;
+# let kick_routine = fn durs ->
+#   durs
+#   |> iter
+#   |> cor_map (fn d ->
+#     kd () |> play_node;
+#     d
+#   )
+# ;;
 
 let snr_routine = fn () ->
   yield 1.;
@@ -355,7 +399,13 @@ let hh_routine = fn () ->
 ;;
 
 let drums = fn () ->
-  kick_routine () |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.; # 16 beats
+  Math.array_choose kick_durs
+  |> iter_array
+  |> cor_map (fn d -> 
+    kd () |> play_node;
+    d * beat * 0.5)
+  |> play_pattern 0.; # 16 beats
+
   snr_routine () |> cor_repeat 4 |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.; # 16
   hh_routine () |> play_pattern 0.; #16
   yield 16. * beat * 0.5;
@@ -370,13 +420,13 @@ let fx_set_routine = fn () ->
 ;;
 
 let g = fn () ->
-  c () |> play_pattern 0.;
+  c1 () |> play_pattern 0.;
   yield 8. * beat;
 
-  c () |> play_pattern 0.;
+  c1 () |> play_pattern 0.;
   yield 8. * beat;
+
   drums () |> play_pattern 0.;
-
   c () |> play_pattern 0.;
   yield 8. * beat;
 
@@ -414,4 +464,4 @@ let g = fn () ->
 
 g () |> play_pattern beat;
 
-# record_start "vordhosbn_cover.wav" 121. ;
+# record_start "vordhosbn_cover.wav" 90. ;
