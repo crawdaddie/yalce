@@ -43,8 +43,7 @@ static bool mir_type_is_primitive_numeric(Type *type) {
 }
 
 static bool mir_type_can_convert_to_double(Type *type) {
-  return mir_type_is_primitive_numeric(type) ||
-         (type && type->kind == T_BOOL);
+  return mir_type_is_primitive_numeric(type) || (type && type->kind == T_BOOL);
 }
 
 static bool mir_type_is_primitive_ordered(Type *type) {
@@ -262,6 +261,7 @@ static MirValueId mir_array_at(MirBuilder *builder, Type *type, Ast *origin,
 
   Type *array_type = mir_function_value_type(builder->fn, array);
   Type *element_type = mir_array_element_type(array_type);
+
   if (!element_type) {
     return MIR_NO_VALUE;
   }
@@ -1171,20 +1171,20 @@ static MirFunction *mir_build_cor_repeat_wrapper(MirBuilder *builder, Ast *app,
   MirPhiIncomingVec count_incoming = {0};
   mir_phi_incoming_vec_push(wrapper->arena, &count_incoming,
                             (MirPhiIncoming){entry->id, count});
-  MirValueId current_count = mir_phi(&wrapper_builder, &t_int, app,
-                                     count_incoming);
+  MirValueId current_count =
+      mir_phi(&wrapper_builder, &t_int, app, count_incoming);
   MirInstr *count_phi = mir_function_find_def_instr(wrapper, current_count);
 
   MirPhiIncomingVec source_incoming = {0};
   mir_phi_incoming_vec_push(wrapper->arena, &source_incoming,
                             (MirPhiIncoming){entry->id, source});
-  MirValueId current_source = mir_phi(&wrapper_builder, coro_type, app,
-                                      source_incoming);
+  MirValueId current_source =
+      mir_phi(&wrapper_builder, coro_type, app, source_incoming);
   MirInstr *source_phi = mir_function_find_def_instr(wrapper, current_source);
   MirValueId zero = mir_const_int(&wrapper_builder, &t_int, app, 0);
-  MirValueId has_repeats = mir_primitive_instr(
-      &wrapper_builder, MIR_OP_IGT, &t_bool, app,
-      (MirValueId[]){current_count, zero}, 2);
+  MirValueId has_repeats =
+      mir_primitive_instr(&wrapper_builder, MIR_OP_IGT, &t_bool, app,
+                          (MirValueId[]){current_count, zero}, 2);
   if (!count_phi || !source_phi || current_count == MIR_NO_VALUE ||
       current_source == MIR_NO_VALUE || zero == MIR_NO_VALUE ||
       has_repeats == MIR_NO_VALUE) {
@@ -1193,8 +1193,8 @@ static MirFunction *mir_build_cor_repeat_wrapper(MirBuilder *builder, Ast *app,
   mir_builder_set_cond(&wrapper_builder, has_repeats, advance->id, done->id);
 
   mir_builder_position_at_end(&wrapper_builder, advance);
-  MirValueId next = mir_coro_next(&wrapper_builder, app, current_source,
-                                  coro_type);
+  MirValueId next =
+      mir_coro_next(&wrapper_builder, app, current_source, coro_type);
   MirValueId tag = mir_variant_tag(&wrapper_builder, app, next);
   MirValueId is_some =
       mir_tag_eq(&wrapper_builder, app, tag, 0, TYPE_NAME_SOME);
@@ -1238,8 +1238,8 @@ static MirFunction *mir_build_cor_repeat_wrapper(MirBuilder *builder, Ast *app,
   return wrapper;
 }
 
-static MirValueId MirCorRepeatHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
-                                      MirBuiltinSymbol *symbol) {
+static MirValueId MirCorRepeatHandler(MirBuilder *builder, Ast *app,
+                                      MirCtx *ctx, MirBuiltinSymbol *symbol) {
   (void)symbol;
   if (!mir_builtin_arity(app, 2) || !is_coroutine_type(app->type)) {
     return MIR_NO_VALUE;
@@ -1897,9 +1897,16 @@ static MirValueId MirArrayAtHandler(MirBuilder *builder, Ast *app, MirCtx *ctx,
   if (!mir_builtin_arity(app, 2)) {
     return MIR_NO_VALUE;
   }
+
+  Ast *array = app->data.AST_APPLICATION.args;
+  Type *array_type = array ? array->type : NULL;
+  Type *element_type = mir_array_element_type(array_type);
+  if (!element_type) {
+    return MIR_NO_VALUE;
+  }
+
   return mir_array_at(
-      builder, app->type, app,
-      mir_expr(builder, app->data.AST_APPLICATION.args, ctx),
+      builder, element_type, app, mir_expr(builder, array, ctx),
       mir_expr(builder, app->data.AST_APPLICATION.args + 1, ctx));
 }
 
@@ -2593,11 +2600,11 @@ void mir_register_core_builtins(MirProgram *program) {
                        (const MirOperandUse[]){MIR_OPERAND_USE_CONSUME}, 1,
                        MIR_RESULT_OWNED);
 
-  mir_register_builtin(program, builtin_envs.cor_repeat, MirCorRepeatHandler,
-                       MIR_BUILTIN_SYMBOL_CORE,
-                       (const MirOperandUse[]){MIR_OPERAND_USE_CONSUME,
-                                               MIR_OPERAND_USE_CONSUME},
-                       2, MIR_RESULT_OWNED);
+  mir_register_builtin(
+      program, builtin_envs.cor_repeat, MirCorRepeatHandler,
+      MIR_BUILTIN_SYMBOL_CORE,
+      (const MirOperandUse[]){MIR_OPERAND_USE_CONSUME, MIR_OPERAND_USE_CONSUME},
+      2, MIR_RESULT_OWNED);
 
   mir_register_builtin(
       program, builtin_envs.cor_map, MirCorMapHandler, MIR_BUILTIN_SYMBOL_CORE,

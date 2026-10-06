@@ -338,6 +338,7 @@ ARRAY_FILL_BODY="$ARTIFACT_DIR/array_fill_ints.mir"
 ARRAY_RANGE_BODY="$ARTIFACT_DIR/array_range_borrow.mir"
 ARRAY_OFFSET_BODY="$ARTIFACT_DIR/array_offset_borrow.mir"
 ARRAY_SUCC_BODY="$ARTIFACT_DIR/array_succ_borrow.mir"
+COROUTINE_ARRAY_RESUME_BODY="$ARTIFACT_DIR/coroutine_array_resume.mir"
 TUPLE_OPTION_PAYLOAD_BODY="$ARTIFACT_DIR/tuple_option_payload_match.mir"
 TUPLE_OPTION_LITERAL_BODY="$ARTIFACT_DIR/tuple_option_literal_match.mir"
 RECORD_LIST_HEAD_BODY="$ARTIFACT_DIR/record_list_head_match.mir"
@@ -469,6 +470,7 @@ extract_function "$COROUTINE_MIR" "generic_iter_array_restart.Array_Double.Corou
 extract_function "$COROUTINE_MIR" "coroutine_zip_loop" "$COROUTINE_ZIP_LOOP_BODY"
 extract_function "$COROUTINE_MIR" "coroutine_returned" "$COROUTINE_RETURNED_BODY"
 extract_function "$COROUTINE_MIR" "coroutine_map_returned" "$COROUTINE_MAP_RETURNED_BODY"
+extract_function "$COROUTINE_MIR" "coroutine_array_resume" "$COROUTINE_ARRAY_RESUME_BODY"
 extract_function "$COROUTINE_MIR" "coroutine_duplicate_returned" "$COROUTINE_DUP_RETURNED_BODY"
 
 ARRAY_SIZE_MIR='extract\.field %[0-9]+, 0 : Int ; ops \[%[0-9]+:container/borrow#0\]'
@@ -852,6 +854,11 @@ assert_order "$COROUTINE_MIR" "cor_map pipeline should construct iter, map, then
   'coro\.new %[0-9]+\(%[0-9]+, %[0-9]+\)' \
   'fn_ref \$\$builtin\.cor_loop\.[0-9]+' \
   'coro\.new %[0-9]+\(%[0-9]+\)'
+assert_order "$COROUTINE_ARRAY_RESUME_BODY" "array coroutine extraction should resume the loaded coroutine" \
+  'construct\.array_literal' \
+  'extract\.field %[0-9]+, 2' \
+  'load %[0-9]+.*Coroutine' \
+  'coro\.next %[0-9]+\(\)'
 assert_contains "$AUDIO_JIT_TASK_MIR" 'extern fn play_pattern\(.*\) -> Task @owned' "audio_jit play_pattern should expose an owned Task"
 assert_order "$AUDIO_JIT_TASK_MIR" "audio_jit play_pattern should return the scheduler task handle" \
   '^fn start_task\(' \

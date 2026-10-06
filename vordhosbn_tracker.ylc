@@ -1,0 +1,114 @@
+open libs/audio_jit/DSP;
+import libs/audio_jit/SF;
+import Tracker;
+import std/Lists;
+
+
+
+let bpm = 180.;
+let beat = 60. / bpm;
+
+let instr0 = module () ->
+  let cymbal = @Audio fn freq ->
+    let t = trig 0;
+
+    tri_osc (freq * (~[1., 1.01]))
+    |> sum
+    |> Filter.lpf (freq * 4.) 1.
+    |> (*) (t |> rect 0.5 |> adsr 0. 0.1 0.2 1. |> kill_on_end)
+    |> (*) (Math.db_amp -10.)
+  ;;
+
+  let r = Reverb.cathedral 0. |> play_node;
+
+  # let defaults = fn () -> [|1., 0., 0., 1., 1.|];;
+
+  let play = fn dur note plist ->
+    let f = Double note |> midi_freq;
+    # cymbal f |> play_node;
+    cymbal f ~> r;
+    ()
+  ;;
+;
+
+
+let instr1 = module () ->
+  let mels = @Audio fn freq d ->
+    let t = trig 0;
+
+    freq * 0.5 * (~[ lfnoise 0.5 0.99 1.01, lfnoise 0.5 0.99 1.01])
+    |> saw_osc 
+    |> sum
+    |> Filter.lpf 5000. 1.
+    |> (*) (t |> rect d |> adsr 0.01 0.1 0.8 0.5 |> kill_on_end)
+    |> (*) (Math.db_amp -20.)
+    
+  ;;
+
+  let play = fn dur note plist ->
+    let f = Double note |> midi_freq;
+    mels f dur ~> instr0.r;
+    ()
+  ;;
+
+;
+
+
+
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+let read_bytes = extern fn Ptr -> String;
+# let read_lines = extern fn Ptr -> (List of String, Int);
+#
+# let (lines,n) = match open_file "~/projects/yalce/aoc/aoc_2019/day01.txt" "rb" with
+#   | Some fd -> read_lines fd
+#   | None -> (["",], 0)
+#   ;
+let spl = beat / 2.;
+
+let pattern_ref = [| Tracker.parse_pattern "" |];
+
+open libs/file_watch/file_watch;
+let watcher = file_watch_start ();
+
+let handle_pat = fn pat _userdata ->
+  # print `'{pat}'\n`;
+  pattern_ref[0] := Tracker.parse_pattern pat;
+  ()
+;;
+
+let play = fn () ->
+  pattern_ref
+  |> Tracker.pattern_cor_ref 0
+  |> cor_map (fn (d, ev) ->
+    file_watch_dispatch watcher;
+    Tracker.handle_ev 
+      (fn note_dur note instr plist ->
+        match instr with
+        | 0 -> instr0.play note_dur note plist
+        | 1 -> instr1.play note_dur note plist
+        | _ -> ()
+      )
+      spl
+      ev
+    ;
+    d * spl
+  )
+  |> cor_loop
+  |> play_pattern beat
+  ;
+  ()
+;;
+
+match open_file "./drums.csv" "rb" with
+| Some fd -> (
+    let initial_pattern = read_bytes fd |> Tracker.parse_pattern;
+    pattern_ref[0] := initial_pattern;
+    let playback = play ();
+    let registration = file_watch_register watcher fd handle_pat (Ptr 0);
+    ()
+  )
+| None -> (
+    print "could not open drums.csv\n";
+    ()
+  )

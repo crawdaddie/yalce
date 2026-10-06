@@ -93,7 +93,7 @@ let a = Tracker.parse_pattern pat
   |> cor_map (fn (d, ev) ->
     let dur = d* spl; 
     Tracker.handle_ev 
-      (fn dur note instr plist ->
+      (fn dur note instr plist note_dur column ->
         match instr with
         | 0 -> instr0.play dur note plist
         | _ -> ()

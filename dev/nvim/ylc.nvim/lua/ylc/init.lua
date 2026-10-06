@@ -786,8 +786,8 @@ end
 
 local function build_cmd(script_path)
 	local cmd = tbl_copy(config.cmd)
-	cmd[#cmd + 1] = script_path
 	cmd[#cmd + 1] = config.interactive_flag
+	cmd[#cmd + 1] = script_path
 	return cmd
 end
 

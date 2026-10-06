@@ -4371,6 +4371,14 @@ static Ast *mir_application_flatten_if_saturated(MirArena *arena, Ast *app) {
     return app;
   }
 
+  Ast *nested = app->data.AST_APPLICATION.function;
+  Ast *nested_root = mir_application_root_function(nested);
+  if (nested_root && nested_root->tag == AST_IDENTIFIER &&
+      strcmp(nested_root->data.AST_IDENTIFIER.value, "array_at") == 0 &&
+      nested->data.AST_APPLICATION.len == 2) {
+    return app;
+  }
+
   Ast *root = mir_application_root_function(app);
   if (!root || !root->type || root->type->kind != T_FN) {
     return app;
@@ -5178,6 +5186,9 @@ MirValueId mir_application(MirBuilder *builder, Type *type, Ast *ast,
     if (callee_value == MIR_NO_VALUE) {
       return MIR_NO_VALUE;
     }
+
+    Type *callee_value_type =
+        mir_function_value_type(builder->fn, callee_value);
     if (is_coroutine_constructor_type(function_type)) {
       call.kind = MIR_CORO_NEW;
       if (is_closure(function_type) && function_type->closure_meta) {
@@ -5233,7 +5244,8 @@ MirValueId mir_application(MirBuilder *builder, Type *type, Ast *ast,
       return mir_builder_append_instr(builder, call);
     }
 
-    if (is_coroutine_type(function_type)) {
+    if (is_coroutine_type(function_type) ||
+        is_coroutine_type(callee_value_type)) {
       if (!mir_application_has_only_void_arg(ast)) {
         fprintf(stderr,
                 "MIR lowering only supports nullary coroutine resume calls\n");
@@ -5241,7 +5253,7 @@ MirValueId mir_application(MirBuilder *builder, Type *type, Ast *ast,
       }
       call.kind = MIR_CORO_NEXT;
       call.data.call.callee = callee_value;
-      call.data.call.callee_type = function_type;
+      call.data.call.callee_type = callee_value_type;
       return mir_builder_append_instr(builder, call);
     }
     if (is_closure(function_type) && function_type->closure_meta) {

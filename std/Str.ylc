@@ -1,16 +1,18 @@
 let first_str_match = extern fn Ptr -> Ptr -> Int;
 
-let split_at = fn str delim ->
-  let len = array_size str;
+let split_at = fn st delim ->
+  let len = array_size st;
   let delim_len = array_size delim;
-  let spl = first_str_match (cstr str) (cstr delim);
+  let spl = first_str_match (cstr st) (cstr delim);
   match (spl, len) with
   | (_, 0) -> ("", "")
-  | (-1, _) -> (str, "")
+  | (-1, _) -> (st, "")
   | (spl,_) -> 
     (
-      array_range 0 spl str, 
-      array_range (spl + delim_len) (len - spl - delim_len) str
+      st[0 .. spl],
+      # array_range 0 spl str, 
+      # array_range (spl + delim_len) (len - spl - delim_len) str
+      st[(spl + delim_len) .. ]
     )
 ;;
 
@@ -31,6 +33,7 @@ let split_on = fn st delim ->
     | None -> None
   )
 ;;
+
 
 # let split_on_inc = fn str delim ->
 #   match find_first_idx 0 str delim with

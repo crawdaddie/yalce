@@ -399,12 +399,12 @@ let hh_routine = fn () ->
 ;;
 
 let drums = fn () ->
-  Math.array_choose kick_durs
-  |> iter_array
-  |> cor_map (fn d -> 
-    kd () |> play_node;
-    d * beat * 0.5)
-  |> play_pattern 0.; # 16 beats
+  # Math.array_choose kick_durs
+  # |> iter
+  # |> cor_map (fn d -> 
+  #   kd () |> play_node;
+  #   d * beat * 0.5)
+  # |> play_pattern 0.; # 16 beats
 
   snr_routine () |> cor_repeat 4 |> cor_map (fn d -> d * beat * 0.5) |> play_pattern 0.; # 16
   hh_routine () |> play_pattern 0.; #16

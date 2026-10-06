@@ -69,6 +69,14 @@ let coroutine_map_returned = fn () ->
   c () |> cor_map (fn x -> x + 1)
 ;;
 
+let coroutine_array_resume = fn () ->
+  let c = fn () -> yield 1; yield 2;;
+  let cs = [| c (), c () |];
+  match (cs[0]) () with
+  | Some 1 -> true
+  | _ -> false
+;;
+
 let coroutine_duplicate_returned = fn () ->
   let c = fn () -> yield 1; yield 2;;
   let x = c ();

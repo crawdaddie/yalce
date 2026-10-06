@@ -88,7 +88,17 @@ let filter = fn f a ->
   list_to_arr (l[0]) res (s[0] - 1)
 ;;
 
-
+# let list_into_arr = fn l res i ->
+#   match l with
+#   | x::rest -> (
+#     res[i] := x;
+#     match i with
+#     | 0 -> res
+#     | _ -> rlist_to_arr rest res (i - 1)
+#   )
+#   | [] -> res
+#
+# ;;
 
 let last = fn x ->
   let len = array_size x in

@@ -98,91 +98,118 @@ let task = fn t ->
 #   reverse     - 1. plays backward, 0. forward
 #   rate        - playback rate / pitch multiplier (1. = normal)
 #   inp         - mono input sample
+# let stutter = @Audio fn trig_sig active beat_length subdiv rate inp ->
+#   let live = delay_line 4.;            # always-recording source ring (4s)
+#   let size = array_size live;          # ring size in samples
+#   let seg  = beat_length * subdiv;     # chunk length in seconds
+#   let n    = Math.max 8. (seg / spf);  # chunk length in samples
+#   let wi = [| 0 |];                    # ring write index (Int)
+#   let sw = [| 0 |];                    # captured write index (Int)
+#   let st = [| 0., 0. |];               # playhead, prev_trig
+#   let rate_mul = [|1.|];
+#
+#   let w         = wi[0];
+#   let start_w   = sw[0];
+#   let playhead  = st[0];
+#
+#   live[w] := inp;                       # keep recording into the ring
+#
+#
+#   let st_start = if (trig_sig == 1.) then w else start_w;
+#   let st_play  = if (trig_sig == 1.) then (n - 1.) else playhead;
+#
+#   let step = rate;
+#
+#   # read the frozen chunk (interpolated at a fractional playhead)
+#   let chunk = tabread_samp live (st_start - n + 1. + st_play);
+#
+#   let out = if active == 1. then chunk else inp;
+#
+#   let p1 = st_play + step;
+#   let fl = Math.floor (p1 / n);
+#   let pw = p1 - n * fl;
+#
+#   sw[0] := st_start;
+#   st[0] := if active >= 0.5 then pw else st_play;
+#   st[1] := trig_sig;
+#   wi[0] := (w + 1) % size;
+#
+#   out
+# ;;
+#
 let stutter = @Audio fn trig_sig active beat_length subdiv rate inp ->
-  let live = delay_line 4.;            # always-recording source ring (4s)
-  let size = array_size live;          # ring size in samples
-  let seg  = beat_length * subdiv;     # chunk length in seconds
-  let n    = Math.max 8. (seg / spf);  # chunk length in samples
-  let wi = [| 0 |];                    # ring write index (Int)
-  let sw = [| 0 |];                    # captured write index (Int)
-  let st = [| 0., 0. |];               # playhead, prev_trig
-  let rate_mul = [|1.|];
+  let live = delay_line 4.;
+  let size = array_size live;
+  let segment = beat_length * subdiv;
+  let length = Math.max 8. (segment / spf);
+  let write_index = [| 0 |];
+  let start_index = [| 0. |];
+  let state = [| 0., 0. |];
 
-  let w         = wi[0];
-  let start_w   = sw[0];
-  let playhead  = st[0];
+  let write = write_index[0];
+  let start = start_index[0];
+  let playhead = state[0];
+  live[write] := inp;
 
-  live[w] := inp;                       # keep recording into the ring
+  let retrigger = Double (trig_sig == 1.);
+  let capture = retrigger * write + (1. - retrigger) * start;
+  let position = retrigger * (length - 1.) + (1. - retrigger) * playhead;
+  let chunk = tabread_samp live (capture - length + 1. + position);
+  let playing = Double (active == 1.);
+  let output = playing * chunk + (1. - playing) * inp;
 
-
-  let st_start = if trig_sig == 1. then w else start_w;
-  let st_play  = if trig_sig == 1. then (n - 1.) else playhead;
-
-  let step = rate;
-
-  # read the frozen chunk (interpolated at a fractional playhead)
-  let chunk = tabread_samp live (st_start - n + 1. + st_play);
-
-  let out = if active == 1. then chunk else inp;
-
-  let p1 = st_play + step;
-  let fl = Math.floor (p1 / n);
-  let pw = p1 - n * fl;
-
-  sw[0] := st_start;
-  st[0] := if active >= 0.5 then pw else st_play;
-  st[1] := trig_sig;
-  wi[0] := (w + 1) % size;
-
-  out
+  let next = position + rate;
+  let wraps = Math.floor (next / length);
+  let next_position = next - length * wraps;
+  start_index[0] := capture;
+  let keep_playing = Double (active >= 0.5);
+  state[0] := keep_playing * next_position + (1. - keep_playing) * playhead;
+  state[1] := trig_sig;
+  write_index[0] := (write + 1) % size;
+  output
 ;;
 
-let stutter2 = @Audio fn trig_sig active beat_length subdiv rate inp ->
-  let live = delay_line 4.;            # always-recording source ring (4s)
-  let size = array_size live;          # ring size in samples
-  let seg  = beat_length * subdiv;     # chunk length in seconds
-  let retrig_freq = 1. / seg;
+# let stutter2 = @Audio fn trig_sig active beat_length subdiv rate inp ->
+#   let live = delay_line 4.;            # always-recording source ring (4s)
+#   let size = array_size live;          # ring size in samples
+#   let seg  = beat_length * subdiv;     # chunk length in seconds
+#   let retrig_freq = 1. / seg;
+#
+#   let n    = Math.max 8. (seg / spf);  # chunk length in samples
+#   let wi = [| 0 |];                    # ring write index (Int)
+#   let sw = [| 0 |];                    # captured write index (Int)
+#   let st = [| 0., 0. |];               # playhead, prev_trig
+#   let rate_mul = [|1.|];
+#
+#   let w         = wi[0];
+#   let start_w   = sw[0];
+#   let playhead  = st[0];
+#
+#   live[w] := inp;                       # keep recording into the ring
+#
+#
+#   let st_start = if trig_sig == 1. then w else start_w;
+#   let st_play  = if trig_sig == 1. then (n - 1.) else playhead;
+#
+#   let step = rate;
+#
+#   # read the frozen chunk (interpolated at a fractional playhead)
+#   let chunk = tabread_samp live (st_start - n + 1. + st_play);
+#
+#   let out = if active == 1. then chunk else inp;
+#
+#   let p1 = st_play + step;
+#   let fl = Math.floor (p1 / n);
+#   let pw = p1 - n * fl;
+#
+#   sw[0] := st_start;
+#   st[0] := if active >= 0.5 then pw else st_play;
+#   st[1] := trig_sig;
+#   wi[0] := (w + 1) % size;
+#
+#   out
+# ;;
 
-  let n    = Math.max 8. (seg / spf);  # chunk length in samples
-  let wi = [| 0 |];                    # ring write index (Int)
-  let sw = [| 0 |];                    # captured write index (Int)
-  let st = [| 0., 0. |];               # playhead, prev_trig
-  let rate_mul = [|1.|];
-
-  let w         = wi[0];
-  let start_w   = sw[0];
-  let playhead  = st[0];
-
-  live[w] := inp;                       # keep recording into the ring
-
-
-  let st_start = if trig_sig == 1. then w else start_w;
-  let st_play  = if trig_sig == 1. then (n - 1.) else playhead;
-
-  let step = rate;
-
-  # read the frozen chunk (interpolated at a fractional playhead)
-  let chunk = tabread_samp live (st_start - n + 1. + st_play);
-
-  let out = if active == 1. then chunk else inp;
-
-  let p1 = st_play + step;
-  let fl = Math.floor (p1 / n);
-  let pw = p1 - n * fl;
-
-  sw[0] := st_start;
-  st[0] := if active >= 0.5 then pw else st_play;
-  st[1] := trig_sig;
-  wi[0] := (w + 1) % size;
-
-  out
-;;
-
-let bool_to_double = fn x -> 
-  match x with
-  | true -> 1.
-  | false -> 0.
-  ;;
 
 # let bit_reduce = @Audio fn depth inp ->
 #   inp * depth |> Math.round |> (/) depth 
@@ -205,7 +232,7 @@ let bitcrush = @Audio fn bits inp ->
 
 let fx = @Audio fn sel tr subdiv beat_len rate inp ->
   let range = Math.round (Math.floor sel);     # integer range index
-  let rr = inp + (inp * (bool_to_double (sel == 5.)) |> Filter.hpf 1000. 1. |> Reverb.concert);
+  let rr = inp + (inp * (Double (sel == 5.)) |> Filter.hpf 1000. 1. |> Reverb.concert);
 
   let cc = 
     rr |> comb (lfnoise 2. 0.001 0.04) 0.1 0.8;
@@ -219,7 +246,7 @@ let fx = @Audio fn sel tr subdiv beat_len rate inp ->
     |> Filter.lpf (lfnoise 4. 50. 1000.) 5.
     ;
 
-  let stutt = rr |> stutter tr ((sel == 6.) |> bool_to_double) beat_len subdiv rate;
+  let stutt = rr |> stutter tr ((sel == 6.) |> Double) beat_len subdiv rate;
 
   let sig = match sel with
     | 0. -> rr                               # dry

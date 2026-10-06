@@ -335,7 +335,7 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
   if (expr->tag == AST_LAMBDA) {
     if (!ylc_config.test_mode &&
         strncmp(name->data.AST_IDENTIFIER.value, "test_", 5) == 0) {
-      return NULL;
+      return ast_void();
     }
 
     const char *chars = name->data.AST_IDENTIFIER.value;
@@ -356,8 +356,8 @@ Ast *ast_let(Ast *name, Ast *expr, Ast *in_continuation) {
 
 Ast *ast_test_module(Ast *expr) {
   if (!ylc_config.test_mode) {
-    // don't parse this unless in test context
-    return NULL;
+    // Keep parsing structurally valid while excluding tests from normal mode.
+    return ast_void();
   }
   Ast *id = ast_identifier((ObjString){"test", 4});
   Ast *node = ast_let(id, expr, NULL);
@@ -490,7 +490,11 @@ bool is_custom_binop(const char *id) {
 
 Ast *ast_application(Ast *func, Ast *arg) {
 
-  if (func->tag == AST_APPLICATION) {
+  if (func->tag == AST_APPLICATION &&
+      !(func->data.AST_APPLICATION.function->tag == AST_IDENTIFIER &&
+        strcmp(func->data.AST_APPLICATION.function->data.AST_IDENTIFIER.value,
+               "array_at") == 0 &&
+        func->data.AST_APPLICATION.len == 2)) {
 
     if (arg->tag == AST_IDENTIFIER &&
         is_custom_binop(arg->data.AST_IDENTIFIER.value)) {
