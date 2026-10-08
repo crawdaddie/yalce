@@ -113,6 +113,9 @@ extern char *yytext;
   list
   array
   tuple
+  named_tuple
+  named_expr
+  named_expr_list
   expr_list
   match_expr
   match_branches
@@ -212,6 +215,7 @@ simple_expr:
   | TOK_VOID              { $$ = ast_void(); SET_AST_LOC($$, @$); }
   | list                  { $$ = $1; }
   | array                 { $$ = $1; }
+  | named_tuple           { $$ = $1; }
   | tuple                 { $$ = $1; }
   | fstring               { $$ = parse_fstring_expr($1); }
   | TOK_CHAR              { $$ = ast_char($1); SET_AST_LOC($$, @$); }
@@ -351,6 +355,19 @@ tuple:
     '(' expr ')'          { $$ = $2; }
   | '(' expr_list ')'     { $$ = ast_tuple($2); }
   | '(' expr_list ',' ')' { $$ = ast_tuple($2); }
+  ;
+
+named_tuple:
+    '(' named_expr_list ')' { $$ = ast_tuple($2); }
+  ;
+
+named_expr:
+    IDENTIFIER ':' expr { $$ = ast_assoc(ast_identifier($1), $3); }
+  ;
+
+named_expr_list:
+    named_expr { $$ = ast_list($1); }
+  | named_expr_list ',' named_expr { $$ = ast_list_push($1, $3); }
   ;
 
 expr_list:

@@ -3504,6 +3504,54 @@ static void mir_function_set_value_type(MirFunction *fn, MirValueId value,
       mir_callable_summary_from_type(fn->arena, type);
 }
 
+static MirFunction *mir_specialize_captured_fn(MirBuilder *builder,
+                                               MirValueId value,
+                                               Type *expected_type) {
+  if (!builder || !builder->program || !builder->fn || !expected_type ||
+      expected_type->kind != T_FN || mir_type_has_type_vars(expected_type)) {
+    return NULL;
+  }
+
+  MirInstr *value_def = mir_function_find_def_instr(builder->fn, value);
+  MirInstr *fn_ref = value_def;
+  MirInstr *closure_def = NULL;
+  if (value_def && value_def->kind == MIR_CONSTRUCT &&
+      value_def->data.construct.kind == MIR_CONSTRUCT_CLOSURE) {
+    closure_def = value_def;
+    fn_ref = mir_function_find_def_instr(
+        builder->fn, value_def->data.construct.operands[0]);
+  }
+  if (!fn_ref || fn_ref->kind != MIR_FN_REF) {
+    return NULL;
+  }
+
+  Type *impl_type = NULL;
+  MirFunction *specialized = NULL;
+  if (closure_def) {
+    specialized = mir_specialize_closure_impl_fn_ref(
+        builder->program, fn_ref, expected_type, &impl_type);
+  } else {
+    impl_type = is_closure(expected_type)
+                    ? mir_closure_callable_type(builder->program->arena,
+                                                expected_type)
+                    : expected_type;
+    specialized = mir_specialize_fn_ref_instr(builder->program, fn_ref,
+                                               impl_type);
+  }
+  if (!specialized) {
+    return NULL;
+  }
+
+  mir_function_set_value_type(builder->fn, fn_ref->result, impl_type);
+  mir_function_set_value_callable_summary(builder->fn, fn_ref->result,
+                                          &specialized->summary);
+  if (closure_def) {
+    closure_def->data.construct.impl_fn = specialized->id;
+    closure_def->data.construct.impl_name = specialized->name;
+  }
+  return specialized;
+}
+
 static void mir_specialize_call_fn_ref_operands(MirBuilder *builder,
                                                 MirInstr *call) {
   if (!builder || !builder->program || !builder->fn || !call ||
@@ -5065,11 +5113,16 @@ static MirValueId mir_partial_application(MirBuilder *builder, Type *type,
   }
 
   MirValueIdVec fields = {0};
+  Type *capture_type = callee->type;
   for (size_t i = 0; i < app->data.AST_APPLICATION.len; i++) {
     MirValueId value =
         mir_expr(builder, app->data.AST_APPLICATION.args + i, ctx);
     if (value == MIR_NO_VALUE) {
       return MIR_NO_VALUE;
+    }
+    if (capture_type && capture_type->kind == T_FN) {
+      mir_specialize_captured_fn(builder, value, capture_type->data.T_FN.from);
+      capture_type = capture_type->data.T_FN.to;
     }
     mir_value_id_vec_push(arena, &fields, value);
   }
@@ -9894,6 +9947,15 @@ static bool mir_scan_param_consume_operand(MirInstr *instr, MirOperand operand,
      and keep such parameters owned. */
   if (instr && instr->kind == MIR_PHI) {
     scan->any_phi = true;
+  }
+  if (operand.use == MIR_OPERAND_USE_CONSUME && instr &&
+      instr->kind == MIR_CALL && instr->data.call.callee != MIR_NO_VALUE) {
+    MirInstr *callee_def = mir_function_find_def_instr(
+        (MirFunction *)scan->fn, instr->data.call.callee);
+    if (callee_def && callee_def->kind == MIR_FN_REF &&
+        callee_def->data.fn_ref.fn == scan->fn) {
+      return true;
+    }
   }
   if (operand.use == MIR_OPERAND_USE_CONSUME) {
     scan->any_consume = true;

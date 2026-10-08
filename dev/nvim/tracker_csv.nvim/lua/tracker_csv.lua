@@ -5,6 +5,143 @@ local DELIMITER_GAP = 1
 local HIGHLIGHT_NS = vim.api.nvim_create_namespace('tracker_csv_columns')
 local ODD_COLUMN = 'TrackerCsvOddColumn'
 local EVEN_COLUMN = 'TrackerCsvEvenColumn'
+local NOTE_NAMES = { 'c', 'c#', 'd', 'd#', 'e', 'f', 'f#', 'g', 'g#', 'a', 'a#', 'b' }
+local is_comment
+local delimiters
+local cell_index
+
+local function replace_at(text, start, finish, value)
+  return text:sub(1, start - 1) .. value .. text:sub(finish + 1)
+end
+
+local function token_at(text, cursor, pattern, convert)
+  local offset = 1
+
+  while true do
+    local match = { text:find(pattern, offset) }
+    local start, finish = match[1], match[2]
+    if not start then
+      return nil
+    end
+
+    if cursor >= start - 1 and cursor < finish then
+      return start, finish, convert(unpack(match, 3))
+    end
+
+    offset = finish + 1
+  end
+end
+
+local function adjust_parameter(cell, cursor, delta)
+  local start, finish = token_at(
+    cell,
+    cursor,
+    '([%a])([%x][%x])',
+    function()
+      return true
+    end
+  )
+
+  if not start then
+    return nil
+  end
+
+  local name = cell:sub(start, start)
+  local number = tonumber(cell:sub(start + 1, finish), 16)
+  number = (number + delta) % 256
+  return replace_at(cell, start, finish, name .. string.format('%02x', number))
+end
+
+local function adjust_instrument(cell, cursor, delta)
+  local start = token_at(
+    cell,
+    cursor,
+    '([%x][%x])([a-gA-G][#b]?%-?%d)',
+    function()
+      return true
+    end
+  )
+
+  if not start then
+    start = token_at(cell, cursor, '(%d%d)', function()
+      return true
+    end)
+
+    if start then
+      local previous = cell:sub(start - 1, start - 1)
+      local following = cell:sub(start + 2, start + 2)
+      local valid_start = previous == '' or previous:match('%s') or previous == '('
+      local valid_end = following == '' or following:match('%s') or following == ')' or following == ';'
+
+      if not valid_start or not valid_end then
+        return nil
+      end
+    end
+  end
+
+  if not start or cursor >= start + 1 then
+    return nil
+  end
+
+  local number = tonumber(cell:sub(start, start + 1), 10)
+  number = (number + delta) % 100
+  return replace_at(cell, start, start + 1, string.format('%02d', number))
+end
+
+local function adjust_note(cell, cursor, delta)
+  local start, finish, note = token_at(
+    cell,
+    cursor,
+    '([a-gA-G])([#b]?)(%-?%d)',
+    function(letter, accidental, octave)
+      return { letter:lower(), accidental, tonumber(octave) }
+    end
+  )
+
+  if not start then
+    return nil
+  end
+
+  local pitch = ({ c = 0, d = 2, e = 4, f = 5, g = 7, a = 9, b = 11 })[note[1]]
+  if note[2] == '#' then
+    pitch = pitch + 1
+  elseif note[2] == 'b' then
+    pitch = pitch - 1
+  end
+
+  local midi = note[3] * 12 + pitch + delta
+  local octave = math.floor(midi / 12)
+  local name = NOTE_NAMES[(midi % 12) + 1]
+  return replace_at(cell, start, finish, name .. octave)
+end
+
+local function adjust_line(line, cursor, delta)
+  if is_comment(line) then
+    return nil
+  end
+
+  local column = cell_index(line, cursor)
+  local separators = delimiters(line)
+  local start = (separators[column - 1] or 0) + 1
+  local finish = separators[column] or #line
+  local cell = line:sub(start, finish)
+  local cell_cursor = cursor - start + 1
+  local updated = adjust_instrument(cell, cell_cursor, delta)
+
+  if not updated then
+    updated = adjust_parameter(cell, cell_cursor, delta)
+  end
+
+  if not updated then
+    updated = adjust_note(cell, cell_cursor, delta)
+  end
+
+  if not updated then
+    return nil
+  end
+
+  return replace_at(line, start, finish, updated)
+end
 
 local function fields(line)
   local result = {}
@@ -32,11 +169,11 @@ local function fields(line)
   return result
 end
 
-local function is_comment(line)
+is_comment = function(line)
   return line:match('^%s*#') ~= nil
 end
 
-local function delimiters(line)
+delimiters = function(line)
   local result = {}
   local depth = 0
 
@@ -55,7 +192,7 @@ local function delimiters(line)
   return result
 end
 
-local function cell_index(line, cursor)
+cell_index = function(line, cursor)
   local column = 1
 
   for _, delimiter in ipairs(delimiters(line)) do
@@ -245,6 +382,59 @@ function M.move_cell(delta)
     target_row,
     cell_start(updated, column),
   })
+end
+
+function M.adjust(delta)
+  local _, cursor = unpack(vim.api.nvim_win_get_cursor(0))
+  local line = vim.api.nvim_get_current_line()
+
+  local updated = adjust_line(line, cursor, delta)
+  if not updated then
+    return
+  end
+
+  vim.api.nvim_set_current_line(updated)
+  M.align(true)
+  M.refresh()
+end
+
+function M.clear_cell()
+  local _, cursor = unpack(vim.api.nvim_win_get_cursor(0))
+  local line = vim.api.nvim_get_current_line()
+
+  if is_comment(line) then
+    return
+  end
+
+  local cells = fields(line)
+  local column = cell_index(line, cursor)
+  if not cells[column] then
+    return
+  end
+
+  cells[column] = ''
+  vim.api.nvim_set_current_line(table.concat(cells, DELIMITER))
+  M.refresh()
+end
+
+function M.adjust_visual(delta)
+  local first = vim.fn.getpos("'<")
+  local last = vim.fn.getpos("'>")
+  local start_row = math.min(first[2], last[2])
+  local end_row = math.max(first[2], last[2])
+  local cursor = math.min(first[3], last[3]) - 1
+  local selected = vim.api.nvim_buf_get_lines(0, start_row - 1, end_row, false)
+
+  for index, line in ipairs(selected) do
+    local updated = adjust_line(line, cursor, delta * (index - 1))
+    if updated then
+      selected[index] = updated
+    end
+  end
+
+  vim.api.nvim_buf_set_lines(0, start_row - 1, end_row, false, selected)
+  M.align(true)
+  M.refresh()
 end
 
 function M.refresh()

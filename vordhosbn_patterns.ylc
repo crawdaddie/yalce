@@ -4,6 +4,10 @@ import Tracker;
 import std/Lists;
 import std/Arrays;
 
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+let read_bytes = extern fn Ptr -> String;
+
 
 
 let bpm = 180.;
@@ -29,8 +33,6 @@ let Drums = module () ->
     "~/Sounds/rns_samples/Claps/ech_clap_vinyl909.flac",
   |] |> Arrays.map (SF.load_sf);
 
-
-
   let kds = @Audio fn () -> 
     let rate = 1.;
     let f = bufs[1]; 
@@ -40,50 +42,75 @@ let Drums = module () ->
     |> bufplay f.data (f.samplerate * spf) 0.
     |> (*) (t |> rect 0.1 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
     |> (*) (Math.db_amp 12.)
-    # |> Filter.lpf 500. 1.
   ;;
+
   let k = fn dur note plist ->
     kds () |> play_node;
     ()
   ;;
+  let retrig_param = fn spl params i ->
+    if i >= array_size params then 0.
+    else (
+      let name, value = params[i];
+      if name == 'r' then Double value / spl
+      else retrig_param spl params (i + 1)
+    )
+  ;;
 
-  let snrs = @Audio fn () -> 
-    let rate = 1.;
+  let vel_param = fn spl params i ->
+    if i >= array_size params then 1.
+    else (
+      let name, value = params[i];
+      if name == 'v' then Double value / 256.
+      else vel_param spl params (i + 1)
+    )
+  ;;
+
+  let snrs = @Audio fn retrigf rate vel -> 
     let f = bufs[2]; 
     let t = trig 0;
 
-    t
-    |> bufplay f.data (f.samplerate * spf) 0.
+    (trig retrigf)
+    |> bufplay f.data (f.samplerate * spf * rate) 0.
     |> (*) (t |> rect 0.1 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
-    # |> (*) (Math.db_amp 12.)
+    |> (*) vel
   ;;
 
-  let s = fn dur note plist ->
-    snrs () |> play_node;
+  let s = fn ctx dur note plist ->
+    let retrig = retrig_param ctx.spl plist 0;
+    let vel = vel_param ctx.spl plist 0;
+    snrs retrig ((Double note) - 60. |> midiratio) vel |> play_node;
     ()
   ;;
 
-  let hhs = @Audio fn () -> 
+  let hhs = @Audio fn retrigf -> 
     let rate = 1.;
     let hbuf = bufs[0]; 
     let t = trig 0;
-    t
+
+    (trig retrigf)
     |> bufplay hbuf.data (hbuf.samplerate * spf) 0.
     |> (*) (t |> rect 0.05 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
     |> pan 2 (rand_trig 0. 1. t)
   ;;
 
-  let hh = fn dur note plist ->
-    hhs () |> play_node;
+
+  let hh = fn ctx dur note plist ->
+    # hhs () |> play_node;
+
+    let spl = ctx.spl;
+    # print `spl: {spl}\n`;
+    let retrig = retrig_param spl plist 0;
+    hhs retrig |> play_node;
     ()
   ;;
 
-  let hh2s = @Audio fn () -> 
+  let hh2s = @Audio fn retrigf -> 
     let rate = 1.5;
     let f = bufs[0]; 
     let t = trig 0;
 
-    t
+    (trig retrigf)
     |> bufplay f.data (rate * f.samplerate * spf) 0.
     |> (*) (t |> rect 0.05 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
 
@@ -91,8 +118,9 @@ let Drums = module () ->
     # |> (*) (Math.db_amp 12.)
   ;;
 
-  let hh2 = fn dur note plist ->
-    hh2s () |> play_node;
+  let hh2 = fn ctx dur note plist ->
+    let retrig = retrig_param ctx.spl plist 0;
+    hh2s retrig |> play_node;
     ()
   ;;
 
@@ -137,57 +165,8 @@ let mels = module () ->
   ;;
 
 ;
-# let instr0 = module () ->
-
-#   let cymbal = @Audio fn freq ->
-#     let t = trig 0;
-#
-#     tri_osc (freq * (~[1., 1.01]))
-#     |> sum
-#     |> Filter.lpf (freq * 4.) 1.
-#     |> (*) (t |> rect 0.5 |> adsr 0. 0.1 0.2 1. |> kill_on_end)
-#     |> (*) (Math.db_amp -10.)
-#   ;;
-#
-#   let r = Reverb.cathedral 0. |> play_node;
-#
-#   # let defaults = fn () -> [|1., 0., 0., 1., 1.|];;
-#
-#   let play = fn dur note plist ->
-#     let f = Double note |> midi_freq;
-#     # cymbal f |> play_node;
-#     cymbal f ~> r;
-#     ()
-#   ;;
-# ;
-#
-#
-# let instr1 = module () ->
-#   let mels = @Audio fn freq d ->
-#     let t = trig 0;
-#
-#     freq * 0.5 * (~[ lfnoise 0.5 0.99 1.01, lfnoise 0.5 0.99 1.01])
-#     |> saw_osc 
-#     |> sum
-#     |> Filter.lpf 5000. 1.
-#     |> (*) (t |> rect d |> adsr 0.01 0.1 0.8 0.5 |> kill_on_end)
-#     |> (*) (Math.db_amp -20.)
-#
-#   ;;
-#
-#   let play = fn dur note plist ->
-#     let f = Double note |> midi_freq;
-#     mels f dur ~> instr0.r;
-#     ()
-#   ;;
-#
-# ;
 
 
-
-let open_file = extern fn String -> String -> Option of Ptr;
-let fclose = extern fn Ptr -> ();
-let read_bytes = extern fn Ptr -> String;
 # let read_lines = extern fn Ptr -> (List of String, Int);
 #
 # let (lines,n) = match open_file "~/projects/yalce/aoc/aoc_2019/day01.txt" "rb" with
@@ -196,35 +175,12 @@ let read_bytes = extern fn Ptr -> String;
 #   ;
 let spl = beat / 2.;
 import std/Str;
-let split_pats = fn st ->
-  let len = array_size st;
-  let count = [|1|];
 
-  for i = 0 .. len in (
-    if i > 0 && i + 1 < len && st[i] == '#' && st[i + 1] == '%' then
-      count[0] := count[0] + 1
-  );
-
-  let result = array_fill_zeroes (count[0]) "";
-  let start = [|0|];
-  let out = [|0|];
-
-  for i = 0 .. len in (
-    if i > 0 && i + 1 < len && st[i] == '#' && st[i + 1] == '%' then (
-      result[out[0]] := st[start[0] .. i];
-      out[0] := out[0] + 1;
-      start[0] := i
-    )
-  );
-
-  result[out[0]] := st[start[0] .. len];
-  result
-;;
 
 import std/Str;
 import std/Arrays;
 let pats = match open_file "./vordhosbn.csv" "rb" with
-  | Some fd -> read_bytes fd |> split_pats |> Arrays.map (Tracker.parse_pattern)
+  | Some fd -> read_bytes fd |> Tracker.CSV.split_pats |> Arrays.map (Tracker.parse_pattern)
   | None -> [| |]
   ;
 
@@ -232,63 +188,42 @@ let pats = match open_file "./vordhosbn.csv" "rb" with
 
 # let spl = beat / 2.;
 
-let handle_pat_ev = fn note_dur note instr plist -> 
-  # match scan_for_delay plist with
-  # | 0. ->
-  # | d ->  
+let handle_pat_ev = fn ctx note_dur note instr plist ->
   match instr with
   | 0 -> mels.play note_dur note plist
   | 2 -> mels.play_tri note_dur note plist
   | 3 -> Drums.k note_dur note plist
-  | 4 -> Drums.hh note_dur note plist
-  | 5 -> Drums.hh2 note_dur note plist
-  | 6 -> Drums.s note_dur note plist
+  | 4 -> Drums.hh ctx note_dur note plist
+  | 5 -> Drums.hh2 ctx note_dur note plist
+  | 6 -> Drums.s ctx note_dur note plist
   | _ -> ()
 ;;
-
 let g = fn () ->
+
   let spl = beat / 2.;
   pats[0]
-  |> Tracker.pattern_cor 0
-  |> cor_map (fn (d, ev) -> 
-    Tracker.handle_ev 
-      handle_pat_ev
-      spl
-      ev;
-    d * spl 
-  )
-  |> cor_repeat 2
+  |> Tracker.pattern_cor_ctx (bpm: 180., spl: (beat / 2.), logical_time: 0. ) 0
+  |> cor_map (Tracker.handle_ev_ctx handle_pat_ev)
   |> play_pattern 0.
   ;
 
-  yield 32. * beat;
+  yield 16. * beat;
 
   let m1 = fn () ->
     pats[1]
-    |> Tracker.pattern_cor 0
-    |> cor_map (fn (d, ev) -> 
-      Tracker.handle_ev 
-        handle_pat_ev
-        spl
-        ev;
-      d * spl
-    )
+    |> Tracker.pattern_cor_ctx (bpm: 180., spl: (beat / 2.), logical_time: 0. ) 0
+    |> cor_map (Tracker.handle_ev_ctx handle_pat_ev)
     |> cor_repeat 2
     |> play_pattern 0.
     ;
 
     pats[2]
-    |> Tracker.pattern_cor 0
-    |> cor_map (fn (d, ev) -> 
-      Tracker.handle_ev 
-        handle_pat_ev
-        (spl * 0.5)
-        ev;
-      d * spl * 0.5
-    )
+    |> Tracker.pattern_cor_ctx (bpm: 180., spl: (beat / 4.), logical_time: 0. ) 0
+    |> cor_map (Tracker.handle_ev_ctx handle_pat_ev)
     |> cor_repeat 2 
     |> play_pattern 0.
     ;
+
     yield 32. * beat;
     yield m1 ()
   ;;
@@ -298,5 +233,3 @@ let g = fn () ->
 ;;
 
 g () |> play_pattern beat;
-
-

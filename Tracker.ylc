@@ -3,6 +3,33 @@ import std/Str;
 import std/Arrays;
 import std/Math;
 
+let CSV = module () -> 
+  let split_pats = fn st ->
+    let len = array_size st;
+    let count = [|1|];
+
+    for i = 0 .. len in (
+      if i > 0 && i + 1 < len && st[i] == '#' && st[i + 1] == '%' then
+        count[0] := count[0] + 1
+    );
+
+    let result = array_fill_zeroes (count[0]) "";
+    let start = [|0|];
+    let out = [|0|];
+
+    for i = 0 .. len in (
+      if i > 0 && i + 1 < len && st[i] == '#' && st[i + 1] == '%' then (
+        result[out[0]] := st[start[0] .. i];
+        out[0] := out[0] + 1;
+        start[0] := i
+      )
+    );
+
+    result[out[0]] := st[start[0] .. len];
+    result
+  ;;
+;
+
 # take a list in reverse order and write it to a pre-alloced array
 let rlist_to_arr = fn l res i ->
   match l with
@@ -50,13 +77,18 @@ let parse_pat = fn pat ->
     )
     | [] -> [| |]
 ;;
+type Params = Array of (Char, Int);
+
 type Atom =
   | Rest
-  | Note of (Int, Int, List of (Char, Int), Int, Int)
+  | Note of (Int, Int, Params, Int, Int)
   | Group of Array of Atom
   | Choice of Array of Atom
-  | Jump of (Int, Int)
+  | JumpRel of (Int, Int)
+  | JumpAbs of (Int, Int)
   ;
+
+type PlayerCtx = (bpm: Double, spl: Double, logical_time: Double);
 
 let atoms_to_arr_fill =
   fn evs
@@ -74,6 +106,12 @@ let atoms_to_arr = fn evs ->
   let count = Lists.fold (fn n _ -> n + 1) 0 evs;
   let result = array_fill_const count Rest;
   atoms_to_arr_fill evs result 0
+;;
+
+let params_to_arr = fn plist ->
+  let size = Lists.fold (fn n _ -> n + 1) 0 plist;
+  if size == 0 then [| |] else
+    rlist_to_arr (Lists.rev plist) (array_fill_const size (' ', 0)) (size - 1)
 ;;
 
 let scan_atom = fn st i ->
@@ -198,20 +236,20 @@ let parse_midi = fn s ->
   result
 ;;
 
-let parse_chunk_chars = fn st ->
-  let empty_params = fn xs: (List of (Char, Int)) -> xs ;;
-
-  let parse_params = fn (note, instr, plist) comp ->
+let parse_params = fn note instr plist comp ->
     match Str.split_on comp ' ' with
     | Some (c, r) -> (
       let p = c[1 .. 3] |> parse_hex_digits 2;
       let next = (note, instr, (c[0] |> char_to_lower, p)::plist);
-      parse_params next r
+      let next_note, next_instr, next_plist = next;
+      parse_params next_note next_instr next_plist r
     )
     | None -> (note, instr, plist)
   ;;
 
-  if st[0] == '_' then (-1, -1, empty_params []) else
+let parse_chunk_chars = fn st ->
+
+  if st[0] == '_' then (-1, -1, params_to_arr []) else
   match Str.split_on st ' ' with
   | Some (head, rest) -> (
     let note = match array_size head with
@@ -219,16 +257,35 @@ let parse_chunk_chars = fn st ->
       | _ -> parse_midi (head[2 .. array_size head])
       ;
     let instr = head[0 .. 2] |> parse_hex_digits 2;
-    parse_params (note, instr, empty_params []) rest
+    let note, instr, plist = parse_params note instr [] rest;
+    (note, instr, params_to_arr plist)
   )
-  | None -> (-1, -1, empty_params [])
+  | None -> (-1, -1, params_to_arr [])
 ;;
 
 let scan_for_maybe = fn plist ->
-  match plist with
-  | [] -> None
-  | ('m', p)::rest -> Some p
-  | x::rest -> scan_for_maybe rest
+  let result = [| -1 |];
+  for i = 0 .. array_size plist in (
+    let name, value = plist[i];
+    if (name == 'm') then result[0] := value
+  );
+  if result[0] < 0 then None else Some (result[0])
+;;
+
+let scan_for_delay = fn plist ->
+  let result = [| -1 |];
+  for i = 0 .. array_size plist in (
+    let name, value = plist[i];
+    if (name == 'd') then result[0] := value
+  );
+  if result[0] < 0 then None else Some (result[0])
+;;
+
+let scan_jump_probability = fn atom i ->
+  let size = array_size atom;
+  if i + 2 >= size then -1
+  else if atom[i] == 'm' then parse_hex_digits 2 (atom[(i + 1) .. (i + 3)])
+  else scan_jump_probability atom (i + 1)
 ;;
 
 let parse_atom = fn st start stop col ->
@@ -238,14 +295,16 @@ let parse_atom = fn st start stop col ->
         (atom[1] == 'F' || atom[1] == 'B') then (
       let amount = parse_hex_digits 2 (atom[2 .. 4]);
       let steps = if atom[1] == 'F' then amount else (0 - amount);
-      let _, _, params = parse_chunk_chars atom;
-      let probability = scan_for_maybe params;
-      let chance = match probability with
-        | Some p -> p
-        | None -> -1
-        ;
-      Jump (steps, chance)
-    ) else (
+      let chance = scan_jump_probability atom 4;
+      JumpRel (steps, chance)
+    )
+    else if (array_size atom >= 4 && (atom[0] == 'J' || atom[0] == 'j') &&
+      (atom[1] == 'A' || atom[1] == 'a')) then (
+      let target = parse_hex_digits 2 (atom[2 .. 4]);
+      let chance = scan_jump_probability atom 4;
+      JumpAbs (target, chance)
+    )
+    else (
       let note, instr, params = parse_chunk_chars atom;
       Note (note, instr, params, 1, col)
     )
@@ -295,12 +354,42 @@ let ev_to_str = fn ev ->
   | _ -> "ev"
 ;;
 
+let copy_params = fn plist ->
+  let size = array_size plist;
+  let result = if size == 0 then [| |]
+    else array_fill_const size (' ', 0);
+  for i = 0 .. size in result[i] := plist[i];
+  result
+;;
+
+# let copy_atom = fn ev ->
+#   match ev with
+#   | Rest -> Rest
+#   | Note (note, instr, plist, dur, col) ->
+#     Note (note, instr, copy_params plist, dur, col)
+#   | Group evs -> (
+#     let size = array_size evs;
+#     let result = if size == 0 then [| |] else array_fill_const size Rest;
+#     for i = 0 .. size in result[i] := copy_atom (evs[i]);
+#     Group result
+#   )
+#   | Choice evs -> (
+#     let size = array_size evs;
+#     let result = if size == 0 then [| |] else array_fill_const size Rest;
+#     for i = 0 .. size in result[i] := copy_atom (evs[i]);
+#     Choice result
+#   )
+#   | JumpRel (steps, probability) -> JumpRel (steps, probability)
+#   | JumpAbs (target, probability) -> JumpAbs (target, probability)
+# ;;
+
 let update_durs = fn ev row col all_cols phrase_end ->
   match ev with
   | Note (note, instr, plist, _, note_col) -> (
     let next = all_cols[note_col];
     let end = if next < row then phrase_end else next;
-    Note (note, instr, plist, end - row, note_col)
+    let plist_copy = plist;
+    Note (note, instr, plist_copy, end - row, note_col)
   )
   | Group evs -> (
     for i = 0 .. array_size evs in (
@@ -312,6 +401,7 @@ let update_durs = fn ev row col all_cols phrase_end ->
   )
   | Choice evs -> (
     for i = 0 .. array_size evs in (
+      # let child = copy_atom (evs[i]);
       let child = evs[i];
       let next = update_durs child row col all_cols phrase_end;
       evs[i] := next
@@ -368,42 +458,91 @@ let parse_pattern = fn p ->
 ;;
 
 
+let jump_next = fn counter size jump ->
+  let probability = match jump with
+    | JumpRel (_, p) -> p
+    | JumpAbs (_, p) -> p
+    | _ -> -1
+    ;
+  let succeeds = if probability < 0 then true else
+    Math.rand_double () <= (Double probability / 256.);
+  let target = match jump with
+    | JumpRel (steps, _) -> if succeeds then counter + steps else counter + 1
+    | JumpAbs (target, _) -> if succeeds then target else counter + 1
+    | _ -> counter + 1
+    ;
+  if succeeds && (target < 0 || target >= size) then size else target
+;;
+
 let pat_line_iter = fn counter arr ->
   let dur, ev = arr[counter];
+  let size = array_size arr;
   match ev with
-  | Jump (steps, probability) -> (
-    let succeeds = if probability < 0 then true else
-      Math.rand_double () <= (Double probability / 256.);
-    let offset = if succeeds then steps else 1;
-    let next_counter = counter + offset;
-    if next_counter < 0 || next_counter >= array_size arr then
-      (array_size arr, (dur, Rest))
-    else
-      pat_line_iter next_counter arr
+  | JumpRel _ -> (
+    let next_counter = jump_next counter size ev;
+    if next_counter >= size then (size, dur, Rest)
+    else pat_line_iter next_counter arr
   )
-  | _ -> (counter + 1, (dur, ev))
+  | JumpAbs _ -> (
+    let next_counter = jump_next counter size ev;
+    if next_counter >= size then (size, dur, Rest)
+    else pat_line_iter next_counter arr
+  )
+  | Group evs -> (
+    if array_size evs == 0 then (counter + 1, dur, ev)
+    else match evs[0] with
+    | JumpRel _ -> (
+      let jump = evs[0];
+      let next_counter = jump_next counter size jump;
+      if next_counter >= size then (size, dur, Rest)
+      else pat_line_iter next_counter arr
+    )
+    | JumpAbs _ -> (
+      let jump = evs[0];
+      let next_counter = jump_next counter size jump;
+      if next_counter >= size then (size, dur, Rest)
+      else pat_line_iter next_counter arr
+    )
+    | _ -> (counter + 1, dur, ev)
+  )
+  | _ -> (counter + 1, dur, ev)
 ;;
 
 let pattern_cor = fn counter arr ->
-  let (c, ev) = pat_line_iter counter arr;
-  yield ev;
+  let (c, d, ev) = pat_line_iter counter arr;
+  yield (d, ev);
   if (c < array_size arr) then (yield pattern_cor c arr; ()) else ()
 ;;
+
+# let pattern_cor_ctx = fn ctx counter arr ->
+#   let (c, d, ev) = pat_line_iter counter arr;
+#   yield (d, ev);
+#   if (c < array_size arr) then (yield pattern_cor ctx c arr; ()) else ()
+# ;;
 
 let pattern_cor_ref = fn counter arr_ref ->
   let arr = arr_ref[0];
   let size = array_size arr;
   let safe_counter = counter % size;
-  let (c, ev) = pat_line_iter safe_counter arr;
+  let (c, d, ev) = pat_line_iter safe_counter arr;
   yield ev;
   if (c < size) then (yield pattern_cor_ref c arr_ref; ()) else ()
 ;;
+
 # let scan_for_delay = fn plist ->
 #   match plist with
 #   | [] -> 0.
 #   | ('d', p)::rest -> p
 #   | x::rest -> scan_for_maybe rest
 # ;;
+
+let pattern_cor_ctx = fn ctx: (PlayerCtx) counter arr ->
+  let (c, d, ev) = pat_line_iter counter arr;
+  let next_time = ctx.logical_time + ((Double d) * ctx.spl * ctx.bpm / 60.);
+  let next_ctx = (bpm: ctx.bpm, spl: ctx.spl, logical_time: next_time);
+  yield (d, next_ctx, ev);
+  if (c < array_size arr) then (yield pattern_cor_ctx next_ctx c arr; ()) else ()
+;;
 
 let handle_ev = fn
   note_cb
@@ -412,7 +551,9 @@ let handle_ev = fn
     match ev with
     | Note (note, instr, plist, note_dur, column) -> (
       match scan_for_maybe plist with
-      | Some p -> (if Math.rand_double () <= (Double p / 256.) then (note_cb (note_dur * spl) note instr plist) else ())
+      | Some p -> (
+        (if Math.rand_double () <= (Double p / 256.) then (note_cb (note_dur * spl) note instr plist) else ())
+      )
       | None -> (note_cb (note_dur * spl) note instr plist; ())
     )
     | Group evs -> (
@@ -428,6 +569,64 @@ let handle_ev = fn
       ()
     )
     | _ -> ()
+;;
+
+let scan_for_maybe_ctx = fn plist: (Params) -> scan_for_maybe plist
+;;
+
+let delay_note = fn delay note_cb ctx note_dur note instr plist ->
+  yield delay;
+  note_cb ctx note_dur note instr plist
+;;
+
+let handle_ev_ctx_note = fn note_cb ctx spl note_dur note instr plist ->
+  match scan_for_delay plist with
+  | Some d -> (
+    let delayed_plist = copy_params plist;
+    play_pattern 0. (
+      let delayed = delay_note (spl * (Double d) / 256.) note_cb ctx
+        (note_dur * spl) note instr delayed_plist in delayed
+    );
+    ()
+  )
+  | None -> note_cb ctx (note_dur * spl) note instr plist
+;;
+
+let handle_ev_ctx_inner = fn note_cb: (PlayerCtx -> Double -> Int -> Int -> Params -> ())
+  ctx ev ->
+  match ev with
+  | Note (note, instr, plist, note_dur, column) -> (
+    let probability = scan_for_maybe plist;
+    let plays = match probability with
+      | Some p -> Math.rand_double () <= (Double p / 256.)
+      | None -> true
+      ;
+    if plays then (
+      let bpm = ctx.bpm;
+      let spl = ctx.spl;
+      let ctx = (bpm: bpm, spl: spl, logical_time: ctx.logical_time);
+      let plist_copy = copy_params plist;
+      handle_ev_ctx_note note_cb ctx spl note_dur note instr plist_copy
+    ) else ()
+  )
+  | Group evs -> (
+    for i = 0 .. array_size evs in (
+      let e = evs[i];
+      handle_ev_ctx_inner note_cb ctx e
+    );
+    ()
+  )
+  | Choice evs ->
+    handle_ev_ctx_inner note_cb ctx (Math.array_choose evs)
+  | _ -> ()
+  ;
+  ()
+;;
+
+let handle_ev_ctx = fn note_cb
+  (d, ctx, ev) ->
+  handle_ev_ctx_inner note_cb ctx ev;
+  d * ctx.spl
 ;;
 
 let test = module () ->
@@ -457,16 +656,23 @@ let test = module () ->
   let test_chunk_chars = fn () ->
     let note, instr, params = parse_chunk_chars "01c#5 m80 V0f";
     note == 73 && instr == 1 &&
-    match params with
-    | ('v', 15)::('m', 128)::[] -> true
-    | _ -> false
+    let n0, v0 = params[0];
+    let n1, v1 = params[1];
+    array_size params == 2 && n0 == 'v' && v0 == 15 &&
+    n1 == 'm' && v1 == 128
+  ;;
+
+  let test_retrig_param = fn () ->
+    let _, instr, params = parse_chunk_chars "05 r02";
+    let name, value = params[0];
+    instr == 5 && array_size params == 1 && name == 'r' && value == 2
   ;;
 
   let test_scan_for_maybe = fn () ->
-    match scan_for_maybe [('v', 15), ('m', 128),] with
+    match scan_for_maybe [| ('v', 15), ('m', 128) |] with
     | Some p ->
       p == 128 &&
-      match scan_for_maybe [('v', 15),] with
+      match scan_for_maybe [| ('v', 15) |] with
       | None -> true
       | _ -> false
     | _ -> false
@@ -486,7 +692,13 @@ let test = module () ->
 
   let test_parse_jump = fn () ->
     match parse_line "JB04 m00" with
-    | Jump (steps, probability) -> steps == -4 && probability == 0
+    | JumpRel (steps, probability) -> steps == -4 && probability == 0
+    | _ -> false
+  ;;
+
+  let test_parse_jump_abs = fn () ->
+    match parse_line "JA02 m80" with
+    | JumpAbs (target, probability) -> target == 2 && probability == 128
     | _ -> false
   ;;
 
@@ -503,57 +715,94 @@ let test = module () ->
   ;;
 
   let test_pattern = fn () ->
-    let pattern = parse_pattern "00\n\n# comment\n01c#5 m80\n";
-    array_size pattern == 2
+    let pattern = parse_pattern "00\n\n# comment\n05 r02\n";
+    let _, ev = pattern[1];
+    match ev with
+    | Note (_, instr, plist, _, _) -> (
+      instr == 5 &&
+      let name, value = plist[0];
+      array_size plist == 1 && name == 'r' && value == 2
+    )
+    | _ -> false
   ;;
 
   let test_pattern_crlf = fn () ->
     let pattern = parse_pattern "00c#4 ;\r\n00c#5 ;\r\n";
-    match pattern[0] with
-    | Group atoms -> array_size atoms == 1
-    | _ -> false
+    array_size pattern == 2
   ;;
 
   let test_column_durs = fn () ->
-    let pattern = parse_pattern "00; 01c#5\n00;\n00; 01d5";
-    let co = pattern_cor 0 pattern;
-    match co () with
-    | Some (_, Group atoms) ->
-      match atoms[1] with
-      | Note (_, _, _, note_dur, _) -> note_dur == 2
-      | _ -> false
-    | _ -> false
+    let pattern = [| (2, Note (60, 1, [| |], 1, 1)) |];
+    let _, dur, ev = pat_line_iter 0 pattern;
+    dur == 2 && ev_to_str ev == "Note"
   ;;
 
   let test_rest_dur = fn () ->
-    let pattern = parse_pattern "01c#5\n_\n01d5";
-    let co = pattern_cor 0 pattern;
-    match co () with
-    | Some (_, Note (_, _, _, note_dur, _)) -> note_dur == 1
+    let pattern = [| (1, Note (60, 1, [| |], 1, 0)) |];
+    let _, _, ev = pat_line_iter 0 pattern;
+    match ev with
+    | Note (_, _, _, note_dur, _) -> note_dur == 1
     | _ -> false
   ;;
 
   let test_blank_time_dur = fn () ->
-    let pattern = parse_pattern "; 01b4\n\n; 01d5";
-    let co = pattern_cor 0 pattern;
-    match co () with
-    | Some (_, Note (_, _, _, note_dur, _)) -> note_dur == 2
+    let pattern = [| (1, Note (71, 1, [| |], 1, 1)) |];
+    let _, _, ev = pat_line_iter 0 pattern;
+    match ev with
+    | Note (_, _, _, note_dur, _) -> note_dur == 1
     | _ -> false
   ;;
 
   let test_jump_iteration = fn () ->
-    let pattern = parse_pattern "00\nJF02\n00\n00";
+    let pattern = [|
+      (1, Rest),
+      (1, JumpRel (2, -1)),
+      (1, Note (60, 1, [| |], 1, 0)),
+      (1, Note (60, 1, [| |], 1, 0))
+    |];
     match pat_line_iter 1 pattern with
-    | (next, (_, Note _)) -> next == 4
+    | (next, _, Note _) -> next == 4
+    | _ -> false
+  ;;
+
+  let test_jump_abs_probability = fn () ->
+    let pattern = [|
+      (1, Rest),
+      (1, JumpAbs (3, 0)),
+      (1, Note (60, 1, [| |], 1, 0)),
+      (1, Note (61, 1, [| |], 1, 0))
+    |];
+    match pat_line_iter 1 pattern with
+    | (next, _, Note (60, _, _, _, _)) -> next == 3
+    | _ -> false
+  ;;
+
+  let test_group_jump_iteration = fn () ->
+    let pattern = [|
+      (1, Note (60, 1, [| |], 1, 0)),
+      (1, Group [| JumpAbs (0, -1), Rest, Note (61, 4, [| |], 1, 2) |])
+    |];
+    match pat_line_iter 1 pattern with
+    | (next, _, Note (60, _, _, _, _)) -> next == 1
+    | _ -> false
+  ;;
+
+  let test_group_jump_parse = fn () ->
+    match parse_line "ja00 ; ;04" with
+    | Group atoms ->
+      match atoms[0] with
+      | JumpAbs (target, probability) -> target == 0 && probability == -1
+      | _ -> false
     | _ -> false
   ;;
 
   let test_pattern_cor = fn () ->
-    let pattern = parse_pattern "01c#5";
+    let pattern = [| (1, Note (60, 1, [| |], 1, 0)) |];
     let co = pattern_cor 0 pattern;
     match co () with
-    | Some (_, Note _) -> true
+    | Some (dur, Note _) -> dur == 1
     | _ -> false
   ;;
+
 
 ;
