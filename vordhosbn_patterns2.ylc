@@ -1,0 +1,329 @@
+open libs/audio_jit/DSP;
+import libs/audio_jit/SF;
+import Tracker;
+import std/Lists;
+import std/Arrays;
+
+
+
+let bpm = 180.;
+let beat = 60. / bpm;
+let Drums = module () ->
+  let bufs = [|
+    "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_synther.flac",
+    "~/Sounds/rns_samples/Kicks/ech_kick_resample.flac",
+    "~/Sounds/rns_samples/Snares/dh_snr_hi_grainy.flac",
+    "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_nospace.flac",
+    "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_tecno.flac",
+    "~/Sounds/rns_samples/HiHats/Closed/ech_hat_verydirty.flac",
+    "~/Sounds/rns_samples/HiHats/Cymbal/dh_cym_ride_sweet.flac",
+    "~/Sounds/rns_samples/HiHats/Open/dh_ophat_long_ender.flac",
+    "~/Sounds/rns_samples/Kicks/dh_kick_mid_tighter.flac",
+    "~/Sounds/rns_samples/Snares/dh_snr_hi_enveloper.flac",
+    "~/Sounds/rns_samples/Snares/dh_snr_syn_808er.flac",
+    "~/Sounds/rns_samples/Snares/dh_snr_syn_whitenoise.flac",
+    "~/Sounds/rns_samples/Snares/ech_snare_analog.flac",
+    "~/Sounds/rns_samples/Percussion/dh_perc_click_metal.flac",
+    "~/Sounds/rns_samples/Percussion/ech_perc_909tom.flac",
+    "~/Sounds/rns_samples/Toms/dh_perc_tom_wave.flac",
+    "~/Sounds/rns_samples/Claps/ech_clap_vinyl909.flac",
+  |] |> Arrays.map (SF.load_sf);
+
+  let kds = @Audio fn () -> 
+    let rate = 1.;
+    let f = bufs[1]; 
+    let t = trig 0;
+
+    t
+    |> bufplay f.data (f.samplerate * spf) 0.
+    |> (*) (t |> rect 0.1 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+    |> (*) (Math.db_amp 12.)
+    # |> Filter.lpf 500. 1.
+  ;;
+
+  let k = fn _ctx dur note plist ->
+    kds () |> play_node;
+    ()
+  ;;
+
+  let snrs = @Audio fn retrigf -> 
+    let rate = 1.;
+    let f = bufs[2]; 
+    let t = trig 0;
+
+    (trig retrigf)
+    |> bufplay f.data (f.samplerate * spf) 0.
+    |> (*) (t |> rect 0.1 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+    # |> (*) (Math.db_amp 12.)
+  ;;
+
+  let s = fn spl dur note plist ->
+    let ps = Lists.fold (fn acc p ->
+      let name, v = p;
+      match name with
+      # | 's' -> (acc[1] := (Double v) / 256.; acc)
+      | 'r' -> (acc[0] := Double v / spl; acc)
+      # | 'd' -> (acc[0] := (Double v) / 256.; acc)
+      # | 'b' -> (acc[4] := (if v > 0 then -1. else 1.); acc)
+      | _ -> acc
+    ) [|0. |] plist;
+    snrs (ps[0]) |> play_node;
+    ()
+  ;;
+
+  let hhs = @Audio fn retrigf -> 
+    let rate = 1.;
+    let hbuf = bufs[0]; 
+    let t = trig 0;
+    (trig retrigf)
+    |> bufplay hbuf.data (hbuf.samplerate * spf) 0.
+    |> (*) (t |> rect 0.05 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+    |> pan 2 (rand_trig 0. 1. t)
+  ;;
+
+  let hh = fn ctx dur note plist ->
+
+    let ps = Lists.fold (fn acc p ->
+      let name, v = p;
+      match name with
+      | 'r' -> (acc[0] := Double v / ctx.spl; acc)
+      | _ -> acc
+    ) [|0. |] plist;
+    hhs (ps[0]) |> play_node;
+    ()
+  ;;
+
+  let hh2s = @Audio fn retrigf -> 
+    let rate = 1.5;
+    let f = bufs[0]; 
+    let t = trig 0;
+
+
+    (trig retrigf)
+    |> bufplay f.data (rate * f.samplerate * spf) 0.
+    |> (*) (t |> rect 0.05 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+
+    |> pan 2 (rand_trig 0. 1. t)
+    # |> (*) (Math.db_amp 12.)
+  ;;
+
+  # let hh2 = fn ctx dur note plist ->
+  #   let ps = Lists.fold (fn acc p ->
+  #     let name, v = p;
+  #     match name with
+  #     # | 's' -> (acc[1] := (Double v) / 256.; acc)
+  #     | 'r' -> (acc[0] := Double v / ctx.spl; acc)
+  #     # | 'd' -> (acc[0] := (Double v) / 256.; acc)
+  #     # | 'b' -> (acc[4] := (if v > 0 then -1. else 1.); acc)
+  #     | _ -> acc
+  #   ) [|0. |] plist;
+  #   hh2s (ps[0]) |> play_node;
+  #   ()
+  # ;;
+
+  let hh2 = fn spl dur note plist ->
+
+    let ps = Lists.fold (fn acc p ->
+      let name, v = p;
+      match name with
+      | 'r' -> (acc[0] := Double v / spl; acc)
+      | _ -> acc
+    ) [|0. |] plist;
+    hh2s (ps[0]) |> play_node;
+    ()
+  ;;
+
+;
+
+let mels = module () ->
+
+  let cymbal = @Audio fn freq ->
+    let t = trig 0;
+
+    (pink () 
+      |> Filter.bpf freq 16.
+      |> (*) (Math.db_amp 40.)
+    )
+    |> (*) (t |> rect 0.5 |> adsr 0. 0.1 0.2 1. |> kill_on_end)
+    |> (*) (Math.db_amp -15.)
+  ;;
+
+  let tri_synth = @Audio fn freq ->
+    let t = trig 0;
+
+    tri_osc (freq * (~[1., 1.01]))
+    |> sum
+    |> Filter.lpf (freq * 4.) 1.
+    |> (*) (t |> rect 0.5 |> adsr 0. 0.1 0.2 1. |> kill_on_end)
+    |> (*) (Math.db_amp -10.)
+  ;;
+  let r = Reverb.cathedral 0. |> play_node;
+
+  let play = fn dur note plist ->
+    let f = Double note |> midi_freq;
+    cymbal f ~> r;
+    # cymbal f ~> r;
+    ()
+  ;;
+
+  let play_tri = fn dur note plist ->
+    let f = Double note |> midi_freq;
+    tri_synth f ~> r;
+    # cymbal f ~> r;
+    ()
+  ;;
+
+;
+# let instr0 = module () ->
+
+#   let cymbal = @Audio fn freq ->
+#     let t = trig 0;
+#
+#     tri_osc (freq * (~[1., 1.01]))
+#     |> sum
+#     |> Filter.lpf (freq * 4.) 1.
+#     |> (*) (t |> rect 0.5 |> adsr 0. 0.1 0.2 1. |> kill_on_end)
+#     |> (*) (Math.db_amp -10.)
+#   ;;
+#
+#   let r = Reverb.cathedral 0. |> play_node;
+#
+#   # let defaults = fn () -> [|1., 0., 0., 1., 1.|];;
+#
+#   let play = fn dur note plist ->
+#     let f = Double note |> midi_freq;
+#     # cymbal f |> play_node;
+#     cymbal f ~> r;
+#     ()
+#   ;;
+# ;
+#
+#
+# let instr1 = module () ->
+#   let mels = @Audio fn freq d ->
+#     let t = trig 0;
+#
+#     freq * 0.5 * (~[ lfnoise 0.5 0.99 1.01, lfnoise 0.5 0.99 1.01])
+#     |> saw_osc 
+#     |> sum
+#     |> Filter.lpf 5000. 1.
+#     |> (*) (t |> rect d |> adsr 0.01 0.1 0.8 0.5 |> kill_on_end)
+#     |> (*) (Math.db_amp -20.)
+#
+#   ;;
+#
+#   let play = fn dur note plist ->
+#     let f = Double note |> midi_freq;
+#     mels f dur ~> instr0.r;
+#     ()
+#   ;;
+#
+# ;
+
+
+
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();
+let read_bytes = extern fn Ptr -> String;
+# let read_lines = extern fn Ptr -> (List of String, Int);
+#
+# let (lines,n) = match open_file "~/projects/yalce/aoc/aoc_2019/day01.txt" "rb" with
+#   | Some fd -> read_lines fd
+#   | None -> (["",], 0)
+#   ;
+let spl = beat / 2.;
+import std/Str;
+let split_pats = fn st ->
+  let len = array_size st;
+  let count = [|1|];
+
+  for i = 0 .. len in (
+    if i > 0 && i + 1 < len && st[i] == '#' && st[i + 1] == '%' then
+      count[0] := count[0] + 1
+  );
+
+  let result = array_fill_zeroes (count[0]) "";
+  let start = [|0|];
+  let out = [|0|];
+
+  for i = 0 .. len in (
+    if i > 0 && i + 1 < len && st[i] == '#' && st[i + 1] == '%' then (
+      result[out[0]] := st[start[0] .. i];
+      out[0] := out[0] + 1;
+      start[0] := i
+    )
+  );
+
+  result[out[0]] := st[start[0] .. len];
+  result
+;;
+
+import std/Str;
+import std/Arrays;
+let pats = match open_file "./vordhosbn.csv" "rb" with
+  | Some fd -> read_bytes fd |> split_pats |> Arrays.map (Tracker.parse_pattern)
+  | None -> [| |]
+  ;
+
+# print `computed {array_size pats} patterns\n`
+
+# let spl = beat / 2.;
+
+let handle_pat_ev = fn
+  ctx: (Tracker.PlayerCtx)
+  note_dur: (Double)
+  note: (Int)
+  instr: (Int)
+  plist: (List of (Char, Int)) -> 
+  # match scan_for_delay plist with
+  # | 0. ->
+  # | d ->  
+  match instr with
+  | 0 -> mels.play note_dur note plist
+  | 2 -> mels.play_tri note_dur note plist
+  | 3 -> Drums.k (dur: ctx.dur, bpm: ctx.bpm, spl: ctx.spl) note_dur note plist
+  | 4 -> Drums.hh (dur: ctx.dur, bpm: ctx.bpm, spl: ctx.spl) note_dur note plist
+  | 5 -> Drums.hh2 ctx.spl note_dur note plist
+  | 6 -> Drums.s (dur: ctx.dur, bpm: ctx.bpm, spl: ctx.spl) note_dur note plist
+  | _ -> ()
+;;
+
+let g = fn () ->
+  let spl = beat / 2.;
+  pats[0]
+  |> Tracker.pattern_cor_ctx (bpm: bpm, spl: (beat / 2.), logical_time: 0.) 0
+  |> cor_map (
+    Tracker.handle_ev_ctx handle_pat_ev
+  )
+  |> play_pattern 0.
+  ;
+
+  yield 16. * beat;
+
+  let m1 = fn () ->
+    pats[1]
+    |> Tracker.pattern_cor_ctx (bpm: bpm, spl: (beat / 2.), logical_time: 0.) 0
+    |> cor_map (
+      Tracker.handle_ev_ctx handle_pat_ev
+    )
+    |> cor_repeat 2
+    |> play_pattern 0.
+    ;
+
+    pats[2]
+    |> Tracker.pattern_cor_ctx (bpm: bpm, spl: (beat / 4.), logical_time: 0.) 0
+    |> cor_map (
+      Tracker.handle_ev_ctx handle_pat_ev
+    )
+    |> cor_repeat 2 
+    |> play_pattern 0.
+    ;
+    yield 32. * beat;
+    yield m1 ()
+  ;;
+
+  yield m1 ()
+ # yield g ()
+;;
+
+g () |> play_pattern beat;

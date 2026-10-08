@@ -33,6 +33,8 @@ let Drums = module () ->
     "~/Sounds/rns_samples/Claps/ech_clap_vinyl909.flac",
   |] |> Arrays.map (SF.load_sf);
 
+  let _ = print `loaded {array_size bufs} buffers\n`;
+
   let kds = @Audio fn () -> 
     let rate = 1.;
     let f = bufs[1]; 
@@ -184,7 +186,7 @@ let pats = match open_file "./vordhosbn.csv" "rb" with
   | None -> [| |]
   ;
 
-# print `computed {array_size pats} patterns\n`
+print `computed {array_size pats} patterns\n`;
 
 # let spl = beat / 2.;
 

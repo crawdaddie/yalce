@@ -2,6 +2,8 @@ import std/Lists;
 import std/Str;
 import std/Arrays;
 import std/Math;
+# import libs/audio_jit/DSP;
+
 
 let CSV = module () -> 
   let split_pats = fn st ->
@@ -82,6 +84,9 @@ type Params = Array of (Char, Int);
 type Atom =
   | Rest
   | Note of (Int, Int, Params, Int, Int)
+
+  #             column, params list
+  | ParamSet of (Int, Params)
   | Group of Array of Atom
   | Choice of Array of Atom
   | JumpRel of (Int, Int)
@@ -186,6 +191,54 @@ let parse_hex_digits = fn num_digits x ->
     acc[0] := acc[0] + ci * (Math.ipow 16 _i)
   );
   acc[0]
+;;
+
+let is_hex_digit = fn c ->
+  match c with
+  | '0' -> true
+  | '1' -> true
+  | '2' -> true
+  | '3' -> true
+  | '4' -> true
+  | '5' -> true
+  | '6' -> true
+  | '7' -> true
+  | '8' -> true
+  | '9' -> true
+  | 'A' -> true
+  | 'B' -> true
+  | 'C' -> true
+  | 'D' -> true
+  | 'E' -> true
+  | 'F' -> true
+  | 'a' -> true
+  | 'b' -> true
+  | 'c' -> true
+  | 'd' -> true
+  | 'e' -> true
+  | 'f' -> true
+  | _ -> false
+;;
+
+let is_param_name = fn c ->
+
+  match c with
+  | '0' -> false
+  | '1' -> false
+  | '2' -> false
+  | '3' -> false
+  | '4' -> false
+  | '5' -> false
+  | '6' -> false
+  | '7' -> false
+  | '8' -> false
+  | '9' -> false
+  | _ -> true
+;;
+
+let is_param_atom = fn atom ->
+  array_size atom >= 3 && is_param_name (atom[0]) &&
+    is_hex_digit (atom[1]) && is_hex_digit (atom[2])
 ;;
 
 let parse_midi = fn s ->
@@ -303,6 +356,10 @@ let parse_atom = fn st start stop col ->
       let target = parse_hex_digits 2 (atom[2 .. 4]);
       let chance = scan_jump_probability atom 4;
       JumpAbs (target, chance)
+    )
+    else if is_param_atom atom then (
+      let _, _, plist = parse_params -1 -1 [] atom;
+      ParamSet (col, params_to_arr plist)
     )
     else (
       let note, instr, params = parse_chunk_chars atom;
@@ -666,6 +723,19 @@ let test = module () ->
     let _, instr, params = parse_chunk_chars "05 r02";
     let name, value = params[0];
     instr == 5 && array_size params == 1 && name == 'r' && value == 2
+  ;;
+
+  let test_parse_param_set = fn () ->
+    match parse_line "_; dff" with
+    | Group atoms -> (
+      match atoms[1] with
+      | ParamSet (column, params) -> (
+        let name, value = params[0];
+        column == 1 && array_size params == 1 && name == 'd' && value == 255
+      )
+      | _ -> false
+    )
+    | _ -> false
   ;;
 
   let test_scan_for_maybe = fn () ->
