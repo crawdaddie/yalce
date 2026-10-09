@@ -16,7 +16,8 @@ let Drums = module () ->
   let bufs = [|
     "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_synther.flac",
     "~/Sounds/rns_samples/Kicks/ech_kick_resample.flac",
-    "~/Sounds/rns_samples/Snares/dh_snr_hi_grainy.flac",
+    # "~/Sounds/rns_samples/Snares/dh_snr_hi_grainy.flac",
+    "~/Sounds/renoise-3.5.4-samples/Snares/Bodied/reggae.flac",
     "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_nospace.flac",
     "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_tecno.flac",
     "~/Sounds/rns_samples/HiHats/Closed/ech_hat_verydirty.flac",
@@ -200,6 +201,7 @@ let handle_pat_ev = fn ctx note_dur note instr plist ->
   | 6 -> Drums.s ctx note_dur note plist
   | _ -> ()
 ;;
+
 let g = fn () ->
 
   let spl = beat / 2.;
@@ -210,7 +212,6 @@ let g = fn () ->
   ;
 
   yield 16. * beat;
-
   let m1 = fn () ->
     pats[1]
     |> Tracker.pattern_cor_ctx (bpm: 180., spl: (beat / 2.), logical_time: 0. ) 0

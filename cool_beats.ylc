@@ -1,0 +1,119 @@
+open libs/audio_jit/DSP;
+import libs/audio_jit/SF;
+import Tracker;
+import std/Lists;
+import std/Arrays;
+
+let bpm = 130.;
+let beat = 60. / bpm;
+let Drums = module () ->
+  let bufs = [|
+    "~/Sounds/renoise-3.5.4-samples/Kicks/Long/wave_2.flac",
+    "~/Sounds/renoise-3.5.4-samples/Snares/Bodied/reggae.flac",
+    "~/Sounds/renoise-3.5.4-samples/HiHats/Closed Hat/around.flac",
+    "~/Sounds/renoise-3.5.4-samples/HiHats/Open Hat/mid.flac",
+  |] |> Arrays.map (SF.load_sf);
+
+  let _ = print `loaded {array_size bufs} buffers\n`;
+
+  let kds = @Audio fn bias -> 
+    let rate = 1.;
+    let f = bufs[0]; 
+    let t = trig 0;
+    let noise = lfnoise 1. 1. 10.;
+
+    t
+    |> bufplay f.data (f.samplerate * spf) 0.
+    |> mixadd (fn i -> 0.2 * Math.sin (i * noise)) 
+    |> (*) 2. |> Math.tanh
+    |> (*) (t |> rect 0.12 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+    |> (*) (Math.db_amp -3.)
+  ;;
+
+  let k = fn () ->
+    kds (Math.rrand 0. 4.) |> play_node;
+    ()
+  ;;
+
+  let hhcls = @Audio fn retrigf rate -> 
+    let hbuf = bufs[2]; 
+    let t = trig 0;
+
+    (trig retrigf)
+    |> bufplay hbuf.data (hbuf.samplerate * spf * rate) 0.
+    |> (*) (t |> rect 0.05 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+  ;;
+
+  let hhcl = fn dur ->
+    hhcls 0. 1.5 |> play_node;
+    ()
+  ;;
+
+  let hhops = @Audio fn retrigf rate -> 
+    let hbuf = bufs[3]; 
+    let t = trig 0;
+
+    (trig retrigf)
+    |> bufplay hbuf.data (hbuf.samplerate * spf) 0.
+    |> (*) (t |> rect 0.1 |> adsr 0. 0.05 0.5 0.01 |> kill_on_end)
+  ;;
+
+  let hhop = fn dur ->
+    hhops 0. 1. |> play_node;
+    ()
+  ;;
+
+  let sns = @Audio fn retrigf rate -> 
+    let hbuf = bufs[1]; 
+    let t = trig 0;
+
+    (trig retrigf)
+    |> bufplay hbuf.data (hbuf.samplerate * spf * rate) 0.
+    # |> (*) (sin_osc 200.)
+    |> (*) (t |> rect 0.1 |> adsr 0. 0.05 0.5 0.01 |> kill_on_end)
+    |> (*) (Math.db_amp 3.)
+    # |> pan 2 (rand_trig 0. 1. t)
+  ;;
+  let r = Reverb.concert 0. |> play_node;
+
+  let snare = fn dur ->
+    sns 0. 1. ~> r;
+    ()
+  ;;
+;
+
+let g = fn () ->
+  let tts_pat = fn () ->
+    Drums.hhcl 0.25 |> play_node;
+    yield 0.25;
+    Drums.hhcl 0.25 |> play_node;
+    yield 0.25;
+    Drums.hhop 0.5 |> play_node;
+    yield 0.25;
+    Math.chance 0.125 (\Drums.hhcl 0.25 |> play_node);
+    yield 0.25;
+    yield tts_pat ()
+  ;;
+
+  let snr_pat = fn () ->
+    yield 3.;
+    Drums.snare ();
+    yield 1.;
+    yield 3.;
+    Drums.snare ();
+    yield 0.75;
+    Drums.snare ();
+    yield 0.25;
+    yield snr_pat ()
+  ;;
+
+  tts_pat () |> cor_map ((*) beat) |> play_pattern 0. ;
+  [|3.,3.,3.,4.,3.|] |> iter |> cor_map (fn d -> Drums.k () |> play_node; d * beat * 0.25) |> cor_loop |> play_pattern 0.;
+  snr_pat () |> cor_loop |> cor_map ((*) beat) |> play_pattern 0.;
+  yield 4.
+;;
+
+
+g () |> play_pattern beat  
+
+
