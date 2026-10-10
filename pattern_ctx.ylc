@@ -1,0 +1,32 @@
+# type EvType = 
+#   | Ev
+#   | Rest
+#   ;
+#
+# type PatternEv = (dur: Double, time: Double, idx: Int, tag: EvType, params: List of (Char, Double));
+
+# let seq = fn events -> events |> iter;;
+
+
+
+let f = fn other_cor ->
+  match other_cor () with
+  | Some t -> (yield t; ())
+  | None -> ()
+  ;
+  yield (f other_cor)
+;;
+
+let c = fn () ->
+  yield 1;
+  yield 2
+;;
+
+let x = f (c ());
+print `
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+{x ()}
+`
