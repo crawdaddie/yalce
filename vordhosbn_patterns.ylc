@@ -12,26 +12,100 @@ let read_bytes = extern fn Ptr -> String;
 
 let bpm = 180.;
 let beat = 60. / bpm;
+
+let stutter = @Audio fn trig_sig active beat_length subdiv rate inp ->
+  let live = delay_line 4.;
+  let size = array_size live;
+  let segment = beat_length * subdiv;
+  let length = Math.max 8. (segment / spf);
+  let write_index = [| 0 |];
+  let start_index = [| 0. |];
+  let state = [| 0., 0. |];
+
+  let write = write_index[0];
+  let start = start_index[0];
+  let playhead = state[0];
+  live[write] := inp;
+
+  let retrigger = Double (trig_sig == 1.);
+  let capture = retrigger * write + (1. - retrigger) * start;
+  let position = retrigger * (length - 1.) + (1. - retrigger) * playhead;
+  let chunk = tabread_samp live (capture - length + 1. + position);
+  let playing = Double (active == 1.);
+  let output = playing * chunk + (1. - playing) * inp;
+
+  let next = position + rate;
+  let wraps = Math.floor (next / length);
+  let next_position = next - length * wraps;
+  start_index[0] := capture;
+  let keep_playing = Double (active >= 0.5);
+  state[0] := keep_playing * next_position + (1. - keep_playing) * playhead;
+  state[1] := trig_sig;
+  write_index[0] := (write + 1) % size;
+  output
+;;
+
+# let bit_reduce = @Audio fn depth inp ->
+#   inp * depth |> Math.round |> (/) depth 
+# ;;
+# Bit-depth reduction. Args: bits (1..24), input.
+let bitcrush = @Audio fn bits inp ->
+  let levels = Math.pow 2. (bits - 1.) in
+  Math.floor (inp * levels + 0.5) / levels
+;;
+
+# Effect processor selected by the `sel` parameter:
+#   0.        -> dry (bypass)
+#   [1., 2.)  -> comb filter
+#   [2., 3.)  -> lowpass filter
+#   ...       -> further ranges reserved for more effects
+#
+# A 1-sample trigger is generated every time `sel` enters a new range
+# (`changed (Math.floor sel)`); it feeds the active effect, and that effect
+# stops when `sel` moves out of its range.
+
+let fx = @Audio fn sel tr subdiv beat_len rate inp ->
+  let range = Math.round (Math.floor sel);     # integer range index
+  let rr = inp + (inp * (Double (sel == 5.)) |> Filter.hpf 1000. 1. |> Reverb.concert);
+
+  let cc = 
+    rr |> comb (lfnoise 2. 0.001 0.04) 0.1 0.8;
+
+  let rm = 
+    rr * sin_osc (lfnoise0 (1. / beat_len) 1000. 3000.);
+
+  let fl =
+    rr
+    |> (*) 3. |> Math.tanh
+    |> Filter.lpf (lfnoise 4. 50. 1000.) 5.
+    ;
+
+  let stutt = rr |> stutter tr ((sel == 6.) |> Double) beat_len subdiv rate;
+
+  let sig = match sel with
+    | 0. -> rr                               # dry
+    | 1. -> cc
+    | 2. -> fl 
+    | 3. -> rm
+    | 4. -> rr |> Filter.hpf (lfnoise 3. 800. 2000.) 4.
+    | 6. -> stutt
+    | 7. -> rr |> bitcrush (lfnoise 2. 1. 4.)
+    | _ -> rr
+    ;
+
+  sig 
+  |> glue -12. 4. 0.005 0.15 6. 3.
+ # |> stutter (changed sel) (1.) beat_len subdiv rate
+
+;;
+
+let glitch = fx 0. 0. 1. beat 1. 0. |> play_node;
+
 let Drums = module () ->
   let bufs = [|
-    "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_synther.flac",
-    "~/Sounds/rns_samples/Kicks/ech_kick_resample.flac",
-    # "~/Sounds/rns_samples/Snares/dh_snr_hi_grainy.flac",
-    "~/Sounds/renoise-3.5.4-samples/Snares/Bodied/reggae.flac",
-    "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_nospace.flac",
-    "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_tecno.flac",
-    "~/Sounds/rns_samples/HiHats/Closed/ech_hat_verydirty.flac",
-    "~/Sounds/rns_samples/HiHats/Cymbal/dh_cym_ride_sweet.flac",
-    "~/Sounds/rns_samples/HiHats/Open/dh_ophat_long_ender.flac",
-    "~/Sounds/rns_samples/Kicks/dh_kick_mid_tighter.flac",
-    "~/Sounds/rns_samples/Snares/dh_snr_hi_enveloper.flac",
-    "~/Sounds/rns_samples/Snares/dh_snr_syn_808er.flac",
-    "~/Sounds/rns_samples/Snares/dh_snr_syn_whitenoise.flac",
-    "~/Sounds/rns_samples/Snares/ech_snare_analog.flac",
-    "~/Sounds/rns_samples/Percussion/dh_perc_click_metal.flac",
-    "~/Sounds/rns_samples/Percussion/ech_perc_909tom.flac",
-    "~/Sounds/rns_samples/Toms/dh_perc_tom_wave.flac",
-    "~/Sounds/rns_samples/Claps/ech_clap_vinyl909.flac",
+    "~/Sounds/renoise-3.5.4-samples/HiHats/Closed Hat/tight_synther.flac", #0: hh
+    "~/Sounds/renoise-3.5.4-samples/Kicks/Hard/offered.flac", #1: kick
+    "~/Sounds/renoise-3.5.4-samples/Snares/Thin/xb_snare_052.flac", #2: snare
   |] |> Arrays.map (SF.load_sf);
 
   let _ = print `loaded {array_size bufs} buffers\n`;
@@ -44,7 +118,7 @@ let Drums = module () ->
     t
     |> bufplay f.data (f.samplerate * spf) 0.
     |> (*) (t |> rect 0.1 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
-    |> (*) (Math.db_amp 12.)
+    |> (*) (Math.db_amp 6.)
   ;;
 
   let k = fn dur note plist ->
@@ -82,7 +156,8 @@ let Drums = module () ->
   let s = fn ctx dur note plist ->
     let retrig = retrig_param ctx.spl plist 0;
     let vel = vel_param ctx.spl plist 0;
-    snrs retrig ((Double note) - 60. |> midiratio) vel |> play_node;
+    # snrs retrig ((Double note) - 60. |> midiratio) vel |> play_node;
+    snrs retrig ((Double note) - 60. |> midiratio) vel ~> glitch; 
     ()
   ;;
 
@@ -104,7 +179,7 @@ let Drums = module () ->
     let spl = ctx.spl;
     # print `spl: {spl}\n`;
     let retrig = retrig_param spl plist 0;
-    hhs retrig |> play_node;
+    hhs retrig ~> glitch;
     ()
   ;;
 
@@ -123,7 +198,7 @@ let Drums = module () ->
 
   let hh2 = fn ctx dur note plist ->
     let retrig = retrig_param ctx.spl plist 0;
-    hh2s retrig |> play_node;
+    hh2s retrig ~> glitch;
     ()
   ;;
 
@@ -202,6 +277,7 @@ let handle_pat_ev = fn ctx note_dur note instr plist ->
   | _ -> ()
 ;;
 
+
 let g = fn () ->
 
   let spl = beat / 2.;
@@ -213,6 +289,7 @@ let g = fn () ->
 
   yield 16. * beat;
   let m1 = fn () ->
+
     pats[1]
     |> Tracker.pattern_cor_ctx (bpm: 180., spl: (beat / 2.), logical_time: 0. ) 0
     |> cor_map (Tracker.handle_ev_ctx handle_pat_ev)
@@ -230,6 +307,31 @@ let g = fn () ->
     yield 32. * beat;
     yield m1 ()
   ;;
+
+  let stut_sched = fn a -> 
+    let d = Math.array_choose [| 1., 1.5, 0.75, 0.5, 0.25 |];
+    yield (d, a);
+    # yield (1., a);
+    yield stut_sched (a + d)
+  ;;
+
+  stut_sched 0.
+  |> cor_map_opt (fn (d, a) ->
+    match a < 16. with
+    | true -> (
+      # print `{Math.array_choose [|0., 1., 2., 3.|]}\n`;
+      # let sel = Math.array_choose [|0., 1., 2., 3.|];
+      set_input_scalar glitch 0 (Double (Math.rand_int 12)); 
+      # set_input_scalar g 0 6.;
+      set_input_scalar glitch 2 (Math.array_choose [|1.5, 0.75, 0.75, 0.75, 0.25, 0.25, 0.5, 0.125,|]) ;
+      set_input_scalar glitch 4 (Math.array_choose [|1., 1., 1., 2., -1.|]) ;
+      set_input_trig glitch 1;
+      Some (d * beat)
+    )
+    | _ -> None
+  )
+  |> cor_loop
+  |> play_pattern 0.;
 
   yield m1 ()
  # yield g ()

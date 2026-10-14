@@ -76,6 +76,13 @@ let chance2 = fn thresh f g ->
   | _ -> (g (); ())
 ;;
 
+let chance2 = fn thresh f g -> 
+  let x = rand_double () in
+  match (x <= thresh) with
+  | true -> (f (); ())
+  | _ -> (g (); ())
+;;
+
 
 let shuffle = fn n -> 
   # `

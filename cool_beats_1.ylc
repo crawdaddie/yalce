@@ -8,30 +8,30 @@ let bpm = 130.;
 let beat = 60. / bpm;
 let Drums = module () ->
   let bufs = [|
-    "~/Sounds/renoise-3.5.4-samples/Kicks/Long/wave_2.flac",
+    "~/Sounds/renoise-3.5.4-samples/Kicks/Long/clean.flac",
     "~/Sounds/renoise-3.5.4-samples/Snares/Bodied/reggae.flac",
     "~/Sounds/renoise-3.5.4-samples/HiHats/Closed Hat/around.flac",
     "~/Sounds/renoise-3.5.4-samples/HiHats/Open Hat/mid.flac",
+    "~/Sounds/renoise-3.5.4-samples/Stabs/housepiano_D.flac"
   |] |> Arrays.map (SF.load_sf);
 
   let _ = print `loaded {array_size bufs} buffers\n`;
 
-  let kds = @Audio fn bias -> 
+  let kds = @Audio fn bias mul -> 
     let rate = 1.;
     let f = bufs[0]; 
     let t = trig 0;
-    let noise = lfnoise 1. 1. 10.;
 
     t
     |> bufplay f.data (f.samplerate * spf) 0.
-    |> mixadd (fn i -> 0.2 * Math.sin (i * noise)) 
-    |> (*) 2. |> Math.tanh
-    |> (*) (t |> rect 0.12 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+    #|> (*) 2. |> Math.tanh
+    |> mixadd (fn i -> Math.sin (bias + i * mul)) 
+    |> (*) (t |> rect 0.2 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
     |> (*) (Math.db_amp -3.)
   ;;
 
-  let k = fn () ->
-    kds (Math.rrand 0. 4.) |> play_node;
+  let k = fn b mul ->
+    kds b mul |> play_node;
     ()
   ;;
 
@@ -42,6 +42,7 @@ let Drums = module () ->
     (trig retrigf)
     |> bufplay hbuf.data (hbuf.samplerate * spf * rate) 0.
     |> (*) (t |> rect 0.05 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+    |> (*) (Math.db_amp -3.)
   ;;
 
   let hhcl = fn dur ->
@@ -56,6 +57,7 @@ let Drums = module () ->
     (trig retrigf)
     |> bufplay hbuf.data (hbuf.samplerate * spf) 0.
     |> (*) (t |> rect 0.1 |> adsr 0. 0.05 0.5 0.01 |> kill_on_end)
+    |> (*) (Math.db_amp -3.)
   ;;
 
   let hhop = fn dur ->
@@ -71,7 +73,7 @@ let Drums = module () ->
     |> bufplay hbuf.data (hbuf.samplerate * spf * rate) 0.
     # |> (*) (sin_osc 200.)
     |> (*) (t |> rect 0.1 |> adsr 0. 0.05 0.5 0.01 |> kill_on_end)
-    |> (*) (Math.db_amp 3.)
+    |> (*) (Math.db_amp 5.)
     # |> pan 2 (rand_trig 0. 1. t)
   ;;
   let r = Reverb.concert 0. |> play_node;
@@ -81,6 +83,32 @@ let Drums = module () ->
     ()
   ;;
 ;
+
+let pianos = @Audio fn retrigf rate d -> 
+  let hbuf = Drums.bufs[4]; 
+  let t = trig 0;
+
+  (trig retrigf)
+  |> mbufplay 2 hbuf.data (hbuf.samplerate * spf * rate * lfnoise 1. 0.99 1.01) 0.
+  # |> (*) (sin_osc 200.)
+  |> (*) (t |> rect d |> adsr 0. 0.05 0.5 0.01 |> kill_on_end)
+  |> (*) (Math.db_amp 3.)
+  # |> pan 2 (rand_trig 0. 1. t)
+;;
+
+let piano_fxs = @Audio fn iinp -> 
+  # let inp = iinp |> disperser 400. 1. 1. |> disperser 400. 1. 1.;
+  let inp = iinp;
+  
+  let pl = 0.1 * Reverb.plate 0.1 inp;
+
+  (inp + pl)
+  # |> comb 0.23075 0.5 0.4
+
+;;
+
+let piano_fx = piano_fxs 0. |> play_node;
+
 
 let seq = fn events -> events |> iter;;
 
@@ -102,13 +130,6 @@ let steps = fn values action ->
   next 0
 ;;
 
-let fast = fn factor pattern ->
-  pattern |> cor_map (fn (dur, action) -> (dur * factor, action))
-;;
-
-let slow = fn factor pattern ->
-  pattern |> cor_map (fn (dur, action) -> (dur / factor, action))
-;;
 
 let play = fn pattern ->
   pattern
@@ -116,7 +137,7 @@ let play = fn pattern ->
        action ();
        dur * beat
      )
-  |> play_pattern 0.
+  |> play_pattern beat 
 ;;
 
 let tts = [
@@ -126,23 +147,86 @@ let tts = [
   hit 0.25 (\Math.chance 0.125 Drums.hhcl)
 ];
 
+# let snr = [
+#   rest 3.,
+#   hit 1. Drums.snare,
+#   # rest 3.,
+#   # hit 0.75 Drums.snare,
+#   # hit 0.25 Drums.snare
+# ];
+
 let snr = [
   rest 3.,
   hit 1. Drums.snare,
-  rest 3.,
-  hit 0.75 Drums.snare,
-  hit 0.25 Drums.snare
+  # rest 2.,
+  # hit 1. Drums.snare,
+  # rest 3.,
+  # hit 0.75 Drums.snare,
+  # hit 0.25 Drums.snare
 ];
 
-let kick = [
-  hit 3. Drums.k,
-  hit 3. Drums.k,
-  hit 3. Drums.k,
-  hit 4. Drums.k,
-  hit 3. Drums.k
-];
 
 play (tts |> iter |> cor_loop);
-play (kick |> iter |> cor_loop |> cor_map (fn (d, a) -> (d * 0.25, a)));
 play (snr |> iter |> cor_loop);
 
+# let kick = [
+#   hit 3. Drums.k,
+#   hit 3. Drums.k,
+#   hit 3. Drums.k,
+#   hit 4. Drums.k,
+#   hit 3. Drums.k
+# ];
+# play (kick |> iter |> cor_loop |> cor_map (fn (d, a) -> (d * 0.25, a)));
+
+# Pair each value with the prior total so durations produce total start offsets since beginning of pattern
+let cor_acc = fn i f c: (Coroutine of T) -> 
+  match c () with
+  | Some v -> (
+    yield (v, i); yield cor_acc (f i v) f c; ()  
+    )
+  | _ -> ()
+;;
+
+
+# select between 2 coroutines with a probability
+let cor_chance2 = fn probability: (Double) a: (Coroutine of T) b: (Coroutine of T) ->
+  match Math.rand_double () < probability with
+  | true -> a
+  | false -> b
+;;
+
+let kick =
+(fn () ->
+  yield cor_chance2 0.5 (iter [3.,]) (iter [1., 2.,]);
+  yield 3.;
+
+  yield cor_chance2 0.5 (iter [3.,]) (iter [1., 1., 1.,]);
+  yield 4.;
+
+  yield cor_chance2 0.5 (iter [3.,]) (iter [2., 1.,]);
+  yield kick ()
+) in kick ()
+|> cor_acc 0. (fn p d -> (p + d) % 32.)
+|> cor_map (fn (d, acc) -> 
+  Drums.kds 0. (0.3 * acc) |> play_node;
+  d * beat * 0.25
+)
+|> play_pattern beat 
+;
+
+
+
+[3., 3., 3., 4., 2., 1.,
+3.,  3., 4., 3., 2., 1.]
+|> iter
+|> cor_loop
+|> cor_map (fn d -> 
+  pianos
+    0.
+    (Math.array_choose [|0., 0., 0., 0., 5., 7., 8., |] |> midiratio)
+    (beat * 0.25 * 0.5)
+    ~> piano_fx;
+  d * beat * 0.25
+)
+|> play_pattern beat
+;
