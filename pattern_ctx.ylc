@@ -3,30 +3,48 @@
 #   | Rest
 #   ;
 #
+
 # type PatternEv = (dur: Double, time: Double, idx: Int, tag: EvType, params: List of (Char, Double));
+# type ValueStream =  
+#   | 
 
 # let seq = fn events -> events |> iter;;
 
 
 
-let f = fn other_cor ->
-  match other_cor () with
-  | Some t -> (yield t; ())
-  | None -> ()
-  ;
-  yield (f other_cor)
+# let f = fn other_cor ->
+#   match other_cor () with
+#   | Some t -> (yield t; ())
+#   | None -> ()
+#   ;
+#   yield (f other_cor)
+# ;;
+#
+# let c = fn () ->
+#   yield 1;
+#   yield 2
+# ;;
+#
+# let x = f (c ());
+# print `
+# {x ()}
+# {x ()}
+# {x ()}
+# {x ()}
+# {x ()}
+# `
+
+let with_dur = fn c ->
+  c |> cor_map (fn d -> (dur: d, time: 0.))
 ;;
 
-let c = fn () ->
-  yield 1;
-  yield 2
-;;
-
-let x = f (c ());
+let pat = [|3.,3.,3.,4.,3.|] |> iter |> with_dur;
 print `
-{x ()}
-{x ()}
-{x ()}
-{x ()}
-{x ()}
+{pat ()}
+{pat ()}
+{pat ()}
+{pat ()}
+{pat ()}
+{pat ()}
+{pat ()}
 `
