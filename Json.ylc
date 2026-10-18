@@ -1,0 +1,63 @@
+let _ = dlopen "/lib/libjson-c.so";
+type JsonObject = Ptr;
+
+let strlen = extern fn Ptr -> Int;
+let from_cstr = extern fn Int -> Ptr -> String;
+
+let json_tokener_parse = extern fn Ptr -> JsonObject;
+let json_object_object_get_ex = extern fn JsonObject -> Ptr -> Ptr -> Int;
+let json_object_get_string = extern fn JsonObject -> Ptr;
+let json_object_get_int = extern fn JsonObject -> Int;
+let json_object_array_get_idx = extern fn JsonObject -> Int -> JsonObject;
+let json_object_length = extern fn JsonObject -> Int;
+let json_object_key_at = extern fn JsonObject -> Int -> Ptr;
+let json_object_value_at = extern fn JsonObject -> Int -> JsonObject;
+
+let as_json_obj = fn a: (JsonObject) -> a;;
+
+let int = fn object ->
+  json_object_get_int object
+;;
+
+let string = fn object ->
+  let value = json_object_get_string object;
+  from_cstr (strlen value) value
+;;
+
+let json_get = fn key object ->
+  let slot = array_fill_zeroes 1 (Ptr 0);
+  if json_object_object_get_ex object (cstr key) (cstr slot) == 0
+  then None
+  else Some (slot[0])
+;;
+
+let get = fn key object ->
+  let slot = array_fill_zeroes 1 (Ptr 0);
+  if json_object_object_get_ex object (cstr key) (cstr slot) == 0
+  then None
+  else Some (slot[0])
+;;
+
+let length = fn object ->
+  json_object_length object
+;;
+
+let key = fn index object ->
+  let value = json_object_key_at object index;
+  from_cstr (strlen value) value
+;;
+
+let value = fn index object ->
+  json_object_value_at object index
+;;
+
+let entry = fn index object ->
+  (key index object, value index object)
+;;
+
+let array_get_idx = fn idx object ->
+  json_object_array_get_idx object idx
+;;
+
+let parse = fn source -> json_tokener_parse (cstr source)
+;;
