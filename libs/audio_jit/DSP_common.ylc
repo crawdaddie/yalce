@@ -116,6 +116,37 @@ let disperser = extern fn Double -> Double -> Double -> Double -> Double;
 # Args: threshold dB, ratio, attack secs, release secs, knee dB, makeup dB, input.
 let glue = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double;
 
+# Three-band OTT compressor. Args: depth, upward, downward, attack, release,
+# input. Crossovers, thresholds, and band gains follow Vital's OTT defaults.
+# The reference-style defaults are:
+#
+#   depth   = 1.0
+#   upward  = 1.0
+#   downward = 1.0
+#   attack  = 0.5
+#   release = 0.5
+#
+#   For really slamming compression:
+#
+#   ott 1.0 2.0 2.0 0.0 0.1 input
+#
+#   Parameter ranges:
+#
+#   - depth: 0..1
+#   - upward, downward: 0..2
+#   - attack, release: 0..1
+#       - 0 = fastest
+#       - 1 = slowest
+let ott = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double;
+
+# OTT with parametrized low/high crossover frequencies. Args: depth, upward,
+# downward, attack, release, low frequency Hz, high frequency Hz, input.
+let ott_freq = extern fn Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double;
+
+# Three-band downward Linkwitz-Riley compressor. Args: threshold dB, ratio,
+# attack, release, input.
+let lr_comp = extern fn Double -> Double -> Double -> Double -> Double -> Double;
+
 # Mono Buffer playback. Args: buffer, rate, start position, trigger.
 let bufplay = extern fn Array of Double -> Double -> Double -> Double -> Double;
 # Multichannel buffer playback. Args: channel count, buffer, rate, start position, trigger.
@@ -712,5 +743,3 @@ let midiratio = fn n ->
 let xline = @Audio fn start finish duration ->
   scale finish start (decay duration (trig 0))
 ;;
-
-

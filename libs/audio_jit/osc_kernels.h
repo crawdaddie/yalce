@@ -2,6 +2,7 @@
 #define AUDIO_JIT_KERNELS_H
 
 #include <stdint.h>
+#include "./ott_kernels.h"
 
 typedef struct {
   double phase;

@@ -1,0 +1,16 @@
+let strlen = extern fn Ptr -> Int;
+let from_cstr = extern fn Int -> Ptr -> String;
+
+import Json;
+
+let test = module () ->
+  let test_string = fn () ->
+    let object = Json.parse "{\"dtype\":\"BF16\"}";
+    match Json.get "dtype" object with
+    | Some value -> (
+        print `dtype: {Json.string value}\n`;
+        true
+      )
+    | _ -> false
+  ;;
+;

@@ -88,7 +88,6 @@ DEC_INT         0|[1-9](_?[0-9])*
 "then"                  return THEN;
 "else"                  return ELSE;
 "yield"                 return YIELD;
-"await"                 return AWAIT;
 "&&"                    return DOUBLE_AMP;
 "&"                     return AMPERSAND;
 "||"                    return DOUBLE_PIPE;

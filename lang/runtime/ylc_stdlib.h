@@ -18,6 +18,11 @@ typedef struct YlcRcHeader {
 
 void __ylc_dup(void *ptr);
 void __ylc_drop(void *ptr);
+char *ylc_string_alloc(int32_t size);
+
+int32_t json_object_length(void *object);
+const char *json_object_key_at(void *object, int32_t index);
+void *json_object_value_at(void *object, int32_t index);
 
 int rand_int(int range);
 
@@ -122,6 +127,12 @@ void _arr_copy(int size, double *from, double *to);
 
 double *mmap_double_array(int32_t data_size, double *data,
                           const char *filename);
+
+void *mmap_file(const char *filename);
+int32_t mmap_file_size(const char *filename);
+ByteArray mmap_file_read(void *mapping, int32_t offset, int32_t size);
+void *mmap_file_ptr(void *mapping, int32_t offset);
+void munmap_file(void *mapping, int32_t size);
 
 _DoubleArray double_array_from_raw(int32_t size, double *data);
 

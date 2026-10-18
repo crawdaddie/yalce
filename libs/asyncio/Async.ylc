@@ -1,1 +1,0 @@
-let _ = dlopen "libasyncio.so";

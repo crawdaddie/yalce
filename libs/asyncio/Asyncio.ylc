@@ -1,0 +1,7 @@
+let _ = dlopen "./libasyncio.so";
+
+
+type Future T;
+
+let Async = extern fn T -> T;
+let await = extern fn Future of T -> T;

@@ -1,0 +1,7 @@
+let test = module () ->
+  let test_fields = fn () ->
+    let ctx = (bpm: 180., spl: 1. / 4., logical_time: 0.) in
+    ctx.bpm == 180. && ctx.spl == 0.25 && ctx.logical_time == 0.
+  ;;
+  test_fields ()
+;;

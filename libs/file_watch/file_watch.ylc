@@ -1,0 +1,17 @@
+# Linux file watcher bindings.
+#
+# The callback owns the file-content String.
+
+dlopen "./libfile_watch.so";
+type FileChangeCallback = String -> Ptr -> ();
+
+let file_watch_start = extern fn () -> Ptr;
+let file_watch_register =
+  extern fn Ptr -> Ptr -> FileChangeCallback -> Ptr -> Int;
+let file_watch_dispatch = extern fn Ptr -> ();
+let file_watch_unregister = extern fn Ptr -> Ptr -> ();
+let file_watch_stop = extern fn Ptr -> ();
+
+# The watcher registers an already-open FILE* returned by open_file.
+let open_file = extern fn String -> String -> Option of Ptr;
+let fclose = extern fn Ptr -> ();

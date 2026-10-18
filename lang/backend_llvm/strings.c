@@ -75,14 +75,14 @@ static LLVMValueRef string_malloc_buffer(LLVMModuleRef module,
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
   LLVMTypeRef i8_ptr_type = LLVMPointerType(LLVMInt8TypeInContext(llvm_ctx), 0);
   LLVMTypeRef i32_type = LLVMInt32TypeInContext(llvm_ctx);
-  LLVMTypeRef malloc_type = LLVMFunctionType(i8_ptr_type, &i32_type, 1, 0);
-  LLVMValueRef malloc_func = LLVMGetNamedFunction(module, "malloc");
-  if (!malloc_func) {
-    malloc_func = LLVMAddFunction(module, "malloc", malloc_type);
+  LLVMTypeRef alloc_type = LLVMFunctionType(i8_ptr_type, &i32_type, 1, 0);
+  LLVMValueRef alloc_func = LLVMGetNamedFunction(module, "ylc_string_alloc");
+  if (!alloc_func) {
+    alloc_func = LLVMAddFunction(module, "ylc_string_alloc", alloc_type);
   }
 
   LLVMValueRef size_value = LLVMConstInt(i32_type, size, 0);
-  return LLVMBuildCall2(builder, malloc_type, malloc_func, &size_value, 1,
+  return LLVMBuildCall2(builder, alloc_type, alloc_func, &size_value, 1,
                         name ? name : "string_buffer");
 }
 
@@ -674,16 +674,16 @@ LLVMValueRef stream_string_concat(LLVMValueRef *strings, int num_strings,
   LLVMValueRef buffer_size = LLVMBuildAdd(
       builder, total_len, LLVMConstInt(i32_type, 1, 0), "buffer_size");
 
-  LLVMValueRef malloc_func = LLVMGetNamedFunction(module, "malloc");
-  if (!malloc_func) {
-    LLVMTypeRef malloc_type =
+  LLVMValueRef alloc_func = LLVMGetNamedFunction(module, "ylc_string_alloc");
+  if (!alloc_func) {
+    LLVMTypeRef alloc_type =
         LLVMFunctionType(i8_ptr_type, (LLVMTypeRef[]){i32_type}, 1, 0);
-    malloc_func = LLVMAddFunction(module, "malloc", malloc_type);
+    alloc_func = LLVMAddFunction(module, "ylc_string_alloc", alloc_type);
   }
 
-  LLVMTypeRef malloc_type =
+  LLVMTypeRef alloc_type =
       LLVMFunctionType(i8_ptr_type, (LLVMTypeRef[]){i32_type}, 1, 0);
-  LLVMValueRef dest_buffer = LLVMBuildCall2(builder, malloc_type, malloc_func,
+  LLVMValueRef dest_buffer = LLVMBuildCall2(builder, alloc_type, alloc_func,
                                             &buffer_size, 1, "concat_buffer");
 
   // Get memcpy intrinsic
@@ -777,19 +777,24 @@ LLVMValueRef char_array(const char *chars, int length, JITLangCtx *ctx,
                         LLVMModuleRef module, LLVMBuilderRef builder) {
 
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
-  LLVMValueRef str_const = LLVMConstStringInContext(llvm_ctx, chars, length, 0);
-  LLVMTypeRef str_const_type = LLVMTypeOf(str_const);
-
   LLVMValueRef data_ptr =
-      (ctx->stack_ptr == 0)
-          ? LLVMBuildMalloc(builder, str_const_type, "heap_array")
-          : LLVMBuildAlloca(builder, str_const_type, "stack_array");
-  //
-  //
-  // LLVMValueRef data_ptr =
-  //     LLVMBuildMalloc(builder, str_const_type, "heap_array");
+      string_malloc_buffer(module, builder, (unsigned)length + 1, "string_buffer");
+  LLVMTypeRef i8_type = LLVMInt8TypeInContext(llvm_ctx);
 
-  LLVMBuildStore(builder, str_const, data_ptr);
+  for (int i = 0; i < length; i++) {
+    LLVMValueRef offset = LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), i, 0);
+    LLVMValueRef byte_ptr =
+        LLVMBuildGEP2(builder, i8_type, data_ptr, &offset, 1, "string_byte");
+    LLVMBuildStore(builder,
+                   LLVMConstInt(i8_type, (unsigned char)chars[i], 0), byte_ptr);
+  }
+
+  LLVMValueRef end =
+      LLVMBuildGEP2(builder, i8_type, data_ptr,
+                    (LLVMValueRef[]){LLVMConstInt(
+                        LLVMInt32TypeInContext(llvm_ctx), length, 0)},
+                    1, "string_end");
+  LLVMBuildStore(builder, LLVMConstInt(i8_type, 0, 0), end);
 
   return data_ptr;
 }
@@ -824,17 +829,24 @@ LLVMValueRef codegen_string(Ast *ast, JITLangCtx *ctx, LLVMModuleRef module,
   int length = ast->data.AST_STRING.length;
 
   LLVMContextRef llvm_ctx = LLVMGetModuleContext(module);
-  LLVMValueRef str_const = LLVMConstStringInContext(llvm_ctx, chars, length, 0);
-  LLVMTypeRef str_const_type = LLVMTypeOf(str_const);
+  LLVMValueRef data_ptr =
+      string_malloc_buffer(module, builder, (unsigned)length + 1, "string_buffer");
+  LLVMTypeRef i8_type = LLVMInt8TypeInContext(llvm_ctx);
 
-  LLVMValueRef data_ptr;
-  if (find_allocation_strategy(ast, ctx) == EA_STACK_ALLOC) {
-    data_ptr = LLVMBuildAlloca(builder, str_const_type, "stack_array");
-  } else {
-    data_ptr = LLVMBuildMalloc(builder, str_const_type, "heap_array");
+  for (int i = 0; i < length; i++) {
+    LLVMValueRef offset = LLVMConstInt(LLVMInt32TypeInContext(llvm_ctx), i, 0);
+    LLVMValueRef byte_ptr =
+        LLVMBuildGEP2(builder, i8_type, data_ptr, &offset, 1, "string_byte");
+    LLVMBuildStore(builder,
+                   LLVMConstInt(i8_type, (unsigned char)chars[i], 0), byte_ptr);
   }
 
-  LLVMBuildStore(builder, str_const, data_ptr);
+  LLVMValueRef end =
+      LLVMBuildGEP2(builder, i8_type, data_ptr,
+                    (LLVMValueRef[]){LLVMConstInt(
+                        LLVMInt32TypeInContext(llvm_ctx), length, 0)},
+                    1, "string_end");
+  LLVMBuildStore(builder, LLVMConstInt(i8_type, 0, 0), end);
 
   // LLVMValueRef null_terminator = LLVMConstInt(char_type, 0, 0);
   // LLVMValueRef last_elem_ptr = LLVMBuildGEP2(builder, char_type, data_ptr,

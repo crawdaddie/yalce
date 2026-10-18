@@ -31,10 +31,6 @@ static int ylc_script_num_globals = 0;
 #define YLC_CLAP_AUDIO_JIT_BITCODE_PATH "libs/audio_jit/build/osc_kernels.bc"
 #endif
 
-void ylc_audio_jit_register_current_program(const char *osc_bitcode_path);
-
-static const char *ylc_lower_audio_jit_bitcode_path = NULL;
-
 static const char *ylc_lower_get_audio_jit_bitcode_path(void) {
   const char *env_path = getenv("YLC_AUDIO_JIT_BITCODE");
   if (env_path && env_path[0] != '\0') {
@@ -69,9 +65,12 @@ static const char *ylc_lower_get_default_base_libs_dir(void) {
   return NULL;
 }
 
-static void ylc_lower_register_audio_jit(MirProgram *program, MirCtx *ctx) {
-  ylc_audio_jit_register_current_program(ylc_lower_audio_jit_bitcode_path);
+static void ylc_lower_register_program(MirProgram *program, MirCtx *ctx) {
   ylc_clap_register_audio_jit_symbols(program, ctx);
+}
+
+__attribute__((constructor)) static void ylc_lower_init(void) {
+  ylc_register_mir_program_init(ylc_lower_register_program);
 }
 
 static void ylc_lower_set_error(char *error, size_t error_size,
@@ -499,13 +498,7 @@ bool ylc_lower_script_file(ylc_orc_session_t *orc, uint64_t module_id,
   mir_root_frame.durable_arena = durable_arena;
   mir_root_frame.durable_builtins = durable_builtins;
   MirCtx mir_ctx = {.env = type_ctx.env, .frame = &mir_root_frame};
-  YlcMirProgramInitFn saved_mir_program_init_fn = ylc_mir_program_init_fn;
-  const char *saved_audio_jit_bitcode_path = ylc_lower_audio_jit_bitcode_path;
-  ylc_lower_audio_jit_bitcode_path = ylc_lower_get_audio_jit_bitcode_path();
-  ylc_mir_program_init_fn = ylc_lower_register_audio_jit;
   MirProgram *mir_program = mir_build_program(mir_arena, ast, &mir_ctx);
-  ylc_mir_program_init_fn = saved_mir_program_init_fn;
-  ylc_lower_audio_jit_bitcode_path = saved_audio_jit_bitcode_path;
   if (mir_program_had_error(mir_program)) {
     ylc_lower_set_error(error, error_size, "MIR build failed: %s", script_path);
     free(script_dir);

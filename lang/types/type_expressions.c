@@ -439,6 +439,24 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
   const char *saved_type_decl_name = current_type_decl_name;
   TypeEnv *saved_type_decl_env = current_type_decl_env;
   TypeEnv *decl_env = NULL;
+  Type *computed = NULL;
+
+  if (!expr && binding->tag == AST_IDENTIFIER) {
+    computed = create_cons_type(binding->data.AST_IDENTIFIER.value, 0, NULL);
+  } else if (expr && expr->tag == AST_LAMBDA &&
+             expr->data.AST_LAMBDA.body == NULL &&
+             binding->tag == AST_IDENTIFIER) {
+    int num_params = expr->data.AST_LAMBDA.len;
+    Type **params = t_alloc(sizeof(Type *) * (size_t)num_params);
+    AstList *param = expr->data.AST_LAMBDA.params;
+
+    for (int i = 0; i < num_params && param; i++, param = param->next) {
+      params[i] = tvar(param->ast->data.AST_IDENTIFIER.value);
+    }
+
+    computed = create_cons_type(binding->data.AST_IDENTIFIER.value,
+                                num_params, params);
+  }
 
   if (binding->tag == AST_IDENTIFIER) {
     current_type_decl_name = binding->data.AST_IDENTIFIER.value;
@@ -449,7 +467,9 @@ Type *infer_type_declaration(Ast *ast, TICtx *ctx) {
     current_type_decl_env = decl_env;
   }
 
-  Type *computed = compute_type_expression(expr, ctx);
+  if (!computed) {
+    computed = compute_type_expression(expr, ctx);
+  }
   current_type_decl_name = saved_type_decl_name;
   current_type_decl_env = saved_type_decl_env;
 

@@ -4,16 +4,58 @@
 #include <llvm-c/Linker.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
+
+typedef struct YlcMirInitHook YlcMirInitHook;
+
+struct YlcMirInitHook {
+  YlcMirProgramInitFn fn;
+  YlcMirInitHook *next;
+};
 
 JITLangCtx *ylc_jit_ctx = NULL;
 LLVMModuleRef ylc_jit_module = NULL;
 LLVMBuilderRef ylc_jit_builder = NULL;
 MirProgram *ylc_mir_program = NULL;
 MirCtx *ylc_mir_ctx = NULL;
-YlcMirProgramInitFn ylc_mir_program_init_fn = NULL;
+
+static YlcMirInitHook *ylc_mir_init_hooks = NULL;
+static YlcMirInitHook *ylc_mir_init_hooks_tail = NULL;
 
 // lang/backend_llvm/lib_registry.c
 YlcRuntimeLoadFn ylc_runtime_load_fn = NULL;
+
+bool ylc_register_mir_program_init(YlcMirProgramInitFn fn) {
+  if (!fn) {
+    return false;
+  }
+
+  for (YlcMirInitHook *hook = ylc_mir_init_hooks; hook; hook = hook->next) {
+    if (hook->fn == fn) {
+      return true;
+    }
+  }
+
+  YlcMirInitHook *hook = malloc(sizeof(*hook));
+  if (!hook) {
+    return false;
+  }
+
+  *hook = (YlcMirInitHook){.fn = fn, .next = NULL};
+  if (ylc_mir_init_hooks_tail) {
+    ylc_mir_init_hooks_tail->next = hook;
+  } else {
+    ylc_mir_init_hooks = hook;
+  }
+  ylc_mir_init_hooks_tail = hook;
+  return true;
+}
+
+void ylc_run_mir_program_init_hooks(MirProgram *program, MirCtx *ctx) {
+  for (YlcMirInitHook *hook = ylc_mir_init_hooks; hook; hook = hook->next) {
+    hook->fn(program, ctx);
+  }
+}
 
 bool ylc_link_llvm_bitcode_file(LLVMModuleRef module, const char *path) {
   if (!module || !path || path[0] == '\0') {

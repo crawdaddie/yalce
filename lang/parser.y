@@ -76,7 +76,7 @@ extern char *yytext;
 %token TEST_ID
 %token MUT
 %token THEN ELSE
-%token YIELD AWAIT FOR IF OF
+%token YIELD FOR IF OF
 
 %token FSTRING_START FSTRING_END FSTRING_INTERP_START FSTRING_INTERP_END
 %token <vstr> FSTRING_TEXT
@@ -146,7 +146,6 @@ program:
 expr:
     atom_expr
   | YIELD expr                      { $$ = ast_yield($2); }
-  | AWAIT expr                      { $$ = ast_await($2); }
   | expr DOUBLE_AT expr               { $$ = ast_application($1, $3); }
   | expr atom_expr %prec APPLICATION  { $$ = ast_application($1, $2); }
   | expr '+' expr                     { $$ = ast_binop(TOKEN_PLUS, $1, $3); }
@@ -171,7 +170,6 @@ expr:
   | type_decl                         { $$ = $1; }
   | THUNK expr                        { $$ = ast_thunk_expr($2); }
   | BANG expr %prec UMINUS             { $$ = ast_application(ast_identifier((ObjString){"!", 1}), $2); }
-  // | TRIPLE_DOT expr                   { $$ = ast_spread_operator($2); }
   | IDENTIFIER_LIST                   { $$ = ast_typed_empty_list($1); }
   | FOR IDENTIFIER '=' expr IN expr   {
                                           Ast *let = ast_let(ast_identifier($2), $4, $6);
@@ -430,6 +428,22 @@ type_decl:
                                     }
                                     args->data.AST_LAMBDA.len--;
                                     args->data.AST_LAMBDA.body = $4;
+                                    Ast *type_decl = ast_let(name, args, NULL);
+                                    type_decl->tag = AST_TYPE_DECL;
+                                    SET_AST_LOC(type_decl, @$);
+                                    $$ = type_decl;
+                                  }
+  | TYPE type_args {
+                                    Ast *args = $2;
+                                    AstList *name_param = args->data.AST_LAMBDA.params;
+                                    Ast *name = name_param->ast;
+                                    args->data.AST_LAMBDA.params = name_param->next;
+                                    if (args->data.AST_LAMBDA.type_annotations != NULL) {
+                                      args->data.AST_LAMBDA.type_annotations =
+                                          args->data.AST_LAMBDA.type_annotations->next;
+                                    }
+                                    args->data.AST_LAMBDA.len--;
+                                    args->data.AST_LAMBDA.body = NULL;
                                     Ast *type_decl = ast_let(name, args, NULL);
                                     type_decl->tag = AST_TYPE_DECL;
                                     SET_AST_LOC(type_decl, @$);

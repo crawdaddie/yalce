@@ -109,7 +109,6 @@ let piano_fxs = @Audio fn iinp ->
 
 let piano_fx = piano_fxs 0. |> play_node;
 
-
 let seq = fn events -> events |> iter;;
 
 let hit = fn dur action -> (dur, action);;
@@ -144,7 +143,9 @@ let tts = [
   hit 0.25 Drums.hhcl,
   hit 0.25 Drums.hhcl,
   hit 0.25 Drums.hhop,
-  hit 0.25 (\Math.chance 0.125 Drums.hhcl)
+  hit 0.25 (\Math.chance 0.125 Drums.hhcl),
+  hit 0.25 Drums.hhcl,
+  hit 0.25 Drums.hhcl,
 ];
 
 # let snr = [
@@ -189,7 +190,7 @@ let cor_acc = fn i f c: (Coroutine of T) ->
 
 
 # select between 2 coroutines with a probability
-let cor_chance2 = fn probability: (Double) a: (Coroutine of T) b: (Coroutine of T) ->
+let cor_chance2 = fn probability a: (Coroutine of T) b: (Coroutine of T) ->
   match Math.rand_double () < probability with
   | true -> a
   | false -> b

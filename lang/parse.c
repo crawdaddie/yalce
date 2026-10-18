@@ -1,4 +1,4 @@
-#include "parse.h"
+// #include "parse.h"
 #include "config.h"
 #include "input.h"
 #include "lex.yy.h"
@@ -15,7 +15,9 @@ static parse_error_info last_parse_error = {0};
 const char *__base_dir = NULL;
 void set_base_dir(const char *dir) { __base_dir = dir; }
 
-void parse_clear_error(void) { memset(&last_parse_error, 0, sizeof(last_parse_error)); }
+void parse_clear_error(void) {
+  memset(&last_parse_error, 0, sizeof(last_parse_error));
+}
 
 void parse_record_error(const char *message, int line, int col,
                         long long absolute_offset, const char *near_text,
@@ -406,7 +408,7 @@ Ast *parse_input(char *input, const char *dirname) {
   // _cur_script_content = input;
   yy_scan_string(input); // Set the input for the lexer
   parse_clear_error();
-  yyparse();             // Parse the input
+  yyparse(); // Parse the input
 
   Ast *res = pctx.ast_root;
 
@@ -456,10 +458,9 @@ static bool is_operator_name(const char *id) {
 }
 
 static bool is_builtin_operator(const char *id) {
-  static const char *const names[] = {"+",  "-",  "*",  "/",  "%",
-                                      "<",  ">",  "&&", "||", ">=",
-                                      "<=", "!=", "==", "|>", ":",
-                                      "..", "::", "=",  "!"};
+  static const char *const names[] = {"+",  "-",  "*",  "/",  "%",  "<",  ">",
+                                      "&&", "||", ">=", "<=", "!=", "==", "|>",
+                                      ":",  "..", "::", "=",  "!"};
   size_t count = sizeof(names) / sizeof(names[0]);
 
   for (size_t i = 0; i < count; i++) {
@@ -695,6 +696,35 @@ Ast *ast_string(ObjString lex_string) {
 }
 
 Ast *parse_fstring_expr(Ast *list) {
+  bool text_only = true;
+  size_t length = 0;
+
+  for (int i = 0; i < list->data.AST_LIST.len; i++) {
+    Ast *item = list->data.AST_LIST.items + i;
+    if (item->tag != AST_STRING) {
+      text_only = false;
+      break;
+    }
+
+    length += (size_t)item->data.AST_STRING.length;
+  }
+
+  if (text_only) {
+    char *chars = palloc(length + 1);
+    size_t offset = 0;
+
+    for (int i = 0; i < list->data.AST_LIST.len; i++) {
+      Ast *item = list->data.AST_LIST.items + i;
+      size_t item_length = (size_t)item->data.AST_STRING.length;
+      memcpy(chars + offset, item->data.AST_STRING.value, item_length);
+      offset += item_length;
+    }
+
+    chars[length] = '\0';
+    return ast_string((ObjString){chars, (int)length,
+                                  hash_string(chars, (int)length)});
+  }
+
   list->tag = AST_FMT_STRING;
   for (int i = 0; i < list->data.AST_LIST.len; i++) {
     Ast *item = list->data.AST_LIST.items + i;
@@ -1157,11 +1187,13 @@ Ast *ast_yield(Ast *expr) {
   return y;
 }
 Ast *ast_await(Ast *expr) {
-  expr = ast_application(
-      expr, ast_application(ast_identifier((ObjString){.chars = "cor_current",
-                                                       .length = 11}),
-                            ast_void()));
-  return ast_yield(expr);
+  // expr = ast_application(
+  //     // expr, ast_application(ast_identifier((ObjString){.chars =
+  //     "cor_current",
+  //     //                                                  .length = 11}),
+  //     //                       ast_void()));
+  // return ast_yield(expr);
+  return ast_application(ast_identifier((ObjString){.chars = "await"}), expr);
 }
 
 Ast *ast_yield_end() {

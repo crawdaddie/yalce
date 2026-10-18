@@ -36,7 +36,10 @@ extern LLVMModuleRef ylc_jit_module;
 extern LLVMBuilderRef ylc_jit_builder;
 extern MirProgram *ylc_mir_program;
 extern MirCtx *ylc_mir_ctx;
-extern YlcMirProgramInitFn ylc_mir_program_init_fn;
+/* Register and invoke per-library MIR initialization hooks. */
+bool ylc_register_mir_program_init(YlcMirProgramInitFn fn);
+void ylc_run_mir_program_init_hooks(MirProgram *program, MirCtx *ctx);
+
 typedef void (*YlcRuntimeLoadFn)(void);
 
 extern YlcRuntimeLoadFn ylc_runtime_load_fn;

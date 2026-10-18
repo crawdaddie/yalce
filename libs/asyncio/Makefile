@@ -1,8 +1,9 @@
 # Makefile for AsyncIO Library
 # Platform-specific async I/O: kqueue (macOS/BSD) vs epoll (Linux)
 
-CC = clang
-CFLAGS = -Wall -Wextra -fPIC -g -I../../lang/
+CC ?= clang
+CFLAGS ?= -Wall -Wextra -fPIC -g
+CFLAGS += -I../../lang -I../../lang/backend_llvm
 
 UNAME_S := $(shell uname -s)
 

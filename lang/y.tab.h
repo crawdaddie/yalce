@@ -93,26 +93,25 @@ extern int yydebug;
     THEN = 294,                    /* THEN  */
     ELSE = 295,                    /* ELSE  */
     YIELD = 296,                   /* YIELD  */
-    AWAIT = 297,                   /* AWAIT  */
-    FOR = 298,                     /* FOR  */
-    IF = 299,                      /* IF  */
-    OF = 300,                      /* OF  */
-    FSTRING_START = 301,           /* FSTRING_START  */
-    FSTRING_END = 302,             /* FSTRING_END  */
-    FSTRING_INTERP_START = 303,    /* FSTRING_INTERP_START  */
-    FSTRING_INTERP_END = 304,      /* FSTRING_INTERP_END  */
-    FSTRING_TEXT = 305,            /* FSTRING_TEXT  */
-    MATCH_BODY_PREC = 306,         /* MATCH_BODY_PREC  */
-    DOUBLE_AMP = 307,              /* DOUBLE_AMP  */
-    DOUBLE_PIPE = 308,             /* DOUBLE_PIPE  */
-    GE = 309,                      /* GE  */
-    LE = 310,                      /* LE  */
-    EQ = 311,                      /* EQ  */
-    NE = 312,                      /* NE  */
-    MODULO = 313,                  /* MODULO  */
-    APPLICATION = 314,             /* APPLICATION  */
-    UMINUS = 315,                  /* UMINUS  */
-    BANG = 316                     /* BANG  */
+    FOR = 297,                     /* FOR  */
+    IF = 298,                      /* IF  */
+    OF = 299,                      /* OF  */
+    FSTRING_START = 300,           /* FSTRING_START  */
+    FSTRING_END = 301,             /* FSTRING_END  */
+    FSTRING_INTERP_START = 302,    /* FSTRING_INTERP_START  */
+    FSTRING_INTERP_END = 303,      /* FSTRING_INTERP_END  */
+    FSTRING_TEXT = 304,            /* FSTRING_TEXT  */
+    MATCH_BODY_PREC = 305,         /* MATCH_BODY_PREC  */
+    DOUBLE_AMP = 306,              /* DOUBLE_AMP  */
+    DOUBLE_PIPE = 307,             /* DOUBLE_PIPE  */
+    GE = 308,                      /* GE  */
+    LE = 309,                      /* LE  */
+    EQ = 310,                      /* EQ  */
+    NE = 311,                      /* NE  */
+    MODULO = 312,                  /* MODULO  */
+    APPLICATION = 313,             /* APPLICATION  */
+    UMINUS = 314,                  /* UMINUS  */
+    BANG = 315                     /* BANG  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -160,26 +159,25 @@ extern int yydebug;
 #define THEN 294
 #define ELSE 295
 #define YIELD 296
-#define AWAIT 297
-#define FOR 298
-#define IF 299
-#define OF 300
-#define FSTRING_START 301
-#define FSTRING_END 302
-#define FSTRING_INTERP_START 303
-#define FSTRING_INTERP_END 304
-#define FSTRING_TEXT 305
-#define MATCH_BODY_PREC 306
-#define DOUBLE_AMP 307
-#define DOUBLE_PIPE 308
-#define GE 309
-#define LE 310
-#define EQ 311
-#define NE 312
-#define MODULO 313
-#define APPLICATION 314
-#define UMINUS 315
-#define BANG 316
+#define FOR 297
+#define IF 298
+#define OF 299
+#define FSTRING_START 300
+#define FSTRING_END 301
+#define FSTRING_INTERP_START 302
+#define FSTRING_INTERP_END 303
+#define FSTRING_TEXT 304
+#define MATCH_BODY_PREC 305
+#define DOUBLE_AMP 306
+#define DOUBLE_PIPE 307
+#define GE 308
+#define LE 309
+#define EQ 310
+#define NE 311
+#define MODULO 312
+#define APPLICATION 313
+#define UMINUS 314
+#define BANG 315
 
 /* Value type.  */
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
@@ -196,7 +194,7 @@ union YYSTYPE
     float vfloat;
     char vchar;
 
-#line 200 "lang/y.tab.h"
+#line 198 "lang/y.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;

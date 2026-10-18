@@ -1,5 +1,6 @@
 #include "ylc_stdlib.h"
 #include <ctype.h>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <math.h>
@@ -14,6 +15,8 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <json-c/json.h>
+#include <json-c/linkhash.h>
 
 static const uint32_t YLC_RC_HEAP_COUNT = 1;
 static const uint32_t YLC_RC_DEFAULT_TAG = 0;
@@ -69,6 +72,61 @@ static void *ylc_rc_alloc(size_t payload_size) {
   header->tag_or_size_class = YLC_RC_DEFAULT_TAG;
 
   return (char *)header + sizeof(YlcRcHeader);
+}
+
+char *ylc_string_alloc(int32_t size) {
+  if (size < 0) {
+    return NULL;
+  }
+
+  return ylc_rc_alloc((size_t)size);
+}
+
+typedef struct lh_table *(*JsonGetObjectFn)(const struct json_object *object);
+
+static struct lh_table *json_table(void *object) {
+  static JsonGetObjectFn get_object;
+  static bool looked_up;
+
+  if (!looked_up) {
+    get_object = (JsonGetObjectFn)dlsym(RTLD_DEFAULT, "json_object_get_object");
+    looked_up = true;
+  }
+
+  if (!get_object || !object) {
+    return NULL;
+  }
+
+  return get_object((struct json_object *)object);
+}
+
+int32_t json_object_length(void *object) {
+  struct lh_table *table = json_table(object);
+  return table ? (int32_t)table->count : 0;
+}
+
+static struct lh_entry *json_entry_at(void *object, int32_t index) {
+  struct lh_table *table = json_table(object);
+  if (!table || index < 0 || index >= (int32_t)table->count) {
+    return NULL;
+  }
+
+  struct lh_entry *entry = table->head;
+  for (int32_t i = 0; entry && i < index; i++) {
+    entry = entry->next;
+  }
+
+  return entry;
+}
+
+const char *json_object_key_at(void *object, int32_t index) {
+  struct lh_entry *entry = json_entry_at(object, index);
+  return entry ? (const char *)entry->k : NULL;
+}
+
+void *json_object_value_at(void *object, int32_t index) {
+  struct lh_entry *entry = json_entry_at(object, index);
+  return entry ? (void *)entry->v : NULL;
 }
 
 static void ylc_rc_free(void *payload) {
@@ -182,12 +240,18 @@ _String string_concat(_String *strings, int num_strings) {
     total_len += lengths[i];
   }
 
-  char *concatted = malloc(sizeof(char) * (total_len + 1));
+  char *concatted = ylc_rc_alloc((size_t)total_len + CSTR_NUL_BYTES);
+  if (concatted == NULL) {
+    return (_String){0, 0, NULL};
+  }
+
   int offset = 0;
   for (int i = 0; i < num_strings; i++) {
     strncpy(concatted + offset, strings[i].chars, lengths[i]);
     offset += lengths[i];
   }
+
+  concatted[total_len] = '\0';
 
   return (_String){total_len, 0, concatted};
 }
@@ -580,6 +644,120 @@ double *mmap_double_array(int32_t data_size, double *data,
   free(data);
 
   return mapped_data;
+}
+
+ByteArray mmap_bytes(const char *filename) {
+  const int32_t max_mapped_bytes = INT32_MAX;
+  char *expanded = NULL;
+  const char *path = filename;
+
+  if (filename && filename[0] == '~') {
+    const char *home = getenv("HOME");
+    if (!home) {
+      return (ByteArray){0, 0, NULL};
+    }
+
+    size_t path_size = strlen(home) + strlen(filename);
+    expanded = malloc(path_size);
+    if (!expanded) {
+      return (ByteArray){0, 0, NULL};
+    }
+
+    snprintf(expanded, path_size, "%s%s", home, filename + 1);
+    path = expanded;
+  }
+
+  struct stat file_stat;
+  if (stat(path, &file_stat) != 0 || file_stat.st_size > max_mapped_bytes) {
+    free(expanded);
+    return (ByteArray){0, 0, NULL};
+  }
+
+  int fd = open(path, O_RDONLY);
+  free(expanded);
+  if (fd == -1) {
+    return (ByteArray){0, 0, NULL};
+  }
+
+  void *mapped = mmap(NULL, (size_t)file_stat.st_size, PROT_READ, MAP_PRIVATE,
+                      fd, 0);
+  close(fd);
+
+  if (mapped == MAP_FAILED) {
+    return (ByteArray){0, 0, NULL};
+  }
+
+  return (ByteArray){(int32_t)file_stat.st_size, 0, mapped};
+}
+
+ByteArray byte_slice(ByteArray bytes, int32_t offset, int32_t size) {
+  if (!bytes.chars || offset < 0 || size < 0 || offset > bytes.size ||
+      size > bytes.size - offset) {
+    return (ByteArray){0, 0, NULL};
+  }
+
+  return (ByteArray){size, 0, bytes.chars + offset};
+}
+
+void munmap_bytes(ByteArray bytes) {
+  if (bytes.chars && bytes.size > 0) {
+    munmap((void *)bytes.chars, (size_t)bytes.size);
+  }
+}
+
+void *mmap_file(const char *filename) {
+  ByteArray bytes = mmap_bytes(filename);
+  return (void *)bytes.chars;
+}
+
+int32_t mmap_file_size(const char *filename) {
+  char *expanded = NULL;
+  const char *path = filename;
+
+  if (filename && filename[0] == '~') {
+    const char *home = getenv("HOME");
+    if (!home) {
+      return 0;
+    }
+
+    size_t path_size = strlen(home) + strlen(filename);
+    expanded = malloc(path_size);
+    if (!expanded) {
+      return 0;
+    }
+
+    snprintf(expanded, path_size, "%s%s", home, filename + 1);
+    path = expanded;
+  }
+
+  struct stat file_stat;
+  int result = stat(path, &file_stat) == 0 && file_stat.st_size <= INT32_MAX
+                   ? (int32_t)file_stat.st_size
+                   : 0;
+  free(expanded);
+  return result;
+}
+
+ByteArray mmap_file_read(void *mapping, int32_t offset, int32_t size) {
+  if (!mapping || offset < 0 || size < 0) {
+    return (ByteArray){0, 0, NULL};
+  }
+
+  return alloc_string((const char *)mapping + offset, (size_t)size);
+}
+
+void *mmap_file_ptr(void *mapping, int32_t offset) {
+  if (!mapping || offset < 0) {
+    return NULL;
+  }
+
+  return (char *)mapping + offset;
+}
+
+void munmap_file(void *mapping, int32_t size) {
+  if (mapping && size > 0) {
+    munmap(mapping, (size_t)size);
+  }
 }
 
 _DoubleArray double_array_from_raw(int32_t size, double *data) {

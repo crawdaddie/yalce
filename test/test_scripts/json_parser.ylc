@@ -1,0 +1,18 @@
+open json;
+
+let test = module () ->
+  let test_null = fn () ->
+    match parse_json "null" with
+    | Ok JNull -> true
+    | _ -> false;;
+
+  let test_values = fn () ->
+    match (parse_json "true", parse_json "false", parse_json "-12.5") with
+    | (Ok (JBool true), Ok (JBool false), Ok (JNumber _)) -> true
+    | _ -> false;;
+
+  let test_string = fn () ->
+    match parse_json "\"hello world\"" with
+    | Ok (JString value) -> value == "hello world"
+    | _ -> false;;
+;

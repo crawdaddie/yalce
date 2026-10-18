@@ -1,4 +1,6 @@
 #include "./osc_kernels.h"
+#include "./ott_kernels.h"
+#include "./ott_kernels.c"
 #include "node.h"
 #include "ylc_datatypes.h"
 #include <math.h>
@@ -1638,6 +1640,7 @@ ylc_audio_glue_kernel(GlueCompState *state, double spf, double thresh,
   }
   return x * gain;
 }
+
 
 /* Look-ahead limiter modeled on SuperCollider's three-buffer limiter. */
 __attribute__((always_inline)) double

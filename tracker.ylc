@@ -1,0 +1,347 @@
+open libs/audio_jit/DSP;
+import libs/audio_jit/SF;
+import std/Math;
+import std/Arrays;
+let buf_idxs = [|
+  "~/projects/yalce/fat_amen_mono_48000.wav"
+  # "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_synther.flac",
+  # "~/Sounds/rns_samples/Kicks/ech_kick_resample.flac",
+  # "~/Sounds/rns_samples/Snares/dh_snr_hi_grainy.flac",
+  # "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_nospace.flac",
+  # "~/Sounds/rns_samples/HiHats/Closed/dh_clhat_tight_tecno.flac",
+  # "~/Sounds/rns_samples/HiHats/Closed/ech_hat_verydirty.flac",
+  # "~/Sounds/rns_samples/HiHats/Cymbal/dh_cym_ride_sweet.flac",
+  # "~/Sounds/rns_samples/HiHats/Open/dh_ophat_long_ender.flac",
+  # "~/Sounds/rns_samples/Kicks/dh_kick_mid_tighter.flac",
+  # "~/Sounds/rns_samples/Snares/dh_snr_hi_enveloper.flac",
+  # "~/Sounds/rns_samples/Snares/dh_snr_syn_808er.flac",
+  # "~/Sounds/rns_samples/Snares/dh_snr_syn_whitenoise.flac",
+  # "~/Sounds/rns_samples/Snares/ech_snare_analog.flac",
+  # "~/Sounds/rns_samples/Percussion/dh_perc_click_metal.flac",
+  # "~/Sounds/rns_samples/Percussion/ech_perc_909tom.flac",
+  # "~/Sounds/rns_samples/Toms/dh_perc_tom_wave.flac",
+
+  # "~/Sounds/rns_samples/Claps/ech_clap_vinyl909.flac",
+|] |> Arrays.map (fn p -> Double (SF.load_sf_buffer p)) ;
+
+let sp = @Audio fn samp_idx dur sp retrig_freq rate rev_dir -> 
+  let f = SF.sf_buffer samp_idx;
+
+  let t = trig retrig_freq;
+  let t0 = trig 0;
+  (match SF.sf_buffer_channels f with
+    | 1 -> bufplay (SF.sf_buffer_data f) (rev_dir * rate *(SF.sf_buffer_samplerate f) * spf) sp t |> pan 2 0.5
+    | 2 -> mbufplay 2 (SF.sf_buffer_data f) (rev_dir * rate *(SF.sf_buffer_samplerate f) * spf) sp t
+  )
+  |> (*) (t0 |> rect dur |> adsr 0. 0. 1. 0.01 |> kill_on_end)
+  |> (*) (Math.db_amp 12.)
+;;
+
+type Param =
+| Pan of Double
+| Vel of Double
+| Pos of Double
+| Retrig of Double
+| Send of Int
+| Dur of Double
+| Rev of Double
+;
+
+import std/Str;
+
+let parse_hex_digits = fn num_digits x ->
+  let acc = [| 0 |];
+  for _i = 0 .. num_digits in (
+    let i = num_digits - _i - 1;
+    let c = x[i];
+    let ci = match c with
+    | '0' -> 0
+    | '1' -> 1
+    | '2' -> 2
+    | '3' -> 3
+    | '4' -> 4
+    | '5' -> 5
+    | '6' -> 6
+    | '7' -> 7
+    | '8' -> 8
+    | '9' -> 9
+    | 'A' -> 10
+    | 'B' -> 11
+    | 'C' -> 12
+    | 'D' -> 13
+    | 'E' -> 14
+    | 'F' -> 15
+    | 'a' -> 10
+    | 'b' -> 11
+    | 'c' -> 12
+    | 'd' -> 13
+    | 'e' -> 14
+    | 'f' -> 15
+    | _ -> 0
+    ;
+    acc[0] := acc[0] + ci * (Math.ipow 16 _i)
+  );
+  acc[0]
+;;
+
+let parse_midi = fn s ->
+  let base = match s[0] with
+    | 'c' -> 0
+    | 'C' -> 0
+    | 'd' -> 2
+    | 'D' -> 2
+    | 'e' -> 4
+    | 'E' -> 4
+    | 'f' -> 5
+    | 'F' -> 5
+    | 'g' -> 7
+    | 'G' -> 7
+    | 'a' -> 9
+    | 'A' -> 9
+    | 'b' -> 11
+    | 'B' -> 11
+    | _ -> -1
+    ;
+  let (acc, octave_start) = match array_size s with
+    | 1 -> (0, 0)
+    | _ -> match s[1] with
+      | '#' -> (1, 2)
+      | '_' -> (-1, 2)
+      | '-' -> (-1, 2)
+      | _ -> (0, 1)
+    ;
+  let octave_char = match octave_start with
+    | 2 -> s[2]
+    | 1 -> s[1]
+    | _ -> '4'
+    ;
+  let octave = match octave_char with
+    | '0' -> 0
+    | '1' -> 1
+    | '2' -> 2
+    | '3' -> 3
+    | '4' -> 4
+    | '5' -> 5
+    | '6' -> 6
+    | '7' -> 7
+    | '8' -> 8
+    | '9' -> 9
+    | _ -> 0
+    ;
+  let result = (octave + 1) * 12 + base + acc;
+  result
+;;
+let print_plist = fn plist ->
+  match plist with
+  | [] -> ()
+  | x::rest -> (
+    match x with
+    | Pan d -> print `pan:{d}, `
+    | Vel d -> print `vel:{d}, `
+    | Pos d -> print `pos:{d}, `
+    | Retrig d -> print `retrig:{d}, `
+    | Dur d -> print `dur:{d}, `
+    | Rev d -> print `rev:{d}, `
+    ;
+    print_plist rest
+  )
+;;
+
+let parse_chunk = fn st ->
+  let empty_params = fn xs: (List of Param) -> xs ;;
+
+  let proc_params = fn (note, instr, plist) comp ->
+    match Str.split_on comp ' ' with
+    | Some (c, r) -> (
+      let a = match c[0] with
+        | 'p' -> (note, instr, (Pan (c[1 .. 3] |> parse_hex_digits 2 |> (*) (1. / 256.)))::plist)
+        | 'P' -> (note, instr, (Pan (c[1 .. 3] |> parse_hex_digits 2 |> (*) (1. / 256.)))::plist)
+        | 's' -> (note, instr, (Pos (c[1 .. 3] |> parse_hex_digits 2 |> (*) (1. / 256.)))::plist)
+        | 'S' -> (note, instr, (Pos (c[1 .. 3] |> parse_hex_digits 2 |> (*) (1. / 256.)))::plist)
+        | 'v' -> (note, instr, (Vel (c[1 .. 3] |> parse_hex_digits 2 |> (*) (1. / 256.)))::plist)
+        | 'V' -> (note, instr, (Vel (c[1 .. 3] |> parse_hex_digits 2 |> (*) (1. / 256.)))::plist)
+        | 'r' -> (note, instr, (Retrig (c[1 .. 3] |> parse_hex_digits 2 |> Double))::plist)
+        | 'R' -> (note, instr, (Retrig (c[1 .. 3] |> parse_hex_digits 2))::plist)
+
+
+        | 'd' -> (note, instr, (Dur (c[1 .. 3] |> parse_hex_digits 2 |> (*) (1. / 256.)))::plist)
+        | 'D' -> (note, instr, (Dur (c[1 .. 3] |> parse_hex_digits 2 |> (*) (1. / 256.)))::plist)
+        | 'b' -> (note, instr, (Rev (c[1 .. 3] |> parse_hex_digits 2 |> (*) (1. / 256.)))::plist)
+        | 'B' -> (note, instr, (Rev (c[1 .. 3] |> parse_hex_digits 2 |> (*) (1. / 256.)))::plist)
+        | _ -> (note, instr, plist)
+        ; 
+      proc_params a r
+    )
+    | None -> (note, instr, plist)
+  ;;
+
+  match Str.split_on st ' ' with
+  | Some (head, rest) -> (
+    let note = match array_size head with
+      | 2 -> parse_midi "C"
+      | _ -> parse_midi (head[2 .. array_size head])
+      ;
+    let instr = head[0 .. 2] |> parse_hex_digits 2;
+    proc_params (note, instr, empty_params []) rest
+  )
+  | None -> (-1, -1, empty_params [])
+;;
+
+let parse_line = fn s num evs ->
+  match Str.split_on s ';' with
+  | Some (m, rest) -> (
+    let event = m |> Str.trim_l |> parse_chunk;
+    parse_line rest (num + 1) (event::evs)
+  )
+  | None -> (num, evs)
+;;
+
+import std/Lists;
+
+let skip_nls = fn acc rest ->
+  if array_size rest <= 0 then (acc, rest) else (
+    match rest[0] with
+    | '\n' -> skip_nls (acc + 1) (rest[1 ..])
+    | _ -> (acc, rest)
+  )
+;;
+
+let cor_lines = fn rest ->
+  match Str.split_on rest '\n' with
+  | Some (line, next) -> (
+    let nls, tail = skip_nls 1 next;
+    yield (nls, line);
+    if array_size tail > 0 then (
+      yield cor_lines tail;
+      ()
+    ) else ()
+  )
+  | None -> ()
+;;
+
+
+let pat = `
+00 s00
+00 s10
+
+00 s30
+00 s40
+00 s50 
+00 s60 
+00 s70 
+00 s80 
+00 s90 
+00 sa0 
+00 sb0 
+00 sc0 
+00 sd0 
+00 se0 
+00 sf0 
+00 s00
+00 s10
+00 s40
+00 s30
+00 s40
+00 s50 
+00 s60 
+00 s70 
+00 s40 r06 
+
+
+
+00 sc0 
+00 sd0 
+00 se0 
+00 sf0 
+00 sc0 
+00 sd0 
+00 se0 
+00 s40
+00c#4   s40
+00d4    s40
+00d#4   s40
+00 s70 
+00 s80 
+00 s90 
+00 sa0 
+00 sb0 
+00 sc0 
+00 sd0 
+00 se0 
+00 sf0 
+00 s00 d80
+
+00 s40 
+00 s50 b01 
+00 s40 
+00 sc0 
+00 sd0 
+00 s50 b01 
+00 s80 r08
+00 s90 
+00 sa0 
+00 sb0 r08
+00 sc0 
+00 sd0 
+00 se0 r08
+00 sf0 
+`
+;
+
+let beat = 60. / 170.;
+
+let bpl = beat / 4.;
+let scale_dur = fn dur: (Int) -> bpl * (Double dur)
+;;
+
+let play_param_acc = fn (acc, dur): (Array of Double, Double) x ->
+  match x with
+  | Pos d -> (acc[0] := d; (acc, dur))
+  | Retrig d -> (acc[2] := d / dur; (acc, dur))
+  | Dur d -> (acc[3] := d; (acc, dur))
+  | Rev d if (d > 0.) -> (acc[4] := -1.; (acc, dur))
+  | _ -> (acc, dur)
+;;
+
+let play_event = fn dur:(Double) i:(Int) (note, instr, plist): (Int, Int, List of Param) ->
+  match instr with
+  | 0 -> (
+    # print `{note}:{(note - 60.) |> midiratio}\n`;
+    let ps, _ = Lists.fold play_param_acc ([|0., 1., 0., 1., 1.|], dur) plist;
+    sp 0. (dur * (ps[3])) (ps[0]) (ps[2]) ((note - 60.) |> midiratio) (ps[4]) |> play_node 
+    ;
+    ()
+  )
+  | _ -> ()
+  # sp play_node;
+;;
+
+let play_event_acc = fn (dur, i): (Double, Int) e ->
+  play_event dur i e;
+  (dur, i - 1)
+;;
+
+
+let x = pat
+|> Str.trim_nl
+|> cor_lines
+|> cor_loop
+|> cor_map (fn (dur, line) ->
+  let (num, evs) = parse_line line 0 [];
+
+  let _ = Lists.fold play_event_acc (scale_dur dur, num - 1) evs;
+
+  scale_dur dur
+
+  )
+|> play_pattern beat
+
+# print `
+# {x ()}
+# {x ()}
+# {x ()}
+# {x ()}
+# {x ()}
+# `
+# |> cor_loop
+# ;

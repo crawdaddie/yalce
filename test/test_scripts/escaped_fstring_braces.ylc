@@ -1,0 +1,12 @@
+let test = module () ->
+  let cuda = `
+extern "C" __global__ void f() \{
+  if (true) \{
+    return;
+  \}
+\}
+`;
+
+  let expected = "\nextern \"C\" __global__ void f() {\n  if (true) {\n    return;\n  }\n}\n";
+  cuda == expected
+;

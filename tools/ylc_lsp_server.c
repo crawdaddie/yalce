@@ -1040,8 +1040,8 @@ static bool range_for_definition_node(Ast *node, source_range *out_range) {
           out_range->end_offset = pos + binding_name.length;
           line_col_for_offset(src, out_range->start_offset,
                               &out_range->start_line, &out_range->start_col);
-          line_col_for_offset(src, out_range->end_offset,
-                              &out_range->end_line, &out_range->end_col);
+          line_col_for_offset(src, out_range->end_offset, &out_range->end_line,
+                              &out_range->end_col);
           return true;
         }
       }
@@ -1069,9 +1069,8 @@ static bool range_for_definition_node(Ast *node, source_range *out_range) {
   return true;
 }
 
-static struct json_object *definition_location_to_json(lsp_server *server,
-                                                       document *doc,
-                                                       Ast *node) {
+static struct json_object *
+definition_location_to_json(lsp_server *server, document *doc, Ast *node) {
   source_range range;
   char *uri;
   struct json_object *location;
@@ -1108,13 +1107,11 @@ static bool json_range_matches_source_range(struct json_object *range,
   struct json_object *start = NULL;
   struct json_object *end = NULL;
 
-  return range && source &&
-         json_object_object_get_ex(range, "start", &start) &&
+  return range && source && json_object_object_get_ex(range, "start", &start) &&
          json_object_object_get_ex(range, "end", &end) &&
          json_position_matches(start, source->start_line - 1,
                                source->start_col - 1) &&
-         json_position_matches(end, source->end_line - 1,
-                               source->end_col - 1);
+         json_position_matches(end, source->end_line - 1, source->end_col - 1);
 }
 
 static bool definition_location_exists(struct json_object *locations,
@@ -1250,10 +1247,11 @@ static definition_binding *definition_lookup(definition_binding *env,
   return NULL;
 }
 
-static definition_binding *
-definition_push_binding(definition_search *search, definition_binding *env,
-                        const char *name, Ast *definition_node,
-                        Ast *value_node) {
+static definition_binding *definition_push_binding(definition_search *search,
+                                                   definition_binding *env,
+                                                   const char *name,
+                                                   Ast *definition_node,
+                                                   Ast *value_node) {
   definition_binding *binding;
 
   if (!search || !name || !definition_node) {
@@ -1383,8 +1381,7 @@ static Ast *stmt_value_node(Ast *stmt) {
   }
 
   if ((stmt->tag == AST_LET || stmt->tag == AST_TYPE_DECL) &&
-      stmt->data.AST_LET.expr &&
-      stmt->data.AST_LET.expr->tag == AST_MODULE) {
+      stmt->data.AST_LET.expr && stmt->data.AST_LET.expr->tag == AST_MODULE) {
     return stmt->data.AST_LET.expr;
   }
 
@@ -1504,9 +1501,8 @@ definition_push_pattern_bindings(definition_search *search,
   }
 
   if (pattern->tag == AST_LET) {
-    return definition_push_pattern_bindings(search, env,
-                                            pattern->data.AST_LET.binding,
-                                            pattern->data.AST_LET.expr);
+    return definition_push_pattern_bindings(
+        search, env, pattern->data.AST_LET.binding, pattern->data.AST_LET.expr);
   }
 
   if (pattern->tag == AST_IDENTIFIER) {
@@ -1573,8 +1569,7 @@ static bool definition_target_in_stmt_binding(definition_search *search,
                                               Ast *stmt) {
   const char *name;
 
-  if (!search || !stmt || search->target_node != stmt ||
-      !search->target_name) {
+  if (!search || !stmt || search->target_node != stmt || !search->target_name) {
     return false;
   }
 
@@ -1730,8 +1725,8 @@ static bool resolve_let_definition(definition_search *search,
   }
 
   if (body) {
-    definition_binding *body_env =
-        definition_push_pattern_bindings(search, env, binding, stmt_value_node(node));
+    definition_binding *body_env = definition_push_pattern_bindings(
+        search, env, binding, stmt_value_node(node));
     return resolve_expr_definition(search, body_env, body);
   }
 
@@ -1845,8 +1840,8 @@ static bool resolve_expr_definition(definition_search *search,
     return resolve_expr_definition(search, env, node->data.AST_YIELD.expr);
 
   case AST_RANGE_EXPRESSION:
-    return resolve_expr_definition(
-               search, env, node->data.AST_RANGE_EXPRESSION.from) ||
+    return resolve_expr_definition(search, env,
+                                   node->data.AST_RANGE_EXPRESSION.from) ||
            resolve_expr_definition(search, env,
                                    node->data.AST_RANGE_EXPRESSION.to);
 
@@ -1937,9 +1932,10 @@ static void rename_add_edit(rename_collect *collect, Ast *node) {
   json_object_array_add(collect->edits, edit);
 }
 
-static definition_binding *
-rename_push_pattern_bindings(rename_collect *collect, definition_binding *env,
-                             Ast *pattern, Ast *value_node) {
+static definition_binding *rename_push_pattern_bindings(rename_collect *collect,
+                                                        definition_binding *env,
+                                                        Ast *pattern,
+                                                        Ast *value_node) {
   if (!pattern) {
     return env;
   }
@@ -1965,9 +1961,8 @@ rename_push_pattern_bindings(rename_collect *collect, definition_binding *env,
   if (pattern->tag == AST_TUPLE || pattern->tag == AST_LIST ||
       pattern->tag == AST_ARRAY) {
     for (size_t i = 0; i < pattern->data.AST_LIST.len; i++) {
-      env = rename_push_pattern_bindings(collect, env,
-                                         pattern->data.AST_LIST.items + i,
-                                         NULL);
+      env = rename_push_pattern_bindings(
+          collect, env, pattern->data.AST_LIST.items + i, NULL);
     }
   }
 
@@ -1982,8 +1977,8 @@ rename_push_pattern_bindings(rename_collect *collect, definition_binding *env,
   return env;
 }
 
-static bool rename_collect_expr(rename_collect *collect, definition_binding *env,
-                                Ast *node);
+static bool rename_collect_expr(rename_collect *collect,
+                                definition_binding *env, Ast *node);
 
 static void rename_collect_lambda(rename_collect *collect,
                                   definition_binding *env, Ast *lambda) {
@@ -1998,8 +1993,8 @@ static void rename_collect_lambda(rename_collect *collect,
     if (param->ast && param->ast->tag == AST_LET) {
       rename_collect_expr(collect, body_env, param->ast->data.AST_LET.expr);
     }
-    body_env = rename_push_pattern_bindings(collect, body_env, param->ast,
-                                            NULL);
+    body_env =
+        rename_push_pattern_bindings(collect, body_env, param->ast, NULL);
   }
 
   rename_collect_expr(collect, body_env, lambda->data.AST_LAMBDA.body);
@@ -2088,8 +2083,8 @@ static void rename_collect_let(rename_collect *collect, definition_binding *env,
   }
 }
 
-static bool rename_collect_expr(rename_collect *collect, definition_binding *env,
-                                Ast *node) {
+static bool rename_collect_expr(rename_collect *collect,
+                                definition_binding *env, Ast *node) {
   if (!collect || !node) {
     return false;
   }
@@ -2098,9 +2093,8 @@ static bool rename_collect_expr(rename_collect *collect, definition_binding *env
   case AST_IDENTIFIER: {
     definition_binding *binding =
         definition_lookup(env, node->data.AST_IDENTIFIER.value);
-    if (binding &&
-        rename_definition_matches(binding->definition_node,
-                                  collect->target_definition_node)) {
+    if (binding && rename_definition_matches(binding->definition_node,
+                                             collect->target_definition_node)) {
       rename_add_edit(collect, node);
     }
     return true;
@@ -2110,8 +2104,8 @@ static bool rename_collect_expr(rename_collect *collect, definition_binding *env
     definition_binding *body_env = env;
     for (AstList *stmt = node->data.AST_BODY.stmts; stmt; stmt = stmt->next) {
       rename_collect_expr(collect, body_env, stmt->ast);
-      body_env = definition_push_stmt_binding(&collect->bindings, body_env,
-                                              stmt->ast);
+      body_env =
+          definition_push_stmt_binding(&collect->bindings, body_env, stmt->ast);
     }
     return true;
   }
@@ -2367,9 +2361,8 @@ static bool reference_collect_expr(reference_collect *collect,
   case AST_IDENTIFIER: {
     definition_binding *binding =
         definition_lookup(env, node->data.AST_IDENTIFIER.value);
-    if (binding &&
-        rename_definition_matches(binding->definition_node,
-                                  collect->target_definition_node)) {
+    if (binding && rename_definition_matches(binding->definition_node,
+                                             collect->target_definition_node)) {
       reference_add_location(collect, node);
     }
     return true;
@@ -2379,8 +2372,8 @@ static bool reference_collect_expr(reference_collect *collect,
     definition_binding *body_env = env;
     for (AstList *stmt = node->data.AST_BODY.stmts; stmt; stmt = stmt->next) {
       reference_collect_expr(collect, body_env, stmt->ast);
-      body_env = definition_push_stmt_binding(&collect->bindings, body_env,
-                                              stmt->ast);
+      body_env =
+          definition_push_stmt_binding(&collect->bindings, body_env, stmt->ast);
     }
     return true;
   }
@@ -2689,8 +2682,8 @@ static struct json_object *syntax_diagnostic_to_json(document *doc) {
 
   if (doc->parse_error.near_text[0] != '\0') {
     char message[256];
-    snprintf(message, sizeof(message), "%s near '%s'",
-             doc->parse_error.message, doc->parse_error.near_text);
+    snprintf(message, sizeof(message), "%s near '%s'", doc->parse_error.message,
+             doc->parse_error.near_text);
     json_object_object_add(diagnostic, "message",
                            json_object_new_string(message));
   } else {
@@ -3112,8 +3105,8 @@ static Ast *resolve_definition_at_position(lsp_server *server, document *doc,
   cursor_offset = offset_for_position(doc->text, line, character);
   stmt = find_stmt_at_line(doc, line + 1, &next_stmt);
   if (stmt && stmt_range_for_doc(doc, stmt, next_stmt, &stmt_range)) {
-    target_match = find_smallest_node_in_subtree(
-        stmt, cursor_offset, stmt_range.end_offset);
+    target_match = find_smallest_node_in_subtree(stmt, cursor_offset,
+                                                 stmt_range.end_offset);
   }
 
   if (target_match.node && target_match.node->tag == AST_IDENTIFIER) {
@@ -3172,8 +3165,8 @@ static void handle_definition(lsp_server *server, int id,
   doc = uri ? find_doc(server, uri) : NULL;
   line = json_get_int_default(position, "line", 0);
   character = json_get_int_default(position, "character", 0);
-  definition_node =
-      resolve_definition_at_position(server, doc, line, character, &target_name);
+  definition_node = resolve_definition_at_position(server, doc, line, character,
+                                                   &target_name);
 
   locations = json_object_new_array();
   if (definition_node) {
@@ -3219,8 +3212,8 @@ static void handle_references(lsp_server *server, int id,
   doc = uri ? find_doc(server, uri) : NULL;
   line = json_get_int_default(position, "line", 0);
   character = json_get_int_default(position, "character", 0);
-  definition_node =
-      resolve_definition_at_position(server, doc, line, character, &target_name);
+  definition_node = resolve_definition_at_position(server, doc, line, character,
+                                                   &target_name);
 
   locations = json_object_new_array();
   if (definition_node && doc && doc->root) {
@@ -3303,10 +3296,11 @@ static void handle_rename(lsp_server *server, int id,
   doc = uri ? find_doc(server, uri) : NULL;
   line = json_get_int_default(position, "line", 0);
   character = json_get_int_default(position, "character", 0);
-  definition_node =
-      resolve_definition_at_position(server, doc, line, character, &target_name);
+  definition_node = resolve_definition_at_position(server, doc, line, character,
+                                                   &target_name);
 
-  if (!definition_node || !definition_node_belongs_to_doc(doc, definition_node)) {
+  if (!definition_node ||
+      !definition_node_belongs_to_doc(doc, definition_node)) {
     free(target_name);
     send_response_int(id, json_object_new_null());
     return;
@@ -3386,8 +3380,8 @@ static void handle_completion(lsp_server *server, int id,
   if (doc->typecheck_ok && doc->type_env) {
     for (TypeEnv *env = doc->type_env; env; env = env->next) {
       add_completion_item_if_matches(items, &seen, env->name,
-                                     completion_kind_for_type(env),
-                                     env->type, prefix);
+                                     completion_kind_for_type(env), env->type,
+                                     prefix);
     }
   }
 
