@@ -1,0 +1,424 @@
+# First safetensors loader for Qwen 2.5 0.5B.
+# The model file is mmap'ed; only its small JSON header is copied.
+
+let model_path =
+  "~/.cache/huggingface/hub/models--Qwen--Qwen2.5-0.5B/snapshots/060db6499f32faf8b98477b0a26969ef7d8b9987/model.safetensors";
+
+let mmap_file = extern fn Ptr -> Ptr;
+let mmap_file_size = extern fn Ptr -> Int;
+let mmap_file_read = extern fn Ptr -> Int -> Int -> String;
+let mmap_file_ptr = extern fn Ptr -> Int -> Ptr;
+let munmap_file = extern fn Ptr -> Int -> ();
+let strlen = extern fn Ptr -> Int;
+let from_cstr = extern fn Int -> Ptr -> String;
+let string_add = extern fn String -> String -> String;
+let int64_from_int = extern fn Int -> Uint64;
+let int64_str = extern fn Uint64 -> String;
+let char_to_int = extern fn Char -> Int;
+let lshift = extern fn Int -> Int -> Int;
+
+import Json;
+type MappedTensor = (
+  data: Ptr,
+  count: Int,
+  stride: Int,
+  shape: Ptr
+);
+
+type QwenModel = (
+  file: Ptr,
+  file_size: Int,
+  header: Ptr,
+  header_bytes: Int,
+  embedding: MappedTensor,
+  tensor_ptrs: Array of Ptr,
+  tensor_counts: Array of Int,
+  tensor_strides: Array of Int
+);
+
+let as_qwen = fn model: (QwenModel) -> model;;
+
+
+
+let header_size = fn bytes ->
+  char_to_int (bytes[0])
+  + lshift (char_to_int (bytes[1])) 8
+  + lshift (char_to_int (bytes[2])) 16
+  + lshift (char_to_int (bytes[3])) 24
+;;
+
+let read_header = fn file ->
+  let prefix = mmap_file_read file 0 8;
+  let size = header_size prefix;
+  mmap_file_read file 8 size
+;;
+
+let json_array_int = fn idx object ->
+  Json.int (Json.array_get_idx idx object)
+;;
+
+let dtype_size = fn dtype ->
+  if dtype == "BF16" then 2
+  else if dtype == "F32" then 4
+  else if dtype == "F16" then 2
+  else 1
+;;
+
+let map_tensor = fn file file_size data_offset tensor ->
+  match Json.get "data_offsets" tensor with
+  | Some offsets -> (
+      let start = json_array_int 0 offsets;
+      let end = json_array_int 1 offsets;
+      match Json.get "dtype" tensor with
+      | Some dtype_object -> (
+          match Json.get "shape" tensor with
+          | Some shape -> (
+              let dtype = Json.string dtype_object;
+              let data = mmap_file_ptr file (data_offset + start);
+              Some (data, (end - start) / dtype_size dtype,
+                    dtype_size dtype, shape)
+            )
+          | _ -> None
+        )
+      | _ -> None
+    )
+  | _ -> None
+;;
+
+let map_safetensors = fn () ->
+  mmap_file (cstr model_path)
+;;
+
+let print_embedding_info = fn header ->
+  match header |> Json.get "model.embed_tokens.weight" with
+  | Some tensor_jo -> (
+      let dtype = tensor_jo |> Json.get "dtype";
+      let shape = tensor_jo |> Json.get "shape";
+      match dtype with
+      | Some dtype -> print `dtype: {Json.string dtype}\n`
+      | _ -> ();
+      match shape with
+      | Some shape -> (
+          print `shape: {shape |> Json.array_get_idx 0 |> Json.int}`;
+          print ` x {shape |> Json.array_get_idx 1 |> Json.int}\n`
+        )
+      | _ -> ()
+    )
+  | _ -> print "embedding tensor not found\n"
+;;
+
+# let embeddings = 
+let empty_model = fn () ->
+  (Ptr 0, 0, Ptr 0, 0, (Ptr 0, 0, 0, Ptr 0),
+   array_fill_zeroes 0 (Ptr 0),
+   array_fill_zeroes 0 0,
+   array_fill_zeroes 0 0)
+;;
+
+let load_model = fn model_path ->
+  match mmap_file_size (cstr model_path) with
+  | 0 -> empty_model ()
+  | file_size -> (
+    let file = mmap_file (cstr model_path);
+    let prefix = mmap_file_read file 0 8;
+    let header_bytes = header_size prefix;
+    let source = read_header file;
+    let header = Json.parse source;
+    print_embedding_info header;
+    match Json.get "model.embed_tokens.weight" header with
+    | Some tensor -> (
+        match map_tensor file file_size (8 + header_bytes) tensor with
+        | Some (data, count, stride, shape) -> (
+            let embedding = (data, count, stride, shape);
+            print `mapped embedding: {count} values, {stride} bytes/value\n`;
+            print `storage: {data}, shape: {shape}\n`;
+            let tensor_total = Json.length header;
+            let tensor_ptrs = array_fill_zeroes tensor_total (Ptr 0);
+            let tensor_counts = array_fill_zeroes tensor_total 0;
+            let tensor_strides = array_fill_zeroes tensor_total 0;
+            for index = 0 .. tensor_total in (
+              let tensor = Json.value index header;
+              match map_tensor file file_size (8 + header_bytes) tensor with
+              | Some (data, count, stride, _) -> (
+                  tensor_ptrs[index] := data;
+                  tensor_counts[index] := count;
+                  tensor_strides[index] := stride;
+                  ()
+                )
+              | _ -> ()
+            );
+            print `registered {tensor_total} header entries\n`;
+            (file, file_size, header, header_bytes, embedding,
+             tensor_ptrs, tensor_counts, tensor_strides)
+          )
+        | _ -> empty_model ()
+      )
+    | _ -> empty_model ()
+  )
+;;
+
+let m = load_model model_path |> as_qwen;
+
+# print `model loaded
+# embedding : {model.tensors[1]}
+# tensor #0: {model.tensors[2]}
+# tensor #1: {model.tensors[3]}
+# \n`
+
+let _ = dlopen "/lib/libcuda.so.1";
+
+let cuInit = extern fn Int -> Int;
+let cuDeviceGet = extern fn Ptr -> Int -> Int;
+let cuDevicePrimaryCtxRetain = extern fn Ptr -> Int -> Int;
+let cuCtxSetCurrent = extern fn Ptr -> Int;
+let cuCtxSynchronize = extern fn () -> Int;
+let cuMemAlloc_v2 = extern fn Ptr -> Uint64 -> Int;
+let cuMemFree = extern fn Uint64 -> Int;
+let cuMemcpyHtoD_v2 = extern fn Uint64 -> Ptr -> Uint64 -> Int;
+let cuMemcpyDtoH_v2 = extern fn Ptr -> Uint64 -> Uint64 -> Int;
+let memcmp = extern fn Ptr -> Ptr -> Uint64 -> Int;
+let cuModuleLoadData = extern fn Ptr -> Ptr -> Int;
+let cuModuleGetFunction = extern fn Ptr -> Ptr -> Ptr -> Int;
+let cuLaunchKernel = extern fn Ptr -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Ptr -> Ptr -> Ptr -> Int;
+
+let Kernels = module () ->
+  let _ = dlopen "/opt/cuda/lib64/libnvrtc.so.13";
+  let nvrtcCreateProgram = extern fn Ptr -> Ptr -> Ptr -> Int -> Ptr -> Ptr -> Int;
+  let nvrtcCompileProgram = extern fn Ptr -> Int -> Ptr -> Int;
+  let nvrtcGetProgramLogSize = extern fn Ptr -> Ptr -> Int;
+  let nvrtcGetProgramLog = extern fn Ptr -> Ptr -> Int;
+  let nvrtcGetPTXSize = extern fn Ptr -> Ptr -> Int;
+  let nvrtcGetPTX = extern fn Ptr -> Ptr -> Int;
+  let nvrtcDestroyProgram = extern fn Ptr -> Int;
+  let int64_to_int = extern fn Uint64 -> Int;
+
+  let compile_kernel = fn src ->
+    let kernel_program = [| Ptr 0 |];
+    let kernel_create_status =
+      nvrtcCreateProgram
+        (cstr kernel_program)
+        (cstr src)
+        (cstr "gather_embedding.cu")
+        0
+        (Ptr 0)
+        (Ptr 0);
+    let kernel_option = cstr "--gpu-architecture=compute_120";
+    let kernel_options = [| kernel_option |];
+    let kernel_compile_status =
+      nvrtcCompileProgram
+        (kernel_program[0])
+        1
+        (cstr kernel_options);
+
+    let kernel_log_size = [| int64_from_int 0 |];
+    let _ = nvrtcGetProgramLogSize
+      (kernel_program[0])
+      (cstr kernel_log_size);
+    let kernel_log = array_fill_zeroes
+      (int64_to_int (kernel_log_size[0]))
+      (char_of_int 0);
+    let _ = nvrtcGetProgramLog (kernel_program[0]) (cstr kernel_log);
+
+    let kernel_ptx_size = [| int64_from_int 0 |];
+    let _ = nvrtcGetPTXSize
+      (kernel_program[0])
+      (cstr kernel_ptx_size);
+    let kernel_ptx = array_fill_zeroes
+      (int64_to_int (kernel_ptx_size[0]))
+      (char_of_int 0);
+    let kernel_ptx_status = nvrtcGetPTX (kernel_program[0]) (cstr kernel_ptx);
+
+    let kernel_module = [| Ptr 0 |];
+    let kernel_module_status =
+      cuModuleLoadData (cstr kernel_module) (cstr kernel_ptx);
+    let kernel_function = [| Ptr 0 |];
+    let kernel_function_status =
+      cuModuleGetFunction
+        (cstr kernel_function)
+        (kernel_module[0])
+        (cstr "gather_embedding");
+    let _ = nvrtcDestroyProgram (cstr kernel_program);
+    (create_status: kernel_create_status,
+     compile_status: kernel_compile_status,
+     ptx_status: kernel_ptx_status,
+     module_status: kernel_module_status,
+     function_status: kernel_function_status,
+     function: kernel_function[0])
+  ;;
+
+;
+
+
+let kernel_source = `
+extern "C" __global__ void gather_embedding(const unsigned short *embedding,
+                                            const int *token_ids,
+                                            unsigned short *output, int hidden) \{
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  int token = blockIdx.y;
+
+  if (index >= hidden) \{
+    return;
+  \}
+
+  output[token * hidden + index] =
+      embedding[(long long)token_ids[token] * hidden + index];
+\}
+`;
+
+
+let upload_embedding = fn model ->
+  let status = cuInit 0;
+
+  let device_out = [| 0 |];
+  let status = cuDeviceGet (cstr device_out) 0;
+
+
+  let context_out = [| Ptr 0 |];
+  let status = cuDevicePrimaryCtxRetain (cstr context_out) @@ device_out[0];
+  let status = cuCtxSetCurrent @@ context_out[0];
+
+
+  let bytes =
+    int64_from_int (model.embedding.count * model.embedding.stride);
+
+  let device_out64 = array_fill_zeroes 1 (int64_from_int 0);
+  let status = cuMemAlloc_v2 (cstr device_out64) bytes;
+
+
+  let status =
+    cuMemcpyHtoD_v2
+      (device_out64[0])
+      model.embedding.data
+      bytes;
+
+  device_out64[0]
+;;
+
+let embedding_device = upload_embedding m;
+
+let kernel = Kernels.compile_kernel kernel_source;
+
+let Tokenizers = module () ->
+
+  let _ = dlopen
+      "libs/hf_tokenizer/target/release/libhf_tokenizer.so";
+
+  let hf_tokenizer_load = extern fn Ptr -> Ptr;
+  let hf_tokenizer_encode = extern fn Ptr -> Ptr -> Ptr -> Int -> Int;
+  let hf_tokenizer_free = extern fn Ptr -> ();
+
+  #  hf_tokenizer_load (cstr "/home/adam/.cache/huggingface/hub/models--Qwen--Qwen2.5-0.5B/snapshots/060db6499f32faf8b98477b0a26969ef7d8b9987/tokenizer.json");
+
+
+  let load = fn path ->
+    hf_tokenizer_load (cstr path)
+  ;;
+
+  let encode = fn tk inp ->
+    let capacity = 256;
+    let ids = array_fill_zeroes capacity 0;
+    match hf_tokenizer_encode
+      tk
+      (cstr inp)
+      (cstr ids)
+      capacity with
+    | c if c < 0 -> (print "tokenizer failed\n"; None) | c -> Some (ids, c) ;;
+  let free = fn tk -> hf_tokenizer_free tk;;
+;
+
+
+let tokenizer = Tokenizers.load "/home/adam/.cache/huggingface/hub/models--Qwen--Qwen2.5-0.5B/snapshots/060db6499f32faf8b98477b0a26969ef7d8b9987/tokenizer.json";
+let ids = Tokenizers.encode tokenizer "blah blah blah...";
+
+let embed_tokens = fn embedding_ptr ids token_count hidden ->
+  let ids_bytes = int64_from_int (token_count * 4);
+  let ids_device = array_fill_zeroes 1 (int64_from_int 0);
+  let output_bytes = int64_from_int (token_count * hidden * 2);
+  let output_device = array_fill_zeroes 1 (int64_from_int 0);
+  let ids_alloc_status = cuMemAlloc_v2 (cstr ids_device) ids_bytes;
+  print `token allocation status {ids_alloc_status}\n`;
+  if ids_alloc_status != 0 then
+    (print "token allocation failed\n"; output_device[0])
+  else (
+  let ids_copy_status = cuMemcpyHtoD_v2 (ids_device[0]) (cstr ids) ids_bytes;
+  print `token copy status {ids_copy_status}\n`;
+  let output_status = cuMemAlloc_v2 (cstr output_device) output_bytes;
+  print `output allocation status {output_status}\n`;
+
+  if kernel.create_status != 0 then
+    print `nvrtcCreateProgram failed: {kernel.create_status}\n`
+  else if kernel.compile_status != 0 then
+    print `nvrtcCompileProgram failed: {kernel.compile_status}\n`
+  else if kernel.ptx_status != 0 then
+    print `nvrtcGetPTX failed: {kernel.ptx_status}\n`
+  else if kernel.module_status != 0 then
+    print `cuModuleLoadData failed: {kernel.module_status}\n`
+  else if kernel.function_status != 0 then
+    print `cuModuleGetFunction failed: {kernel.function_status}\n`
+  else (
+      let embedding_arg = [| embedding_ptr |];
+      let hidden_arg = [| hidden |];
+      let kernel_args = [|
+        cstr embedding_arg,
+        cstr ids_device,
+        cstr output_device,
+        cstr hidden_arg
+      |];
+      let blocks = (hidden + 255) / 256;
+      let launch_status =
+        cuLaunchKernel
+          kernel.function
+          blocks token_count 1
+          256 1 1
+          0
+          (Ptr 0)
+          (cstr kernel_args)
+          (Ptr 0);
+      print `embedding launch status {launch_status}, tokens {token_count}, hidden {hidden}\n`;
+
+      let sync_status = cuCtxSynchronize ();
+      let row_bytes = int64_from_int (hidden * 2);
+      let actual_host = array_fill_zeroes (hidden * 2) (char_of_int 0);
+      let expected_host = array_fill_zeroes
+        (hidden * 2)
+        (char_of_int 0);
+      let mismatches = [| 0 |];
+      for token = 0 .. token_count in (
+        let actual_device = output_device[0] +
+          int64_from_int (token * hidden * 2);
+        let expected_device = embedding_ptr +
+          int64_from_int (ids[token] * hidden * 2);
+        let actual_status = cuMemcpyDtoH_v2
+          (cstr actual_host)
+          actual_device
+          row_bytes;
+        let expected_status = cuMemcpyDtoH_v2
+          (cstr expected_host)
+          expected_device
+          row_bytes;
+        let equal = memcmp
+          (cstr actual_host)
+          (cstr expected_host)
+          row_bytes;
+        let actual_word = char_to_int (actual_host[0]) +
+          lshift (char_to_int (actual_host[1])) 8;
+        let expected_word = char_to_int (expected_host[0]) +
+          lshift (char_to_int (expected_host[1])) 8;
+        print `verify token {token} id {ids[token]}, actual {actual_word}, expected {expected_word}, copy {actual_status}/{expected_status}, memcmp {equal}\n`;
+        if actual_status != 0 || expected_status != 0 || equal != 0 then
+          (mismatches[0] := mismatches[0] + 1; ())
+        else
+          ()
+      );
+      print `embedding verification sync {sync_status}, mismatched rows {mismatches[0]}\n`
+  );
+  output_device[0]
+  )
+;;
+
+match ids with
+| Some (token_ids, token_count) -> (
+    let _ = embed_tokens embedding_device token_ids token_count 896;
+    ()
+  )
+| None -> print "tokenization failed\n"

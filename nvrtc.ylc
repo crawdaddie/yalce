@@ -1,0 +1,62 @@
+let _ = dlopen "/opt/cuda/lib64/libnvrtc.so.13";
+
+let strlen = extern fn Ptr -> Int;
+let from_cstr = extern fn Int -> Ptr -> String;
+let int64_from_int = extern fn Int -> Uint64;
+
+let nvrtcCreateProgram = extern fn Ptr -> Ptr -> Ptr -> Int -> Ptr -> Ptr -> Int;
+let nvrtcCompileProgram = extern fn Ptr -> Int -> Ptr -> Int;
+let nvrtcGetProgramLogSize = extern fn Ptr -> Ptr -> Int;
+let nvrtcGetProgramLog = extern fn Ptr -> Ptr -> Int;
+let nvrtcGetPTXSize = extern fn Ptr -> Ptr -> Int;
+let nvrtcGetPTX = extern fn Ptr -> Ptr -> Int;
+let nvrtcDestroyProgram = extern fn Ptr -> Int;
+
+let source = `
+extern "C" __global__ void gather_embedding(const unsigned short *embedding,
+                                            const int *token_ids,
+                                            unsigned short *output, int hidden) \{
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  int token = blockIdx.y;
+
+  if (index >= hidden) \{
+    return;
+  \}
+
+  output[token * hidden + index] =
+      embedding[(long long)token_ids[token] * hidden + index];
+\}
+`;
+
+
+let program = [| Ptr 0 |];
+let name = cstr "gather_embedding.cu";
+let status =
+  nvrtcCreateProgram
+    (cstr program)
+    (cstr source)
+    name
+    0
+    (Ptr 0)
+    (Ptr 0);
+print `create status {status}\n`;
+
+let option = cstr "--gpu-architecture=compute_120";
+let options = [| option |];
+let compile_status = nvrtcCompileProgram (program[0]) 1 (cstr options);
+print `compile status {compile_status}\n`;
+
+let log = array_fill_zeroes 65536 (char_of_int 0);
+let log_status = nvrtcGetProgramLog (program[0]) (cstr log);
+print `log status {log_status}: {from_cstr (strlen (cstr log)) (cstr log)}\n`;
+
+let ptx_size = [| int64_from_int 0 |];
+let size_status = nvrtcGetPTXSize (program[0]) (cstr ptx_size);
+print `ptx size status {size_status}, bytes {ptx_size[0]}\n`;
+
+let ptx = array_fill_zeroes 65536 (char_of_int 0);
+let ptx_status = nvrtcGetPTX (program[0]) (cstr ptx);
+print `ptx status {ptx_status}, text length {strlen (cstr ptx)}\n`;
+
+let destroy_status = nvrtcDestroyProgram (cstr program);
+print `destroy status {destroy_status}\n`
