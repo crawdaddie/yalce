@@ -1,0 +1,8 @@
+import libs/asyncio/Asyncio;
+
+
+let a = @Async fn () ->
+  let z = await sleep 0.2 1;
+  z
+;;
+# print `{typeof Asyncio.Future}`
