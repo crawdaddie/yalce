@@ -1,0 +1,43 @@
+type Seq = 
+  | Val of Double
+  | ValInt of Int
+  | SubSeq of List of Seq
+  ;
+
+
+let parse_seq = fn ps st -> 
+  match array_size st with
+  | 0 -> ps
+  | _ -> 
+    (
+      let ch = st[0];
+      print `{ch}\n`;
+      match ch with
+        | '[' -> ()
+        | ']' -> ()
+        | '{' -> ()
+        | '}' -> ()
+        | '(' -> ()
+        | ')' -> ()
+        | ' ' -> ()
+        | x  -> ()
+        | _ -> ()
+        ;
+    
+      parse_seq (ps) (st[1 ..])
+    )
+  # match st[0] with
+  # | _ ->
+;;
+let seq = fn st ->
+  let s = parse_seq 0 st;
+  s
+;;
+
+let y = seq `
+3 2 1
+`;
+
+# let x = seq `1 2 3 [3 4] %[2.5 6] {y}`;
+
+
