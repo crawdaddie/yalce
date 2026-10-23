@@ -1,0 +1,31 @@
+let bind = fn f: (T -> Option of U) o: (Option of T) ->
+  match o with
+  | Some t -> f t
+  | None -> None
+;;
+
+let map = fn f: (T -> U) o: (Option of T) ->
+  match o with
+  | Some t -> Some @@ f t
+  | None -> None
+;;
+let or_else = fn f: (() -> Option of T) o: (Option of T) -> 
+
+  match o with
+  | Some t -> o
+  | None -> f ()
+;;
+# Invoke callbacks directly to preserve captures through specialization.
+let (>>=) = fn o: (Option of T) f: (T -> Option of U) ->
+  match o with
+  | Some t -> f t
+  | None -> None
+;;
+
+let (<&>) = fn o: (Option of T) f: (T -> U) ->
+  match o with
+  | Some t -> Some (f t)
+  | None -> None
+;;
+
+

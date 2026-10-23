@@ -223,6 +223,16 @@ $(MIR_OPERAND_METADATA_TEST_TARGET): $(MIR_OPERAND_METADATA_TEST_OBJ) $(RANGE_SE
 test_mir_operand_metadata: $(MIR_OPERAND_METADATA_TEST_TARGET)
 	$(MIR_OPERAND_METADATA_TEST_TARGET)
 
+.PHONY: test_rc_cache
+.PHONY: test_type_hash
+test_type_hash: | $(BUILD_DIR)
+	$(CC) -g -Wall -Wextra -Ilang test/test_type_hash.c lang/types/type_hash.c -o $(BUILD_DIR)/test_type_hash
+	$(BUILD_DIR)/test_type_hash
+
+test_rc_cache: | $(BUILD_DIR)
+	$(LANG_CC) -ffunction-sections -fdata-sections test/test_rc_cache.c -Xlinker $(if $(filter Darwin,$(shell uname -s)),-dead_strip,--gc-sections) -o $(BUILD_DIR)/test_rc_cache
+	$(BUILD_DIR)/test_rc_cache
+
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -f $(LEX_OUTPUT) $(YACC_OUTPUT)

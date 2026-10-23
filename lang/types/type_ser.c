@@ -54,7 +54,7 @@ void print_tc_list_to_stream(Type *t, FILE *stream) {
   }
 }
 
-void print_type_to_stream(Type *t, FILE *stream) {
+static void print_type_nested(Type *t, FILE *stream, int depth) {
   if (t == NULL) {
     fprintf(stream, "null");
     return;
@@ -89,14 +89,14 @@ void print_type_to_stream(Type *t, FILE *stream) {
     }
 
     if (is_list_type(t)) {
-      print_type_to_stream(type_of_list(t), stream);
+      print_type_nested(type_of_list(t), stream, depth);
       fprintf(stream, "[]");
       break;
     }
 
     if (is_array_type(t)) {
       fprintf(stream, "Array of ");
-      print_type_to_stream(t->data.T_CONS.args[0], stream);
+      print_type_nested(t->data.T_CONS.args[0], stream, depth);
       // fprintf(stream, "[]");
       break;
     }
@@ -113,7 +113,7 @@ void print_type_to_stream(Type *t, FILE *stream) {
           if (t->data.T_CONS.names != NULL) {
             fprintf(stream, "%s: ", t->data.T_CONS.names[i]);
           }
-          print_type_to_stream(t->data.T_CONS.args[i], stream);
+          print_type_nested(t->data.T_CONS.args[i], stream, depth);
           fprintf(stream, "\n");
         }
       }
@@ -127,7 +127,7 @@ void print_type_to_stream(Type *t, FILE *stream) {
         if (is_named) {
           fprintf(stream, "%s: ", t->data.T_CONS.names[i]);
         }
-        print_type_to_stream(t->data.T_CONS.args[i], stream);
+        print_type_nested(t->data.T_CONS.args[i], stream, depth);
         // if (i < t->data.T_CONS.num_args - 1) {
         fprintf(stream, ", ");
         // }
@@ -189,7 +189,7 @@ void print_type_to_stream(Type *t, FILE *stream) {
         if (t->data.T_CONS.names) {
           fprintf(stream, "%s: ", t->data.T_CONS.names[i]);
         }
-        print_type_to_stream(t->data.T_CONS.args[i], stream);
+        print_type_nested(t->data.T_CONS.args[i], stream, depth);
         if (i < t->data.T_CONS.num_args - 1) {
           fprintf(stream, ", ");
         }
@@ -199,12 +199,12 @@ void print_type_to_stream(Type *t, FILE *stream) {
     break;
   }
   case T_SUM: {
-    fprintf(stream, "%s\n", t->data.T_CONS.name);
+    // Indent nested variants without adding blank lines between branches.
+    const int indent_width = 2;
+    fprintf(stream, "%s", t->data.T_CONS.name);
     for (int i = 0; i < t->data.T_CONS.num_args; i++) {
-      fprintf(stream, "  | ");
-      print_type_to_stream(t->data.T_CONS.args[i], stream);
-
-      fprintf(stream, "\n");
+      fprintf(stream, "\n%*s| ", (depth + 1) * indent_width, "");
+      print_type_nested(t->data.T_CONS.args[i], stream, depth + 1);
     }
 
     break;
@@ -237,14 +237,14 @@ void print_type_to_stream(Type *t, FILE *stream) {
 
     if (is_closure(fn)) {
       fprintf(stream, "[closure over ");
-      print_type_to_stream(fn->closure_meta, stream);
+      print_type_nested(fn->closure_meta, stream, depth);
       fprintf(stream, "] ");
     }
 
-    print_type_to_stream(fn->data.T_FN.from, stream);
+    print_type_nested(fn->data.T_FN.from, stream, depth);
 
     fprintf(stream, " -> ");
-    print_type_to_stream(fn->data.T_FN.to, stream);
+    print_type_nested(fn->data.T_FN.to, stream, depth);
     fprintf(stream, ")");
     break;
   }
@@ -258,12 +258,12 @@ void print_type_to_stream(Type *t, FILE *stream) {
       if (te->scheme_vars) {
         fprintf(stream, "∀ ");
         for (TypeList *v = te->scheme_vars; v; v = v->next) {
-          print_type_to_stream(v->type, stream);
+          print_type_nested(v->type, stream, depth);
           fprintf(stream, ", ");
         }
         fprintf(stream, ": ");
       }
-      print_type_to_stream(te->type, stream);
+      print_type_nested(te->type, stream, depth);
       fprintf(stream, "\n");
     }
     break;
@@ -272,6 +272,10 @@ void print_type_to_stream(Type *t, FILE *stream) {
 }
 
 // Updated print functions that use the stream-based approach
+void print_type_to_stream(Type *t, FILE *stream) {
+  print_type_nested(t, stream, 0);
+}
+
 void print_type(Type *t) {
   if (!t) {
     printf("null\n");

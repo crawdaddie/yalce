@@ -306,20 +306,12 @@ let function_lines = fn expression series_title -> (kind: 1, source: expression,
 let function_lines_lw = fn expression width: (Int) series_title -> (kind: 1, source: expression, style: "", name: series_title, style_kind: 1, linewidth: width, point_type: 7, point_size: 1.0);;
 
 let emit_style = fn spec: (SeriesSpec) gp ->
-  if spec.style_kind == 1 then (
-    fprintf gp "with lines";
-    if spec.linewidth > 1 then fprintf gp ` linewidth {spec.linewidth}` else 0
-  ) else (
-    if spec.style_kind == 2 then (
-      fprintf gp `with points pointtype {spec.point_type} pointsize {spec.point_size}`
-    ) else (
-      if spec.style_kind == 3 then (
-        fprintf gp "with vectors nohead linewidth 1"
-      ) else (
-        fprintf gp spec.style
-      )
-    )
-  );
+  # Flat branches avoid nested conditional joins in MIR lowering.
+  match spec.style_kind with
+  | 1 -> (fprintf gp `with lines linewidth {spec.linewidth}`; ())
+  | 2 -> (fprintf gp `with points pointtype {spec.point_type} pointsize {spec.point_size}`; ())
+  | 3 -> (fprintf gp "with vectors nohead linewidth 1"; ())
+  | _ -> (fprintf gp spec.style; ());
   gp
 ;;
 
@@ -486,7 +478,7 @@ let plot_y_many = fn plot_title y_label series ->
       if i < (n - 1) then plot_separator gp else plot_newline gp
     );
     for i = 0 .. n in (
-      emit_y series[i] gp
+      emit_y (series[i]) gp
     );
     gp
   )
@@ -502,7 +494,7 @@ let plot_xy_many = fn plot_title x_label y_label xs ys_series ->
       if i < (n - 1) then plot_separator gp else plot_newline gp
     );
     for i = 0 .. n in (
-      emit_xy xs ys_series[i] gp
+      emit_xy xs (ys_series[i]) gp
     );
     gp
   )
@@ -566,4 +558,28 @@ let plot_soundfile_data = fn data samplerate max_points ->
 
 let plot_soundfile = fn sf max_points ->
   plot_soundfile_data sf.data sf.samplerate max_points
+;;
+
+# Emit dynamic commands directly; MIR supports interpolation in fprintf.
+let multiplot = fn title: (String) rows: (Int) columns: (Int) gp ->
+  fprintf gp `set multiplot layout {rows},{columns} title '`;
+  fprintf gp title;
+  fprintf gp "'\n";
+  gp
+;;
+
+let binary_row = fn filename: (String) width: (Int) row: (Int) gp ->
+  let float_bytes = 4;
+  let offset = row * width * float_bytes;
+  fprintf gp "'";
+  fprintf gp filename;
+  fprintf gp `' binary array={width} skip={offset} using 1 with lines title 'token {row}'`;
+  gp
+;;
+
+let binary_image = fn filename: (String) width: (Int) height: (Int) gp ->
+  fprintf gp "plot '";
+  fprintf gp filename;
+  fprintf gp `' binary array=({width},{height}) using 1 with image\n`;
+  gp
 ;;

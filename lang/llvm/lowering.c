@@ -22,6 +22,61 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+typedef struct {
+  double resolve_seconds;
+  size_t hits;
+  size_t misses;
+  size_t full;
+  size_t alias_searches;
+  size_t shape_searches;
+  size_t drop_bodies;
+} LowerRcProfile;
+
+static LowerRcProfile lower_rc_profile;
+
+// Monotonic wall time includes waits; disabled profiling avoids clock reads.
+static double lower_profile_now(void) {
+  if (!ylc_config.profile_lowering) {
+    return 0;
+  }
+
+  static const double ns_per_second = 1000000000.0;
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  return now.tv_sec + now.tv_nsec / ns_per_second;
+}
+
+static void lower_profile_report(const char *stage, double start) {
+  if (!ylc_config.profile_lowering) {
+    return;
+  }
+
+  static const double ms_per_second = 1000.0;
+  fprintf(stderr, "[lowering] %12.3f ms  %s\n",
+          (lower_profile_now() - start) * ms_per_second, stage);
+}
+
+// Snapshot deltas attribute shared helper work to the requesting function.
+static void lower_rc_report(const char *name, LowerRcProfile before) {
+  if (!ylc_config.profile_lowering) {
+    return;
+  }
+
+  static const double ms_per_second = 1000.0;
+  fprintf(stderr,
+          "[lowering-rc] %12.3f ms  %s | hits=%zu misses=%zu full=%zu "
+          "alias-searches=%zu shape-searches=%zu drop-bodies=%zu\n",
+          (lower_rc_profile.resolve_seconds - before.resolve_seconds) *
+              ms_per_second,
+          name, lower_rc_profile.hits - before.hits,
+          lower_rc_profile.misses - before.misses,
+          lower_rc_profile.full - before.full,
+          lower_rc_profile.alias_searches - before.alias_searches,
+          lower_rc_profile.shape_searches - before.shape_searches,
+          lower_rc_profile.drop_bodies - before.drop_bodies);
+}
 
 typedef struct {
   LLVMValueRef *items;
@@ -90,65 +145,100 @@ static LLVMTypeRef lower_mir_generic_ptr_type(LLVMModuleRef module);
 static Type *lower_mir_resolve_rc_type(Type *type, JITLangCtx *ctx);
 static Type *lower_mir_resolve_rc_type_uncached(Type *type, JITLangCtx *ctx);
 
-/* Per-program memoization cache for lower_mir_resolve_rc_type. The same Type*
-   is shared across all MIR values of a given type, so resolving it once and
-   reusing the result avoids repeatedly running resolve_type_in_env +
-   deep_copy_type + the program-wide equivalent-alias search for the hundreds
-   of RC dup/drop markers that lower the same types. */
-#define LOWER_MIR_RC_CACHE_CAP 1024
-static struct {
+// Keep pointer-identity mappings below half capacity to bound probe lengths.
+enum { RC_CACHE_INITIAL_CAP = 1024, RC_CACHE_GROWTH = 2 };
+typedef struct {
   Type *in;
   Type *out;
-} lower_mir_rc_cache[LOWER_MIR_RC_CACHE_CAP];
-static bool lower_mir_rc_cache_valid[LOWER_MIR_RC_CACHE_CAP];
+} RcCacheEntry;
+
+static RcCacheEntry *lower_mir_rc_cache;
+static size_t rc_cache_capacity;
+static size_t rc_cache_count;
+
+static size_t rc_cache_slot(RcCacheEntry *entries, size_t capacity,
+                            Type *type) {
+  static const uintptr_t hash_multiplier = 0x9E3779B1u;
+  static const unsigned hash_shift = 16;
+  uintptr_t hash = (uintptr_t)type;
+  hash ^= hash >> hash_shift;
+  hash *= hash_multiplier;
+  size_t slot = hash & (capacity - 1);
+  while (entries[slot].in && entries[slot].in != type) {
+    slot = (slot + 1) & (capacity - 1);
+  }
+  return slot;
+}
+
+static bool rc_cache_grow(void) {
+  if (rc_cache_capacity > SIZE_MAX / RC_CACHE_GROWTH) {
+    return false;
+  }
+  size_t capacity = rc_cache_capacity
+                        ? rc_cache_capacity * RC_CACHE_GROWTH
+                        : RC_CACHE_INITIAL_CAP;
+  if (capacity > SIZE_MAX / sizeof(RcCacheEntry)) {
+    return false;
+  }
+  RcCacheEntry *entries = calloc(capacity, sizeof(*entries));
+  if (!entries) {
+    return false;
+  }
+
+  // Rehash before swapping so allocation failure leaves existing hits intact.
+  for (size_t i = 0; i < rc_cache_capacity; i++) {
+    RcCacheEntry entry = lower_mir_rc_cache[i];
+    if (!entry.in) {
+      continue;
+    }
+    entries[rc_cache_slot(entries, capacity, entry.in)] = entry;
+  }
+  free(lower_mir_rc_cache);
+  lower_mir_rc_cache = entries;
+  rc_cache_capacity = capacity;
+  return true;
+}
 
 static void lower_mir_rc_cache_reset(void) {
-  memset(lower_mir_rc_cache_valid, 0, sizeof(lower_mir_rc_cache_valid));
+  // Reuse storage across REPL inputs, but never retain their type mappings.
+  if (lower_mir_rc_cache) {
+    memset(lower_mir_rc_cache, 0,
+           rc_cache_capacity * sizeof(*lower_mir_rc_cache));
+  }
+  rc_cache_count = 0;
 }
 
 static Type *lower_mir_rc_cache_get(Type *type) {
-  if (!type) {
+  if (!type || !rc_cache_capacity) {
     return NULL;
   }
-  uintptr_t h = (uintptr_t)type;
-  h ^= h >> 16;
-  h *= 0x9E3779B1u;
-  size_t idx = h & (LOWER_MIR_RC_CACHE_CAP - 1);
-  for (size_t probe = 0; probe < LOWER_MIR_RC_CACHE_CAP; probe++) {
-    size_t i = (idx + probe) & (LOWER_MIR_RC_CACHE_CAP - 1);
-    if (!lower_mir_rc_cache_valid[i]) {
-      return NULL;
-    }
-    if (lower_mir_rc_cache[i].in == type) {
-      return lower_mir_rc_cache[i].out;
-    }
-  }
-  return NULL;
+  size_t slot = rc_cache_slot(lower_mir_rc_cache, rc_cache_capacity, type);
+  return lower_mir_rc_cache[slot].out;
 }
 
 static void lower_mir_rc_cache_put(Type *type, Type *resolved) {
   if (!type) {
     return;
   }
-  uintptr_t h = (uintptr_t)type;
-  h ^= h >> 16;
-  h *= 0x9E3779B1u;
-  size_t idx = h & (LOWER_MIR_RC_CACHE_CAP - 1);
-  for (size_t probe = 0; probe < LOWER_MIR_RC_CACHE_CAP; probe++) {
-    size_t i = (idx + probe) & (LOWER_MIR_RC_CACHE_CAP - 1);
-    if (!lower_mir_rc_cache_valid[i]) {
-      lower_mir_rc_cache[i].in = type;
-      lower_mir_rc_cache[i].out = resolved;
-      lower_mir_rc_cache_valid[i] = true;
-      return;
-    }
-    if (lower_mir_rc_cache[i].in == type) {
-      lower_mir_rc_cache[i].out = resolved;
+  if (rc_cache_capacity) {
+    size_t slot = rc_cache_slot(lower_mir_rc_cache, rc_cache_capacity, type);
+    if (lower_mir_rc_cache[slot].in) {
+      lower_mir_rc_cache[slot].out = resolved;
       return;
     }
   }
-  /* Cache full; drop the new entry (cache is advisory, miss falls back to the
-     slow path). This only happens with >1024 distinct resolved types. */
+
+  if (rc_cache_count >= rc_cache_capacity / RC_CACHE_GROWTH &&
+      !rc_cache_grow()) {
+    // Caching is optional; resolution still works if growth cannot allocate.
+    if (ylc_config.profile_lowering) {
+      lower_rc_profile.full++;
+    }
+    return;
+  }
+  size_t slot = rc_cache_slot(lower_mir_rc_cache, rc_cache_capacity, type);
+  lower_mir_rc_cache[slot] = (RcCacheEntry){.in = type, .out = resolved};
+  rc_cache_count++;
 }
 
 typedef struct MirDlopenCacheEntry {
@@ -4801,6 +4891,9 @@ static Type *lower_mir_find_rc_alias_type(const char *alias) {
   if (!program || !alias) {
     return NULL;
   }
+  if (ylc_config.profile_lowering) {
+    lower_rc_profile.alias_searches++;
+  }
 
   for (size_t i = 0; i < program->functions.len; i++) {
     MirFunction *fn =
@@ -5027,6 +5120,9 @@ static Type *lower_mir_find_equivalent_rc_alias_type(Type *target) {
   if (!program || !target) {
     return NULL;
   }
+  if (ylc_config.profile_lowering) {
+    lower_rc_profile.shape_searches++;
+  }
 
   for (size_t i = 0; i < program->functions.len; i++) {
     MirFunction *fn =
@@ -5162,13 +5258,22 @@ static Type *lower_mir_resolve_rc_type(Type *type, JITLangCtx *ctx) {
     return type;
   }
 
+  double start = lower_profile_now();
   Type *cached = lower_mir_rc_cache_get(type);
   if (cached) {
+    if (ylc_config.profile_lowering) {
+      lower_rc_profile.hits++;
+      lower_rc_profile.resolve_seconds += lower_profile_now() - start;
+    }
     return cached;
   }
 
   Type *result = lower_mir_resolve_rc_type_uncached(type, ctx);
   lower_mir_rc_cache_put(type, result);
+  if (ylc_config.profile_lowering) {
+    lower_rc_profile.misses++;
+    lower_rc_profile.resolve_seconds += lower_profile_now() - start;
+  }
   return result;
 }
 
@@ -5380,6 +5485,19 @@ static char *lower_mir_drop_type_fragment(Type *type) {
   }
   case T_FN: {
     char *result = strdup("Fn");
+    // Cleanup depends on captures, even when callable signatures match.
+    if (type->closure_meta) {
+      char *env = lower_mir_drop_type_fragment(type->closure_meta);
+      char *closure = NULL;
+      if (!env || asprintf(&closure, "Closure_Env_%s", env) < 0) {
+        free(result);
+        free(env);
+        return NULL;
+      }
+      free(result);
+      free(env);
+      result = closure;
+    }
     Type *cur = type;
     while (cur && cur->kind == T_FN) {
       char *arg_frag = lower_mir_drop_type_fragment(cur->data.T_FN.from);
@@ -5922,6 +6040,9 @@ static LLVMValueRef lower_mir_ensure_drop_fn(Type *type, LLVMModuleRef module,
   LLVMValueRef dup_hook = lower_mir_rc_hook(module, "__ylc_dup");
   JITLangCtx dummy_ctx = {0};
   JITLangCtx *drop_ctx = ctx ? ctx : &dummy_ctx;
+  if (ylc_config.profile_lowering) {
+    lower_rc_profile.drop_bodies++;
+  }
   lower_mir_build_drop_fn_body(type, fn, module, drop_ctx);
   (void)dup_hook;
   return fn;
@@ -7239,6 +7360,8 @@ LLVMValueRef lower_mir(MirProgram *prog, LLVMModuleRef module,
   if (!prog || !module || !builder) {
     return NULL;
   }
+  double profile_start = lower_profile_now();
+  LowerRcProfile profile_before = lower_rc_profile;
   MirProgram *saved_current_program = lower_mir_current_program;
   lower_mir_current_program = prog;
   lower_mir_rc_cache_reset();
@@ -7260,13 +7383,17 @@ LLVMValueRef lower_mir(MirProgram *prog, LLVMModuleRef module,
     return NULL;
   }
 
+  double stage_start = lower_profile_now();
   if (!lower_mir_link_llvm_bitcode_dependencies(prog, module)) {
+    lower_profile_report("bitcode linking (failed)", stage_start);
     free(lctx.functions);
     free(lctx.function_types);
     lower_mir_current_program = saved_current_program;
     return NULL;
   }
+  lower_profile_report("bitcode linking", stage_start);
 
+  stage_start = lower_profile_now();
   MirFunction *top_fn = NULL;
   for (size_t i = 0; i < prog->functions.len; i++) {
     MirFunction *fn = prog->functions.items ? prog->functions.items[i] : NULL;
@@ -7279,6 +7406,7 @@ LLVMValueRef lower_mir(MirProgram *prog, LLVMModuleRef module,
     }
     lower_mir_declare_function(&lctx, fn, module);
   }
+  lower_profile_report("function declarations", stage_start);
 
   if (!top_fn) {
     free(lctx.functions);
@@ -7287,6 +7415,7 @@ LLVMValueRef lower_mir(MirProgram *prog, LLVMModuleRef module,
     return lower_mir_void_stub(module, builder);
   }
 
+  stage_start = lower_profile_now();
   for (size_t i = 0; i < prog->functions.len; i++) {
     MirFunction *fn = prog->functions.items ? prog->functions.items[i] : NULL;
     if (!fn || !lctx.functions[fn->id]) {
@@ -7297,7 +7426,12 @@ LLVMValueRef lower_mir(MirProgram *prog, LLVMModuleRef module,
       continue;
     }
 
+    // Report each body to expose expensive functions before lowering finishes.
+    LowerRcProfile rc_before = lower_rc_profile;
+    double body_start = lower_profile_now();
     bool ok = lower_mir_function_body(&lctx, fn, module, builder);
+    lower_profile_report(fn->name ? fn->name : "<anonymous>", body_start);
+    lower_rc_report(fn->name ? fn->name : "<anonymous>", rc_before);
     if (!ok) {
       free(lctx.functions);
       free(lctx.function_types);
@@ -7305,11 +7439,14 @@ LLVMValueRef lower_mir(MirProgram *prog, LLVMModuleRef module,
       return NULL;
     }
   }
+  lower_profile_report("function bodies (includes reporting)", stage_start);
 
   LLVMValueRef top =
       top_fn->id < lctx.functions_len ? lctx.functions[top_fn->id] : NULL;
   free(lctx.functions);
   free(lctx.function_types);
   lower_mir_current_program = saved_current_program;
+  lower_profile_report("total (includes reporting)", profile_start);
+  lower_rc_report("total", profile_before);
   return top ? top : lower_mir_void_stub(module, builder);
 }

@@ -2146,6 +2146,9 @@ void add_constraint(TICtx *result, Type *var, Type *type) {
   if (!var || !type) {
     return;
   }
+  // Nested let bindings may have solved variables retained by their caller.
+  var = apply_subst_to_type(result->subst, var);
+  type = apply_subst_to_type(result->subst, type);
   for (Constraint *c = result->constraints; c; c = c->next) {
     if (c->kind == CONSTRAINT_EQUALITY &&
         types_equal(c->data.EQUALITY.left, var) &&

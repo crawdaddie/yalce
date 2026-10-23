@@ -3150,6 +3150,14 @@ static const char *mir_type_symbol_fragment(MirArena *arena, Type *type) {
   }
   case T_FN: {
     const char *fragment = type->closure_meta ? "Closure" : "Fn";
+    // Captured layouts distinguish callbacks with identical signatures.
+    if (type->closure_meta) {
+      const char *env = mir_type_symbol_fragment(arena, type->closure_meta);
+      if (!env) {
+        return NULL;
+      }
+      fragment = mir_arena_printf(arena, "%s_Env_%s", fragment, env);
+    }
     Type *cur = type;
     while (cur && cur->kind == T_FN) {
       const char *arg_fragment =
@@ -3179,6 +3187,15 @@ static const char *mir_specialized_function_name(MirArena *arena,
   }
 
   const char *name = mir_symbol_sanitize(arena, base_name, "anonymous");
+  // Closure implementations also specialize on their hidden environment.
+  if (callee_type->closure_meta) {
+    const char *env =
+        mir_type_symbol_fragment(arena, callee_type->closure_meta);
+    if (!env) {
+      return NULL;
+    }
+    name = mir_arena_printf(arena, "%s.Env_%s", name, env);
+  }
   Type *cur = callee_type;
   while (cur && cur->kind == T_FN) {
     const char *arg_fragment =
@@ -3267,6 +3284,9 @@ static Type *mir_type_subst_lookup(MirTypeSubst *subst, Type *var) {
   return NULL;
 }
 
+static bool mir_collect_type_subst(MirArena *arena, MirTypeSubst **subst,
+                                   Type *generic, Type *concrete);
+
 static bool mir_type_subst_bind(MirArena *arena, MirTypeSubst **subst,
                                 Type *var, Type *concrete) {
   if (!arena || !subst || !var || var->kind != T_VAR || !concrete) {
@@ -3275,7 +3295,13 @@ static bool mir_type_subst_bind(MirArena *arena, MirTypeSubst **subst,
 
   Type *existing = mir_type_subst_lookup(*subst, var);
   if (existing) {
-    return types_equal(existing, concrete);
+    if (types_equal(existing, concrete)) {
+      return true;
+    }
+    // Concrete aliases must agree structurally across repeated parameters.
+    return !mir_type_has_type_vars(existing) &&
+           !mir_type_has_type_vars(concrete) &&
+           mir_collect_type_subst(arena, subst, existing, concrete);
   }
 
   MirTypeSubst *entry =
@@ -3319,7 +3345,8 @@ static bool mir_collect_type_subst(MirArena *arena, MirTypeSubst **subst,
                                   concrete->data.T_FN.to);
   case T_CONS:
   case T_SUM:
-    if (generic->data.T_CONS.num_args != concrete->data.T_CONS.num_args) {
+    if (strcmp(generic->data.T_CONS.name, concrete->data.T_CONS.name) != 0 ||
+        generic->data.T_CONS.num_args != concrete->data.T_CONS.num_args) {
       return false;
     }
     for (int i = 0; i < generic->data.T_CONS.num_args; i++) {
@@ -3460,6 +3487,7 @@ static MirFunction *mir_specialize_fn_ref_instr(MirProgram *program,
 }
 
 static MirFunction *mir_specialize_closure_impl_fn_ref(MirProgram *program,
+                                                       MirArena *arena,
                                                        MirInstr *fn_ref,
                                                        Type *closure_type,
                                                        Type **out_impl_type) {
@@ -3472,7 +3500,8 @@ static MirFunction *mir_specialize_closure_impl_fn_ref(MirProgram *program,
     return NULL;
   }
 
-  Type *impl_type = mir_closure_callable_type(program->arena, closure_type);
+  // Callback signatures share the owning function's lifetime across REPL inputs.
+  Type *impl_type = mir_closure_callable_type(arena, closure_type);
   if (out_impl_type) {
     *out_impl_type = impl_type;
   }
@@ -3528,12 +3557,12 @@ static MirFunction *mir_specialize_captured_fn(MirBuilder *builder,
   Type *impl_type = NULL;
   MirFunction *specialized = NULL;
   if (closure_def) {
-    specialized = mir_specialize_closure_impl_fn_ref(builder->program, fn_ref,
-                                                     expected_type, &impl_type);
+    specialized = mir_specialize_closure_impl_fn_ref(
+        builder->program, builder->fn->arena, fn_ref, expected_type, &impl_type);
   } else {
     impl_type =
         is_closure(expected_type)
-            ? mir_closure_callable_type(builder->program->arena, expected_type)
+            ? mir_closure_callable_type(builder->fn->arena, expected_type)
             : expected_type;
     specialized =
         mir_specialize_fn_ref_instr(builder->program, fn_ref, impl_type);
@@ -3803,42 +3832,103 @@ static void mir_remap_deferred_phi_incomings(MirFunction *fn,
   }
 }
 
-static void mir_predict_clone_value_ids(MirFunction *source, MirFunction *fn,
-                                        MirTypeSubst *subst,
-                                        MirValueId *value_map,
-                                        size_t value_map_len) {
-  if (!source || !fn || !value_map) {
-    return;
+static MirValueId *mir_reserve_clone_values(MirFunction *source, MirFunction *fn,
+                                            MirTypeSubst *subst,
+                                            MirValueId *value_map) {
+  // Reserve forward references independently of instructions added by lowering.
+  MirValueId *reserved = mir_arena_alloc(
+      fn->arena, sizeof(MirValueId) * source->values.len, MIR_ALIGNOF(MirValueId));
+  if (!reserved) {
+    return NULL;
   }
+  for (size_t i = 0; i < source->values.len; i++) {
+    if (value_map[i] == MIR_NO_VALUE) {
+      MirValue *value = &source->values.items[i];
+      value_map[i] = mir_function_add_value(
+          fn, mir_substitute_type(fn->arena, subst, value->type), value->origin);
+    }
+    reserved[i] = value_map[i];
+  }
+  return reserved;
+}
 
-  MirValueId next_value = (MirValueId)fn->values.len;
-  for (size_t i = 0; i < source->blocks.len; i++) {
-    MirBlock *block = source->blocks.items[i];
-    if (!block) {
+static MirValueId mir_relocate_value(MirValueId value, MirRemapOperandCtx *ctx) {
+  return value < ctx->value_map_len ? ctx->value_map[value] : value;
+}
+
+static MirValueId mir_relocate_operand(MirInstr *instr, MirOperand operand,
+                                       void *ctx) {
+  (void)instr;
+  return mir_relocate_value(operand.value, ctx);
+}
+
+static bool mir_relocate_clone_values(MirFunction *fn, MirValueId *reserved,
+                                      MirValueId *value_map, size_t len) {
+  // Resolve reserved references once all actual results are known.
+  MirValueId *relocations = mir_arena_alloc(
+      fn->arena, sizeof(MirValueId) * len, MIR_ALIGNOF(MirValueId));
+  if (!relocations) {
+    return false;
+  }
+  for (size_t i = 0; i < len; i++) {
+    relocations[reserved[i]] = value_map[i];
+  }
+  MirRemapOperandCtx ctx = {.value_map = relocations, .value_map_len = len};
+  for (size_t i = 0; i < fn->blocks.len; i++) {
+    MirBlock *block = fn->blocks.items[i];
+    for (size_t j = 0; j < block->instrs.len; j++) {
+      mir_instr_rewrite_operands(&block->instrs.items[j], mir_relocate_operand,
+                                &ctx);
+    }
+    block->term.value = mir_relocate_value(block->term.value, &ctx);
+    block->term.cond = mir_relocate_value(block->term.cond, &ctx);
+    for (size_t j = 0; j < block->term.args.len; j++) {
+      block->term.args.items[j] =
+          mir_relocate_value(block->term.args.items[j], &ctx);
+    }
+  }
+  return true;
+}
+
+static void mir_split_returned_calls(MirBuilder *builder, MirInstr *call) {
+  // Call the factory first, then apply remaining arguments to its closure.
+  Type *cursor = call->data.call.callee_type;
+  for (size_t i = 1; i < call->data.call.operands.len && cursor &&
+                     cursor->kind == T_FN; i++) {
+    cursor = cursor->data.T_FN.to;
+    if (!cursor || !is_closure(cursor) || mir_type_has_type_vars(cursor)) {
       continue;
     }
 
-    for (size_t j = 0; j < block->instrs.len; j++) {
-      MirInstr *instr = &block->instrs.items[j];
-      if (instr->kind == MIR_CALL && instr->data.call.callee != MIR_NO_VALUE) {
-        MirValueId mapped_callee =
-            mir_remap_value(value_map, value_map_len, instr->data.call.callee);
-        Type *callee_type = mir_function_value_type(fn, mapped_callee);
-        if (!callee_type) {
-          callee_type =
-              mir_function_value_type(source, instr->data.call.callee);
-          callee_type = mir_substitute_type(fn->arena, subst, callee_type);
-        }
-        if (callee_type && is_closure(callee_type) &&
-            callee_type->closure_meta && !mir_type_has_type_vars(callee_type)) {
-          next_value += 2;
-        }
-      }
-      if (instr->result < value_map_len &&
-          value_map[instr->result] == MIR_NO_VALUE) {
-        value_map[instr->result] = next_value++;
-      }
+    MirInstr first = *call;
+    first.type = cursor;
+    first.data.call.operands.len = i;
+    first.data.call.operand_uses.len = i;
+    mir_call_apply_callee_summary(builder, &first);
+    MirValueId closure = mir_builder_append_instr(builder, first);
+    Type *impl = mir_closure_callable_type(builder->fn->arena, cursor);
+    MirValueId env = mir_closure_get_env(builder, cursor->closure_meta,
+                                        call->origin, closure);
+    MirValueId callee = mir_closure_fn(builder, impl, call->origin, closure);
+    MirValueIdVec operands = {0};
+    MirOperandUseVec uses = {0};
+    mir_value_id_vec_push(builder->fn->arena, &operands, env);
+    mir_operand_use_vec_push(builder->fn->arena, &uses, MIR_OPERAND_USE_BORROW);
+    for (size_t k = i; k < call->data.call.operands.len; k++) {
+      mir_value_id_vec_push(builder->fn->arena, &operands,
+                            call->data.call.operands.items[k]);
+      mir_operand_use_vec_push(
+          builder->fn->arena, &uses,
+          k < call->data.call.operand_uses.len
+              ? call->data.call.operand_uses.items[k]
+              : MIR_OPERAND_USE_CONSUME);
     }
+    call->data.call.callee = callee;
+    call->data.call.callee_type = impl;
+    call->data.call.operands = operands;
+    call->data.call.operand_uses = uses;
+    cursor = impl;
+    i = 0;
   }
 }
 
@@ -3899,7 +3989,10 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
          field extractions against a non-tuple env. Use the substituted env
          type instead, and only consume the cursor when the specialization
          type itself carries the env as its first link (impl_type shape). */
-      Type *env_type = mir_substitute_type(program->arena, subst, param->type);
+      // Parameter types must outlive later REPL calls to durable functions.
+      Type *env_type = is_closure(fn_type) && fn_type->closure_meta
+                           ? fn_type->closure_meta
+                           : mir_substitute_type(fn_arena, subst, param->type);
       if (specialized_param_cursor && specialized_param_cursor->kind == T_FN &&
           specialized_param_cursor->data.T_FN.from &&
           types_equal(specialized_param_cursor->data.T_FN.from, env_type)) {
@@ -3914,7 +4007,7 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
         specialized_param_cursor = specialized_param_cursor->data.T_FN.to;
       }
       if (!param_type) {
-        param_type = mir_substitute_type(program->arena, subst, param->type);
+        param_type = mir_substitute_type(fn_arena, subst, param->type);
       }
     }
     MirValueId value =
@@ -3929,7 +4022,10 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
     }
   }
 
-  mir_predict_clone_value_ids(source, fn, subst, value_map, value_map_len);
+  MirValueId *reserved = mir_reserve_clone_values(source, fn, subst, value_map);
+  if (!reserved) {
+    return NULL;
+  }
 
   for (size_t i = 0; i < source->blocks.len; i++) {
     MirBlock *source_block = source->blocks.items[i];
@@ -3952,20 +4048,38 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
       if (clone.kind == MIR_FN_REF && clone.data.fn_ref.fn == source &&
           !mir_type_has_type_vars(fn_type)) {
         clone.type = fn_type;
+        clone.data.fn_ref.fn = fn;
+        clone.data.fn_ref.name = fn->name;
       }
-      if (clone.kind == MIR_FN_REF && clone.type &&
-          !mir_type_has_type_vars(clone.type)) {
-        mir_specialize_fn_ref_instr(program, &clone, clone.type);
+      // Calls specialize from actual operands so forwarded closures keep their ABI.
+      if (clone.kind == MIR_CONSTRUCT &&
+          clone.data.construct.kind == MIR_CONSTRUCT_CLOSURE_ENV &&
+          clone.type && clone.type->kind == T_CONS) {
+        // Captured callbacks carry an environment as well as a function pointer.
+        for (size_t k = 0; k < clone.data.construct.items.len; k++) {
+          if (k < (size_t)clone.type->data.T_CONS.num_args) {
+            mir_specialize_captured_fn(
+                &builder, clone.data.construct.items.items[k],
+                clone.type->data.T_CONS.args[k]);
+          }
+          Type *actual = mir_function_value_type(
+              fn, clone.data.construct.items.items[k]);
+          if (actual && k < (size_t)clone.type->data.T_CONS.num_args) {
+            clone.type->data.T_CONS.args[k] = actual;
+          }
+        }
       }
       if (clone.kind == MIR_CONSTRUCT &&
           clone.data.construct.kind == MIR_CONSTRUCT_CLOSURE && clone.type &&
           is_closure(clone.type) && clone.type->closure_meta &&
           !mir_type_has_type_vars(clone.type)) {
+        clone.type->closure_meta = mir_function_value_type(
+            fn, clone.data.construct.operands[1]);
         Type *impl_type = NULL;
         MirInstr *fn_ref =
             mir_function_find_def_instr(fn, clone.data.construct.operands[0]);
         MirFunction *impl = mir_specialize_closure_impl_fn_ref(
-            program, fn_ref, clone.type, &impl_type);
+            program, fn_arena, fn_ref, clone.type, &impl_type);
         if (fn_ref && impl_type && !mir_type_has_type_vars(impl_type)) {
           fn_ref->type = impl_type;
           mir_function_set_value_type(fn, fn_ref->result, impl_type);
@@ -3978,15 +4092,18 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
       if (clone.kind == MIR_EXTRACT &&
           clone.data.extract.kind == MIR_EXTRACT_FIELD) {
         mir_resolve_named_extract_field(fn, &clone);
+        Type *record = mir_function_value_type(fn, clone.data.extract.value);
+        if (record && record->kind == T_CONS && record->data.T_CONS.args &&
+            clone.data.extract.index < (size_t)record->data.T_CONS.num_args) {
+          clone.type = record->data.T_CONS.args[clone.data.extract.index];
+        }
       }
-      if (mir_instr_is_call_like(&clone) &&
-          (!clone.data.call.callee_type ||
-           mir_type_has_type_vars(clone.data.call.callee_type))) {
+      if (mir_instr_is_call_like(&clone)) {
         Type *callee_type =
-            mir_call_type_from_expected_operands(&builder, &clone);
-        if (!callee_type) {
+            mir_call_type_from_operand_values(&builder, &clone, clone.type);
+        if (!callee_type || mir_type_has_type_vars(callee_type)) {
           callee_type =
-              mir_call_type_from_operand_values(&builder, &clone, clone.type);
+              mir_call_type_from_expected_operands(&builder, &clone);
         }
         if (callee_type && !mir_type_has_type_vars(callee_type)) {
           clone.data.call.callee_type = callee_type;
@@ -3995,6 +4112,14 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
       if (clone.kind == MIR_CALL && clone.data.call.callee != MIR_NO_VALUE) {
         Type *callee_value_type =
             mir_function_value_type(fn, clone.data.call.callee);
+        MirInstr *callee_def =
+            mir_function_find_def_instr(fn, clone.data.call.callee);
+        // Preserve returned closure boundaries on indirect callbacks.
+        if ((!callee_def || callee_def->kind != MIR_FN_REF) &&
+            callee_value_type && callee_value_type->kind == T_FN &&
+            !mir_type_has_type_vars(callee_value_type)) {
+          clone.data.call.callee_type = callee_value_type;
+        }
         if (callee_value_type && is_closure(callee_value_type) &&
             !mir_type_has_type_vars(callee_value_type)) {
           Type *callable_type =
@@ -4061,6 +4186,7 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
         result = mir_lower_specialized_builtin_call(&builder, &clone);
       }
       if (clone.kind == MIR_CALL && !clone.data.call.builtin) {
+        mir_split_returned_calls(&builder, &clone);
         mir_specialize_call_fn_ref_operands(&builder, &clone);
         clone.data.call.specialized_name =
             mir_call_specialized_name(&builder, &clone);
@@ -4195,6 +4321,9 @@ static MirFunction *mir_clone_specialized_function(MirProgram *program,
   }
 
   mir_remap_deferred_phi_incomings(fn, value_map, value_map_len);
+  if (!mir_relocate_clone_values(fn, reserved, value_map, value_map_len)) {
+    return NULL;
+  }
   mir_resolve_named_extract_fields(fn);
   return fn;
 }
@@ -4671,12 +4800,12 @@ mir_append_curried_inner_call(MirBuilder *wrapper_builder, Ast *origin,
   call.data.call.operands = operands;
   call.data.call.operand_uses = (MirOperandUseVec){0};
   for (size_t i = 0; i < operands.len; i++) {
-    mir_operand_use_vec_push(wrapper_builder->program->arena,
+    mir_operand_use_vec_push(wrapper_builder->fn->arena,
                              &call.data.call.operand_uses,
                              MIR_OPERAND_USE_CONSUME);
   }
   mir_emit_call_init(&call, callee_ref, NULL,
-                     mir_fn_type_from_args(wrapper_builder->program->arena,
+                     mir_fn_type_from_args(wrapper_builder->fn->arena,
                                            operand_types, operand_count,
                                            result_type));
   mir_specialize_call_fn_ref_operands(wrapper_builder, &call);
@@ -4719,8 +4848,15 @@ static Type *mir_call_type_from_operand_values(MirBuilder *builder,
     }
   }
 
-  return mir_fn_type_from_args(builder->program->arena, operand_types,
-                               operand_count, result_type);
+  Type *type = mir_fn_type_from_args(builder->fn->arena, operand_types,
+                                     operand_count, result_type);
+  Type *expected = call->data.call.callee_type;
+  for (Type *cursor = type;
+       cursor && cursor->kind == T_FN && expected && expected->kind == T_FN;
+       cursor = cursor->data.T_FN.to, expected = expected->data.T_FN.to) {
+    cursor->data.T_FN.attributes = expected->data.T_FN.attributes;
+  }
+  return type;
 }
 
 static Type *mir_call_type_from_expected_operands(MirBuilder *builder,
@@ -4746,7 +4882,7 @@ static Type *mir_call_type_from_expected_operands(MirBuilder *builder,
     }
   }
 
-  Type *type = mir_substitute_type(builder->program->arena, subst,
+  Type *type = mir_substitute_type(builder->fn->arena, subst,
                                    call->data.call.callee_type);
   return type && !mir_type_has_type_vars(type) ? type : NULL;
 }
@@ -4805,7 +4941,7 @@ static void mir_update_closure_value_type(MirBuilder *builder,
 
   Type *impl_type = NULL;
   MirFunction *impl = mir_specialize_closure_impl_fn_ref(
-      builder->program, fn_ref, type, &impl_type);
+      builder->program, builder->fn->arena, fn_ref, type, &impl_type);
   if (!impl_type || mir_type_has_type_vars(impl_type)) {
     return;
   }
@@ -4896,10 +5032,10 @@ static MirFunction *mir_build_const_curried_wrapper(MirBuilder *builder,
     return NULL;
   }
 
-  MirArena *arena = builder->program->arena;
+  MirArena *arena = builder->fn->arena;
   const char *name = mir_curried_wrapper_name(arena, callee, false);
   MirFunction *wrapper =
-      mir_program_add_function(builder->program, name, app->type, app);
+      mir_program_add_function_arena(builder->program, name, app->type, app, arena);
   MirBlock *entry = wrapper ? mir_function_add_block(wrapper, "entry") : NULL;
   if (!wrapper || !entry) {
     return NULL;
@@ -4976,10 +5112,10 @@ static MirFunction *mir_build_env_curried_wrapper(MirBuilder *builder, Ast *app,
     return NULL;
   }
 
-  MirArena *arena = builder->program->arena;
+  MirArena *arena = builder->fn->arena;
   const char *name = mir_curried_wrapper_name(arena, callee, true);
   MirFunction *wrapper =
-      mir_program_add_function(builder->program, name, impl_type, app);
+      mir_program_add_function_arena(builder->program, name, impl_type, app, arena);
   MirBlock *entry = wrapper ? mir_function_add_block(wrapper, "entry") : NULL;
   if (!wrapper || !entry) {
     return NULL;
@@ -5081,7 +5217,7 @@ static MirValueId mir_partial_application(MirBuilder *builder, Type *type,
     return MIR_NO_VALUE;
   }
 
-  MirArena *arena = builder->program->arena;
+  MirArena *arena = builder->fn->arena;
   if (app->data.AST_APPLICATION.is_curried_with_constants && type &&
       type->kind == T_FN && !is_closure(type)) {
     MirFunction *wrapper =
@@ -5811,11 +5947,11 @@ static MirValueId mir_lambda_value(MirBuilder *builder, Ast *expr, MirCtx *ctx,
   // MirFunction/blocks/instrs from the persistent arena held by the REPL
   // session, so the body survives mir_program_destroy and re-resolves
   // across inputs via the durable MIR_SYMBOL_FUNCTION (MirFunction *).
-  // Closures are deferred (their env is program-relative); they keep
-  // using the program arena.
+  // Nested callback code shares its owner's lifetime; captures remain separate.
   MirArena *durable = NULL;
   bool is_closure_fn = is_closure(expr->type) && expr->type->closure_meta;
-  if (!is_closure_fn) {
+  if (!is_closure_fn ||
+      builder->fn->arena == builder->program->durable_arena) {
     durable = mir_function_arena(builder, ctx);
   }
   MirArena *alloc_arena = durable ? durable : builder->program->arena;
@@ -5836,14 +5972,15 @@ static MirValueId mir_lambda_value(MirBuilder *builder, Ast *expr, MirCtx *ctx,
 
   Type *fn_ref_type =
       is_closure(expr->type)
-          ? mir_closure_callable_type(builder->program->arena, expr->type)
+          ? mir_closure_callable_type(builder->fn->arena, expr->type)
           : expr->type;
   MirValueId fn_ref = mir_fn_ref(builder, fn_ref_type, expr, fn);
   if (!is_closure(expr->type) || !expr->type->closure_meta) {
     return fn_ref;
   }
 
-  MirArena *arena = builder->program->arena;
+  // Capture operands must survive subsequent REPL compilations with their owner.
+  MirArena *arena = builder->fn->arena;
   MirValueIdVec fields = {0};
   for (AstList *closed = expr->data.AST_LAMBDA.closed_vals; closed;
        closed = closed->next) {
@@ -6137,8 +6274,9 @@ static MirValueId mir_specialized_module_binding_value(MirBuilder *builder,
 
   ht module_table;
   MirStackFrame module_frame;
+  // Inline modules share the REPL storage allocator with their parent.
   mir_stack_frame_init(builder->program->arena, &module_table, &module_frame,
-                       NULL);
+                       ctx ? ctx->frame : NULL);
   MirCtx module_ctx = {
       .env = ctx->env,
       .frame = &module_frame,
@@ -6245,8 +6383,9 @@ static MirValueId mir_module_binding_value(MirBuilder *builder, Ast *ast,
 
   ht module_table;
   MirStackFrame module_frame;
+  // Inline modules share the REPL storage allocator with their parent.
   mir_stack_frame_init(builder->program->arena, &module_table, &module_frame,
-                       NULL);
+                       ctx ? ctx->frame : NULL);
   MirCtx module_ctx = {
       .env = ctx->env,
       .frame = &module_frame,
@@ -6275,6 +6414,33 @@ static MirValueId mir_import_value(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
     MirSymbol *symbol =
         mir_ctx_lookup_symbol(builder->program, ctx, import_name);
     if (symbol && symbol->kind == MIR_SYMBOL_MODULE) {
+      MirModule *module =
+          mir_program_get_module(builder->program, symbol->as.module);
+      if (!module) {
+        return MIR_NO_VALUE;
+      }
+
+      // Local opens expose existing exports without rerunning initialization.
+      if (ast->data.AST_IMPORT.import_all) {
+        hti it = ht_iterator(&module->exports);
+        for (bool cont = ht_next(&it); cont; cont = ht_next(&it)) {
+          MirSymbol *exported = it.value;
+          MirSymbol *opened = mir_symbol_new(
+              mir_scope_arena(ctx), exported->kind, exported->type,
+              exported->origin, ctx->current_module);
+          if (!opened) {
+            return MIR_NO_VALUE;
+          }
+          *opened = *exported;
+          if (opened->kind == MIR_SYMBOL_GLOBAL) {
+            opened->global_value = MIR_NO_VALUE;
+          }
+
+          if (!mir_bind_export_symbol(builder, ctx, it.key, opened)) {
+            return MIR_NO_VALUE;
+          }
+        }
+      }
       return mir_const_void(builder, &t_void, ast);
     }
     return MIR_NO_VALUE;
@@ -6802,6 +6968,51 @@ MirSymbol *mir_resolve_ast_symbol(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
   return NULL;
 }
 
+static MirValueId mir_constructor_value(MirBuilder *builder, Ast *ast) {
+  Type *type = ast->type;
+  if (!type || type->kind != T_FN) {
+    return MIR_NO_VALUE;
+  }
+
+  const char *name = ast->data.AST_IDENTIFIER.value;
+  Type *result_type = fn_return_type(type);
+  int index = -1;
+  Type *constructor = mir_sum_constructor_by_name(result_type, name, &index);
+  if (!constructor || constructor->kind != T_CONS ||
+      is_list_type(result_type) ||
+      constructor->data.T_CONS.num_args != (int)mir_fn_param_count(type)) {
+    return MIR_NO_VALUE;
+  }
+
+  // A constructor reference is a function that wraps its payload arguments.
+  MirArena *arena = builder->fn->arena;
+  const char *wrapper_name = mir_arena_printf(
+      arena, "constructor.%s.%zu", name, builder->program->functions.len);
+  MirFunction *wrapper = mir_program_add_function_arena(
+      builder->program, wrapper_name, type, ast, arena);
+  MirBlock *entry = wrapper ? mir_function_add_block(wrapper, "entry") : NULL;
+  if (!entry) {
+    return MIR_NO_VALUE;
+  }
+
+  MirBuilder body;
+  mir_builder_init(&body, builder->program, wrapper);
+  mir_builder_position_at_end(&body, entry);
+  MirValueIdVec fields = {0};
+  Type *cursor = type;
+  for (int i = 0; i < constructor->data.T_CONS.num_args; i++) {
+    MirValueId param = mir_function_add_param(
+        wrapper, mir_arena_printf(arena, "arg%d", i), cursor->data.T_FN.from,
+        ast);
+    mir_value_id_vec_push(arena, &fields, param);
+    cursor = cursor->data.T_FN.to;
+  }
+  MirValueId result = mir_variant(&body, result_type, ast, constructor, index,
+                                   name, fields);
+  mir_builder_set_return(&body, result);
+  return mir_fn_ref(builder, type, ast, wrapper);
+}
+
 static MirValueId mir_identifier(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
   MirValueId value = MIR_NO_VALUE;
 
@@ -6831,6 +7042,11 @@ static MirValueId mir_identifier(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
       return mir_fn_ref(builder, ast->type, ast, fn);
     }
 
+    MirValueId constructor = mir_constructor_value(builder, ast);
+    if (constructor != MIR_NO_VALUE) {
+      return constructor;
+    }
+
     MirBuiltinSymbol *builtin = mir_program_lookup_builtin(
         builder ? builder->program : NULL, ast->data.AST_IDENTIFIER.value);
     MirFunction *builtin_fn = mir_materialize_builtin_function(
@@ -6840,7 +7056,7 @@ static MirValueId mir_identifier(MirBuilder *builder, Ast *ast, MirCtx *ctx) {
       return mir_fn_ref(builder, fn_ref_type, ast, builtin_fn);
     }
 
-    MirValueId constructor = mir_constructor_call(
+    constructor = mir_constructor_call(
         builder, ast, ast->type, ast->data.AST_IDENTIFIER.value, NULL, 0, ctx);
     if (constructor != MIR_NO_VALUE) {
       return constructor;

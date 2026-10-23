@@ -1,38 +1,117 @@
-let bind = fn p token_func input ->
-  match p input with
-  | None -> None
-  | Some (x, rest) -> (token_func x) rest  
+open std/Opt;
+
+
+let return = fn value input -> Some (value, input);;
+
+# Parser bind threads input; Option bind propagates failure.
+let (>>~) = fn parser next input ->
+  parser input >>= (fn (value, rest) -> next value rest)
 ;;
 
-let (>>=) = bind;
+let map = fn f p input ->
+  p input <&> (fn (value, rest) -> (f value, rest))
+;;
 
-let isdigit = extern fn Char -> Bool;
+# Retry from the original input when the first branch fails.
+let choice = fn first second input ->
+  or_else (fn () -> second input) (first input)
+;;
+
+# Check length before indexing so empty input fails safely.
+let satisfy = fn predicate input ->
+  if array_size input == 0 then None
+  else if predicate (input[0]) then Some (input[0], array_succ input)
+  else None
+;;
+
+let char = fn expected input ->
+  satisfy (fn value -> value == expected) input
+;;
+
+let isdigit = extern fn Char -> Int;
 
 let digit = fn input ->
-  let s = array_size input;
-
-  match (s, input[0]) with
-  | (0, _) -> None
-  | (_, x) if isdigit x -> Some (array_range 0 1 input, array_succ input)
-  | _ -> None
+  satisfy (fn value -> isdigit value != 0) input
 ;;
 
-let return = fn x -> (fn inp -> Some (x, inp));;
+let complete = fn p input ->
+  p input >>= (fn (value, rest) ->
+    if array_size rest == 0 then Some value else None
+  )
+;;
 
-let parser = fn input ->
-  digit >>= (fn first ->
-  digit >>= (fn second ->
-    return (first, second)
+# Parser bind hides the remaining input from each step.
+let two_digits = fn input ->
+  (digit >>~ (fn first ->
+    digit >>~ (fn second ->
+      return (first, second)
+    )
   )) input
 ;;
-let res = parser "12";
-match res with
-| Some ((x, y), inp) -> print `{x}:{y}:{inp}\n`
-| None -> print "parsed none"
 
-# let parser = (digit >>= (fn first -> return first));
-# let res = "12" |> parser;
-# match res with 
-# | Some (x, inp) -> print `{x}:{inp}`
-# | None -> print "none"
-# print `{digit "12helrg"}\n`;
+# Parser bind hides the remaining input from each step.
+let three_digits = fn input ->
+  (digit >>~ (fn first ->
+    digit >>~ (fn second ->
+      digit >>~ (fn third ->
+        return (first, second, third)
+      )
+    )
+  )) input
+;;
+
+type Token = | Digits of (Char, Char);
+let token = fn input -> map Digits two_digits input;;
+
+let test = module () ->
+  let test_digits = fn () ->
+    match two_digits "12rest" with
+    | Some (('1', '2'), rest) -> rest == "rest"
+    | _ -> false
+  ;;
+
+  let test_empty = fn () ->
+    match digit "" with | None -> true | _ -> false
+  ;;
+
+  let test_short = fn () ->
+    match two_digits "1" with | None -> true | _ -> false
+  ;;
+
+  let test_invalid = fn () ->
+    match two_digits "1x" with | None -> true | _ -> false
+  ;;
+
+  let test_char = fn () ->
+    match char '+' "+12" with
+    | Some ('+', rest) -> rest == "12"
+    | _ -> false
+  ;;
+
+  let test_backtrack = fn () ->
+    match choice two_digits (return ('x', 'y')) "1!" with
+    | Some (('x', 'y'), rest) -> rest == "1!"
+    | _ -> false
+  ;;
+
+  let test_first_choice = fn () ->
+    match choice two_digits (return ('x', 'y')) "12!" with
+    | Some (('1', '2'), rest) -> rest == "!"
+    | _ -> false
+  ;;
+
+  let test_ast = fn () ->
+    match complete token "42" with
+    | Some (Digits ('4', '2')) -> true
+    | _ -> false
+  ;;
+
+  let test_trailing = fn () ->
+    match complete token "42!" with | None -> true | _ -> false
+  ;;
+;
+
+# match complete token "12" with
+# | Some (Digits (first, second)) -> print `{first}:{second}\n`
+# | None -> print "parse failed\n"
+# ;
