@@ -230,7 +230,7 @@ test_type_hash: | $(BUILD_DIR)
 	$(BUILD_DIR)/test_type_hash
 
 test_rc_cache: | $(BUILD_DIR)
-	$(LANG_CC) -ffunction-sections -fdata-sections test/test_rc_cache.c -Xlinker $(if $(filter Darwin,$(shell uname -s)),-dead_strip,--gc-sections) -o $(BUILD_DIR)/test_rc_cache
+	$(LANG_CC) -ffunction-sections -fdata-sections test/test_rc_cache.c lang/types/type_hash.c -Xlinker $(if $(filter Darwin,$(shell uname -s)),-dead_strip,--gc-sections) -o $(BUILD_DIR)/test_rc_cache
 	$(BUILD_DIR)/test_rc_cache
 
 clean:

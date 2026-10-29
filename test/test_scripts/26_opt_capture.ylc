@@ -1,0 +1,19 @@
+open std/Opt;
+
+let captured = fn n: (Int) value: (Option of Int) ->
+  let bound = value >>= (fn x: (Int) -> Some (x + n));
+  bound <&> (fn x: (Int) -> x + n)
+;;
+
+let test = module () ->
+  # Operators must preserve callback captures through both optional paths.
+  let test_captured_some = fn () ->
+    captured 3 (Some 2) == Some 8
+  ;;
+
+  let test_captured_none = fn () ->
+    match captured 3 None with
+    | Some value -> false
+    | None -> true
+  ;;
+;

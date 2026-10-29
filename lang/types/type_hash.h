@@ -23,6 +23,9 @@ typedef struct {
 // or mutated; rebuild keys after mutation. This is not an RC equivalence test.
 // Output must not own a previous encoding. Failure leaves it empty.
 TypeHashStatus type_hash_create(const Type *type, TypeHashKey *key);
+// Resolution keys also retain aliases and reference names. Ordinary variables
+// are rejected because their meaning depends on mutable inference bindings.
+TypeHashStatus type_hash_resolution(const Type *type, TypeHashKey *key);
 void type_hash_destroy(TypeHashKey *key);
 
 #endif

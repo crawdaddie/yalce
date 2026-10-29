@@ -1,0 +1,28 @@
+import std/Opt;
+
+# Forward a captured callback taking both a value and remaining input.
+let bind = fn p next input ->
+  Opt.bind (fn (value, rest) -> next value rest) (p input)
+;;
+
+let item = fn input ->
+  if array_size input == 0 then None
+  else Some (input[0], array_succ input)
+;;
+
+let pair = fn input ->
+  bind item (fn first rest ->
+    bind item (fn second tail -> Some ((first, second), tail)) rest
+  ) input
+;;
+
+let test = module () ->
+  let test_pair = fn () ->
+    match pair "12!" with
+    | Some (('1', '2'), rest) -> rest == "!"
+    | _ -> false
+  ;;
+  let test_empty = fn () ->
+    match pair "" with | None -> true | _ -> false
+  ;;
+;

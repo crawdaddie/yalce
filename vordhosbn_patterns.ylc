@@ -95,6 +95,13 @@ let fx = @Audio fn sel tr subdiv beat_len rate inp ->
 
   sig 
   |> glue -12. 4. 0.005 0.15 6. 3.
+  # |> ott 1. 1. 1. 0.5 0.5 
+
+#   depth   = 1.0
+#   upward  = 1.0
+#   downward = 1.0
+#   attack  = 0.5
+#   release = 0.5
  # |> stutter (changed sel) (1.) beat_len subdiv rate
 
 ;;

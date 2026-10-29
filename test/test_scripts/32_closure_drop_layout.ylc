@@ -1,0 +1,8 @@
+let text_fn = fn text: (String) -> (fn n: (Int) -> array_size text + n);;
+let number_fn = fn value: (Int) -> (fn n: (Int) -> value + n);;
+let apply = fn f -> f 1;;
+let test = module () ->
+  let test_text = fn () -> apply (text_fn "hello") == 6;;
+  let test_number = fn () -> apply (number_fn 7) == 8;;
+  let test_again = fn () -> apply (text_fn "world") == 6;;
+;

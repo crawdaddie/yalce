@@ -1,0 +1,49 @@
+open std/Opt;
+
+type Weight = | ProjectWeight of Int | NoWeight;
+type Payload = | PairValue of (Int, String);
+
+let project = fn value -> Some value <&> ProjectWeight;;
+let boxed = fn value -> Some value <&> Some;;
+let construct = ProjectWeight;
+let pair = fn value -> Some value <&> PairValue;;
+let absent = fn () -> Some NoWeight;;
+
+let test = module () ->
+  let test_map = fn () ->
+    match project 7 with
+    | Some (ProjectWeight weight) -> weight == 7
+    | _ -> false
+  ;;
+  let test_alias = fn () ->
+    match construct 8 with
+    | ProjectWeight weight -> weight == 8
+    | _ -> false
+  ;;
+  let test_generic = fn () ->
+    match boxed 9 with
+    | Some (Some value) -> value == 9
+    | _ -> false
+  ;;
+  let test_none = fn () ->
+    match None <&> ProjectWeight with
+    | None -> true
+    | _ -> false
+  ;;
+  let test_generic_string = fn () ->
+    match boxed "value" with
+    | Some (Some value) -> value == "value"
+    | _ -> false
+  ;;
+  let test_tuple = fn () ->
+    match pair (3, "payload") with
+    | Some (PairValue (number, text)) -> number == 3 && text == "payload"
+    | _ -> false
+  ;;
+  let test_nullary = fn () ->
+    match absent () with
+    | Some NoWeight -> true
+    | _ -> false
+  ;;
+
+;

@@ -4,10 +4,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { KEY_INITIAL_CAP = 128, KEY_GROWTH = 2, KEY_MAX_DEPTH = 512,
-       NUMBER_BUFFER_SIZE = 32 };
+enum {
+  KEY_INITIAL_CAP = 128,
+  KEY_GROWTH = 2,
+  KEY_MAX_DEPTH = 512,
+  NUMBER_BUFFER_SIZE = 32
+};
 static const uint64_t fnv_offset = UINT64_C(14695981039346656037);
 static const uint64_t fnv_prime = UINT64_C(1099511628211);
+typedef enum { KEY_STRUCTURAL, KEY_RESOLUTION } KeyMode;
 
 typedef struct {
   char *text;
@@ -16,6 +21,7 @@ typedef struct {
   const Type *active[KEY_MAX_DEPTH];
   size_t depth;
   TypeHashStatus status;
+  KeyMode mode;
 } KeyWriter;
 
 // Length prefixes keep punctuation and nested constructors unambiguous.
@@ -72,8 +78,15 @@ static void key_name(KeyWriter *writer, const char *name) {
 
 static void key_type(KeyWriter *writer, const Type *type);
 
-// Resolve explicit back-edges to active binders; never encode pointer addresses.
+// Resolve explicit back-edges to active binders; never encode pointer
+// addresses.
 static void key_recursive(KeyWriter *writer, const Type *type) {
+  if (writer->mode == KEY_RESOLUTION) {
+    key_text(writer, "ref;");
+    key_name(writer, type->kind == T_RECURSIVE_REF
+                         ? type->data.T_RECURSIVE_REF.name
+                         : type->data.T_VAR.name);
+  }
   if (type->kind == T_RECURSIVE_REF && type->data.T_RECURSIVE_REF.decl &&
       type->data.T_RECURSIVE_REF.decl->type) {
     const Type *target = type->data.T_RECURSIVE_REF.decl->type;
@@ -115,7 +128,7 @@ static void key_payload(KeyWriter *writer, const Type *type) {
   case T_EMPTY_LIST:
     return;
   case T_VAR:
-    if (type->data.T_VAR.id < 0) {
+    if (writer->mode == KEY_RESOLUTION || type->data.T_VAR.id < 0) {
       writer->status = TYPE_HASH_INVALID;
       return;
     }
@@ -136,8 +149,8 @@ static void key_payload(KeyWriter *writer, const Type *type) {
     key_name(writer, type->data.T_CONS.name);
     key_number(writer, (uint64_t)type->data.T_CONS.num_args);
     for (int i = 0; i < type->data.T_CONS.num_args; i++) {
-      key_name(writer, type->data.T_CONS.names ? type->data.T_CONS.names[i]
-                                             : NULL);
+      key_name(writer,
+               type->data.T_CONS.names ? type->data.T_CONS.names[i] : NULL);
       key_type(writer, type->data.T_CONS.args[i]);
       if (writer->status != TYPE_HASH_OK) {
         return;
@@ -179,6 +192,9 @@ static void key_type(KeyWriter *writer, const Type *type) {
   writer->active[writer->depth++] = type;
   key_text(writer, "(");
   key_number(writer, type->kind);
+  if (writer->mode == KEY_RESOLUTION) {
+    key_name(writer, type->alias);
+  }
   key_number(writer, type->is_coroutine_instance);
   key_type(writer, type->closure_meta);
   key_payload(writer, type);
@@ -186,7 +202,8 @@ static void key_type(KeyWriter *writer, const Type *type) {
   writer->depth--;
 }
 
-TypeHashStatus type_hash_create(const Type *type, TypeHashKey *key) {
+static TypeHashStatus key_create(const Type *type, TypeHashKey *key,
+                                 KeyMode mode) {
   if (!key) {
     return TYPE_HASH_INVALID;
   }
@@ -194,8 +211,8 @@ TypeHashStatus type_hash_create(const Type *type, TypeHashKey *key) {
   if (!type) {
     return TYPE_HASH_INVALID;
   }
-  KeyWriter writer = {0};
-  key_text(&writer, "type-key-v1;");
+  KeyWriter writer = {.mode = mode};
+  key_text(&writer, mode == KEY_STRUCTURAL ? "type-key-v1;" : "rc-key-v1;");
   key_type(&writer, type);
   if (writer.status != TYPE_HASH_OK) {
     free(writer.text);
@@ -209,6 +226,14 @@ TypeHashStatus type_hash_create(const Type *type, TypeHashKey *key) {
   }
   *key = (TypeHashKey){.encoding = writer.text, .hash = hash};
   return TYPE_HASH_OK;
+}
+
+TypeHashStatus type_hash_create(const Type *type, TypeHashKey *key) {
+  return key_create(type, key, KEY_STRUCTURAL);
+}
+
+TypeHashStatus type_hash_resolution(const Type *type, TypeHashKey *key) {
+  return key_create(type, key, KEY_RESOLUTION);
 }
 
 void type_hash_destroy(TypeHashKey *key) {

@@ -1,0 +1,49 @@
+import std/Json;
+open std/Opt;
+
+let json_array_int = fn index object -> Json.int (Json.array_get_idx index object);;
+let dtype_size = fn dtype -> if dtype == "BF16" then 2 else 4;;
+let mmap_file_ptr = fn file offset -> file;;
+
+# Nested checkpoints must retain callback and tuple constraints.
+let map_tensor = fn file data_offset tensor ->
+  Json.get "data_offsets" tensor
+  >>= (fn offsets ->
+    let start = json_array_int 0 offsets;
+    let end = json_array_int 1 offsets;
+    Json.get "dtype" tensor <&> (fn dtype ->
+      (start, end, dtype_size (Json.string dtype))
+    )
+  )
+  >>= (fn metadata ->
+    let (start, end, stride) = metadata;
+    Json.get "shape" tensor <&> (fn shape ->
+      let data = mmap_file_ptr file (data_offset + start);
+      (data, (end - start) / stride, stride, shape)
+    )
+  )
+;;
+
+let inspect = fn source ->
+  map_tensor (Ptr 0) 0 (Json.parse source)
+  <&> (fn value -> let (_, count, stride, _) = value; (count, stride))
+;;
+
+let missing = fn source ->
+  match inspect source with
+  | None -> true
+  | Some value -> false
+;;
+
+let test = module () ->
+  let test_metadata = fn () ->
+    match inspect "{\"data_offsets\":[0,8],\"dtype\":\"BF16\",\"shape\":[4]}" with
+    | Some (count, stride) -> count == 4 && stride == 2
+    | None -> false
+  ;;
+  let test_no_offsets = fn () -> missing "{}";;
+  let test_no_dtype = fn () -> missing "{\"data_offsets\":[0,8]}";;
+  let test_no_shape = fn () ->
+    missing "{\"data_offsets\":[0,8],\"dtype\":\"BF16\"}"
+  ;;
+;

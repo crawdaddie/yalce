@@ -1,8 +1,11 @@
 # First safetensors loader for Qwen 2.5 0.5B.
 # The model file is mmap'ed; only its small JSON header is copied.
 
+let max_new_tokens = 16;
+let eos_token_id = 151643;
+
 let model_path =
-  "~/.cache/huggingface/hub/models--Qwen--Qwen2.5-0.5B/snapshots/060db6499f32faf8b98477b0a26969ef7d8b9987/model.safetensors";
+  "./Qwen2.5-0.5B/model.safetensors";
 
 let mmap_file = extern fn Ptr -> Ptr;
 let mmap_file_size = extern fn Ptr -> Int;
@@ -17,7 +20,9 @@ let int64_str = extern fn Uint64 -> String;
 let char_to_int = extern fn Char -> Int;
 let lshift = extern fn Int -> Int -> Int;
 
-import Json;
+import std/Json;
+open std/Opt;
+import libs/Gnuplot/Gnuplot;
 type MappedTensor = (
   data: Ptr,
   count: Int,
@@ -64,25 +69,22 @@ let dtype_size = fn dtype ->
   else 1
 ;;
 
-let map_tensor = fn file file_size data_offset tensor ->
-  match Json.get "data_offsets" tensor with
-  | Some offsets -> (
-      let start = json_array_int 0 offsets;
-      let end = json_array_int 1 offsets;
-      match Json.get "dtype" tensor with
-      | Some dtype_object -> (
-          match Json.get "shape" tensor with
-          | Some shape -> (
-              let dtype = Json.string dtype_object;
-              let data = mmap_file_ptr file (data_offset + start);
-              Some (data, (end - start) / dtype_size dtype,
-                    dtype_size dtype, shape)
-            )
-          | _ -> None
-        )
-      | _ -> None
+let map_tensor = fn file data_offset tensor ->
+  Json.get "data_offsets" tensor
+  >>= (fn offsets ->
+    let start = json_array_int 0 offsets;
+    let end = json_array_int 1 offsets;
+    Json.get "dtype" tensor <&> (fn dtype ->
+      (start, end, dtype_size (Json.string dtype))
     )
-  | _ -> None
+  )
+  >>= (fn metadata ->
+    let (start, end, stride) = metadata;
+    Json.get "shape" tensor <&> (fn shape ->
+      let data = mmap_file_ptr file (data_offset + start);
+      (data, (end - start) / stride, stride, shape)
+    )
+  )
 ;;
 
 let map_safetensors = fn () ->
@@ -118,42 +120,44 @@ let empty_model = fn () ->
 let load_model = fn model_path ->
   match mmap_file_size (cstr model_path) with
   | 0 -> empty_model ()
-  | file_size -> (
+  | size -> (
+    let file_size = size;
     let file = mmap_file (cstr model_path);
     let prefix = mmap_file_read file 0 8;
     let header_bytes = header_size prefix;
     let source = read_header file;
     let header = Json.parse source;
     print_embedding_info header;
-    match Json.get "model.embed_tokens.weight" header with
-    | Some tensor -> (
-        match map_tensor file file_size (8 + header_bytes) tensor with
-        | Some (data, count, stride, shape) -> (
-            let embedding = (data, count, stride, shape);
-            print `mapped embedding: {count} values, {stride} bytes/value\n`;
-            print `storage: {data}, shape: {shape}\n`;
-            let tensor_total = Json.length header;
-            let tensor_ptrs = array_fill_zeroes tensor_total (Ptr 0);
-            let tensor_counts = array_fill_zeroes tensor_total 0;
-            let tensor_strides = array_fill_zeroes tensor_total 0;
-            for index = 0 .. tensor_total in (
-              let tensor = Json.value index header;
-              match map_tensor file file_size (8 + header_bytes) tensor with
-              | Some (data, count, stride, _) -> (
-                  tensor_ptrs[index] := data;
-                  tensor_counts[index] := count;
-                  tensor_strides[index] := stride;
-                  ()
-                )
-              | _ -> ()
-            );
-            print `registered {tensor_total} header entries\n`;
-            (file, file_size, header, header_bytes, embedding,
-             tensor_ptrs, tensor_counts, tensor_strides)
+    # Chain optional lookups, then unwrap the completed model once.
+    let model = Json.get "model.embed_tokens.weight" header
+      >>= (fn tensor: (Ptr) -> map_tensor file (8 + header_bytes) tensor)
+      <&> (fn tensor: (MappedTensor) ->
+      let (data, count, stride, shape) = tensor;
+      let embedding = (data, count, stride, shape);
+      print `mapped embedding: {count} values, {stride} bytes/value\n`;
+      print `storage: {data}, shape: {shape}\n`;
+      let tensor_total = Json.length header;
+      let tensor_ptrs = array_fill_zeroes tensor_total (Ptr 0);
+      let tensor_counts = array_fill_zeroes tensor_total 0;
+      let tensor_strides = array_fill_zeroes tensor_total 0;
+      for index = 0 .. tensor_total in (
+        let tensor = Json.value index header;
+        match map_tensor file (8 + header_bytes) tensor with
+        | Some (data, count, stride, _) -> (
+            tensor_ptrs[index] := data;
+            tensor_counts[index] := count;
+            tensor_strides[index] := stride;
+            ()
           )
-        | _ -> empty_model ()
-      )
-    | _ -> empty_model ()
+        | _ -> ()
+      );
+      print `registered {tensor_total} header entries\n`;
+      (file, file_size, header, header_bytes, embedding,
+       tensor_ptrs, tensor_counts, tensor_strides)
+    );
+    match model with
+    | Some value -> value
+    | None -> empty_model ()
   )
 ;;
 
@@ -173,8 +177,9 @@ let cuDevicePrimaryCtxRetain = extern fn Ptr -> Int -> Int;
 let cuCtxSetCurrent = extern fn Ptr -> Int;
 let cuCtxSynchronize = extern fn () -> Int;
 let cuMemAlloc_v2 = extern fn Ptr -> Uint64 -> Int;
-let cuMemFree = extern fn Uint64 -> Int;
+let cuMemFree_v2 = extern fn Uint64 -> Int;
 let cuMemcpyHtoD_v2 = extern fn Uint64 -> Ptr -> Uint64 -> Int;
+let cuMemcpyDtoD_v2 = extern fn Uint64 -> Uint64 -> Uint64 -> Int;
 let cuMemcpyDtoH_v2 = extern fn Ptr -> Uint64 -> Uint64 -> Int;
 let memcmp = extern fn Ptr -> Ptr -> Uint64 -> Int;
 let cuModuleLoadData = extern fn Ptr -> Ptr -> Int;
@@ -192,58 +197,76 @@ let Kernels = module () ->
   let nvrtcDestroyProgram = extern fn Ptr -> Int;
   let int64_to_int = extern fn Uint64 -> Int;
 
-  let compile_kernel = fn src ->
-    let kernel_program = [| Ptr 0 |];
-    let kernel_create_status =
-      nvrtcCreateProgram
-        (cstr kernel_program)
-        (cstr src)
-        (cstr "gather_embedding.cu")
-        0
-        (Ptr 0)
-        (Ptr 0);
-    let kernel_option = cstr "--gpu-architecture=compute_120";
-    let kernel_options = [| kernel_option |];
-    let kernel_compile_status =
-      nvrtcCompileProgram
-        (kernel_program[0])
-        1
-        (cstr kernel_options);
+  let nvrtc_success = 0;
+  let cuda_success = 0;
+  let cuModuleUnload = extern fn Ptr -> Int;
 
-    let kernel_log_size = [| int64_from_int 0 |];
-    let _ = nvrtcGetProgramLogSize
-      (kernel_program[0])
-      (cstr kernel_log_size);
-    let kernel_log = array_fill_zeroes
-      (int64_to_int (kernel_log_size[0]))
-      (char_of_int 0);
-    let _ = nvrtcGetProgramLog (kernel_program[0]) (cstr kernel_log);
+  let checked = fn label status success ->
+    if status == success then true
+    else (print `{label}: status {status}\n`; false)
+  ;;
 
-    let kernel_ptx_size = [| int64_from_int 0 |];
-    let _ = nvrtcGetPTXSize
-      (kernel_program[0])
-      (cstr kernel_ptx_size);
-    let kernel_ptx = array_fill_zeroes
-      (int64_to_int (kernel_ptx_size[0]))
-      (char_of_int 0);
-    let kernel_ptx_status = nvrtcGetPTX (kernel_program[0]) (cstr kernel_ptx);
+  let create_program = fn name: (String) src: (String) ->
+    let output = [| Ptr 0 |];
+    let status = nvrtcCreateProgram (cstr output) (cstr src) (cstr name)
+      0 (Ptr 0) (Ptr 0);
+    if checked "create program" status nvrtc_success then Some (output[0])
+    else None
+  ;;
 
-    let kernel_module = [| Ptr 0 |];
-    let kernel_module_status =
-      cuModuleLoadData (cstr kernel_module) (cstr kernel_ptx);
-    let kernel_function = [| Ptr 0 |];
-    let kernel_function_status =
-      cuModuleGetFunction
-        (cstr kernel_function)
-        (kernel_module[0])
-        (cstr "gather_embedding");
-    let _ = nvrtcDestroyProgram (cstr kernel_program);
-    (create_status: kernel_create_status,
-     compile_status: kernel_compile_status,
-     ptx_status: kernel_ptx_status,
-     module_status: kernel_module_status,
-     function_status: kernel_function_status,
-     function: kernel_function[0])
+  let print_log = fn program ->
+    let size = [| int64_from_int 0 |];
+    if checked "log size" (nvrtcGetProgramLogSize program (cstr size)) nvrtc_success then (
+      let log = array_fill_zeroes (int64_to_int (size[0])) (char_of_int 0);
+      if checked "read log" (nvrtcGetProgramLog program (cstr log)) nvrtc_success
+      then print log else ()
+    ) else ()
+  ;;
+
+  let compile_program = fn program ->
+    let options = [| cstr "--gpu-architecture=compute_120",
+                    cstr "--include-path=/opt/cuda/include" |];
+    let status = nvrtcCompileProgram program (array_size options) (cstr options);
+    if checked "compile program" status nvrtc_success then Some program
+    else (print_log program; None)
+  ;;
+
+  let as_text = fn value: (String) -> value;;
+
+  let read_ptx = fn program ->
+    let size = [| int64_from_int 0 |];
+    if checked "PTX size" (nvrtcGetPTXSize program (cstr size)) nvrtc_success then (
+      let ptx = array_fill_zeroes (int64_to_int (size[0])) (char_of_int 0);
+      if checked "read PTX" (nvrtcGetPTX program (cstr ptx)) nvrtc_success
+      then Some (as_text ptx) else None
+    ) else None
+  ;;
+
+  let load_function = fn name: (String) ptx: (String) ->
+    let loaded = [| Ptr 0 |];
+    if checked "load module" (cuModuleLoadData (cstr loaded) (cstr ptx)) cuda_success then (
+      let function = [| Ptr 0 |];
+      let status = cuModuleGetFunction (cstr function) (loaded[0]) (cstr name);
+      if checked "find function" status cuda_success then Some (function[0])
+      else (
+        # Release modules that cannot supply the requested function.
+        let _ = cuModuleUnload (loaded[0]);
+        None
+      )
+    ) else None
+  ;;
+
+  let compile_kernel = fn name: (String) src: (String) ->
+    create_program name src >>= (fn program ->
+      let function = compile_program program
+        >>= read_ptx
+        >>= (fn ptx -> load_function name ptx);
+      # Destroy the program on every path after successful creation.
+      let owned = [| program |];
+      let status = nvrtcDestroyProgram (cstr owned);
+      let _ = checked "destroy program" status nvrtc_success;
+      function
+    )
   ;;
 
 ;
@@ -266,46 +289,366 @@ extern "C" __global__ void gather_embedding(const unsigned short *embedding,
 `;
 
 
-let upload_embedding = fn model ->
-  let status = cuInit 0;
+let layer_source = `
+#include <cuda_bf16.h>
+#include <math_constants.h>
 
-  let device_out = [| 0 |];
-  let status = cuDeviceGet (cstr device_out) 0;
+// Baseline kernels: contiguous token-major buffers, FP32 accumulation/output.
+// Convert embedding BF16 once; keep activations FP32 while validating stages.
+extern "C" __global__ void bf16_to_float(const __nv_bfloat16 *input,
+                                        float *output, int count) \{
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < count) \{
+    output[i] = __bfloat162float(input[i]);
+  \}
+\}
 
+// One thread per row; replace with a block reduction after parity checks.
+extern "C" __global__ void rms_norm(const float *input,
+                                   const __nv_bfloat16 *weight, float *output,
+                                   int rows, int hidden, double epsilon) \{
+  int row = blockIdx.x * blockDim.x + threadIdx.x;
+  if (row >= rows) \{
+    return;
+  \}
 
-  let context_out = [| Ptr 0 |];
-  let status = cuDevicePrimaryCtxRetain (cstr context_out) @@ device_out[0];
-  let status = cuCtxSetCurrent @@ context_out[0];
+  float sum = 0.0f;
+  for (int col = 0; col < hidden; ++col) \{
+    float x = input[row * hidden + col];
+    sum += x * x;
+  \}
 
+  float scale = rsqrtf(sum / hidden + epsilon);
+  for (int col = 0; col < hidden; ++col) \{
+    output[row * hidden + col] = input[row * hidden + col] * scale *
+                                __bfloat162float(weight[col]);
+  \}
+\}
 
-  let bytes =
-    int64_from_int (model.embedding.count * model.embedding.stride);
+// Checkpoint weights are [out, in]. Q/K/V have bias; pass null for O/MLP.
+extern "C" __global__ void linear(const float *input,
+                                 const __nv_bfloat16 *weight,
+                                 const __nv_bfloat16 *bias, float *output,
+                                 int rows, int inputs, int outputs) \{
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
+  int row = blockIdx.y;
+  if (col >= outputs || row >= rows) \{
+    return;
+  \}
 
-  let device_out64 = array_fill_zeroes 1 (int64_from_int 0);
-  let status = cuMemAlloc_v2 (cstr device_out64) bytes;
+  float sum = bias ? __bfloat162float(bias[col]) : 0.0f;
+  for (int k = 0; k < inputs; ++k) \{
+    sum += input[row * inputs + k] *
+           __bfloat162float(weight[(long long)col * inputs + k]);
+  \}
+  output[row * outputs + col] = sum;
+\}
 
+// Qwen rotates matching coordinates in two halves, not adjacent pairs.
+// Q and K use separate launches: [tokens, 14, 64] and [tokens, 2, 64].
+extern "C" __global__ void rope(float *values, const int *positions,
+                               int tokens, int heads, int width, double theta) \{
+  int pair = blockIdx.x * blockDim.x + threadIdx.x;
+  int half = width / 2;
+  int pairs = tokens * heads * half;
+  if (pair >= pairs) \{
+    return;
+  \}
 
-  let status =
-    cuMemcpyHtoD_v2
-      (device_out64[0])
-      model.embedding.data
-      bytes;
+  int coordinate = pair % half;
+  int head = pair / half;
+  int token = head / heads;
+  float angle = positions[token] * powf((float)theta, -2.0f * coordinate / width);
+  float sine, cosine;
+  sincosf(angle, &sine, &cosine);
+  int first = head * width + coordinate;
+  int second = first + half;
+  float x = values[first];
+  float y = values[second];
+  values[first] = x * cosine - y * sine;
+  values[second] = y * cosine + x * sine;
+\}
+// Materialize [query_heads, tokens, tokens] scores for a readable baseline.
+extern "C" __global__ void attention_scores(
+    const float *q, const float *k, float *scores,
+    int tokens, int heads, int kv_heads, int width) \{
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= heads * tokens * tokens) \{
+    return;
+  \}
+  int key = i % tokens;
+  int query = (i / tokens) % tokens;
+  int head = i / (tokens * tokens);
+  if (key > query) \{
+    scores[i] = -CUDART_INF_F;
+    return;
+  \}
+  int kv_head = head / (heads / kv_heads);
+  float sum = 0.0f;
+  for (int d = 0; d < width; ++d) \{
+    sum += q[(query * heads + head) * width + d] *
+           k[(key * kv_heads + kv_head) * width + d];
+  \}
+  scores[i] = sum * rsqrtf((float)width);
+\}
 
-  device_out64[0]
+// Stable softmax; masked entries become exactly zero.
+extern "C" __global__ void softmax(float *scores, int rows, int columns) \{
+  int row = blockIdx.x * blockDim.x + threadIdx.x;
+  if (row >= rows) \{
+    return;
+  \}
+  float *values = scores + row * columns;
+  float maximum = -CUDART_INF_F;
+  for (int i = 0; i < columns; ++i) \{
+    maximum = fmaxf(maximum, values[i]);
+  \}
+  float sum = 0.0f;
+  for (int i = 0; i < columns; ++i) \{
+    values[i] = expf(values[i] - maximum);
+    sum += values[i];
+  \}
+  for (int i = 0; i < columns; ++i) \{
+    values[i] /= sum;
+  \}
+\}
+
+extern "C" __global__ void attention_values(
+    const float *scores, const float *v, float *output,
+    int tokens, int heads, int kv_heads, int width) \{
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i >= tokens * heads * width) \{
+    return;
+  \}
+  int d = i % width;
+  int head = (i / width) % heads;
+  int query = i / (heads * width);
+  int kv_head = head / (heads / kv_heads);
+  float sum = 0.0f;
+  for (int key = 0; key <= query; ++key) \{
+    sum += scores[(head * tokens + query) * tokens + key] *
+           v[(key * kv_heads + kv_head) * width + d];
+  \}
+  output[i] = sum;
+\}
+
+extern "C" __global__ void add_residual(float *values, const float *skip, int count) \{
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < count) \{
+    values[i] += skip[i];
+  \}
+\}
+
+extern "C" __global__ void swiglu(float *gate, const float *up, int count) \{
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  if (i < count) \{
+    float x = gate[i];
+    gate[i] = (x / (1.0f + expf(-x))) * up[i];
+  \}
+\}
+
+// Greedy next-token selection; strict > gives the lowest ID on ties.
+extern "C" __global__ void argmax(const float *values, int *output, int count) \{
+  if (blockIdx.x != 0 || threadIdx.x != 0) \{
+    return;
+  \}
+  int best = 0;
+  for (int i = 1; i < count; ++i) \{
+    if (values[i] > values[best]) \{
+      best = i;
+    \}
+  \}
+  output[0] = best;
+\}
+
+`;
+
+# Layer stages accept parameters first and calculation last for |> composition.
+type Precision = | BF16 | F32;
+type Calculation = (data: Uint64, rows: Int, width: Int, precision: Precision);
+let as_calculation = fn value: (Calculation) -> value;;
+let as_result = fn value: (Option of Calculation) -> value;;
+let as_bytes = fn value: (Array of Char) -> value;;
+
+# Driver helpers own allocations and synchronize before handing buffers upward.
+let as_device = fn value: (Option of Uint64) -> value;;
+
+type GpuStatus = | GpuDone;
+let as_status = fn value: (Option of GpuStatus) -> value;;
+let as_kernel = fn value: (Option of Ptr) -> value;;
+let as_download = fn value: (Option of Array of Char) -> value;;
+
+let Gpu = module () ->
+  let success = 0;
+  let threads = 128;
+  let f32_bytes = 4;
+  let bf16_bytes = 2;
+  let device_index = 0;
+  let init_flags = 0;
+  let cuDevicePrimaryCtxRelease = extern fn Int -> Int;
+
+  let check = fn label: (String) status: (Int) ->
+    if status == success then Some GpuDone
+    else (print `{label}: CUDA status {status}\n`; None)
+  ;;
+
+  let device = fn index: (Int) ->
+    let output = [| 0 |];
+    check "get device" (cuDeviceGet (cstr output) index)
+    <&> (fn done -> output[0])
+  ;;
+
+  let context = fn device: (Int) ->
+    let output = [| Ptr 0 |];
+    check "retain context" (cuDevicePrimaryCtxRetain (cstr output) device)
+    >>= (fn done ->
+      match check "set context" (cuCtxSetCurrent (output[0])) with
+      | Some GpuDone -> Some (output[0])
+      | None -> (
+          let _ = check "release context" (cuDevicePrimaryCtxRelease device);
+          None
+        )
+    )
+  ;;
+
+  let initialize = fn () ->
+    check "initialize" (cuInit init_flags)
+    >>= (fn done -> device device_index)
+    >>= context
+  ;;
+
+  let ready = initialize ();
+
+  let alloc = fn bytes: (Int) -> (
+    ready >>= (fn context ->
+      let output = [| int64_from_int 0 |];
+      check "allocate" (cuMemAlloc_v2 (cstr output) (int64_from_int bytes))
+      <&> (fn done -> output[0])
+    )
+    ) |> as_device
+  ;;
+
+  let free = fn buffer: (Uint64) -> check "free" (cuMemFree_v2 buffer);;
+
+  # Transfer ownership only when the dependent operation succeeds.
+  let keep = fn resource: (Option of T) dispose: (T -> Option of GpuStatus) use: (T -> Option of U) ->
+    resource >>= (fn value ->
+      match use value with
+      | Some result -> Some result
+      | None -> (let _ = dispose value; None)
+    )
+  ;;
+
+  # Bind an owned resource; downstream failure runs its cleanup.
+  let (>>!) = fn owned use ->
+    let (resource, dispose) = owned;
+    keep resource dispose use
+  ;;
+
+  # Temporary resources are released on both paths.
+  let using = fn resource: (Option of T) dispose: (T -> Option of GpuStatus) use: (T -> Option of U) ->
+    resource >>= (fn value ->
+      let result = use value;
+      let released = dispose value;
+      result >>= (fn output -> released <&> (fn done -> output))
+    )
+  ;;
+
+  let buffer = fn bytes: (Int) use: (Uint64 -> Option of T) -> keep (alloc bytes) free use;;
+
+  let temporary = fn bytes: (Int) use: (Uint64 -> Option of T) -> using (alloc bytes) free use;;
+
+  let release = fn buffer: (Uint64) result: (Option of T) ->
+    let released = free buffer;
+    result >>= (fn value -> released <&> (fn done -> value))
+  ;;
+
+  let upload = fn output: (Uint64) data: (Ptr) bytes: (Int) ->
+    check "upload" (cuMemcpyHtoD_v2 output data (int64_from_int bytes))
+  ;;
+
+  let read = fn host: (Ptr) input: (Uint64) bytes: (Int) ->
+    check "download" (cuMemcpyDtoH_v2 host input (int64_from_int bytes))
+  ;;
+
+  let compile = fn name: (String) -> (
+    ready >>= (fn context -> Kernels.compile_kernel name layer_source)
+    ) |> as_kernel
+  ;;
+
+  let launch = fn function: (Ptr) columns: (Int) rows: (Int) args: (Array of Ptr) ->
+    let status = cuLaunchKernel function
+      ((columns + threads - 1) / threads) rows 1
+      threads 1 1 0 (Ptr 0) (cstr args) (Ptr 0);
+    check "launch" status
+    >>= (fn done -> check "synchronize" (cuCtxSynchronize ()))
+  ;;
+
+  let clone = fn value: (Calculation) -> (
+    let bytes = value.rows * value.width * f32_bytes;
+    buffer bytes (fn output: (Uint64) ->
+      check "save residual" (cuMemcpyDtoD_v2 output value.data (int64_from_int bytes))
+      <&> (fn done -> output)
+    )
+    ) |> as_device
+  ;;
+
+  let download = fn value: (Calculation) -> (
+    let bytes = value.rows * value.width * f32_bytes;
+    let host = array_fill_zeroes bytes (char_of_int 0);
+    match read (cstr host) value.data bytes with
+    | Some done -> Some (as_bytes host)
+    | None -> None
+    ) |> as_download
+  ;;
+
+  # Resolve by name and validate BF16 storage before uploading a layer weight.
+  let weight = fn model: (QwenModel) name: (String) count: (Int) -> (
+    match Json.get name model.header with
+    | None -> (print `missing tensor: {name}\n`; None)
+    | Some object -> (
+        match map_tensor model.file (8 + model.header_bytes) object with
+        | Some mapped -> (
+            let (data, actual, stride, _) = mapped;
+            if actual != count || stride != bf16_bytes then
+              (print `invalid tensor: {name}\n`; None)
+            else (
+            let bytes = count * stride;
+            buffer bytes (fn output: (Uint64) ->
+              upload output data bytes <&> (fn done -> output)
+            )
+            )
+          )
+        | _ -> (print `invalid tensor: {name}\n`; None)
+      )
+    ) |> as_device
+  ;;
+;
+
+open Gpu;
+
+let upload_embedding = fn model: (QwenModel) ->
+  let bytes = model.embedding.count * model.embedding.stride;
+  Gpu.buffer bytes (fn output: (Uint64) ->
+    Gpu.upload output model.embedding.data bytes <&> (fn done -> output)
+  )
 ;;
 
 let embedding_device = upload_embedding m;
-
-let kernel = Kernels.compile_kernel kernel_source;
+let kernel = Gpu.ready >>= (fn context ->
+  Kernels.compile_kernel "gather_embedding" kernel_source);
 
 let Tokenizers = module () ->
 
   let _ = dlopen
       "libs/hf_tokenizer/target/release/libhf_tokenizer.so";
+  type TokenizerRef = Ptr;
 
   let hf_tokenizer_load = extern fn Ptr -> Ptr;
-  let hf_tokenizer_encode = extern fn Ptr -> Ptr -> Ptr -> Int -> Int;
+  let hf_tokenizer_encode = extern fn TokenizerRef -> Ptr -> Ptr -> Int -> Int;
   let hf_tokenizer_free = extern fn Ptr -> ();
+  let hf_tokenizer_decode = extern fn Ptr -> Int -> Ptr -> Int -> Int;
+  let hf_tokenizer_decode_ids = extern fn Ptr -> Ptr -> Int -> Ptr -> Int -> Int;
 
   #  hf_tokenizer_load (cstr "/home/adam/.cache/huggingface/hub/models--Qwen--Qwen2.5-0.5B/snapshots/060db6499f32faf8b98477b0a26969ef7d8b9987/tokenizer.json");
 
@@ -314,7 +657,7 @@ let Tokenizers = module () ->
     hf_tokenizer_load (cstr path)
   ;;
 
-  let encode = fn tk inp ->
+  let encode = fn tk: (TokenizerRef) inp: (String) ->
     let capacity = 256;
     let ids = array_fill_zeroes capacity 0;
     match hf_tokenizer_encode
@@ -322,103 +665,819 @@ let Tokenizers = module () ->
       (cstr inp)
       (cstr ids)
       capacity with
-    | c if c < 0 -> (print "tokenizer failed\n"; None) | c -> Some (ids, c) ;;
+    | c if c < 0 -> (print "tokenizer failed\n"; None)
+    | c -> Some (ids, c) ;;
+
+  let as_decoded = fn value: (Option of String) -> value;;
+
+  # Query the byte count so decoding never truncates UTF-8 or leading spaces.
+  let decode = fn tk token ->
+    let size = hf_tokenizer_decode tk token (Ptr 0) 0;
+    if size < 0 then None
+    else (
+      let text = array_fill_zeroes size (char_of_int 0);
+      let written = hf_tokenizer_decode tk token (cstr text) size;
+      let as_text = fn value: (String) -> value;;
+      if written == size then Some (as_text text) else None
+    )
+  ;;
+
+  let decode_ids = fn tk ids: (Array of Int) count ->
+    let size = hf_tokenizer_decode_ids tk (cstr ids) count (Ptr 0) 0;
+    if size < 0 then None
+    else (
+      let text = array_fill_zeroes size (char_of_int 0);
+      let written = hf_tokenizer_decode_ids tk (cstr ids) count (cstr text) size;
+      let as_text = fn value: (String) -> value;;
+      if written == size then Some (as_text text) else None
+    )
+  ;;
+
   let free = fn tk -> hf_tokenizer_free tk;;
 ;
 
 
-let tokenizer = Tokenizers.load "/home/adam/.cache/huggingface/hub/models--Qwen--Qwen2.5-0.5B/snapshots/060db6499f32faf8b98477b0a26969ef7d8b9987/tokenizer.json";
-let ids = Tokenizers.encode tokenizer "blah blah blah...";
+let tokenizer = Tokenizers.load  "./Qwen2.5-0.5B/tokenizer.json";
 
-let embed_tokens = fn embedding_ptr ids token_count hidden ->
-  let ids_bytes = int64_from_int (token_count * 4);
-  let ids_device = array_fill_zeroes 1 (int64_from_int 0);
-  let output_bytes = int64_from_int (token_count * hidden * 2);
-  let output_device = array_fill_zeroes 1 (int64_from_int 0);
-  let ids_alloc_status = cuMemAlloc_v2 (cstr ids_device) ids_bytes;
-  print `token allocation status {ids_alloc_status}\n`;
-  if ids_alloc_status != 0 then
-    (print "token allocation failed\n"; output_device[0])
-  else (
-  let ids_copy_status = cuMemcpyHtoD_v2 (ids_device[0]) (cstr ids) ids_bytes;
-  print `token copy status {ids_copy_status}\n`;
-  let output_status = cuMemAlloc_v2 (cstr output_device) output_bytes;
-  print `output allocation status {output_status}\n`;
+# Owns temporary token storage; callers own successful output buffers.
+let Embeddings = module () ->
+  let bf16_bytes = 2;
+  let token_bytes = 4;
+  let threads = 256;
+  let cuda_success = 0;
 
-  if kernel.create_status != 0 then
-    print `nvrtcCreateProgram failed: {kernel.create_status}\n`
-  else if kernel.compile_status != 0 then
-    print `nvrtcCompileProgram failed: {kernel.compile_status}\n`
-  else if kernel.ptx_status != 0 then
-    print `nvrtcGetPTX failed: {kernel.ptx_status}\n`
-  else if kernel.module_status != 0 then
-    print `cuModuleLoadData failed: {kernel.module_status}\n`
-  else if kernel.function_status != 0 then
-    print `cuModuleGetFunction failed: {kernel.function_status}\n`
-  else (
-      let embedding_arg = [| embedding_ptr |];
-      let hidden_arg = [| hidden |];
-      let kernel_args = [|
-        cstr embedding_arg,
-        cstr ids_device,
-        cstr output_device,
-        cstr hidden_arg
-      |];
-      let blocks = (hidden + 255) / 256;
-      let launch_status =
-        cuLaunchKernel
-          kernel.function
-          blocks token_count 1
-          256 1 1
-          0
-          (Ptr 0)
-          (cstr kernel_args)
-          (Ptr 0);
-      print `embedding launch status {launch_status}, tokens {token_count}, hidden {hidden}\n`;
+  let alloc = fn bytes ->
+    let out = [| int64_from_int 0 |];
+    match cuMemAlloc_v2 (cstr out) bytes with
+    | status if status == cuda_success -> Some (out[0])
+    | status -> (print `allocation failed: {status}\n`; None)
+  ;;
 
-      let sync_status = cuCtxSynchronize ();
-      let row_bytes = int64_from_int (hidden * 2);
-      let actual_host = array_fill_zeroes (hidden * 2) (char_of_int 0);
-      let expected_host = array_fill_zeroes
-        (hidden * 2)
-        (char_of_int 0);
-      let mismatches = [| 0 |];
-      for token = 0 .. token_count in (
-        let actual_device = output_device[0] +
-          int64_from_int (token * hidden * 2);
-        let expected_device = embedding_ptr +
-          int64_from_int (ids[token] * hidden * 2);
-        let actual_status = cuMemcpyDtoH_v2
-          (cstr actual_host)
-          actual_device
-          row_bytes;
-        let expected_status = cuMemcpyDtoH_v2
-          (cstr expected_host)
-          expected_device
-          row_bytes;
-        let equal = memcmp
-          (cstr actual_host)
-          (cstr expected_host)
-          row_bytes;
-        let actual_word = char_to_int (actual_host[0]) +
-          lshift (char_to_int (actual_host[1])) 8;
-        let expected_word = char_to_int (expected_host[0]) +
-          lshift (char_to_int (expected_host[1])) 8;
-        print `verify token {token} id {ids[token]}, actual {actual_word}, expected {expected_word}, copy {actual_status}/{expected_status}, memcmp {equal}\n`;
-        if actual_status != 0 || expected_status != 0 || equal != 0 then
-          (mismatches[0] := mismatches[0] + 1; ())
-        else
-          ()
-      );
-      print `embedding verification sync {sync_status}, mismatched rows {mismatches[0]}\n`
-  );
-  output_device[0]
+  let upload_ids = fn ids count ->
+    let bytes = int64_from_int (count * token_bytes);
+    match alloc bytes with
+    | None -> None
+    | Some device -> (
+        match cuMemcpyHtoD_v2 device (cstr ids) bytes with
+        | status if status == cuda_success -> Some device
+        | status -> (
+            let _ = cuMemFree_v2 device;
+            print `token upload failed: {status}\n`;
+            None
+          )
+      )
+  ;;
+
+  let launch = fn function embedding ids output count hidden ->
+    let embedding_arg = [| embedding |];
+    let ids_arg = [| ids |];
+    let output_arg = [| output |];
+    let hidden_arg = [| hidden |];
+    let args = [| cstr embedding_arg, cstr ids_arg,
+                  cstr output_arg, cstr hidden_arg |];
+    cuLaunchKernel function
+      ((hidden + threads - 1) / threads) count 1
+      threads 1 1 0 (Ptr 0) (cstr args) (Ptr 0)
+  ;;
+
+  let gather = fn kernel embedding ids count hidden ->
+    if count <= 0 || hidden <= 0 then
+      None
+    else match kernel with
+    | None -> None
+    | Some function -> (
+      match upload_ids ids count with
+      | None -> None
+      | Some tokens -> (
+          match alloc (int64_from_int (count * hidden * bf16_bytes)) with
+          | None -> (let _ = cuMemFree_v2 tokens; None)
+          | Some output -> (
+              let status = launch function embedding tokens output count hidden;
+              # Synchronize before releasing arguments used by the GPU.
+              let synced = cuCtxSynchronize ();
+              let _ = cuMemFree_v2 tokens;
+              if status == cuda_success && synced == cuda_success then
+                Some output
+              else (
+                let _ = cuMemFree_v2 output;
+                print `embedding failed: launch {status}, sync {synced}\n`;
+                None
+              )
+            )
+        )
+    )
+  ;;
+
+  let forward = fn parameters tokens ->
+    let (kernel, embedding, hidden) = parameters;
+    let (ids, count) = tokens;
+    gather kernel embedding ids count hidden
+    <&> (fn output -> as_calculation (output, count, hidden, BF16))
+  ;;
+
+  # Compare every row against the mapped checkpoint, independent of upload.
+  let verify = fn model: (QwenModel) output ids count hidden ->
+    let bytes = hidden * bf16_bytes;
+    let row_bytes = int64_from_int bytes;
+    let actual = array_fill_zeroes bytes (char_of_int 0);
+    let mismatches = [| 0 |];
+    for token = 0 .. count in (
+      let source = output + int64_from_int (token * bytes);
+      let status = cuMemcpyDtoH_v2 (cstr actual) source row_bytes;
+      let expected = mmap_file_ptr model.embedding.data (ids[token] * bytes);
+      let equal = memcmp (cstr actual) expected row_bytes;
+      if status != cuda_success || equal != 0 then
+        (mismatches[0] := mismatches[0] + 1; ())
+      else ()
+    );
+    print `embedding verification: {count} rows, {mismatches[0]} mismatches\n`;
+    mismatches[0] == 0
+  ;;
+;
+
+
+let Float32 = module () ->
+  let function = Gpu.compile "bf16_to_float";
+
+  # Borrow BF16 input; callers own the converted buffer.
+  let convert = fn value: (Calculation) ->
+    let count = value.rows * value.width;
+    Gpu.buffer (count * Gpu.f32_bytes) (fn output: (Uint64) ->
+    let input_arg = [| value.data |];
+    let output_arg = [| output |];
+    let count_arg = [| count |];
+    function >>= (fn kernel -> Gpu.launch kernel count 1
+      [| cstr input_arg, cstr output_arg, cstr count_arg |]) >>= (fn done ->
+    Some (as_calculation (output, value.rows, value.width, F32))
   )
+)
 ;;
 
-match ids with
-| Some (token_ids, token_count) -> (
-    let _ = embed_tokens embedding_device token_ids token_count 896;
-    ()
+  let snapshot = fn value: (Calculation) ->
+    match value.precision with
+    | F32 -> Gpu.download value
+    | BF16 -> Gpu.using (convert value)
+        (fn converted: (Calculation) -> Gpu.free converted.data) Gpu.download
+  ;;
+
+  let forward = fn value: (Calculation) ->
+    match value.precision with
+    | F32 -> Some value
+    | BF16 -> Gpu.release value.data (convert value)
+  ;;
+;
+
+let RmsNorm = module () ->
+  let function = Gpu.compile "rms_norm";
+  let epsilon = 0.000001;
+
+  let forward = fn weight value ->
+    Float32.forward value >>= (fn value ->
+        let value = as_calculation value;
+        Gpu.buffer (value.rows * value.width * Gpu.f32_bytes) (fn output: (Uint64) ->
+        let input_arg = [| value.data |];
+        let weight_arg = [| weight |];
+        let output_arg = [| output |];
+        let rows_arg = [| value.rows |];
+        let width_arg = [| value.width |];
+        let epsilon_arg = [| epsilon |];
+        function >>= (fn kernel -> Gpu.launch kernel value.rows 1
+          [| cstr input_arg, cstr weight_arg, cstr output_arg,
+             cstr rows_arg, cstr width_arg, cstr epsilon_arg |]) >>= (fn done ->
+        let _ = Gpu.free value.data;
+        Some (as_calculation (output, value.rows, value.width, F32))
+      )
+)
+)
+  ;;
+;
+
+type Projection = (weight: Uint64, bias: Uint64, inputs: Int, outputs: Int);
+let as_projection = fn value: (Projection) -> value;;
+type QkvValues = (q: Calculation, k: Calculation, v: Calculation);
+let as_qkv = fn value: (QkvValues) -> value;;
+
+let Linear = module () ->
+  let function = Gpu.compile "linear";
+
+  let load = fn model name inputs outputs ->
+    (Gpu.weight model (string_add name ".weight") (inputs * outputs), Gpu.free)
+    >>! (fn weight ->
+      Gpu.weight model (string_add name ".bias") outputs
+      <&> (fn bias -> as_projection (weight, bias, inputs, outputs))
+    )
+  ;;
+
+  # Borrow the input so Q, K, and V can share one normalized activation.
+  let apply = fn layer: (Projection) value: (Calculation) ->
+    Gpu.buffer (value.rows * layer.outputs * Gpu.f32_bytes) (fn output: (Uint64) ->
+    let input_arg = [| value.data |];
+    let weight_arg = [| layer.weight |];
+    let bias_arg = [| layer.bias |];
+    let output_arg = [| output |];
+    let rows_arg = [| value.rows |];
+    let inputs_arg = [| layer.inputs |];
+    let outputs_arg = [| layer.outputs |];
+    function
+    >>= (fn kernel -> Gpu.launch kernel layer.outputs value.rows
+      [| cstr input_arg, cstr weight_arg, cstr bias_arg, cstr output_arg,
+         cstr rows_arg, cstr inputs_arg, cstr outputs_arg |])
+    >>= (fn done -> Some (as_calculation (output, value.rows, layer.outputs, F32)))
+)
+;;
+
+  let load_unbiased = fn model name inputs outputs ->
+    Gpu.weight model (string_add name ".weight") (inputs * outputs)
+    <&> (fn weight -> as_projection (weight, int64_from_int 0, inputs, outputs))
+  ;;
+
+  let forward = fn layer value: (Calculation) ->
+    Gpu.release value.data (apply layer value)
+  ;;
+
+  let free = fn layer: (Projection) ->
+    let weight = Gpu.free layer.weight;
+    let bias = if layer.bias == int64_from_int 0 then Some GpuDone else Gpu.free layer.bias;
+    weight >>= (fn done -> bias)
+  ;;
+;
+
+let Qkv = module () ->
+  # Transfer Q and K together so a failed V projection releases both.
+  let pair = fn q_layer k_layer value ->
+    (Linear.apply q_layer value, (fn q -> Gpu.free q.data))
+    >>! (fn q -> Linear.apply k_layer value <&> (fn k -> (q, k)))
+  ;;
+
+  let free_pair = fn values: (Calculation, Calculation) ->
+    let (q, k) = values;
+    let released_k = Gpu.free k.data;
+    let released_q = Gpu.free q.data;
+    released_k >>= (fn done -> released_q)
+  ;;
+
+  let forward = fn layers value: (Calculation) ->
+    let (q_layer, k_layer, v_layer) = layers;
+    ((pair q_layer k_layer value, free_pair)
+    >>! (fn values ->
+      let (q, k) = values;
+      Linear.apply v_layer value <&> (fn v -> as_qkv (q, k, v))
+    ))
+    |> Gpu.release value.data
+  ;;
+;
+
+let Rope = module () ->
+  let function = Gpu.compile "rope";
+  let head_width = 64;
+  let theta = 1000000.;
+  let position_bytes = 4;
+
+  let apply = fn positions value: (Calculation) ->
+    let values_arg = [| value.data |];
+    let positions_arg = [| positions |];
+    let tokens_arg = [| value.rows |];
+    let heads_arg = [| value.width / head_width |];
+    let width_arg = [| head_width |];
+    let theta_arg = [| theta |];
+
+    function >>= (fn kernel ->
+      Gpu.launch kernel (value.rows * value.width / 2) 1
+        [| cstr values_arg, cstr positions_arg, cstr tokens_arg,
+           cstr heads_arg, cstr width_arg, cstr theta_arg |]
+    )
+  ;;
+
+  # Prefill positions begin at offset; V passes through unchanged.
+  let forward = fn offset value ->
+    let value = as_qkv value;
+    let positions = array_fill_zeroes value.q.rows 0;
+    for i = 0 .. value.q.rows in (positions[i] := offset + i; ());
+    let bytes = value.q.rows * position_bytes;
+
+    Gpu.temporary bytes (fn device ->
+      Gpu.upload device (cstr positions) bytes
+      >>= (fn done -> apply device value.q)
+      >>= (fn done -> apply device value.k)
+      <&> (fn done -> value)
+    )
+  ;;
+;
+
+let Attention = module () ->
+  let score_kernel = Gpu.compile "attention_scores";
+  let softmax_kernel = Gpu.compile "softmax";
+  let value_kernel = Gpu.compile "attention_values";
+
+  let forward = fn value ->
+    let value = as_qkv value;
+    let tokens = value.q.rows;
+    let heads = value.q.width / Rope.head_width;
+    let kv_heads = value.k.width / Rope.head_width;
+
+    Gpu.temporary (heads * tokens * tokens * Gpu.f32_bytes) (fn scores ->
+      Gpu.buffer (tokens * value.q.width * Gpu.f32_bytes) (fn output: (Uint64) ->
+        let q_arg = [| value.q.data |];
+        let k_arg = [| value.k.data |];
+        let v_arg = [| value.v.data |];
+        let scores_arg = [| scores |];
+        let output_arg = [| output |];
+        let tokens_arg = [| tokens |];
+        let heads_arg = [| heads |];
+        let kv_arg = [| kv_heads |];
+        let width_arg = [| Rope.head_width |];
+        let rows_arg = [| heads * tokens |];
+
+        score_kernel
+        >>= (fn kernel -> Gpu.launch kernel (heads * tokens * tokens) 1
+          [| cstr q_arg, cstr k_arg, cstr scores_arg, cstr tokens_arg,
+             cstr heads_arg, cstr kv_arg, cstr width_arg |])
+        >>= (fn done -> softmax_kernel)
+        >>= (fn kernel -> Gpu.launch kernel (heads * tokens) 1
+          [| cstr scores_arg, cstr rows_arg, cstr tokens_arg |])
+        >>= (fn done -> value_kernel)
+        >>= (fn kernel -> Gpu.launch kernel (tokens * value.q.width) 1
+          [| cstr scores_arg, cstr v_arg, cstr output_arg, cstr tokens_arg,
+             cstr heads_arg, cstr kv_arg, cstr width_arg |])
+        <&> (fn done ->
+          let _ = Gpu.free value.q.data;
+          let _ = Gpu.free value.k.data;
+          let _ = Gpu.free value.v.data;
+          as_calculation (output, tokens, value.q.width, F32)
+        )
+      )
+    )
+  ;;
+;
+
+let Residual = module () ->
+  let function = Gpu.compile "add_residual";
+
+  # Borrow the saved branch; its caller owns cleanup.
+  let forward = fn skip: (Uint64) value: (Calculation) ->
+    let count = value.rows * value.width;
+    let data_arg = [| value.data |];
+    let skip_arg = [| skip |];
+    let count_arg = [| count |];
+    (Some value, (fn value -> Gpu.free value.data))
+    >>! (fn value ->
+      function
+      >>= (fn kernel -> Gpu.launch kernel count 1 [| cstr data_arg, cstr skip_arg, cstr count_arg |])
+      <&> (fn done -> value)
+    )
+  ;;
+;
+
+let Mlp = module () ->
+  let function = Gpu.compile "swiglu";
+
+  let combine = fn gate: (Calculation) up: (Calculation) ->
+    let count = gate.rows * gate.width;
+    let gate_arg = [| gate.data |];
+    let up_arg = [| up.data |];
+    let count_arg = [| count |];
+    function
+    >>= (fn kernel ->
+      Gpu.launch kernel count 1 [| cstr gate_arg, cstr up_arg, cstr count_arg |])
+    <&> (fn done -> gate)
+  ;;
+
+  let forward = fn layers value: (Calculation) ->
+    let (gate_layer, up_layer) = layers;
+    ((Linear.apply gate_layer value, (fn gate -> Gpu.free gate.data))
+    >>! (fn gate ->
+      Gpu.using (Linear.apply up_layer value)
+        (fn up -> Gpu.free up.data) (combine gate)
+    ))
+    |> Gpu.release value.data
+  ;;
+;
+
+# Keep binary snapshots so plots can be regenerated without another GPU run.
+let Snapshots = module () ->
+  let directory = "build/qwen/plots/";
+  let fopen = extern fn Ptr -> Ptr -> Ptr;
+  let fwrite = extern fn Ptr -> Uint64 -> Uint64 -> Ptr -> Uint64;
+  let fclose = extern fn Ptr -> Int;
+  let system = extern fn Ptr -> Int;
+  let exit = extern fn Int -> ();
+
+  let require = fn status ->
+    if status == 0 then ()
+    else (print "plot output failed\n"; exit 1)
+  ;;
+
+  # This demo targets the 64-bit CUDA driver ABI.
+  let is_null = fn pointer ->
+    let pointer_bytes = 8;
+    let actual = [| pointer |];
+    let null = [| Ptr 0 |];
+    memcmp (cstr actual) (cstr null) (int64_from_int pointer_bytes) == 0
+  ;;
+
+  let prepare = fn () ->
+    require (system (cstr "mkdir -p build/qwen/plots"))
+  ;;
+
+  let save = fn name value: (Calculation) ->
+    Float32.snapshot value >>= (fn host: (Array of Char) ->
+    let path = string_add directory (string_add name ".bin");
+    let file = fopen (cstr path) (cstr "wb");
+    let _ = if is_null file then require 1 else ();
+    let count = int64_from_int (value.rows * value.width * Gpu.f32_bytes);
+    let written = fwrite (cstr host) (int64_from_int 1) count file;
+    let _ = require (fclose file);
+    let _ = if written == int64_from_int (array_size host) then () else require 1;
+    Some path
   )
-| None -> print "tokenization failed\n"
+;;
+;
+
+let Plots = module () ->
+  let plot_width = 1200;
+  let plot_height = 800;
+  let trace_width = 64;
+
+  # Trace the first head, then show all features across all input tokens.
+  let render = fn name: (String) title: (String) value: (Calculation) ->
+    Snapshots.save name value >>= (fn path ->
+    let gp = Gnuplot.start ();
+    let _ = if Snapshots.is_null gp then Snapshots.require 1 else ();
+    let _ = Gnuplot.terminal_kitty plot_width plot_height gp;
+    let _ = Gnuplot.multiplot title 2 1 gp;
+    let _ = Gnuplot.title "First 64 features per token" gp;
+    let _ = Gnuplot.xlabel "Feature index" gp;
+    let _ = Gnuplot.ylabel "Activation" gp;
+    let _ = Gnuplot.xrange 0. (Double (trace_width - 1)) gp;
+    let _ = Gnuplot.grid gp;
+    let _ = Gnuplot.zeroaxis gp;
+    let _ = Gnuplot.write "set key outside right\nplot " gp;
+    for row = 0 .. value.rows in (
+      let _ = Gnuplot.binary_row path value.width row gp;
+      let _ = if row < value.rows - 1 then Gnuplot.write ", " gp
+              else Gnuplot.write "\n" gp;
+      ()
+    );
+    let _ = Gnuplot.write "unset grid\nunset key\nunset zeroaxis\n" gp;
+    let _ = Gnuplot.title "All features (independent colour scale per panel)" gp;
+    let _ = Gnuplot.xlabel "Feature index" gp;
+    let _ = Gnuplot.ylabel "Token position" gp;
+    let _ = Gnuplot.xrange (-0.5) (Double value.width - 0.5) gp;
+    let _ = Gnuplot.yrange (Double value.rows - 0.5) (-0.5) gp;
+    let _ = Gnuplot.write "set ytics 1\nset palette defined (-1 '#2166ac', 0 '#f7f7f7', 1 '#b2182b')\n" gp;
+    let _ = Gnuplot.write "set cblabel 'Activation'\n" gp;
+    let _ = Gnuplot.binary_image path value.width value.rows gp;
+    let _ = Gnuplot.write "unset multiplot\n" gp;
+    let status = Gnuplot.finish gp;
+    let _ = Snapshots.require status;
+    Some GpuDone
+    )
+  ;;
+
+  # Plotting borrows activations; |> returns the original calculation.
+  let activation = fn name title calculation ->
+    calculation >>= (fn value -> render name title value <&> (fn done -> value))
+  ;;
+
+  let qkv = fn prefix title calculation ->
+    calculation >>= (fn value ->
+      let value = as_qkv value;
+      render (string_add prefix "-q") (string_add title " / Q") value.q
+      >>= (fn done -> render (string_add prefix "-k") (string_add title " / K") value.k)
+      >>= (fn done -> render (string_add prefix "-v") (string_add title " / V (not rotated)") value.v)
+      <&> (fn done -> value)
+    )
+  ;;
+  let stage = fn name title calculation ->
+    activation name title calculation
+  ;;
+
+  let projections = fn prefix title calculation ->
+    qkv prefix title calculation
+  ;;
+
+;
+
+type DecoderWeights = (
+  norm: Uint64, q: Projection, k: Projection, v: Projection, o: Projection,
+  post: Uint64, gate: Projection, up: Projection, down: Projection
+);
+let as_decoder = fn value: (DecoderWeights) -> value;;
+
+type DecoderPart =
+  | InputNorm
+  | Query
+  | Key
+  | Value
+  | AttentionOutput
+  | PostNorm
+  | Gate
+  | Up
+  | Down
+  ;
+
+type DecoderResource =
+  | NormWeight of Uint64
+  | ProjectWeight of Projection
+  ;
+
+type DecoderBuild = (
+  model: QwenModel, prefix: String, hidden: Int,
+  weights: List of (DecoderPart, DecoderResource)
+);
+let as_build = fn value: (DecoderBuild) -> value;;
+
+# Own partial weights until a complete decoder can take ownership.
+let DecoderLoad = module () ->
+  let kv_width = 128;
+  let intermediate = 4864;
+
+  let start = fn model index hidden ->
+    let prefix = string_add "model.layers."
+      (string_add (int64_str (int64_from_int index)) ".");
+    Some (as_build (model, prefix, hidden, []))
+  ;;
+
+  let discard = fn weights ->
+    match weights with
+    | [] -> ()
+    | (_, resource) :: rest -> (
+        let _ = match resource with
+          | NormWeight buffer -> Gpu.free buffer
+          | ProjectWeight layer -> Linear.free layer;
+        discard rest
+      )
+  ;;
+
+  let acquire = fn part state: (DecoderBuild) ->
+    let model = state.model;
+    let prefix = state.prefix;
+    let hidden = state.hidden;
+    match part with
+    | InputNorm -> Gpu.weight model (string_add prefix "input_layernorm.weight") hidden <&> NormWeight
+    | Query -> Linear.load model (string_add prefix "self_attn.q_proj") hidden hidden <&> ProjectWeight
+    | Key -> Linear.load model (string_add prefix "self_attn.k_proj") hidden kv_width <&> ProjectWeight
+    | Value -> Linear.load model (string_add prefix "self_attn.v_proj") hidden kv_width <&> ProjectWeight
+    | AttentionOutput -> Linear.load_unbiased model (string_add prefix "self_attn.o_proj") hidden hidden <&> ProjectWeight
+    | PostNorm -> Gpu.weight model (string_add prefix "post_attention_layernorm.weight") hidden <&> NormWeight
+    | Gate -> Linear.load_unbiased model (string_add prefix "mlp.gate_proj") hidden intermediate <&> ProjectWeight
+    | Up -> Linear.load_unbiased model (string_add prefix "mlp.up_proj") hidden intermediate <&> ProjectWeight 
+    | Down -> Linear.load_unbiased model (string_add prefix "mlp.down_proj") intermediate hidden <&> ProjectWeight
+    ;;
+
+  # Short-circuit later loads and unwind earlier weights in reverse order.
+  let step = fn part build ->
+    build >>= (fn state: (DecoderBuild) ->
+      match acquire part state with
+      | None -> (discard state.weights; None)
+      | Some weight -> Some (as_build
+          (state.model, state.prefix, state.hidden, (part, weight) :: state.weights))
+    )
+  ;;
+
+  let finish = fn build ->
+    build >>= (fn state: (DecoderBuild) ->
+      match state.weights with
+      | (Down, ProjectWeight down) :: (Up, ProjectWeight up)
+        :: (Gate, ProjectWeight gate) :: (PostNorm, NormWeight post)
+        :: (AttentionOutput, ProjectWeight o) :: (Value, ProjectWeight v)
+        :: (Key, ProjectWeight k) :: (Query, ProjectWeight q)
+        :: (InputNorm, NormWeight norm) :: [] ->
+          Some (as_decoder (norm, q, k, v, o, post, gate, up, down))
+      | _ -> (discard state.weights; None)
+    )
+  ;;
+;
+
+let Decoder = module () ->
+  let layers = 24;
+
+  # Upload each block once; predictions borrow its resident weights.
+  let load = fn model index hidden ->
+    DecoderLoad.start model index hidden
+    |> DecoderLoad.step InputNorm
+    |> DecoderLoad.step Query
+    |> DecoderLoad.step Key
+    |> DecoderLoad.step Value
+    |> DecoderLoad.step AttentionOutput
+    |> DecoderLoad.step PostNorm
+    |> DecoderLoad.step Gate
+    |> DecoderLoad.step Up
+    |> DecoderLoad.step Down
+    |> DecoderLoad.finish
+  ;;
+
+  let free = fn layer: (DecoderWeights) ->
+    let _ = Gpu.free layer.norm;
+    let _ = Linear.free layer.q;
+    let _ = Linear.free layer.k;
+    let _ = Linear.free layer.v;
+    let _ = Linear.free layer.o;
+    let _ = Gpu.free layer.post;
+    let _ = Linear.free layer.gate;
+    let _ = Linear.free layer.up;
+    Linear.free layer.down
+  ;;
+
+  # Stop loading at the first failure and release completed layers.
+  let load_all = fn model hidden ->
+    load model 0 hidden >>= (fn first ->
+      let weights = array_fill_const layers first;
+      let loaded = [| 1 |];
+      let result = [| Some GpuDone |];
+      for index = 1 .. layers in (
+        result[0] := result[0] >>= (fn done ->
+          load model index hidden <&> (fn layer ->
+            weights[index] := layer;
+            loaded[0] := index + 1;
+            GpuDone
+          )
+        );
+        ()
+      );
+      match result[0] with
+      | Some GpuDone -> Some weights
+      | None -> (
+          for index = 0 .. loaded[0] in (let _ = free (weights[index]); ());
+          None
+        )
+    )
+  ;;
+
+  let calculate = fn layer: (DecoderWeights) value: (Calculation) ->
+    let attended = Gpu.using (Gpu.clone value) Gpu.free (fn skip ->
+      (Some value
+      >>= (RmsNorm.forward layer.norm)
+      # |> Plots.stage "02-rmsnorm" "RMSNorm before attention"
+      >>= (Qkv.forward (layer.q, layer.k, layer.v))
+      # |> Plots.projections "03-projection" "Learned QKV projections"
+      >>= (Rope.forward 0)
+      # |> Plots.projections "04-rope" "Position-dependent Q and K rotation"
+      >>= Attention.forward
+      # |> Plots.stage "05-attention" "Causal grouped attention: weighted V per query"
+      >>= (Linear.forward layer.o)
+      # |> Plots.stage "06-output" "Output projection: mix attention heads"
+      >>= (Residual.forward skip))
+      |> as_result
+      # |> Plots.stage "07-residual" "Attention output plus original input";
+    );
+    match attended with
+    | None -> None
+    | Some value -> (
+        let value = as_calculation value;
+        Gpu.using (Gpu.clone value) Gpu.free (fn skip ->
+        (Some value
+        >>= (RmsNorm.forward layer.post)
+        # |> Plots.stage "08-postnorm" "RMSNorm before MLP"
+        >>= (Mlp.forward (layer.gate, layer.up))
+        #|> Plots.stage "09-swiglu" "MLP expansion: SiLU(gate) times up"
+        >>= (Linear.forward layer.down)
+        #|> Plots.stage "10-down" "MLP down projection to hidden width"
+        >>= (Residual.forward skip))
+        |> as_result
+        #|> Plots.stage "11-block" "Decoder block output: second residual"
+      )
+    )
+  ;;
+
+  let forward = fn weights: (Array of DecoderWeights) index: (Int) value: (Calculation) ->
+    calculate (weights[index]) value |> as_result
+  ;;
+
+  let rest = fn weights index value ->
+    if index >= layers then Some value
+    else forward weights index value
+      >>= (fn next -> rest weights (index + 1) next)
+  ;;
+;
+
+let Output = module () ->
+  let function = Gpu.compile "argmax";
+  let token_bytes = 4;
+
+  # Only the last position is needed for greedy next-token prediction.
+  let forward = fn embedding vocab value: (Calculation) ->
+    let offset = int64_from_int ((value.rows - 1) * value.width * Gpu.f32_bytes);
+    let last = as_calculation (value.data + offset, 1, value.width, F32);
+    let tied = as_projection (embedding, int64_from_int 0, value.width, vocab);
+    Gpu.release value.data (Linear.apply tied last)
+  ;;
+
+  # let pick = fn value: (Calculation) ->
+  let read_token = fn output: (Uint64) ->
+    let host = [| 0 |];
+    Gpu.read (cstr host) output token_bytes <&> (fn done -> host[0])
+  ;;
+
+  let pick = fn value: (Calculation) ->
+    Gpu.temporary token_bytes (fn output: (Uint64) ->
+      let data_arg = [| value.data |];
+      let output_arg = [| output |];
+      let count_arg = [| value.width |];
+      function
+      >>= (fn kernel ->
+        Gpu.launch kernel 1 1 [| cstr data_arg, cstr output_arg, cstr count_arg |])
+      >>= (fn done -> read_token output)
+    )
+  ;;
+;
+
+let Forward = module () ->
+  # Verification preserves a successful calculation for the next layer.
+  let check_embedding = fn model ids calculation ->
+    calculation >>= (fn value ->
+        let value = as_calculation value;
+        if Embeddings.verify model value.data ids value.rows value.width then
+          Some value
+        else (let _ = cuMemFree_v2 value.data; None)
+      )
+  ;;
+
+  let finish = fn calculation ->
+    calculation >>= (fn value: (Calculation) ->
+      Gpu.release value.data (Output.pick value)
+    )
+  ;;
+
+  let as_token = fn value: (Option of Int) -> value;;
+
+  let predict = fn model: (QwenModel) weights embedding norm token_ids count ->
+    let (_, device, _) = embedding;
+    let vocab = json_array_int 0 model.embedding.shape;
+    (Some (token_ids, count)
+    >>= (Embeddings.forward embedding)
+    # |> check_embedding model token_ids
+    # |> Plots.stage "01-embedding" "Embedding: token IDs become learned vectors"
+    >>= Float32.forward
+    >>= (Decoder.forward weights 0)
+    >>= (Decoder.rest weights 1)
+    >>= (RmsNorm.forward norm)
+    # |> Plots.stage "12-finalnorm" "Final RMSNorm after 24 decoder blocks"
+    >>= (Output.forward device vocab))
+    |> finish
+    |> as_token
+  ;;
+;
+
+type GenerationStatus = | Generating | Finished | Failed;
+let Generation = module () ->
+  let max_context = 32768;
+
+  let run = fn model weights embedding norm tokenizer limit eos input ->
+    match input with
+    | None -> None
+    | Some (original, count) -> (
+        if limit < 0 || count + limit > max_context then (
+          print "generation exceeds context limit\n";
+          None
+        ) else (
+          let tokens = array_fill_zeroes (count + limit) 0;
+          for i = 0 .. count in (tokens[i] := original[i]; ());
+          let output = array_fill_zeroes limit 0;
+          let generated = [| 0 |];
+          let status = [| Generating |];
+          for step = 0 .. limit in (
+            match status[0] with
+            | Generating -> (
+                match Forward.predict model weights embedding norm tokens (count + generated[0])
+                  |> Forward.as_token with
+                | None -> (status[0] := Failed; ())
+                | Some next if next == eos -> (status[0] := Finished; ())
+                | Some next -> (
+                    tokens[count + generated[0]] := next;
+                    output[generated[0]] := next;
+                    generated[0] := generated[0] + 1;
+                    print `token {generated[0]}/{limit}: {next}\n`;
+                    ()
+                  )
+              )
+            | _ -> ()
+          );
+          match status[0] with
+          | Failed -> (print "generation failed\n"; None)
+          | _ -> (
+              # Decode the sequence together to preserve split UTF-8 characters.
+              match Tokenizers.decode_ids tokenizer output (generated[0])
+                |> Tokenizers.as_decoded with
+              | None -> (print "decoding failed\n"; None)
+              | Some text -> (print `generated text: "{text}"\n`; Some GpuDone)
+            )
+        )
+      )
+  ;;
+;
+
+let hidden = json_array_int 1 m.embedding.shape;
+let vocab = json_array_int 0 m.embedding.shape;
+let embedding = embedding_device <&> (fn device -> (kernel, device, hidden));
+let final_norm = Gpu.weight m "model.norm.weight" hidden |> as_device;
+# Keep model resources alive for repeated REPL calls.
+let decoder_weights = final_norm >>= (fn norm -> Decoder.load_all m hidden);
+let chat = fn input: (String) ->
+  embedding >>= (fn embedding ->
+  final_norm >>= (fn norm ->
+  decoder_weights >>= (fn weights ->
+    Tokenizers.encode tokenizer input
+    |> Generation.run m weights embedding norm tokenizer max_new_tokens eos_token_id
+  ))) |> as_status
+;;

@@ -1,0 +1,34 @@
+let Opt = module () ->
+  let bind = fn f: (T -> Option of U) o: (Option of T) ->
+    match o with
+    | Some t -> f t
+    | None -> None
+  ;;
+
+  let map = fn f: (T -> U) o: (Option of T) ->
+    match o with
+    | Some t -> Some (f t)
+    | None -> None
+  ;;
+
+  let (>>=) = fn o f -> Opt.bind f o;;
+  let (<&>) = fn o f -> Opt.map f o;;
+  let fallback = 9;
+;
+
+open Opt;
+
+let test = module () ->
+  # Opening a local module exposes operators, functions, and stored values.
+  let test_open_bind = fn () ->
+    (Some 2 >>= (fn n: (Int) -> Some (n + 2))) == Some 4
+  ;;
+
+  let test_open_map = fn () ->
+    (Some 2 <&> (fn n: (Int) -> n + 5)) == Some 7
+  ;;
+
+  let test_open_members = fn () ->
+    map (fn n: (Int) -> n + fallback) (Some 2) == Some 11
+  ;;
+;

@@ -1,0 +1,37 @@
+open std/Opt;
+
+let return = fn value input -> Some (value, input);;
+let (>>~) = fn parser next input ->
+  parser input >>= (fn (value, rest) -> next value rest)
+;;
+let item = fn input ->
+  if array_size input == 0 then None
+  else Some (input[0], array_succ input)
+;;
+let pair = fn input ->
+  (item >>~ (fn first ->
+    item >>~ (fn second -> return (first, second))
+  )) input
+;;
+let triple = fn input ->
+  (item >>~ (fn first ->
+    item >>~ (fn second ->
+      item >>~ (fn third -> return (first, second, third))
+    )
+  )) input
+;;
+let test = module () ->
+  let test_pair = fn () ->
+    match pair "12!" with
+    | Some (('1', '2'), rest) -> rest == "!"
+    | _ -> false
+  ;;
+  let test_short = fn () ->
+    match pair "1" with | None -> true | _ -> false
+  ;;
+  let test_triple = fn () ->
+    match triple "123!" with
+    | Some (('1', '2', '3'), rest) -> rest == "!"
+    | _ -> false
+  ;;
+;

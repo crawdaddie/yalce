@@ -21,7 +21,15 @@ let int = fn object ->
 
 let string = fn object ->
   let value = json_object_get_string object;
-  from_cstr (strlen value) value
+  let size = strlen value;
+  let text = array_fill_zeroes size (char_of_int 0);
+  let memcpy = extern fn Ptr -> Ptr -> Uint64 -> Ptr;
+  let int64_from_int = extern fn Int -> Uint64;
+  let as_string = fn value: (String) -> value;;
+
+  # json-c owns its string; return a separate YLC-managed copy.
+  let _ = memcpy (cstr text) value (int64_from_int size);
+  as_string text
 ;;
 
 let json_get = fn key object ->

@@ -12,6 +12,7 @@
 #include "escape_analysis.h"
 #include "input.h"
 #include "types/type_expressions.h"
+#include "types/type_hash.h"
 #include <ctype.h>
 #include <dlfcn.h>
 #include <llvm-c/Core.h>
@@ -27,6 +28,9 @@
 typedef struct {
   double resolve_seconds;
   size_t hits;
+  size_t shape_hits;
+  size_t alias_candidates;
+  size_t alias_index_builds;
   size_t misses;
   size_t full;
   size_t alias_searches;
@@ -67,7 +71,7 @@ static void lower_rc_report(const char *name, LowerRcProfile before) {
   static const double ms_per_second = 1000.0;
   fprintf(stderr,
           "[lowering-rc] %12.3f ms  %s | hits=%zu misses=%zu full=%zu "
-          "alias-searches=%zu shape-searches=%zu drop-bodies=%zu\n",
+          "alias-searches=%zu shape-searches=%zu drop-bodies=%zu shape-hits=%zu alias-candidates=%zu alias-index-builds=%zu\n",
           (lower_rc_profile.resolve_seconds - before.resolve_seconds) *
               ms_per_second,
           name, lower_rc_profile.hits - before.hits,
@@ -75,7 +79,10 @@ static void lower_rc_report(const char *name, LowerRcProfile before) {
           lower_rc_profile.full - before.full,
           lower_rc_profile.alias_searches - before.alias_searches,
           lower_rc_profile.shape_searches - before.shape_searches,
-          lower_rc_profile.drop_bodies - before.drop_bodies);
+          lower_rc_profile.drop_bodies - before.drop_bodies,
+          lower_rc_profile.shape_hits - before.shape_hits,
+          lower_rc_profile.alias_candidates - before.alias_candidates,
+          lower_rc_profile.alias_index_builds - before.alias_index_builds);
 }
 
 typedef struct {
@@ -199,7 +206,101 @@ static bool rc_cache_grow(void) {
   return true;
 }
 
+typedef struct {
+  TypeHashKey key;
+  TypeEnv *env;
+  Type *result;
+} RcShapeEntry;
+
+static RcShapeEntry *rc_shapes;
+static size_t rc_shape_capacity;
+static size_t rc_shape_count;
+
+static size_t rc_shape_slot(RcShapeEntry *entries, size_t capacity,
+                            const TypeHashKey *key, TypeEnv *env) {
+  size_t slot = key->hash & (capacity - 1);
+  while (entries[slot].key.encoding) {
+    RcShapeEntry *entry = &entries[slot];
+    if (entry->env == env && entry->key.hash == key->hash &&
+        strcmp(entry->key.encoding, key->encoding) == 0) {
+      return slot;
+    }
+    slot = (slot + 1) & (capacity - 1);
+  }
+  return slot;
+}
+
+static bool rc_shape_grow(void) {
+  if (rc_shape_capacity > SIZE_MAX / RC_CACHE_GROWTH) {
+    return false;
+  }
+  size_t capacity = rc_shape_capacity ? rc_shape_capacity * RC_CACHE_GROWTH
+                                      : RC_CACHE_INITIAL_CAP;
+  if (capacity > SIZE_MAX / sizeof(RcShapeEntry)) {
+    return false;
+  }
+  RcShapeEntry *entries = calloc(capacity, sizeof(*entries));
+  if (!entries) {
+    return false;
+  }
+  for (size_t i = 0; i < rc_shape_capacity; i++) {
+    RcShapeEntry entry = rc_shapes[i];
+    if (!entry.key.encoding) {
+      continue;
+    }
+    entries[rc_shape_slot(entries, capacity, &entry.key, entry.env)] = entry;
+  }
+  free(rc_shapes);
+  rc_shapes = entries;
+  rc_shape_capacity = capacity;
+  return true;
+}
+
+static Type *rc_shape_get(const TypeHashKey *key, TypeEnv *env) {
+  if (!key->encoding || !rc_shape_capacity) {
+    return NULL;
+  }
+  return rc_shapes[rc_shape_slot(rc_shapes, rc_shape_capacity, key, env)].result;
+}
+
+// Transfer key ownership only after insertion; callers free unconsumed keys.
+static void rc_shape_put(TypeHashKey *key, TypeEnv *env, Type *result) {
+  if (!key->encoding || !result) {
+    return;
+  }
+  if (rc_shape_capacity) {
+    size_t slot = rc_shape_slot(rc_shapes, rc_shape_capacity, key, env);
+    if (rc_shapes[slot].key.encoding) {
+      rc_shapes[slot].result = result;
+      return;
+    }
+  }
+  if (rc_shape_count >= rc_shape_capacity / RC_CACHE_GROWTH &&
+      !rc_shape_grow()) {
+    if (ylc_config.profile_lowering) {
+      lower_rc_profile.full++;
+    }
+    return;
+  }
+  size_t slot = rc_shape_slot(rc_shapes, rc_shape_capacity, key, env);
+  rc_shapes[slot] = (RcShapeEntry){.key = *key, .env = env, .result = result};
+  *key = (TypeHashKey){0};
+  rc_shape_count++;
+}
+
+static void rc_shape_reset(void) {
+  for (size_t i = 0; i < rc_shape_capacity; i++) {
+    type_hash_destroy(&rc_shapes[i].key);
+    rc_shapes[i] = (RcShapeEntry){0};
+  }
+  rc_shape_count = 0;
+}
+
+static void rc_alias_reset(void);
+
 static void lower_mir_rc_cache_reset(void) {
+  rc_alias_reset();
+  rc_shape_reset();
   // Reuse storage across REPL inputs, but never retain their type mappings.
   if (lower_mir_rc_cache) {
     memset(lower_mir_rc_cache, 0,
@@ -5115,13 +5216,10 @@ static Type *lower_mir_find_equivalent_rc_alias_type_in_type(Type *type,
   return NULL;
 }
 
-static Type *lower_mir_find_equivalent_rc_alias_type(Type *target) {
+static Type *rc_alias_scan(Type *target) {
   MirProgram *program = lower_mir_current_program;
   if (!program || !target) {
     return NULL;
-  }
-  if (ylc_config.profile_lowering) {
-    lower_rc_profile.shape_searches++;
   }
 
   for (size_t i = 0; i < program->functions.len; i++) {
@@ -5183,6 +5281,234 @@ static Type *lower_mir_find_equivalent_rc_alias_type(Type *target) {
   }
 
   return NULL;
+}
+
+enum { RC_ALIAS_DEPTH = 12, RC_ALIAS_INITIAL = 128, RC_ALIAS_GROWTH = 2 };
+static const size_t rc_alias_none = SIZE_MAX;
+
+typedef struct {
+  Type *type;
+  size_t shape_next;
+  size_t name_next;
+} RcAliasEntry;
+
+typedef struct {
+  RcAliasEntry *entries;
+  size_t length;
+  size_t capacity;
+  size_t *shapes;
+  size_t *names;
+  size_t buckets;
+  MirProgram *program;
+} RcAliasIndex;
+
+static RcAliasIndex rc_alias_index;
+
+static void rc_alias_reset(void) {
+  free(rc_alias_index.entries);
+  free(rc_alias_index.shapes);
+  free(rc_alias_index.names);
+  rc_alias_index = (RcAliasIndex){0};
+}
+
+static bool rc_alias_add(Type *type) {
+  if (!type || (type->kind != T_CONS && type->kind != T_SUM) || !type->alias) {
+    return true;
+  }
+  RcAliasIndex *index = &rc_alias_index;
+  if (index->length == index->capacity) {
+    if (index->capacity > SIZE_MAX / RC_ALIAS_GROWTH) {
+      return false;
+    }
+    size_t capacity = index->capacity ? index->capacity * RC_ALIAS_GROWTH
+                                      : RC_ALIAS_INITIAL;
+    if (capacity > SIZE_MAX / sizeof(RcAliasEntry)) {
+      return false;
+    }
+    RcAliasEntry *entries = realloc(index->entries, capacity * sizeof(*entries));
+    if (!entries) {
+      return false;
+    }
+    index->entries = entries;
+    index->capacity = capacity;
+  }
+  index->entries[index->length++] = (RcAliasEntry){.type = type};
+  return true;
+}
+
+// Match the old search order and depth limit, including declaration back-edges.
+static bool rc_alias_collect(Type *type, unsigned depth) {
+  if (!type || depth > RC_ALIAS_DEPTH) {
+    return true;
+  }
+  if (!rc_alias_add(type) || !rc_alias_collect(type->closure_meta, depth + 1)) {
+    return false;
+  }
+  switch (type->kind) {
+  case T_CONS:
+  case T_SUM:
+    for (int i = 0; type->data.T_CONS.args && i < type->data.T_CONS.num_args; i++) {
+      if (!rc_alias_collect(type->data.T_CONS.args[i], depth + 1)) {
+        return false;
+      }
+    }
+    return true;
+  case T_FN:
+    return rc_alias_collect(type->data.T_FN.from, depth + 1) &&
+           rc_alias_collect(type->data.T_FN.to, depth + 1);
+  case T_RECURSIVE_REF:
+    return !type->data.T_RECURSIVE_REF.decl ||
+           rc_alias_add(type->data.T_RECURSIVE_REF.decl->type);
+  default:
+    return true;
+  }
+}
+
+static bool rc_alias_collect_fn(MirFunction *fn) {
+  if (!fn) {
+    return true;
+  }
+  if (!rc_alias_collect(fn->type, 0)) {
+    return false;
+  }
+  for (size_t i = 0; i < fn->params.len; i++) {
+    if (!rc_alias_collect(fn->params.items[i].type, 0)) {
+      return false;
+    }
+  }
+  for (size_t i = 0; i < fn->values.len; i++) {
+    if (!rc_alias_collect(fn->values.items[i].type, 0)) {
+      return false;
+    }
+  }
+  for (size_t i = 0; i < fn->blocks.len; i++) {
+    MirBlock *block = fn->blocks.items ? fn->blocks.items[i] : NULL;
+    if (!block) {
+      continue;
+    }
+    for (size_t j = 0; j < block->instrs.len; j++) {
+      MirInstr *instr = &block->instrs.items[j];
+      if (!rc_alias_collect(instr->type, 0)) {
+        return false;
+      }
+      Type *extra = NULL;
+      if (instr->kind == MIR_CONSTRUCT) {
+        extra = instr->data.construct.constructor_type;
+      } else if (instr->kind == MIR_CALL) {
+        extra = instr->data.call.callee_type;
+      }
+      if (!rc_alias_collect(extra, 0)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+static uint64_t rc_alias_hash(const char *name) {
+  static const uint64_t offset = UINT64_C(14695981039346656037);
+  static const uint64_t prime = UINT64_C(1099511628211);
+  uint64_t hash = offset;
+  for (const unsigned char *p = (const unsigned char *)name; p && *p; p++) {
+    hash = (hash ^ *p) * prime;
+  }
+  return hash;
+}
+
+static size_t rc_alias_shape_bucket(Type *type) {
+  static const uint64_t prime = UINT64_C(1099511628211);
+  uint64_t hash = rc_alias_hash(type->data.T_CONS.name);
+  hash = (hash ^ (uint64_t)type->kind) * prime;
+  hash = (hash ^ (uint64_t)type->data.T_CONS.num_args) * prime;
+  return hash & (rc_alias_index.buckets - 1);
+}
+
+static bool rc_alias_build(MirProgram *program) {
+  rc_alias_reset();
+  for (size_t i = 0; i < program->functions.len; i++) {
+    if (!rc_alias_collect_fn(program->functions.items
+                                 ? program->functions.items[i] : NULL)) {
+      rc_alias_reset();
+      return false;
+    }
+  }
+  RcAliasIndex *index = &rc_alias_index;
+  // Capacity is a power of two and bounds the number of collected candidates.
+  index->buckets = index->capacity ? index->capacity : RC_ALIAS_INITIAL;
+  index->shapes = malloc(index->buckets * sizeof(*index->shapes));
+  index->names = malloc(index->buckets * sizeof(*index->names));
+  if (!index->shapes || !index->names) {
+    rc_alias_reset();
+    return false;
+  }
+  for (size_t i = 0; i < index->buckets; i++) {
+    index->shapes[i] = index->names[i] = rc_alias_none;
+  }
+  // Prepend in reverse order so both candidate chains retain first-match order.
+  for (size_t i = index->length; i > 0; i--) {
+    RcAliasEntry *entry = &index->entries[i - 1];
+    size_t shape = rc_alias_shape_bucket(entry->type);
+    size_t name = rc_alias_hash(entry->type->alias) & (index->buckets - 1);
+    entry->shape_next = index->shapes[shape];
+    entry->name_next = index->names[name];
+    index->shapes[shape] = index->names[name] = i - 1;
+  }
+  index->program = program;
+  if (ylc_config.profile_lowering) {
+    lower_rc_profile.alias_index_builds++;
+  }
+  return true;
+}
+
+static Type *rc_alias_lookup(Type *target) {
+  RcAliasIndex *index = &rc_alias_index;
+  size_t shape = rc_alias_none;
+  size_t name = rc_alias_none;
+  if (target->kind == T_CONS || target->kind == T_SUM) {
+    shape = index->shapes[rc_alias_shape_bucket(target)];
+    if (target->alias) {
+      name = index->names[rc_alias_hash(target->alias) & (index->buckets - 1)];
+    }
+  } else if (target->kind == T_RECURSIVE_REF ||
+             (target->kind == T_VAR && target->is_recursive_type_ref)) {
+    const char *alias = lower_mir_type_decl_name(target);
+    if (alias) {
+      name = index->names[rc_alias_hash(alias) & (index->buckets - 1)];
+    }
+  }
+
+  // Merge both chains: matching aliases can override constructor differences.
+  while (shape != rc_alias_none || name != rc_alias_none) {
+    size_t candidate = shape < name ? shape : name;
+    RcAliasEntry *entry = &index->entries[candidate];
+    if (shape == candidate) {
+      shape = entry->shape_next;
+    }
+    if (name == candidate) {
+      name = entry->name_next;
+    }
+    if (ylc_config.profile_lowering) {
+      lower_rc_profile.alias_candidates++;
+    }
+    if (lower_mir_types_same_rc_shape(entry->type, target, 0)) {
+      return entry->type;
+    }
+  }
+  return NULL;
+}
+
+static Type *lower_mir_find_equivalent_rc_alias_type(Type *target) {
+  MirProgram *program = lower_mir_current_program;
+  if (!program || !target) {
+    return NULL;
+  }
+  if (ylc_config.profile_lowering) {
+    lower_rc_profile.shape_searches++;
+  }
+  if (rc_alias_index.program != program && !rc_alias_build(program)) {
+    return rc_alias_scan(target);
+  }
+  return rc_alias_lookup(target);
 }
 
 static Type *lower_mir_resolve_rc_type_refs(Type *type, JITLangCtx *ctx,
@@ -5268,8 +5594,26 @@ static Type *lower_mir_resolve_rc_type(Type *type, JITLangCtx *ctx) {
     return cached;
   }
 
+  // Canonical aliases already resolve to themselves; preserve their identity.
+  TypeHashKey key = {0};
+  if (!((type->kind == T_CONS || type->kind == T_SUM) && type->alias)) {
+    type_hash_resolution(type, &key);
+  }
+  cached = rc_shape_get(&key, ctx->env);
+  if (cached) {
+    type_hash_destroy(&key);
+    lower_mir_rc_cache_put(type, cached);
+    if (ylc_config.profile_lowering) {
+      lower_rc_profile.shape_hits++;
+      lower_rc_profile.resolve_seconds += lower_profile_now() - start;
+    }
+    return cached;
+  }
+
   Type *result = lower_mir_resolve_rc_type_uncached(type, ctx);
   lower_mir_rc_cache_put(type, result);
+  rc_shape_put(&key, ctx->env, result);
+  type_hash_destroy(&key);
   if (ylc_config.profile_lowering) {
     lower_rc_profile.misses++;
     lower_rc_profile.resolve_seconds += lower_profile_now() - start;

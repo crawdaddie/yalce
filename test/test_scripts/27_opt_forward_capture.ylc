@@ -1,0 +1,20 @@
+open std/Opt;
+
+let keep = fn resource use ->
+  resource >>= (fn value -> use value)
+;;
+
+let buffer = fn use -> keep (Some 7) use;;
+
+let captured = fn n ->
+  buffer (fn value -> Some (value + n))
+;;
+
+let add = fn n value -> Some (n + value);;
+let curried = fn n -> buffer (add n);;
+
+let test = module () ->
+  # Forwarding a callback must preserve its captured environment.
+  let test_forward_capture = fn () -> captured 5 == Some 12;;
+  let test_curried_capture = fn () -> curried 5 == Some 12;;
+;
