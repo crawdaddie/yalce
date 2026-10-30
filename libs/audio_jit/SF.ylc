@@ -1,6 +1,9 @@
 type SFInfo = (fd: Ptr, frames: Uint64, samplerate: Int, channels: Int);
 type SF = (data: Array of Double, channels: Int, samplerate: Int);
 type SFB = (data: Array of Double, channels: Int, samplerate: Int);
+
+# A stable registry handle, classified as a resource by the audio compiler.
+type BufferRef = Ptr;
 let load_sf_buffer = extern fn String -> Int;
 let sf_buffer = extern fn Int -> Ptr;
 # let load_sf_buffer = fn p ->
@@ -44,4 +47,28 @@ let load_sf_mono = fn path ->
       SF mono_data 1 samplerate
     )
     | None -> SF [| |] 0 0
+;;
+
+# Registry-owned references outlive every voice that borrows them.
+let sf_ref_load = extern fn String -> BufferRef;
+let sf_ref_valid = extern fn BufferRef -> Bool;
+let load_ref = fn path ->
+  let buffer = sf_ref_load path;
+  if sf_ref_valid buffer then Some buffer else None
+;;
+
+# Fixed mono output; rate is relative to the source sample rate.
+let sf_play = extern fn BufferRef -> Double -> Double -> Double -> Double;
+open DSP_common;
+# let _ = dlopen "./libaudio_jit.so";
+
+# let Audio = extern fn (T: (Double ... -> Double)) -> T;
+let play = @Audio fn buffer rate start trigger ->
+  sf_play buffer rate start trigger
+;;
+
+# Fixed stereo output; mono sources feed both channels.
+let sf_play2 = extern fn BufferRef -> Double -> Double -> Double -> Double;
+let play2 = @Audio fn buffer rate start trigger ->
+  sf_play2 buffer rate start trigger
 ;;

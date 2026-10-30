@@ -23,8 +23,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
+#ifndef YLC_PROFILE_LOWERING
+#define YLC_PROFILE_LOWERING 0
+#endif
 
+#if YLC_PROFILE_LOWERING
+#include <time.h>
+#endif
+
+#if YLC_PROFILE_LOWERING
 typedef struct {
   double resolve_seconds;
   size_t hits;
@@ -39,13 +46,8 @@ typedef struct {
 } LowerRcProfile;
 
 static LowerRcProfile lower_rc_profile;
-
-// Monotonic wall time includes waits; disabled profiling avoids clock reads.
+// Monotonic wall time includes waits.
 static double lower_profile_now(void) {
-  if (!ylc_config.profile_lowering) {
-    return 0;
-  }
-
   static const double ns_per_second = 1000000000.0;
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
@@ -53,10 +55,6 @@ static double lower_profile_now(void) {
 }
 
 static void lower_profile_report(const char *stage, double start) {
-  if (!ylc_config.profile_lowering) {
-    return;
-  }
-
   static const double ms_per_second = 1000.0;
   fprintf(stderr, "[lowering] %12.3f ms  %s\n",
           (lower_profile_now() - start) * ms_per_second, stage);
@@ -64,10 +62,6 @@ static void lower_profile_report(const char *stage, double start) {
 
 // Snapshot deltas attribute shared helper work to the requesting function.
 static void lower_rc_report(const char *name, LowerRcProfile before) {
-  if (!ylc_config.profile_lowering) {
-    return;
-  }
-
   static const double ms_per_second = 1000.0;
   fprintf(stderr,
           "[lowering-rc] %12.3f ms  %s | hits=%zu misses=%zu full=%zu "
@@ -84,6 +78,12 @@ static void lower_rc_report(const char *name, LowerRcProfile before) {
           lower_rc_profile.alias_candidates - before.alias_candidates,
           lower_rc_profile.alias_index_builds - before.alias_index_builds);
 }
+
+#else
+#define lower_profile_now() 0.0
+#define lower_profile_report(stage, start) ((void)0)
+#define lower_rc_report(name, before) ((void)0)
+#endif
 
 typedef struct {
   LLVMValueRef *items;
@@ -277,9 +277,9 @@ static void rc_shape_put(TypeHashKey *key, TypeEnv *env, Type *result) {
   }
   if (rc_shape_count >= rc_shape_capacity / RC_CACHE_GROWTH &&
       !rc_shape_grow()) {
-    if (ylc_config.profile_lowering) {
-      lower_rc_profile.full++;
-    }
+#if YLC_PROFILE_LOWERING
+    lower_rc_profile.full++;
+#endif
     return;
   }
   size_t slot = rc_shape_slot(rc_shapes, rc_shape_capacity, key, env);
@@ -332,9 +332,9 @@ static void lower_mir_rc_cache_put(Type *type, Type *resolved) {
   if (rc_cache_count >= rc_cache_capacity / RC_CACHE_GROWTH &&
       !rc_cache_grow()) {
     // Caching is optional; resolution still works if growth cannot allocate.
-    if (ylc_config.profile_lowering) {
-      lower_rc_profile.full++;
-    }
+#if YLC_PROFILE_LOWERING
+    lower_rc_profile.full++;
+#endif
     return;
   }
   size_t slot = rc_cache_slot(lower_mir_rc_cache, rc_cache_capacity, type);
@@ -4992,9 +4992,9 @@ static Type *lower_mir_find_rc_alias_type(const char *alias) {
   if (!program || !alias) {
     return NULL;
   }
-  if (ylc_config.profile_lowering) {
-    lower_rc_profile.alias_searches++;
-  }
+#if YLC_PROFILE_LOWERING
+  lower_rc_profile.alias_searches++;
+#endif
 
   for (size_t i = 0; i < program->functions.len; i++) {
     MirFunction *fn =
@@ -5454,9 +5454,9 @@ static bool rc_alias_build(MirProgram *program) {
     index->shapes[shape] = index->names[name] = i - 1;
   }
   index->program = program;
-  if (ylc_config.profile_lowering) {
-    lower_rc_profile.alias_index_builds++;
-  }
+#if YLC_PROFILE_LOWERING
+  lower_rc_profile.alias_index_builds++;
+#endif
   return true;
 }
 
@@ -5487,9 +5487,9 @@ static Type *rc_alias_lookup(Type *target) {
     if (name == candidate) {
       name = entry->name_next;
     }
-    if (ylc_config.profile_lowering) {
-      lower_rc_profile.alias_candidates++;
-    }
+#if YLC_PROFILE_LOWERING
+    lower_rc_profile.alias_candidates++;
+#endif
     if (lower_mir_types_same_rc_shape(entry->type, target, 0)) {
       return entry->type;
     }
@@ -5502,9 +5502,9 @@ static Type *lower_mir_find_equivalent_rc_alias_type(Type *target) {
   if (!program || !target) {
     return NULL;
   }
-  if (ylc_config.profile_lowering) {
-    lower_rc_profile.shape_searches++;
-  }
+#if YLC_PROFILE_LOWERING
+  lower_rc_profile.shape_searches++;
+#endif
   if (rc_alias_index.program != program && !rc_alias_build(program)) {
     return rc_alias_scan(target);
   }
@@ -5584,13 +5584,15 @@ static Type *lower_mir_resolve_rc_type(Type *type, JITLangCtx *ctx) {
     return type;
   }
 
+#if YLC_PROFILE_LOWERING
   double start = lower_profile_now();
+#endif
   Type *cached = lower_mir_rc_cache_get(type);
   if (cached) {
-    if (ylc_config.profile_lowering) {
-      lower_rc_profile.hits++;
-      lower_rc_profile.resolve_seconds += lower_profile_now() - start;
-    }
+#if YLC_PROFILE_LOWERING
+    lower_rc_profile.hits++;
+    lower_rc_profile.resolve_seconds += lower_profile_now() - start;
+#endif
     return cached;
   }
 
@@ -5603,10 +5605,10 @@ static Type *lower_mir_resolve_rc_type(Type *type, JITLangCtx *ctx) {
   if (cached) {
     type_hash_destroy(&key);
     lower_mir_rc_cache_put(type, cached);
-    if (ylc_config.profile_lowering) {
-      lower_rc_profile.shape_hits++;
-      lower_rc_profile.resolve_seconds += lower_profile_now() - start;
-    }
+#if YLC_PROFILE_LOWERING
+    lower_rc_profile.shape_hits++;
+    lower_rc_profile.resolve_seconds += lower_profile_now() - start;
+#endif
     return cached;
   }
 
@@ -5614,10 +5616,10 @@ static Type *lower_mir_resolve_rc_type(Type *type, JITLangCtx *ctx) {
   lower_mir_rc_cache_put(type, result);
   rc_shape_put(&key, ctx->env, result);
   type_hash_destroy(&key);
-  if (ylc_config.profile_lowering) {
-    lower_rc_profile.misses++;
-    lower_rc_profile.resolve_seconds += lower_profile_now() - start;
-  }
+#if YLC_PROFILE_LOWERING
+  lower_rc_profile.misses++;
+  lower_rc_profile.resolve_seconds += lower_profile_now() - start;
+#endif
   return result;
 }
 
@@ -6384,9 +6386,9 @@ static LLVMValueRef lower_mir_ensure_drop_fn(Type *type, LLVMModuleRef module,
   LLVMValueRef dup_hook = lower_mir_rc_hook(module, "__ylc_dup");
   JITLangCtx dummy_ctx = {0};
   JITLangCtx *drop_ctx = ctx ? ctx : &dummy_ctx;
-  if (ylc_config.profile_lowering) {
-    lower_rc_profile.drop_bodies++;
-  }
+#if YLC_PROFILE_LOWERING
+  lower_rc_profile.drop_bodies++;
+#endif
   lower_mir_build_drop_fn_body(type, fn, module, drop_ctx);
   (void)dup_hook;
   return fn;
@@ -7704,8 +7706,12 @@ LLVMValueRef lower_mir(MirProgram *prog, LLVMModuleRef module,
   if (!prog || !module || !builder) {
     return NULL;
   }
+#if YLC_PROFILE_LOWERING
   double profile_start = lower_profile_now();
+#endif
+#if YLC_PROFILE_LOWERING
   LowerRcProfile profile_before = lower_rc_profile;
+#endif
   MirProgram *saved_current_program = lower_mir_current_program;
   lower_mir_current_program = prog;
   lower_mir_rc_cache_reset();
@@ -7727,7 +7733,9 @@ LLVMValueRef lower_mir(MirProgram *prog, LLVMModuleRef module,
     return NULL;
   }
 
+#if YLC_PROFILE_LOWERING
   double stage_start = lower_profile_now();
+#endif
   if (!lower_mir_link_llvm_bitcode_dependencies(prog, module)) {
     lower_profile_report("bitcode linking (failed)", stage_start);
     free(lctx.functions);
@@ -7737,7 +7745,9 @@ LLVMValueRef lower_mir(MirProgram *prog, LLVMModuleRef module,
   }
   lower_profile_report("bitcode linking", stage_start);
 
+#if YLC_PROFILE_LOWERING
   stage_start = lower_profile_now();
+#endif
   MirFunction *top_fn = NULL;
   for (size_t i = 0; i < prog->functions.len; i++) {
     MirFunction *fn = prog->functions.items ? prog->functions.items[i] : NULL;
@@ -7759,7 +7769,9 @@ LLVMValueRef lower_mir(MirProgram *prog, LLVMModuleRef module,
     return lower_mir_void_stub(module, builder);
   }
 
+#if YLC_PROFILE_LOWERING
   stage_start = lower_profile_now();
+#endif
   for (size_t i = 0; i < prog->functions.len; i++) {
     MirFunction *fn = prog->functions.items ? prog->functions.items[i] : NULL;
     if (!fn || !lctx.functions[fn->id]) {
@@ -7771,8 +7783,12 @@ LLVMValueRef lower_mir(MirProgram *prog, LLVMModuleRef module,
     }
 
     // Report each body to expose expensive functions before lowering finishes.
+#if YLC_PROFILE_LOWERING
     LowerRcProfile rc_before = lower_rc_profile;
+#endif
+#if YLC_PROFILE_LOWERING
     double body_start = lower_profile_now();
+#endif
     bool ok = lower_mir_function_body(&lctx, fn, module, builder);
     lower_profile_report(fn->name ? fn->name : "<anonymous>", body_start);
     lower_rc_report(fn->name ? fn->name : "<anonymous>", rc_before);

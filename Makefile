@@ -2,6 +2,9 @@ include .env
 
 BUILD_DIR := build
 
+# Enable MIR-to-LLVM timing and cache counters at build time.
+PROFILE_LOWERING ?= 0
+
 LLVM := ${LLVM_PATH}
 # Debug LLVM path (you can change this to your debug LLVM installation path)
 DEBUG_LLVM := ~/projects/llvm-debug
@@ -185,6 +188,14 @@ $(LEX_OUTPUT): $(LEX_FILE)
 $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.c $(LANG_HEADERS) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
 	$(LANG_CC) -c -o $@ $<
 
+# Recompile lowering when profiling changes, without a clean build.
+.PHONY: force_profile_lowering
+$(BUILD_DIR)/.profile-lowering: force_profile_lowering | $(BUILD_DIR)
+	@test "`cat $@ 2>/dev/null`" = "$(PROFILE_LOWERING)" || printf '%s\n' '$(PROFILE_LOWERING)' > $@
+
+$(BUILD_DIR)/llvm/lowering.o: $(LANG_SRC_DIR)/llvm/lowering.c $(BUILD_DIR)/.profile-lowering $(LANG_HEADERS) $(YACC_OUTPUT) $(LEX_OUTPUT) | $(BUILD_DIR)
+	$(LANG_CC) -DYLC_PROFILE_LOWERING=$(PROFILE_LOWERING) -c -o $@ $<
+
 # Build C++ object files for coroutine passes
 $(BUILD_DIR)/%.o: $(LANG_SRC_DIR)/%.cpp $(LANG_HEADERS) | $(BUILD_DIR)
 	$(LANG_CXX) -c -o $@ $<
@@ -243,6 +254,10 @@ clean:
 
 test:
 	$(MAKE) -C test
+
+.PHONY: test_synth_buffers
+test_synth_buffers: $(BUILD_DIR)/ylc
+	python3 test/test_synth_buffers.py
 
 sample_timing_test: $(BUILD_DIR)/ylc
 	bash test/test_sample_timing.sh

@@ -1,7 +1,8 @@
 #include "./osc_kernels.h"
-#include "./ott_kernels.h"
 #include "./ott_kernels.c"
+#include "./ott_kernels.h"
 #include "node.h"
+#include "sf_buffer.h"
 #include "ylc_datatypes.h"
 #include <math.h>
 #include <stdint.h>
@@ -111,6 +112,29 @@ ylc_audio_sin_osc_kernel(SinOscState *state, double spf, double freq) {
 
   double sample = (1.0 - frac) * a + (frac * b);
   state->phase = fmod(state->phase + freq * spf, 1.0);
+
+  return sample;
+}
+
+/* External phase modulation changes the lookup, never the accumulator. */
+__attribute__((always_inline)) double ylc_audio_fm_op_kernel(FmOpState *state,
+                                                             double spf,
+                                                             double freq,
+                                                             double phase_mod) {
+  const int table_mask = SIN_TABSIZE - 1;
+  double phase = state->phase + phase_mod;
+  phase -= floor(phase);
+
+  double position = phase * SIN_TABSIZE;
+  int index = (int)position;
+  double fraction = position - index;
+  double a = sin_table[index & table_mask];
+  double b = sin_table[(index + 1) & table_mask];
+  double sample = a + fraction * (b - a);
+
+  /* Branch-free wrapping shortens the per-sample phase dependency chain. */
+  double next = state->phase + freq * spf;
+  state->phase = next - floor(next);
   return sample;
 }
 
@@ -488,6 +512,39 @@ ylc_audio_bufplay_kernel(BufplayState *state, double spf, int32_t size,
   return sample;
 }
 
+/* Read registered samples without array allocation or reference counting. */
+__attribute__((always_inline)) double
+sf_play_kernel(BufplayState *state, double spf, void *buffer, double rate,
+               double start, double trigger, int32_t output_channel) {
+  const SfBufferView *view = sf_ref_view(buffer);
+  if (!view || view->frames <= 0 || view->channels < 1 ||
+      view->channels > SF_PLAY_CHANNELS) {
+    return 0.0;
+  }
+
+  double phase =
+      audio_jit_rising_edge(trigger, state->prev_trig) ? start : state->phase;
+  double position = audio_jit_wrap_index(phase * view->frames, view->frames);
+  int first = (int)floor(position);
+  int second = (first + 1) % view->frames;
+  double sample = 0.0;
+  /* Mix for SF.play; select one channel for each SF.play2 output lane. */
+  int first_channel =
+      output_channel == SF_PLAY_MIX ? 0 : output_channel % view->channels;
+  int channel_count = output_channel == SF_PLAY_MIX ? view->channels : 1;
+  for (int channel = first_channel; channel < first_channel + channel_count;
+       channel++) {
+    sample += audio_jit_lerp(view->data[first * view->channels + channel],
+                             view->data[second * view->channels + channel],
+                             position - first);
+  }
+
+  state->phase = audio_jit_wrap_index(
+      phase + view->samplerate * spf * rate / view->frames, 1.0);
+  state->prev_trig = trigger;
+  return sample / channel_count;
+}
+
 __attribute__((always_inline)) double
 ylc_audio_mbufplay_kernel(BufplayState *state, double spf, int32_t channels,
                           int32_t channel, int32_t size, int32_t offset,
@@ -501,8 +558,7 @@ ylc_audio_mbufplay_kernel(BufplayState *state, double spf, int32_t channels,
   int32_t frames = size / channels;
   int rising = audio_jit_rising_edge(trig, state->prev_trig);
   double phase = rising ? start_pos : state->phase;
-  double frame = audio_jit_wrap_index(phase * (double)frames,
-                                      (double)frames);
+  double frame = audio_jit_wrap_index(phase * (double)frames, (double)frames);
   int32_t frame0 = (int32_t)floor(frame);
   int32_t frame1 = frame0 + 1;
   if (frame1 >= frames) {
@@ -1640,7 +1696,6 @@ ylc_audio_glue_kernel(GlueCompState *state, double spf, double thresh,
   }
   return x * gain;
 }
-
 
 /* Look-ahead limiter modeled on SuperCollider's three-buffer limiter. */
 __attribute__((always_inline)) double

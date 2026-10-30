@@ -1,3 +1,4 @@
+#include "sf_buffer.h"
 #include "./engine_core.h"
 #include "./audio_loop.h"
 #include "./scheduling.h"
@@ -855,6 +856,7 @@ typedef struct {
 } SfArrayPayload;
 
 typedef struct SfBuffer {
+  SfBufferView view;
   SfArrayPayload *array;
   int index;
   int frames;
@@ -936,6 +938,7 @@ int load_sf_buffer(_String path) {
   }
 
   *buffer = (SfBuffer){
+      .view = {array->data, (int)info.frames, info.channels, info.samplerate},
       .array = array,
       .index = sf_buffer_next++,
       .frames = (int)info.frames,
@@ -962,6 +965,21 @@ void *sf_buffer(int index) {
     buffer = buffer->next;
   }
   return buffer;
+}
+
+/* References remain valid while the engine registry is alive. */
+void *sf_ref_load(_String path) {
+  return load_sf_buffer_path(path);
+}
+
+bool sf_ref_valid(void *raw) {
+  SfBuffer *buffer = raw;
+  return buffer && buffer->channels > 0 && buffer->channels <= 2;
+}
+
+const SfBufferView *sf_ref_view(void *raw) {
+  SfBuffer *buffer = raw;
+  return buffer ? &buffer->view : NULL;
 }
 
 _DoubleArray sf_buffer_data(void *raw_buffer) {

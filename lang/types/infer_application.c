@@ -174,8 +174,14 @@ static bool types_compatible_ignoring_closure_meta(Type *param_type,
   return types_match(param_type, arg_type) || types_match(arg_type, param_type);
 }
 
+typedef enum {
+  PARAM_GENERAL,
+  PARAM_AUDIO,
+} ParamConstraint;
+
 static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
-                                             Type *param_type, Ast *arg_ast) {
+                                             Type *param_type, Ast *arg_ast,
+                                             ParamConstraint mode) {
   // Variadic structural constraint: if the parameter type carries a Variadic
   // template (stored on meta), expand it to match the argument's arity and
   // add a constraint.  This constrains each lambda arg to the template's last
@@ -194,6 +200,22 @@ static void constrain_argument_for_parameter(TICtx *ctx, Type *arg_type,
     Type *expanded = arg_has_void_param
                          ? extend_variadic_template_void(variadic, arg_type)
                          : extend_variadic_template(variadic, arg_type);
+    /* Resolve resource parameters before applying numeric signal defaults. */
+    if (expanded && mode == PARAM_AUDIO) {
+      Solution solution = {0};
+      if (infer_solve(ctx, &solution) != 0) {
+        return;
+      }
+      Type *resolved = apply_subst_to_type(solution.subst, arg_type);
+      Type *expected = expanded;
+      for (Type *actual = resolved; actual && actual->kind == T_FN &&
+           expected && expected->kind == T_FN;
+           actual = actual->data.T_FN.to, expected = expected->data.T_FN.to) {
+        if (is_pointer_type(actual->data.T_FN.from)) {
+          expected->data.T_FN.from = actual->data.T_FN.from;
+        }
+      }
+    }
     if (expanded) {
       // Link the parameter (a tvar carrying the Variadic meta) to the
       // argument so the function's result type tracks the argument. Then
@@ -336,7 +358,9 @@ Type *infer_application(Ast *ast, TICtx *ctx) {
       // spuriously require `From((), [arg])`.
       if (param_type->kind != T_VOID) {
         constrain_argument_for_parameter(ctx, arg_type, param_type,
-                                         ast->data.AST_APPLICATION.args + i);
+                                         ast->data.AST_APPLICATION.args + i,
+                                         is_identifier_named(fn_ast, "Audio")
+                                             ? PARAM_AUDIO : PARAM_GENERAL);
       }
       current = current->data.T_FN.to;
     } else {

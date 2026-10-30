@@ -10,7 +10,6 @@ typedef struct RTConfig {
   bool dump_ir;
   bool dump_ir_pre;
   bool dump_mir;
-  bool profile_lowering;
   bool debug_symbols;
   bool verify_ir;
   bool perceus_rc;

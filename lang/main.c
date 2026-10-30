@@ -34,9 +34,6 @@ void parse_args(int argc, char **argv) {
     } else if (strcmp(argv[arg_counter], "--dump-mir") == 0) {
       ylc_config.dump_mir = true;
       arg_counter++;
-    } else if (strcmp(argv[arg_counter], "--profile-lowering") == 0) {
-      ylc_config.profile_lowering = true;
-      arg_counter++;
     } else if (strcmp(argv[arg_counter], "--test") == 0) {
       // run top-level tests for input module
       ylc_config.test_mode = true;

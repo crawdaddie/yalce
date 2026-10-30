@@ -4,6 +4,14 @@
 #include <stdint.h>
 #include "./ott_kernels.h"
 
+/* A fixed stereo layout also accepts mono source buffers. */
+typedef enum {
+  SF_PLAY_MIX = -1,
+  SF_PLAY_LEFT,
+  SF_PLAY_RIGHT,
+  SF_PLAY_CHANNELS,
+} SfPlayChannel;
+
 typedef struct {
   double phase;
 } PhasorState;
@@ -40,6 +48,10 @@ typedef struct {
 typedef struct {
   double phase;
 } SinOscState;
+
+typedef struct {
+  double phase;
+} FmOpState;
 
 typedef struct {
   double previous;
