@@ -109,21 +109,23 @@ let fx = @Audio fn sel tr subdiv beat_len rate inp ->
 let glitch = fx 0. 0. 1. beat 1. 0. |> play_node;
 
 let Drums = module () ->
+  # Each synth captures its fixed buffer; failed loads render silence.
   let bufs = [|
     "~/Sounds/renoise-3.5.4-samples/HiHats/Closed Hat/tight_synther.flac", #0: hh
     "~/Sounds/renoise-3.5.4-samples/Kicks/Hard/offered.flac", #1: kick
     "~/Sounds/renoise-3.5.4-samples/Snares/Thin/xb_snare_052.flac", #2: snare
-  |] |> Arrays.map (SF.load_sf);
+  |] |> Arrays.map (fn path -> SF.sf_ref_load path);
 
   let _ = print `loaded {array_size bufs} buffers\n`;
 
+  let hat_buffer = bufs[0];
+  let kick_buffer = bufs[1];
+  let snare_buffer = bufs[2];
+
   let kds = @Audio fn () -> 
-    let rate = 1.;
-    let f = bufs[1]; 
     let t = trig 0;
 
-    t
-    |> bufplay f.data (f.samplerate * spf) 0.
+    SF.play (bufs[1]) 1. 0. t
     |> (*) (t |> rect 0.1 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
     |> (*) (Math.db_amp 6.)
   ;;
@@ -151,11 +153,9 @@ let Drums = module () ->
   ;;
 
   let snrs = @Audio fn retrigf rate vel -> 
-    let f = bufs[2]; 
     let t = trig 0;
 
-    (trig retrigf)
-    |> bufplay f.data (f.samplerate * spf * rate) 0.
+    SF.play (bufs[2]) rate 0. (trig retrigf)
     |> (*) (t |> rect 0.1 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
     |> (*) vel
   ;;
@@ -169,20 +169,15 @@ let Drums = module () ->
   ;;
 
   let hhs = @Audio fn retrigf -> 
-    let rate = 1.;
-    let hbuf = bufs[0]; 
     let t = trig 0;
 
-    (trig retrigf)
-    |> bufplay hbuf.data (hbuf.samplerate * spf) 0.
+    SF.play (bufs[0]) 1. 0. (trig retrigf)
     |> (*) (t |> rect 0.05 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
     |> pan 2 (rand_trig 0. 1. t)
   ;;
 
 
   let hh = fn ctx dur note plist ->
-    # hhs () |> play_node;
-
     let spl = ctx.spl;
     # print `spl: {spl}\n`;
     let retrig = retrig_param spl plist 0;
@@ -191,12 +186,9 @@ let Drums = module () ->
   ;;
 
   let hh2s = @Audio fn retrigf -> 
-    let rate = 1.5;
-    let f = bufs[0]; 
     let t = trig 0;
 
-    (trig retrigf)
-    |> bufplay f.data (rate * f.samplerate * spf) 0.
+    SF.play hat_buffer 1.5 0. (trig retrigf)
     |> (*) (t |> rect 0.05 |> adsr 0. 0. 1. 0.01 |> kill_on_end)
 
     |> pan 2 (rand_trig 0. 1. t)

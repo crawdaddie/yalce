@@ -4,10 +4,9 @@
 let max_new_tokens = 16;
 let eos_token_id = 151643;
 
-let model_path =
-  "./Qwen2.5-0.5B/model.safetensors";
-
+let model_path = "./Qwen2.5-0.5B/model.safetensors";
 let mmap_file = extern fn Ptr -> Ptr;
+
 let mmap_file_size = extern fn Ptr -> Int;
 let mmap_file_read = extern fn Ptr -> Int -> Int -> String;
 let mmap_file_ptr = extern fn Ptr -> Int -> Ptr;
@@ -94,27 +93,27 @@ let map_safetensors = fn () ->
 let print_embedding_info = fn header ->
   match header |> Json.get "model.embed_tokens.weight" with
   | Some tensor_jo -> (
-      let dtype = tensor_jo |> Json.get "dtype";
-      let shape = tensor_jo |> Json.get "shape";
-      match dtype with
-      | Some dtype -> print `dtype: {Json.string dtype}\n`
-      | _ -> ();
-      match shape with
-      | Some shape -> (
-          print `shape: {shape |> Json.array_get_idx 0 |> Json.int}`;
-          print ` x {shape |> Json.array_get_idx 1 |> Json.int}\n`
-        )
-      | _ -> ()
+    let dtype = tensor_jo |> Json.get "dtype";
+    let shape = tensor_jo |> Json.get "shape";
+    match dtype with
+    | Some dtype -> print `dtype: {Json.string dtype}\n`
+    | _ -> ();
+    match shape with
+    | Some shape -> (
+      print `shape: {shape |> Json.array_get_idx 0 |> Json.int}`;
+      print ` x {shape |> Json.array_get_idx 1 |> Json.int}\n`
     )
+    | _ -> ()
+  )
   | _ -> print "embedding tensor not found\n"
 ;;
 
-# let embeddings = 
+# let embeddings =
 let empty_model = fn () ->
   (Ptr 0, 0, Ptr 0, 0, (Ptr 0, 0, 0, Ptr 0),
-   array_fill_zeroes 0 (Ptr 0),
-   array_fill_zeroes 0 0,
-   array_fill_zeroes 0 0)
+    array_fill_zeroes 0 (Ptr 0),
+    array_fill_zeroes 0 0,
+    array_fill_zeroes 0 0)
 ;;
 
 let load_model = fn model_path ->
@@ -130,8 +129,8 @@ let load_model = fn model_path ->
     print_embedding_info header;
     # Chain optional lookups, then unwrap the completed model once.
     let model = Json.get "model.embed_tokens.weight" header
-      >>= (fn tensor: (Ptr) -> map_tensor file (8 + header_bytes) tensor)
-      <&> (fn tensor: (MappedTensor) ->
+    >>= (fn tensor: (Ptr) -> map_tensor file (8 + header_bytes) tensor)
+    <&> (fn tensor: (MappedTensor) ->
       let (data, count, stride, shape) = tensor;
       let embedding = (data, count, stride, shape);
       print `mapped embedding: {count} values, {stride} bytes/value\n`;
@@ -144,16 +143,16 @@ let load_model = fn model_path ->
         let tensor = Json.value index header;
         match map_tensor file (8 + header_bytes) tensor with
         | Some (data, count, stride, _) -> (
-            tensor_ptrs[index] := data;
-            tensor_counts[index] := count;
-            tensor_strides[index] := stride;
-            ()
-          )
+          tensor_ptrs[index] := data;
+          tensor_counts[index] := count;
+          tensor_strides[index] := stride;
+          ()
+        )
         | _ -> ()
       );
       print `registered {tensor_total} header entries\n`;
       (file, file_size, header, header_bytes, embedding,
-       tensor_ptrs, tensor_counts, tensor_strides)
+        tensor_ptrs, tensor_counts, tensor_strides)
     );
     match model with
     | Some value -> value
@@ -209,7 +208,7 @@ let Kernels = module () ->
   let create_program = fn name: (String) src: (String) ->
     let output = [| Ptr 0 |];
     let status = nvrtcCreateProgram (cstr output) (cstr src) (cstr name)
-      0 (Ptr 0) (Ptr 0);
+    0 (Ptr 0) (Ptr 0);
     if checked "create program" status nvrtc_success then Some (output[0])
     else None
   ;;
@@ -225,7 +224,7 @@ let Kernels = module () ->
 
   let compile_program = fn program ->
     let options = [| cstr "--gpu-architecture=compute_120",
-                    cstr "--include-path=/opt/cuda/include" |];
+      cstr "--include-path=/opt/cuda/include" |];
     let status = nvrtcCompileProgram program (array_size options) (cstr options);
     if checked "compile program" status nvrtc_success then Some program
     else (print_log program; None)
@@ -259,8 +258,8 @@ let Kernels = module () ->
   let compile_kernel = fn name: (String) src: (String) ->
     create_program name src >>= (fn program ->
       let function = compile_program program
-        >>= read_ptx
-        >>= (fn ptx -> load_function name ptx);
+      >>= read_ptx
+      >>= (fn ptx -> load_function name ptx);
       # Destroy the program on every path after successful creation.
       let owned = [| program |];
       let status = nvrtcDestroyProgram (cstr owned);
@@ -505,9 +504,9 @@ let Gpu = module () ->
       match check "set context" (cuCtxSetCurrent (output[0])) with
       | Some GpuDone -> Some (output[0])
       | None -> (
-          let _ = check "release context" (cuDevicePrimaryCtxRelease device);
-          None
-        )
+        let _ = check "release context" (cuDevicePrimaryCtxRelease device);
+        None
+      )
     )
   ;;
 
@@ -520,11 +519,11 @@ let Gpu = module () ->
   let ready = initialize ();
 
   let alloc = fn bytes: (Int) -> (
-    ready >>= (fn context ->
-      let output = [| int64_from_int 0 |];
-      check "allocate" (cuMemAlloc_v2 (cstr output) (int64_from_int bytes))
-      <&> (fn done -> output[0])
-    )
+      ready >>= (fn context ->
+        let output = [| int64_from_int 0 |];
+        check "allocate" (cuMemAlloc_v2 (cstr output) (int64_from_int bytes))
+        <&> (fn done -> output[0])
+      )
     ) |> as_device
   ;;
 
@@ -572,53 +571,53 @@ let Gpu = module () ->
   ;;
 
   let compile = fn name: (String) -> (
-    ready >>= (fn context -> Kernels.compile_kernel name layer_source)
+      ready >>= (fn context -> Kernels.compile_kernel name layer_source)
     ) |> as_kernel
   ;;
 
   let launch = fn function: (Ptr) columns: (Int) rows: (Int) args: (Array of Ptr) ->
     let status = cuLaunchKernel function
-      ((columns + threads - 1) / threads) rows 1
-      threads 1 1 0 (Ptr 0) (cstr args) (Ptr 0);
+    ((columns + threads - 1) / threads) rows 1
+    threads 1 1 0 (Ptr 0) (cstr args) (Ptr 0);
     check "launch" status
     >>= (fn done -> check "synchronize" (cuCtxSynchronize ()))
   ;;
 
   let clone = fn value: (Calculation) -> (
-    let bytes = value.rows * value.width * f32_bytes;
-    buffer bytes (fn output: (Uint64) ->
-      check "save residual" (cuMemcpyDtoD_v2 output value.data (int64_from_int bytes))
-      <&> (fn done -> output)
-    )
+      let bytes = value.rows * value.width * f32_bytes;
+      buffer bytes (fn output: (Uint64) ->
+        check "save residual" (cuMemcpyDtoD_v2 output value.data (int64_from_int bytes))
+        <&> (fn done -> output)
+      )
     ) |> as_device
   ;;
 
   let download = fn value: (Calculation) -> (
-    let bytes = value.rows * value.width * f32_bytes;
-    let host = array_fill_zeroes bytes (char_of_int 0);
-    match read (cstr host) value.data bytes with
-    | Some done -> Some (as_bytes host)
-    | None -> None
+      let bytes = value.rows * value.width * f32_bytes;
+      let host = array_fill_zeroes bytes (char_of_int 0);
+      match read (cstr host) value.data bytes with
+      | Some done -> Some (as_bytes host)
+      | None -> None
     ) |> as_download
   ;;
 
   # Resolve by name and validate BF16 storage before uploading a layer weight.
   let weight = fn model: (QwenModel) name: (String) count: (Int) -> (
-    match Json.get name model.header with
-    | None -> (print `missing tensor: {name}\n`; None)
-    | Some object -> (
+      match Json.get name model.header with
+      | None -> (print `missing tensor: {name}\n`; None)
+      | Some object -> (
         match map_tensor model.file (8 + model.header_bytes) object with
         | Some mapped -> (
-            let (data, actual, stride, _) = mapped;
-            if actual != count || stride != bf16_bytes then
-              (print `invalid tensor: {name}\n`; None)
-            else (
+          let (data, actual, stride, _) = mapped;
+          if actual != count || stride != bf16_bytes then
+          (print `invalid tensor: {name}\n`; None)
+          else (
             let bytes = count * stride;
             buffer bytes (fn output: (Uint64) ->
               upload output data bytes <&> (fn done -> output)
             )
-            )
           )
+        )
         | _ -> (print `invalid tensor: {name}\n`; None)
       )
     ) |> as_device
@@ -641,7 +640,7 @@ let kernel = Gpu.ready >>= (fn context ->
 let Tokenizers = module () ->
 
   let _ = dlopen
-      "libs/hf_tokenizer/target/release/libhf_tokenizer.so";
+  "libs/hf_tokenizer/target/release/libhf_tokenizer.so";
   type TokenizerRef = Ptr;
 
   let hf_tokenizer_load = extern fn Ptr -> Ptr;
@@ -661,10 +660,10 @@ let Tokenizers = module () ->
     let capacity = 256;
     let ids = array_fill_zeroes capacity 0;
     match hf_tokenizer_encode
-      tk
-      (cstr inp)
-      (cstr ids)
-      capacity with
+    tk
+    (cstr inp)
+    (cstr ids)
+    capacity with
     | c if c < 0 -> (print "tokenizer failed\n"; None)
     | c -> Some (ids, c) ;;
 
@@ -697,7 +696,7 @@ let Tokenizers = module () ->
 ;
 
 
-let tokenizer = Tokenizers.load  "./Qwen2.5-0.5B/tokenizer.json";
+let tokenizer = Tokenizers.load "./Qwen2.5-0.5B/tokenizer.json";
 
 # Owns temporary token storage; callers own successful output buffers.
 let Embeddings = module () ->
@@ -718,14 +717,14 @@ let Embeddings = module () ->
     match alloc bytes with
     | None -> None
     | Some device -> (
-        match cuMemcpyHtoD_v2 device (cstr ids) bytes with
-        | status if status == cuda_success -> Some device
-        | status -> (
-            let _ = cuMemFree_v2 device;
-            print `token upload failed: {status}\n`;
-            None
-          )
+      match cuMemcpyHtoD_v2 device (cstr ids) bytes with
+      | status if status == cuda_success -> Some device
+      | status -> (
+        let _ = cuMemFree_v2 device;
+        print `token upload failed: {status}\n`;
+        None
       )
+    )
   ;;
 
   let launch = fn function embedding ids output count hidden ->
@@ -734,37 +733,37 @@ let Embeddings = module () ->
     let output_arg = [| output |];
     let hidden_arg = [| hidden |];
     let args = [| cstr embedding_arg, cstr ids_arg,
-                  cstr output_arg, cstr hidden_arg |];
+      cstr output_arg, cstr hidden_arg |];
     cuLaunchKernel function
-      ((hidden + threads - 1) / threads) count 1
-      threads 1 1 0 (Ptr 0) (cstr args) (Ptr 0)
+    ((hidden + threads - 1) / threads) count 1
+    threads 1 1 0 (Ptr 0) (cstr args) (Ptr 0)
   ;;
 
   let gather = fn kernel embedding ids count hidden ->
     if count <= 0 || hidden <= 0 then
-      None
+    None
     else match kernel with
     | None -> None
     | Some function -> (
       match upload_ids ids count with
       | None -> None
       | Some tokens -> (
-          match alloc (int64_from_int (count * hidden * bf16_bytes)) with
-          | None -> (let _ = cuMemFree_v2 tokens; None)
-          | Some output -> (
-              let status = launch function embedding tokens output count hidden;
-              # Synchronize before releasing arguments used by the GPU.
-              let synced = cuCtxSynchronize ();
-              let _ = cuMemFree_v2 tokens;
-              if status == cuda_success && synced == cuda_success then
-                Some output
-              else (
-                let _ = cuMemFree_v2 output;
-                print `embedding failed: launch {status}, sync {synced}\n`;
-                None
-              )
-            )
+        match alloc (int64_from_int (count * hidden * bf16_bytes)) with
+        | None -> (let _ = cuMemFree_v2 tokens; None)
+        | Some output -> (
+          let status = launch function embedding tokens output count hidden;
+          # Synchronize before releasing arguments used by the GPU.
+          let synced = cuCtxSynchronize ();
+          let _ = cuMemFree_v2 tokens;
+          if status == cuda_success && synced == cuda_success then
+          Some output
+          else (
+            let _ = cuMemFree_v2 output;
+            print `embedding failed: launch {status}, sync {synced}\n`;
+            None
+          )
         )
+      )
     )
   ;;
 
@@ -787,7 +786,7 @@ let Embeddings = module () ->
       let expected = mmap_file_ptr model.embedding.data (ids[token] * bytes);
       let equal = memcmp (cstr actual) expected row_bytes;
       if status != cuda_success || equal != 0 then
-        (mismatches[0] := mismatches[0] + 1; ())
+      (mismatches[0] := mismatches[0] + 1; ())
       else ()
     );
     print `embedding verification: {count} rows, {mismatches[0]} mismatches\n`;
@@ -803,21 +802,21 @@ let Float32 = module () ->
   let convert = fn value: (Calculation) ->
     let count = value.rows * value.width;
     Gpu.buffer (count * Gpu.f32_bytes) (fn output: (Uint64) ->
-    let input_arg = [| value.data |];
-    let output_arg = [| output |];
-    let count_arg = [| count |];
-    function >>= (fn kernel -> Gpu.launch kernel count 1
-      [| cstr input_arg, cstr output_arg, cstr count_arg |]) >>= (fn done ->
-    Some (as_calculation (output, value.rows, value.width, F32))
-  )
-)
-;;
+      let input_arg = [| value.data |];
+      let output_arg = [| output |];
+      let count_arg = [| count |];
+      function >>= (fn kernel -> Gpu.launch kernel count 1
+        [| cstr input_arg, cstr output_arg, cstr count_arg |]) >>= (fn done ->
+        Some (as_calculation (output, value.rows, value.width, F32))
+      )
+    )
+  ;;
 
   let snapshot = fn value: (Calculation) ->
     match value.precision with
     | F32 -> Gpu.download value
     | BF16 -> Gpu.using (convert value)
-        (fn converted: (Calculation) -> Gpu.free converted.data) Gpu.download
+    (fn converted: (Calculation) -> Gpu.free converted.data) Gpu.download
   ;;
 
   let forward = fn value: (Calculation) ->
@@ -833,8 +832,8 @@ let RmsNorm = module () ->
 
   let forward = fn weight value ->
     Float32.forward value >>= (fn value ->
-        let value = as_calculation value;
-        Gpu.buffer (value.rows * value.width * Gpu.f32_bytes) (fn output: (Uint64) ->
+      let value = as_calculation value;
+      Gpu.buffer (value.rows * value.width * Gpu.f32_bytes) (fn output: (Uint64) ->
         let input_arg = [| value.data |];
         let weight_arg = [| weight |];
         let output_arg = [| output |];
@@ -843,12 +842,12 @@ let RmsNorm = module () ->
         let epsilon_arg = [| epsilon |];
         function >>= (fn kernel -> Gpu.launch kernel value.rows 1
           [| cstr input_arg, cstr weight_arg, cstr output_arg,
-             cstr rows_arg, cstr width_arg, cstr epsilon_arg |]) >>= (fn done ->
-        let _ = Gpu.free value.data;
-        Some (as_calculation (output, value.rows, value.width, F32))
+            cstr rows_arg, cstr width_arg, cstr epsilon_arg |]) >>= (fn done ->
+          let _ = Gpu.free value.data;
+          Some (as_calculation (output, value.rows, value.width, F32))
+        )
       )
-)
-)
+    )
   ;;
 ;
 
@@ -871,20 +870,20 @@ let Linear = module () ->
   # Borrow the input so Q, K, and V can share one normalized activation.
   let apply = fn layer: (Projection) value: (Calculation) ->
     Gpu.buffer (value.rows * layer.outputs * Gpu.f32_bytes) (fn output: (Uint64) ->
-    let input_arg = [| value.data |];
-    let weight_arg = [| layer.weight |];
-    let bias_arg = [| layer.bias |];
-    let output_arg = [| output |];
-    let rows_arg = [| value.rows |];
-    let inputs_arg = [| layer.inputs |];
-    let outputs_arg = [| layer.outputs |];
-    function
-    >>= (fn kernel -> Gpu.launch kernel layer.outputs value.rows
-      [| cstr input_arg, cstr weight_arg, cstr bias_arg, cstr output_arg,
-         cstr rows_arg, cstr inputs_arg, cstr outputs_arg |])
-    >>= (fn done -> Some (as_calculation (output, value.rows, layer.outputs, F32)))
-)
-;;
+      let input_arg = [| value.data |];
+      let weight_arg = [| layer.weight |];
+      let bias_arg = [| layer.bias |];
+      let output_arg = [| output |];
+      let rows_arg = [| value.rows |];
+      let inputs_arg = [| layer.inputs |];
+      let outputs_arg = [| layer.outputs |];
+      function
+      >>= (fn kernel -> Gpu.launch kernel layer.outputs value.rows
+        [| cstr input_arg, cstr weight_arg, cstr bias_arg, cstr output_arg,
+          cstr rows_arg, cstr inputs_arg, cstr outputs_arg |])
+      >>= (fn done -> Some (as_calculation (output, value.rows, layer.outputs, F32)))
+    )
+  ;;
 
   let load_unbiased = fn model name inputs outputs ->
     Gpu.weight model (string_add name ".weight") (inputs * outputs)
@@ -919,10 +918,10 @@ let Qkv = module () ->
   let forward = fn layers value: (Calculation) ->
     let (q_layer, k_layer, v_layer) = layers;
     ((pair q_layer k_layer value, free_pair)
-    >>! (fn values ->
-      let (q, k) = values;
-      Linear.apply v_layer value <&> (fn v -> as_qkv (q, k, v))
-    ))
+      >>! (fn values ->
+        let (q, k) = values;
+        Linear.apply v_layer value <&> (fn v -> as_qkv (q, k, v))
+      ))
     |> Gpu.release value.data
   ;;
 ;
@@ -943,8 +942,8 @@ let Rope = module () ->
 
     function >>= (fn kernel ->
       Gpu.launch kernel (value.rows * value.width / 2) 1
-        [| cstr values_arg, cstr positions_arg, cstr tokens_arg,
-           cstr heads_arg, cstr width_arg, cstr theta_arg |]
+      [| cstr values_arg, cstr positions_arg, cstr tokens_arg,
+        cstr heads_arg, cstr width_arg, cstr theta_arg |]
     )
   ;;
 
@@ -991,14 +990,14 @@ let Attention = module () ->
         score_kernel
         >>= (fn kernel -> Gpu.launch kernel (heads * tokens * tokens) 1
           [| cstr q_arg, cstr k_arg, cstr scores_arg, cstr tokens_arg,
-             cstr heads_arg, cstr kv_arg, cstr width_arg |])
+            cstr heads_arg, cstr kv_arg, cstr width_arg |])
         >>= (fn done -> softmax_kernel)
         >>= (fn kernel -> Gpu.launch kernel (heads * tokens) 1
           [| cstr scores_arg, cstr rows_arg, cstr tokens_arg |])
         >>= (fn done -> value_kernel)
         >>= (fn kernel -> Gpu.launch kernel (tokens * value.q.width) 1
           [| cstr scores_arg, cstr v_arg, cstr output_arg, cstr tokens_arg,
-             cstr heads_arg, cstr kv_arg, cstr width_arg |])
+            cstr heads_arg, cstr kv_arg, cstr width_arg |])
         <&> (fn done ->
           let _ = Gpu.free value.q.data;
           let _ = Gpu.free value.k.data;
@@ -1045,10 +1044,10 @@ let Mlp = module () ->
   let forward = fn layers value: (Calculation) ->
     let (gate_layer, up_layer) = layers;
     ((Linear.apply gate_layer value, (fn gate -> Gpu.free gate.data))
-    >>! (fn gate ->
-      Gpu.using (Linear.apply up_layer value)
+      >>! (fn gate ->
+        Gpu.using (Linear.apply up_layer value)
         (fn up -> Gpu.free up.data) (combine gate)
-    ))
+      ))
     |> Gpu.release value.data
   ;;
 ;
@@ -1081,16 +1080,16 @@ let Snapshots = module () ->
 
   let save = fn name value: (Calculation) ->
     Float32.snapshot value >>= (fn host: (Array of Char) ->
-    let path = string_add directory (string_add name ".bin");
-    let file = fopen (cstr path) (cstr "wb");
-    let _ = if is_null file then require 1 else ();
-    let count = int64_from_int (value.rows * value.width * Gpu.f32_bytes);
-    let written = fwrite (cstr host) (int64_from_int 1) count file;
-    let _ = require (fclose file);
-    let _ = if written == int64_from_int (array_size host) then () else require 1;
-    Some path
-  )
-;;
+      let path = string_add directory (string_add name ".bin");
+      let file = fopen (cstr path) (cstr "wb");
+      let _ = if is_null file then require 1 else ();
+      let count = int64_from_int (value.rows * value.width * Gpu.f32_bytes);
+      let written = fwrite (cstr host) (int64_from_int 1) count file;
+      let _ = require (fclose file);
+      let _ = if written == int64_from_int (array_size host) then () else require 1;
+      Some path
+    )
+  ;;
 ;
 
 let Plots = module () ->
@@ -1101,36 +1100,36 @@ let Plots = module () ->
   # Trace the first head, then show all features across all input tokens.
   let render = fn name: (String) title: (String) value: (Calculation) ->
     Snapshots.save name value >>= (fn path ->
-    let gp = Gnuplot.start ();
-    let _ = if Snapshots.is_null gp then Snapshots.require 1 else ();
-    let _ = Gnuplot.terminal_kitty plot_width plot_height gp;
-    let _ = Gnuplot.multiplot title 2 1 gp;
-    let _ = Gnuplot.title "First 64 features per token" gp;
-    let _ = Gnuplot.xlabel "Feature index" gp;
-    let _ = Gnuplot.ylabel "Activation" gp;
-    let _ = Gnuplot.xrange 0. (Double (trace_width - 1)) gp;
-    let _ = Gnuplot.grid gp;
-    let _ = Gnuplot.zeroaxis gp;
-    let _ = Gnuplot.write "set key outside right\nplot " gp;
-    for row = 0 .. value.rows in (
-      let _ = Gnuplot.binary_row path value.width row gp;
-      let _ = if row < value.rows - 1 then Gnuplot.write ", " gp
-              else Gnuplot.write "\n" gp;
-      ()
-    );
-    let _ = Gnuplot.write "unset grid\nunset key\nunset zeroaxis\n" gp;
-    let _ = Gnuplot.title "All features (independent colour scale per panel)" gp;
-    let _ = Gnuplot.xlabel "Feature index" gp;
-    let _ = Gnuplot.ylabel "Token position" gp;
-    let _ = Gnuplot.xrange (-0.5) (Double value.width - 0.5) gp;
-    let _ = Gnuplot.yrange (Double value.rows - 0.5) (-0.5) gp;
-    let _ = Gnuplot.write "set ytics 1\nset palette defined (-1 '#2166ac', 0 '#f7f7f7', 1 '#b2182b')\n" gp;
-    let _ = Gnuplot.write "set cblabel 'Activation'\n" gp;
-    let _ = Gnuplot.binary_image path value.width value.rows gp;
-    let _ = Gnuplot.write "unset multiplot\n" gp;
-    let status = Gnuplot.finish gp;
-    let _ = Snapshots.require status;
-    Some GpuDone
+      let gp = Gnuplot.start ();
+      let _ = if Snapshots.is_null gp then Snapshots.require 1 else ();
+      let _ = Gnuplot.terminal_kitty plot_width plot_height gp;
+      let _ = Gnuplot.multiplot title 2 1 gp;
+      let _ = Gnuplot.title "First 64 features per token" gp;
+      let _ = Gnuplot.xlabel "Feature index" gp;
+      let _ = Gnuplot.ylabel "Activation" gp;
+      let _ = Gnuplot.xrange 0. (Double (trace_width - 1)) gp;
+      let _ = Gnuplot.grid gp;
+      let _ = Gnuplot.zeroaxis gp;
+      let _ = Gnuplot.write "set key outside right\nplot " gp;
+      for row = 0 .. value.rows in (
+        let _ = Gnuplot.binary_row path value.width row gp;
+        let _ = if row < value.rows - 1 then Gnuplot.write ", " gp
+        else Gnuplot.write "\n" gp;
+        ()
+      );
+      let _ = Gnuplot.write "unset grid\nunset key\nunset zeroaxis\n" gp;
+      let _ = Gnuplot.title "All features (independent colour scale per panel)" gp;
+      let _ = Gnuplot.xlabel "Feature index" gp;
+      let _ = Gnuplot.ylabel "Token position" gp;
+      let _ = Gnuplot.xrange (-0.5) (Double value.width - 0.5) gp;
+      let _ = Gnuplot.yrange (Double value.rows - 0.5) (-0.5) gp;
+      let _ = Gnuplot.write "set ytics 1\nset palette defined (-1 '#2166ac', 0 '#f7f7f7', 1 '#b2182b')\n" gp;
+      let _ = Gnuplot.write "set cblabel 'Activation'\n" gp;
+      let _ = Gnuplot.binary_image path value.width value.rows gp;
+      let _ = Gnuplot.write "unset multiplot\n" gp;
+      let status = Gnuplot.finish gp;
+      let _ = Snapshots.require status;
+      Some GpuDone
     )
   ;;
 
@@ -1165,21 +1164,21 @@ type DecoderWeights = (
 let as_decoder = fn value: (DecoderWeights) -> value;;
 
 type DecoderPart =
-  | InputNorm
-  | Query
-  | Key
-  | Value
-  | AttentionOutput
-  | PostNorm
-  | Gate
-  | Up
-  | Down
-  ;
+| InputNorm
+| Query
+| Key
+| Value
+| AttentionOutput
+| PostNorm
+| Gate
+| Up
+| Down
+;
 
 type DecoderResource =
-  | NormWeight of Uint64
-  | ProjectWeight of Projection
-  ;
+| NormWeight of Uint64
+| ProjectWeight of Projection
+;
 
 type DecoderBuild = (
   model: QwenModel, prefix: String, hidden: Int,
@@ -1194,7 +1193,7 @@ let DecoderLoad = module () ->
 
   let start = fn model index hidden ->
     let prefix = string_add "model.layers."
-      (string_add (int64_str (int64_from_int index)) ".");
+    (string_add (int64_str (int64_from_int index)) ".");
     Some (as_build (model, prefix, hidden, []))
   ;;
 
@@ -1202,11 +1201,11 @@ let DecoderLoad = module () ->
     match weights with
     | [] -> ()
     | (_, resource) :: rest -> (
-        let _ = match resource with
-          | NormWeight buffer -> Gpu.free buffer
-          | ProjectWeight layer -> Linear.free layer;
-        discard rest
-      )
+      let _ = match resource with
+      | NormWeight buffer -> Gpu.free buffer
+      | ProjectWeight layer -> Linear.free layer;
+      discard rest
+    )
   ;;
 
   let acquire = fn part state: (DecoderBuild) ->
@@ -1221,9 +1220,9 @@ let DecoderLoad = module () ->
     | AttentionOutput -> Linear.load_unbiased model (string_add prefix "self_attn.o_proj") hidden hidden <&> ProjectWeight
     | PostNorm -> Gpu.weight model (string_add prefix "post_attention_layernorm.weight") hidden <&> NormWeight
     | Gate -> Linear.load_unbiased model (string_add prefix "mlp.gate_proj") hidden intermediate <&> ProjectWeight
-    | Up -> Linear.load_unbiased model (string_add prefix "mlp.up_proj") hidden intermediate <&> ProjectWeight 
+    | Up -> Linear.load_unbiased model (string_add prefix "mlp.up_proj") hidden intermediate <&> ProjectWeight
     | Down -> Linear.load_unbiased model (string_add prefix "mlp.down_proj") intermediate hidden <&> ProjectWeight
-    ;;
+  ;;
 
   # Short-circuit later loads and unwind earlier weights in reverse order.
   let step = fn part build ->
@@ -1231,7 +1230,7 @@ let DecoderLoad = module () ->
       match acquire part state with
       | None -> (discard state.weights; None)
       | Some weight -> Some (as_build
-          (state.model, state.prefix, state.hidden, (part, weight) :: state.weights))
+        (state.model, state.prefix, state.hidden, (part, weight) :: state.weights))
     )
   ;;
 
@@ -1239,11 +1238,11 @@ let DecoderLoad = module () ->
     build >>= (fn state: (DecoderBuild) ->
       match state.weights with
       | (Down, ProjectWeight down) :: (Up, ProjectWeight up)
-        :: (Gate, ProjectWeight gate) :: (PostNorm, NormWeight post)
-        :: (AttentionOutput, ProjectWeight o) :: (Value, ProjectWeight v)
-        :: (Key, ProjectWeight k) :: (Query, ProjectWeight q)
-        :: (InputNorm, NormWeight norm) :: [] ->
-          Some (as_decoder (norm, q, k, v, o, post, gate, up, down))
+      :: (Gate, ProjectWeight gate) :: (PostNorm, NormWeight post)
+      :: (AttentionOutput, ProjectWeight o) :: (Value, ProjectWeight v)
+      :: (Key, ProjectWeight k) :: (Query, ProjectWeight q)
+      :: (InputNorm, NormWeight norm) :: [] ->
+      Some (as_decoder (norm, q, k, v, o, post, gate, up, down))
       | _ -> (discard state.weights; None)
     )
   ;;
@@ -1298,42 +1297,42 @@ let Decoder = module () ->
       match result[0] with
       | Some GpuDone -> Some weights
       | None -> (
-          for index = 0 .. loaded[0] in (let _ = free (weights[index]); ());
-          None
-        )
+        for index = 0 .. loaded[0] in (let _ = free (weights[index]); ());
+        None
+      )
     )
   ;;
 
   let calculate = fn layer: (DecoderWeights) value: (Calculation) ->
     let attended = Gpu.using (Gpu.clone value) Gpu.free (fn skip ->
       (Some value
-      >>= (RmsNorm.forward layer.norm)
-      # |> Plots.stage "02-rmsnorm" "RMSNorm before attention"
-      >>= (Qkv.forward (layer.q, layer.k, layer.v))
-      # |> Plots.projections "03-projection" "Learned QKV projections"
-      >>= (Rope.forward 0)
-      # |> Plots.projections "04-rope" "Position-dependent Q and K rotation"
-      >>= Attention.forward
-      # |> Plots.stage "05-attention" "Causal grouped attention: weighted V per query"
-      >>= (Linear.forward layer.o)
-      # |> Plots.stage "06-output" "Output projection: mix attention heads"
-      >>= (Residual.forward skip))
+        >>= (RmsNorm.forward layer.norm)
+        # |> Plots.stage "02-rmsnorm" "RMSNorm before attention"
+        >>= (Qkv.forward (layer.q, layer.k, layer.v))
+        # |> Plots.projections "03-projection" "Learned QKV projections"
+        >>= (Rope.forward 0)
+        # |> Plots.projections "04-rope" "Position-dependent Q and K rotation"
+        >>= Attention.forward
+        # |> Plots.stage "05-attention" "Causal grouped attention: weighted V per query"
+        >>= (Linear.forward layer.o)
+        # |> Plots.stage "06-output" "Output projection: mix attention heads"
+        >>= (Residual.forward skip))
       |> as_result
       # |> Plots.stage "07-residual" "Attention output plus original input";
     );
     match attended with
     | None -> None
     | Some value -> (
-        let value = as_calculation value;
-        Gpu.using (Gpu.clone value) Gpu.free (fn skip ->
+      let value = as_calculation value;
+      Gpu.using (Gpu.clone value) Gpu.free (fn skip ->
         (Some value
-        >>= (RmsNorm.forward layer.post)
-        # |> Plots.stage "08-postnorm" "RMSNorm before MLP"
-        >>= (Mlp.forward (layer.gate, layer.up))
-        #|> Plots.stage "09-swiglu" "MLP expansion: SiLU(gate) times up"
-        >>= (Linear.forward layer.down)
-        #|> Plots.stage "10-down" "MLP down projection to hidden width"
-        >>= (Residual.forward skip))
+          >>= (RmsNorm.forward layer.post)
+          # |> Plots.stage "08-postnorm" "RMSNorm before MLP"
+          >>= (Mlp.forward (layer.gate, layer.up))
+          #|> Plots.stage "09-swiglu" "MLP expansion: SiLU(gate) times up"
+          >>= (Linear.forward layer.down)
+          #|> Plots.stage "10-down" "MLP down projection to hidden width"
+          >>= (Residual.forward skip))
         |> as_result
         #|> Plots.stage "11-block" "Decoder block output: second residual"
       )
@@ -1347,7 +1346,7 @@ let Decoder = module () ->
   let rest = fn weights index value ->
     if index >= layers then Some value
     else forward weights index value
-      >>= (fn next -> rest weights (index + 1) next)
+    >>= (fn next -> rest weights (index + 1) next)
   ;;
 ;
 
@@ -1386,11 +1385,11 @@ let Forward = module () ->
   # Verification preserves a successful calculation for the next layer.
   let check_embedding = fn model ids calculation ->
     calculation >>= (fn value ->
-        let value = as_calculation value;
-        if Embeddings.verify model value.data ids value.rows value.width then
-          Some value
-        else (let _ = cuMemFree_v2 value.data; None)
-      )
+      let value = as_calculation value;
+      if Embeddings.verify model value.data ids value.rows value.width then
+      Some value
+      else (let _ = cuMemFree_v2 value.data; None)
+    )
   ;;
 
   let finish = fn calculation ->
@@ -1405,15 +1404,15 @@ let Forward = module () ->
     let (_, device, _) = embedding;
     let vocab = json_array_int 0 model.embedding.shape;
     (Some (token_ids, count)
-    >>= (Embeddings.forward embedding)
-    # |> check_embedding model token_ids
-    # |> Plots.stage "01-embedding" "Embedding: token IDs become learned vectors"
-    >>= Float32.forward
-    >>= (Decoder.forward weights 0)
-    >>= (Decoder.rest weights 1)
-    >>= (RmsNorm.forward norm)
-    # |> Plots.stage "12-finalnorm" "Final RMSNorm after 24 decoder blocks"
-    >>= (Output.forward device vocab))
+      >>= (Embeddings.forward embedding)
+      # |> check_embedding model token_ids
+      # |> Plots.stage "01-embedding" "Embedding: token IDs become learned vectors"
+      >>= Float32.forward
+      >>= (Decoder.forward weights 0)
+      >>= (Decoder.rest weights 1)
+      >>= (RmsNorm.forward norm)
+      # |> Plots.stage "12-finalnorm" "Final RMSNorm after 24 decoder blocks"
+      >>= (Output.forward device vocab))
     |> finish
     |> as_token
   ;;
@@ -1427,43 +1426,43 @@ let Generation = module () ->
     match input with
     | None -> None
     | Some (original, count) -> (
-        if limit < 0 || count + limit > max_context then (
-          print "generation exceeds context limit\n";
-          None
-        ) else (
-          let tokens = array_fill_zeroes (count + limit) 0;
-          for i = 0 .. count in (tokens[i] := original[i]; ());
-          let output = array_fill_zeroes limit 0;
-          let generated = [| 0 |];
-          let status = [| Generating |];
-          for step = 0 .. limit in (
-            match status[0] with
-            | Generating -> (
-                match Forward.predict model weights embedding norm tokens (count + generated[0])
-                  |> Forward.as_token with
-                | None -> (status[0] := Failed; ())
-                | Some next if next == eos -> (status[0] := Finished; ())
-                | Some next -> (
-                    tokens[count + generated[0]] := next;
-                    output[generated[0]] := next;
-                    generated[0] := generated[0] + 1;
-                    print `token {generated[0]}/{limit}: {next}\n`;
-                    ()
-                  )
-              )
-            | _ -> ()
-          );
+      if limit < 0 || count + limit > max_context then (
+        print "generation exceeds context limit\n";
+        None
+      ) else (
+        let tokens = array_fill_zeroes (count + limit) 0;
+        for i = 0 .. count in (tokens[i] := original[i]; ());
+        let output = array_fill_zeroes limit 0;
+        let generated = [| 0 |];
+        let status = [| Generating |];
+        for step = 0 .. limit in (
           match status[0] with
-          | Failed -> (print "generation failed\n"; None)
-          | _ -> (
-              # Decode the sequence together to preserve split UTF-8 characters.
-              match Tokenizers.decode_ids tokenizer output (generated[0])
-                |> Tokenizers.as_decoded with
-              | None -> (print "decoding failed\n"; None)
-              | Some text -> (print `generated text: "{text}"\n`; Some GpuDone)
+          | Generating -> (
+            match Forward.predict model weights embedding norm tokens (count + generated[0])
+            |> Forward.as_token with
+            | None -> (status[0] := Failed; ())
+            | Some next if next == eos -> (status[0] := Finished; ())
+            | Some next -> (
+              tokens[count + generated[0]] := next;
+              output[generated[0]] := next;
+              generated[0] := generated[0] + 1;
+              print `token {generated[0]}/{limit}: {next}\n`;
+              ()
             )
+          )
+          | _ -> ()
+        );
+        match status[0] with
+        | Failed -> (print "generation failed\n"; None)
+        | _ -> (
+          # Decode the sequence together to preserve split UTF-8 characters.
+          match Tokenizers.decode_ids tokenizer output (generated[0])
+          |> Tokenizers.as_decoded with
+          | None -> (print "decoding failed\n"; None)
+          | Some text -> (print `generated text: "{text}"\n`; Some GpuDone)
         )
       )
+    )
   ;;
 ;
 
@@ -1471,13 +1470,14 @@ let hidden = json_array_int 1 m.embedding.shape;
 let vocab = json_array_int 0 m.embedding.shape;
 let embedding = embedding_device <&> (fn device -> (kernel, device, hidden));
 let final_norm = Gpu.weight m "model.norm.weight" hidden |> as_device;
+
 # Keep model resources alive for repeated REPL calls.
 let decoder_weights = final_norm >>= (fn norm -> Decoder.load_all m hidden);
 let chat = fn input: (String) ->
   embedding >>= (fn embedding ->
-  final_norm >>= (fn norm ->
-  decoder_weights >>= (fn weights ->
-    Tokenizers.encode tokenizer input
-    |> Generation.run m weights embedding norm tokenizer max_new_tokens eos_token_id
-  ))) |> as_status
+    final_norm >>= (fn norm ->
+      decoder_weights >>= (fn weights ->
+        Tokenizers.encode tokenizer input
+        |> Generation.run m weights embedding norm tokenizer max_new_tokens eos_token_id
+      ))) |> as_status
 ;;

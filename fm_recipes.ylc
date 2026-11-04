@@ -1,0 +1,648 @@
+open libs/audio_jit/DSP;
+import std/Math;
+
+# Frequencies are Hz; modulation depths are cycles, as in pm_osc.
+let voice_gain = 0.2;
+
+# One operator accepts any modulation signal, allowing arbitrary routing.
+let op = @Audio fn freq phase_mod ->
+  fm_op freq phase_mod
+;;
+
+# Fade the attack and release, then free the whole voice.
+let finish = @Audio fn trigger duration sound ->
+  let envelope = trigger
+    |> rect duration
+    |> adsr 0.002 0. 1. 0.05
+    |> kill_on_end;
+  sound
+  |> (*) (decay duration trigger)
+  |> (*) envelope
+  |> (*) voice_gain
+;;
+
+# B -> A --+
+# D -> C --+-> output: body plus a short metallic attack.
+let epiano = @Audio fn freq duration ->
+  let t = trig 0;
+  let body = freq
+    |> pm_osc 1. (0.12 * decay 0.8 t);
+
+  let tine = freq * 2.
+    |> pm_osc 3.5 (0.25 * decay 0.06 t)
+    |> (*) 0.2;
+
+  body + tine |> finish t duration
+;;
+
+# D -> C -> B -> A -> output: upper operators decay into a simpler bass tone.
+let stack_bass = @Audio fn freq duration ->
+  let t = trig 0;
+
+  let a = fm_op (freq * 4.) 0.
+    |> (*) (0.15 * decay 0.04 t)
+    |> fm_op (freq * 2.)
+
+    |> (*) (0.2 * decay 0.15 t)
+    |> fm_op freq
+
+    |> (*) (0.3 * decay 0.3 t)
+    |> fm_op freq
+    ;
+
+  a |> finish t duration
+;;
+
+# B, C, D -> A -> output: noninteger ratios give independently fading partials.
+let bell = @Audio fn freq duration ->
+  let t = trig 0;
+  let b = fm_op (freq * 2.01) 0.
+    |> (*) (0.15 * decay 1.2 t);
+  let c = fm_op (freq * 3.5) 0.
+    |> (*) (0.08 * decay 0.5 t);
+  let d = fm_op (freq * 7.13) 0.
+    |> (*) (0.04 * decay 0.08 t);
+
+  b + c + d
+  |> fm_op freq
+  |> finish t duration
+;;
+
+# Read the previous sample before writing: feedback needs an explicit delay.
+let fb_op = @Audio fn freq amount ->
+  let previous = [| 0. |];
+  let output = previous[0]
+    |> (*) amount
+    |> fm_op freq;
+  previous[0] := output;
+  output
+;;
+
+# B feeds itself and A. Start feedback around 0.02-0.1 cycles.
+let feedback_bass = @Audio fn freq duration feedback ->
+  let t = trig 0;
+  fb_op (freq * 2.) (lfnoise 2. 0.1 1.)
+  |> (*) 0.1
+  |> op freq
+  |> finish t duration
+;;
+
+# Evaluate one line in the REPL. Duration is seconds; each voice frees itself.
+# Increase indices for brightness; high pitches/depths/feedback can alias.
+
+# Moving FM depth and a falling resonant band give the growl its vowel sweep.
+let growl = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let pitch = freq * (1. + 0.5 * decay 0.025 t);
+  let motion = sin_osc 7. |> scale_bp 0.05 0.25;
+  let carrier = fb_op (pitch * 3.) (0.04 + bite * 0.08)
+    |> (*) bite
+    |> (*) 0.35
+    |> fm_op (pitch * 2.)
+
+    |> (*) (motion + bite * decay 0.18 t)
+    |> fm_op pitch;
+  let cutoff = decay 0.22 t |> scale 350. 3200.;
+  let edge = carrier |> Filter.bpf cutoff 1.5;
+  let sub = sin_osc freq * 0.35;
+
+  (carrier + edge + sub) * 2.
+  |> Math.tanh
+  |> Filter.hpf 30. 0.707
+  |> finish t duration
+;;
+
+# A steep pitch drop and inharmonic modulation make a short grime zap.
+let laser = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let pitch = freq * (1. + 10. * decay 0.055 t);
+  fb_op (pitch * 1.73) (0.03 + bite * 0.04)
+  |> (*) (bite * (0.05 + 0.65 * decay 0.1 t))
+  |> fm_op pitch
+
+  |> (*) 2.5
+  |> Math.tanh
+  |> Filter.lpf 6500. 0.707
+  |> finish t duration
+;;
+
+# Tuned FM shell plus a short noise crack; freq controls the shell's body.
+let metal_snare = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let pitch = freq * (1. + 2. * decay 0.018 t);
+  let metal = fb_op (freq * 7.31) (0.04 + bite * 0.06);
+  let shell = metal * bite * 0.3 * (decay 0.07 t)
+    |> fm_op pitch
+    |> (*) (decay 0.12 t);
+
+  let crack = white ()
+    |> Filter.hpf 1800. 0.707
+    |> (*) (decay 0.09 t);
+
+  let ring = metal
+    |> (*) 0.08
+    |> fm_op (freq * 3.17)
+    |> (*) (0.2 * decay 0.22 t);
+
+  (shell + crack * 0.7 + ring) * 3.
+  |> Math.tanh
+  |> Filter.hpf 100. 0.707
+  |> finish t duration
+;;
+
+# Detuned parallel carriers beat against each other beneath a closing filter.
+let reese_stab = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let detune = 0.006;
+  let index = bite * (0.2 + 0.35 * decay 0.2 t);
+  let left = fb_op (freq * 2.) (bite * 0.08)
+    |> (*) index
+    |> fm_op (freq * (1. - detune));
+  let right = fm_op (freq * 2.013) 0.
+    |> (*) index
+    |> fm_op (freq * (1. + detune));
+  let cutoff = decay 0.25 t |> scale 250. 4200.;
+
+  (left + right) * 2.
+  |> Math.tanh
+  |> Filter.lpf cutoff 1.
+  |> Filter.hpf 30. 0.707
+  |> finish t duration
+;;
+
+# The noisy FM attack collapses into a clean low tail.
+let sub_impact = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let pitch = freq * (1. + 12. * decay 0.025 t);
+  let body = fb_op (pitch * 2.41) (bite * 0.12)
+    |> (*) (bite * 0.8 * decay 0.035 t)
+    |> fm_op pitch;
+  let click = white ()
+    |> Filter.hpf 3000. 0.707
+    |> (*) (0.3 * decay 0.006 t);
+
+  (body + click) * 2.
+  |> Math.tanh
+  |> Filter.lpf 5500. 0.707
+  |> finish t duration
+;;
+
+# Opposing pitch sweeps and a moving band turn the hit into a rubbery vowel.
+let rubber_yelp = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let bend = decay 0.13 t;
+  let carrier_pitch = freq * (0.7 + 3.3 * bend);
+  let mod_pitch = freq * (6. - 4. * bend);
+  let body = bite * 0.45 * fb_op mod_pitch (0.05 + bite * 0.07)
+    |> fm_op carrier_pitch;
+  let vowel = body |> Filter.bpf (350. + 2400. * bend) 2.;
+
+  (body * 0.4 + vowel) * 3.
+  |> Math.tanh
+  |> Filter.hpf 70. 0.707
+  |> finish t duration
+;;
+
+# Stepped ratios and a falling sample clock produce a broken digital transmission.
+let modem_burst = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let clock_rate = 18.;
+  let ratio = lfnoise0 clock_rate 1. 9. |> Math.floor;
+  let body = fm_op (freq * ratio) 0.
+    |> (*) bite
+    |> (*) 0.5
+    |> fm_op freq;
+  let sample_clock = trig (decay 0.2 t |> scale 700. 9000.);
+  let chopped = sah body sample_clock;
+  let gate = sin_osc clock_rate |> scale_bp 0.1 1.;
+
+  chopped * gate * 2.
+  |> Math.tanh
+  |> Filter.hpf 180. 0.707
+  |> Filter.lpf 6000. 0.707
+  |> finish t duration
+;;
+
+# Both operators read last sample's output: mutual feedback without evaluation bias.
+let cross_scream = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let previous = [| 0., 0. |];
+  let index = bite * (0.08 + 0.32 * decay 0.3 t);
+  let a = previous[1] |> (*) index |> fm_op freq;
+  let b = previous[0] |> (*) index |> fm_op (freq * 1.413);
+  previous[0] := a;
+  previous[1] := b;
+  let ring = a * b;
+
+  (a + b + ring) * 1.5
+  |> Math.tanh
+  |> Filter.hpf 90. 0.707
+  |> Filter.lpf 7000. 0.707
+  |> finish t duration
+;;
+
+# Inharmonic FM and a short comb leave a rattling, bent-metal tail.
+let broken_gong = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let body = fm_op (freq * 6.79) 0.
+    |> (*) bite
+    |> (*) 0.3
+    |> (*) (decay 0.15 t)
+    |> fm_op (freq * 2.37)
+
+    |> (*) bite
+    |> (*) 0.6
+    |> (*) (decay 0.8 t)
+    |> fm_op freq;
+  let rattle = body
+    |> freq_shift (37. + 140. * decay 0.12 t) 0.
+    |> comb 0.013 0.02 0.65;
+
+  (body + rattle * 0.5) * 2.
+  |> Math.tanh
+  |> Filter.hpf 150. 0.707
+  |> finish t duration
+;;
+
+# Accelerating pulses and a rising index unzip a low tone into a rasp.
+let zipper = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let progress = sweep 1. t / duration |> Math.clamp 0. 1.;
+  let pulse_rate = 8. + 110. * progress * progress;
+  let pulse = trig pulse_rate |> decay 0.008;
+  fb_op (freq * (1. + 3. * progress)) (bite * 0.1)
+  |> (*) bite
+  |> (*) (0.05 + progress * 0.6)
+  |> fm_op freq
+
+  |> (*) pulse
+  |> (*) 3.
+  |> Math.tanh
+  |> Filter.hpf 50. 0.707
+  |> Filter.lpf 6500. 0.707
+  |> finish t duration
+;;
+
+# A hard strike excites three unrelated modes, like a small chrome object.
+let chrome_clack = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let strike = decay 0.012 t;
+  let modulator = fm_op (freq * 8.73) 0.;
+  let low = modulator
+    |> (*) bite
+    |> (*) strike
+    |> fm_op freq;
+  let middle = modulator
+    |> (*) bite
+    |> (*) 0.3
+    |> (*) strike
+    |> fm_op (freq * 2.756);
+  let high = modulator
+    |> (*) bite
+    |> (*) 0.2
+    |> (*) strike
+    |> fm_op (freq * 5.404);
+  let modes = low * decay 0.18 t
+    + middle * 0.7 * decay 0.09 t
+    + high * 0.4 * decay 0.045 t;
+  let tick = white () |> Filter.hpf 5000. 0.707 |> (*) (strike * 0.2);
+
+  (modes + tick) * 3.
+  |> Math.tanh
+  |> Filter.hpf 350. 0.707
+  |> finish t duration
+;;
+
+# A thin sheet flexes after the strike; each FM mode bends at a different rate.
+let steel_fold = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let bend = decay 0.12 t;
+  let a = fb_op (freq * 7.13) (bite * 0.09)
+    |> (*) bite
+    |> (*) 0.4
+    |> (*) (decay 0.3 t)
+    |> fm_op (freq * (1. + 0.7 * bend));
+  let b = a
+    |> (*) bite
+    |> (*) 0.25
+    |> fm_op (freq * (2.41 - 0.6 * bend));
+  let rattle = (a + b) |> comb 0.007 0.02 0.55;
+
+  (a + b * 0.5 + rattle * 0.3) * 2.
+  |> Math.tanh
+  |> Filter.hpf 180. 0.707
+  |> Filter.lpf 8500. 0.707
+  |> finish t duration
+;;
+
+# A quick upward bend and narrow moving bands give a stretched-latex squeak.
+let latex_snap = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let stretch = 1. - decay 0.035 t;
+  let pitch = freq * (1. + 3. * stretch) * (0.6 + 0.4 * decay 0.2 t);
+  let body = fm_op (pitch * 1.97) 0.
+    |> (*) bite
+    |> (*) (0.08 + 0.3 * decay 0.08 t)
+    |> fm_op pitch;
+  let squeak = body |> Filter.bpf (700. + 3400. * stretch) 2.5;
+  let pop = white () |> Filter.hpf 2000. 0.707 |> (*) (decay 0.004 t);
+
+  (squeak * 3. + body * 0.25 + pop * 0.2) * 2.
+  |> Math.tanh
+  |> finish t duration
+;;
+
+# A rising then falling pitch, nasal bands and flutter suggest an elephant trumpet.
+# Lower freq for a bellow; raise bite for a torn, metallic edge.
+let elephant = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let rise = 1. - decay 0.06 t;
+  let fall = decay (duration * 0.5) t;
+  let flutter = sin_osc 23. * 0.025 * rise;
+  let pitch = freq * (0.65 + 2.5 * rise * fall) * (1. + flutter);
+  let carrier = fb_op (pitch * 2.) (bite * 0.08)
+    |> (*) bite
+    |> (*) 0.15
+    |> fm_op (pitch * 1.003)
+
+    |> (*) bite
+    |> (*) (0.25 + 0.65 * rise * fall)
+    |> fm_op pitch;
+  let nasal = carrier |> Filter.bpf (500. + 700. * fall) 2.;
+  let throat = carrier |> Filter.bpf (1400. + 1500. * rise * fall) 1.5;
+  let breath = white () |> Filter.bpf 2200. 0.8 |> (*) (0.08 * rise);
+  let pressure = rise * (0.8 + 0.2 * sin_osc 31.);
+
+  (carrier * 0.35 + nasal * 2. + throat + breath) * pressure * 3.
+  |> Math.tanh
+  |> Filter.hpf 55. 0.707
+  |> Filter.lpf 7000. 0.707
+  |> finish t duration
+;;
+
+# A tiny resonant cavity turns a noisy FM strike into a hollow metallic bubble.
+let alloy_bubble = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let bend = decay 0.045 t;
+  let body = fm_op (freq * 4.83) 0.
+    |> (*) bite
+    |> (*) 0.5
+    |> (*) (decay 0.08 t)
+    |> fm_op (freq * (0.7 + 3. * bend));
+  let wet = body
+    |> comb 0.0037 0.01 0.7
+    |> Filter.bpf (600. + 3600. * bend) 1.5;
+
+  (body * 0.4 + wet) * 3.
+  |> Math.tanh
+  |> Filter.hpf 200. 0.707
+  |> finish t duration
+;;
+
+# Falling strike density and stepped tuning scatter a handful of glass shards.
+let glass_hail = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let strikes = trig (decay 0.16 t |> scale 12. 95.);
+  let ratio = rand_trig 1. 4.5 strikes;
+  let hit = decay 0.018 strikes;
+  let shard = fm_op (freq * ratio * 6.37) 0.
+    |> (*) hit
+    |> (*) bite
+    |> (*) 0.7
+    |> fm_op (freq * ratio);
+  let glitter = shard
+    |> (*) bite
+    |> (*) 0.1
+    |> fm_op (freq * ratio * 2.89);
+
+  (shard + glitter * 0.35) * hit * 2.
+  |> Math.tanh
+  |> Filter.hpf 1600. 0.707
+  |> Filter.lpf 10500. 0.707
+  |> finish t duration
+;;
+
+# A short inhalation ends in a pitched seal-breaking pop.
+let suction_pop = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let inhale_time = 0.09;
+  let progress = sweep 1. t / inhale_time |> Math.clamp 0. 1.;
+  let release = delay inhale_time inhale_time t;
+  let breath = white ()
+    |> Filter.bpf (400. + 3600. * progress) 2.
+    |> (*) (progress * rect inhale_time t);
+  let pitch = freq * (0.5 + 4. * decay 0.025 release);
+  let pop = fm_op (pitch * 3.73) 0.
+    |> (*) bite
+    |> (*) 0.35
+    |> fm_op pitch
+    |> (*) (decay 0.11 release);
+
+  (breath * 0.4 + pop) * 3.
+  |> Math.tanh
+  |> Filter.hpf 80. 0.707
+  |> finish t duration
+;;
+
+# A slowing toothed wheel retriggers a small, inharmonic metal body.
+let ratchet = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let teeth = trig (decay 0.2 t |> scale 8. 150.);
+  let strike = decay 0.007 teeth;
+  let body = fb_op (freq * 5.61) (bite * 0.07)
+    |> (*) bite
+    |> (*) 0.5
+    |> (*) strike
+    |> fm_op (freq * (1. + strike * 0.4));
+  let shell = body * strike |> comb 0.0041 0.01 0.55;
+
+  (body * strike + shell * 0.4) * 3.
+  |> Math.tanh
+  |> Filter.hpf 700. 0.707
+  |> finish t duration
+;;
+
+# A stretched wire twangs into two beating modes with a short FM scrape.
+let wire_pluck = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let tension = 1. + 0.18 * decay 0.035 t;
+  let scrape = white () |> Filter.bpf 3500. 1.2 |> (*) (decay 0.025 t);
+  let modulator = scrape
+    |> (*) bite
+    |> (*) 0.2
+    |> fm_op (freq * 3.997)
+    |> (*) (bite * (0.015 + 0.3 * decay 0.08 t));
+  let a = modulator |> fm_op (freq * tension);
+  let b = modulator |> fm_op (freq * tension * 1.009);
+  let bridge = (a + b) |> Filter.bpf (freq * 7.) 2.;
+
+  (a * 0.5 + b * 0.5 + bridge * 0.6 + scrape * 0.15) * 2.
+  |> Math.tanh
+  |> Filter.hpf 100. 0.707
+  |> finish t duration
+;;
+
+# A nasal bellow collapses into rapid throat pulses instead of a smooth tail.
+let beast_choke = @Audio fn freq duration bite ->
+  let t = trig 0;
+  let progress = sweep 1. t / duration |> Math.clamp 0. 1.;
+  let pitch = freq * (0.55 + 2.5 * decay 0.16 t);
+  let carrier = fb_op (pitch * 1.51) (bite * 0.11)
+    |> (*) bite
+    |> (*) (0.2 + 0.5 * progress)
+    |> fm_op pitch;
+  let throat = carrier |> Filter.bpf (300. + 1300. * decay 0.22 t) 2.;
+  let mouth = carrier |> Filter.bpf (2200. - 1200. * progress) 1.5;
+  let pulses = trig (12. + 65. * progress) |> decay 0.006;
+  let choke = (1. - progress) + progress * pulses;
+
+  (carrier * 0.25 + throat * 2. + mouth) * choke * 3.
+  |> Math.tanh
+  |> Filter.hpf 50. 0.707
+  |> Filter.lpf 6000. 0.707
+  |> finish t duration
+;;
+
+# Morgue-inspired experiment: flip pitch, keeping oscillator phase continuous.
+# Flip low -> high -> low once; interval is semitones above freq.
+let morgue_stab = @Audio fn freq duration flip_hz interval bite ->
+  let t = trig 0;
+  let high_ratio = midiratio interval;
+  let flip_period = 1. / flip_hz;
+  let flip = rect flip_period t - rect (flip_period * 0.5) t;
+  let pitch = freq * (1. + flip * (high_ratio - 1.));
+  let cutoff = 700. + 4500. * decay 0.08 t;
+
+  fm_op (pitch * 2.) 0.
+  |> (*) (0.12 + 0.18 * bite * decay 0.06 t)
+  |> fm_op pitch
+  |> (*) (1. + 3. * bite)
+  |> Math.tanh
+  |> Filter.lpf cutoff 0.707
+  |> Filter.hpf 35. 0.707
+  |> finish t duration
+;;
+
+# Each new hit takes frequency, duration, bite. Start bite around 0.5-1.5.
+# growl (midi_freq 30.) 0.8 1. |> play_node;
+# laser (midi_freq 42.) 0.5 1. |> play_node;
+# metal_snare 180. 0.35 1. |> play_node;
+# reese_stab (midi_freq 30.) 0.8 1. |> play_node;
+# sub_impact (midi_freq 29.) 1. 1. |> play_node;
+
+# Play the original voices, then the new hits, once in order.
+let x = fn () ->
+
+  print "epiano\n";
+  epiano (midi_freq 60.) 2. |> play_node;
+  yield .5;
+
+  print "stack bass\n";
+  stack_bass (midi_freq 36.) 1. |> play_node;
+
+  yield .5;
+
+  print "bell\n";
+  bell (midi_freq 60.) 4. |> play_node;
+
+  yield .5;
+
+  print "fb bass\n";
+  feedback_bass (midi_freq 36.) 1. 1. |> play_node;
+  yield .5;
+
+  print "growl\n";
+  growl (midi_freq 30.) 0.8 1. |> play_node;
+  yield .5;
+
+  print "laser\n";
+  laser (midi_freq 42.) 0.5 1. |> play_node;
+  yield .5;
+
+  print "metal snare\n";
+  metal_snare 180. 0.35 1. |> play_node;
+  yield .5;
+
+  print "reese\n";
+  reese_stab (midi_freq 30.) 0.8 1. |> play_node;
+  yield .5;
+
+  print "sub-impact\n";
+  sub_impact (midi_freq 29.) 1. 1. |> play_node;
+  yield .5;
+
+  print "rubber yelp\n";
+  rubber_yelp (midi_freq 42.) 0.7 1. |> play_node;
+  yield .5;
+
+  print "modem burst\n";
+  modem_burst (midi_freq 54.) 0.8 1. |> play_node;
+  yield .5;
+
+  print "cross scream\n";
+  cross_scream (midi_freq 45.) 0.8 1. |> play_node;
+  yield .5;
+
+  print "broken gong\n";
+  broken_gong (midi_freq 48.) 1.5 1. |> play_node;
+  yield .5;
+
+  print "zipper\n";
+  zipper (midi_freq 36.) 0.9 1. |> play_node;
+  yield .5;
+
+  print "chrome clack\n";
+  chrome_clack 320. 0.35 1. |> play_node;
+  yield 0.5;
+
+  print "steel fold\n";
+  steel_fold 170. 0.8 1. |> play_node;
+  yield .5;
+
+  print "latex snap\n";
+  latex_snap 180. 0.4 1. |> play_node;
+  yield 0.5;
+
+  print "elephant\n";
+  elephant 85. 1.4 1. |> play_node;
+  yield .5;
+
+  print "elephant\n";
+  elephant 36. 1.4 2. |> play_node;
+  yield .5;
+
+  print "alloy bubble\n";
+  alloy_bubble 240. 0.5 1. |> play_node;
+  yield .5;
+
+  print "glass hail\n";
+  glass_hail 950. 0.65 1. |> play_node;
+  yield .5;
+
+  print "suction pop\n";
+  suction_pop 150. 0.45 1. |> play_node;
+  yield .5;
+
+  print "ratchet\n";
+  ratchet 480. 0.7 1. |> play_node;
+  yield .5;
+
+  print "wire pluck\n";
+  wire_pluck 220. 1.2 1. |> play_node;
+  yield .5;
+
+  print "beast choke\n";
+  beast_choke 75. 0.9 1. |> play_node;
+  yield .5;
+
+  print "morgue stab: octave flip\n";
+  morgue_stab 110. 0.45 10. 12. 1. |> play_node;
+  yield .5;
+
+  print "morgue stab: fast fifth flip\n";
+  morgue_stab 110. 0.45 10. 7. 1. |> play_node;
+  yield .5;
+  yield x ()
+
+;;
+x () |> play_pattern 0.

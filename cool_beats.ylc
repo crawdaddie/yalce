@@ -108,8 +108,17 @@ let g = fn () ->
   ;;
 
   tts_pat () |> cor_map ((*) beat) |> play_pattern 0. ;
-  [|3.,3.,3.,4.,3.|] |> iter |> cor_map (fn d -> Drums.k () |> play_node; d * beat * 0.25) |> cor_loop |> play_pattern 0.;
+  [|3.,3.,3.,4.,3.|] |> iter
+  |> cor_map
+  (fn d ->
+    Drums.k () |> play_node;
+    d * beat * 0.25
+  )
+  |> cor_loop
+  |> play_pattern 0.;
+
   snr_pat () |> cor_loop |> cor_map ((*) beat) |> play_pattern 0.;
+
   yield 4.
 ;;
 

@@ -52,16 +52,15 @@ let kick = @Audio fn freq duration ->
 
   let pitch = trigger |> decay 0.02 |> scale freq 4000;
 
-  let body = sin_osc pitch
-    |> (*) (1. + 10. * decay 0.001 trigger)
-  ;
+  let body = sin_osc pitch;
 
   let click = decay 0.01 trigger
     * (hasher (sweep 1. trigger) |> Filter.hpf 1000. 0.707);
 
   let raw = body + click ;
 
-  let clipped = raw |> Math.clamp (-1.) 1.
+  let clipped = raw
+    |> Math.clamp (-1.) 1.
     |> (+) (fold2 1. raw |> (*) (Math.db_amp (-10.))) ;
 
   let shaped = clipped
@@ -555,13 +554,19 @@ let stutter = @Audio fn trig_sig active beat_length subdiv rate inp ->
 ;;
 
 
+let bitcrush = @Audio fn bits inp ->
+  let levels = Math.pow 2. (bits - 1.) in
+  Math.floor (inp * levels + 0.5) / levels
+;;
 type Stereo = Double;
-let fx = @Audio fn sel trigger subdiv beat_length rate inpp: (Stereo) ->
+let fx = @Audio fn sel trigger subdiv beat_length rate inppp: (Stereo) ->
+  let inpp = inppp;
+
   let inp = inpp + (inpp * (Double (sel == 5.)) |> Filter.hpf 800. 1. |> Reverb.concert);
 
   let comb_short = inp
   |> comb (lfnoise 1. 0.01 0.025) 0.1 0.5
-  |> disperser 100. 1. 1.
+  # |> disperser 100. 1. 1.
   ;
 
   let latch = sah inp (trig (rand_trig 4000. 8000. trigger))
@@ -598,11 +603,11 @@ let fx = @Audio fn sel trigger subdiv beat_length rate inpp: (Stereo) ->
     | 4. -> ring
     | 5. -> inp
     | 6. -> stutt
+    | 7. -> inp |> bitcrush (lfnoise 2. 1. 4.)
     | _ -> inp)
-  |> glue -12. 4. 0.005 0.15 6. 3.
-  |> (*) (Math.db_amp -2.)
-  # |> Filter.lpf 10000. 0.2
-
+  |> (*) (Math.db_amp -6.)
+  |> Filter.lpf 10000. 0.2
+  # inppp
 ;;
 
 let fx_node = fx 0. 0. 1. (60. / 150.) 1. 0. |> play_node ;
@@ -703,7 +708,7 @@ let metal_snare = @Audio fn dec pmul ->
 
 let beat = tempo_mul () ;
 let play_kick = fn d ->
-  kick (midi_freq 20.) (d * beat * 0.5) |> play_node;
+  kick (midi_freq 20.) (d * beat) |> play_node;
   d * beat
 ;;
 
@@ -812,15 +817,15 @@ let drums = fn () ->
   yield drums ()
 ;;
 let b = bass 0. 0. 0. |> play_node;
+let play_bass = fn note duration ->
+  # bass (midi_freq note) (duration * beat * 0.5) |> play_node ;
+  # set_nobass (midi_freq note) (duration * beat * 0.5) |> play_node ;
+  set_input_scalar b 1 (midi_freq note);
+  set_input_scalar b 2 (duration * beat * 0.5);
+  set_input_trig b 0;
+  duration * beat
+;;
 
-  let play_bass = fn note duration ->
-    # bass (midi_freq note) (duration * beat * 0.5) |> play_node ;
-    # set_nobass (midi_freq note) (duration * beat * 0.5) |> play_node ;
-    set_input_scalar b 1 (midi_freq note);
-    set_input_scalar b 2 (duration * beat * 0.5);
-    set_input_trig b 0;
-    duration * beat
-  ;;
 let bass_line = fn () ->
 
   yield play_bass 32. 0.5 ;
@@ -894,6 +899,7 @@ drums () |> play_pattern beat |> task;
 # rim_soft 1. 1. |> play_node
 # rim2 100. 1. 1. 1. |> play_node;
 #
+(
 let co = fn v sc ->
   set_input_scalar (v[3]) 0 (Math.array_choose [|53., 51., 58.|] |> midi_freq);
   yield 4. * sc;
@@ -913,7 +919,8 @@ let v = [|
   vocals (53. |> midi_freq) |> play_rv
 
 |];
-co v (4 * tempo_mul ()) |> play_pattern beat;
+co v (4 * tempo_mul ()) |> play_pattern beat
+)
 
 # let record_start = extern fn String -> Double -> Int;
 # let record_stop = extern fn () -> ();
