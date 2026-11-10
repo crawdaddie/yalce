@@ -1,0 +1,15 @@
+/home/adam/projects/yalce/libs/hf_tokenizer/target/debug/deps/onig-fd2145423ab86601.d: /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/lib.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/buffers.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/find.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/flags.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/match_param.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/names.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/region.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/replace.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/syntax.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/tree.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/utils.rs
+
+/home/adam/projects/yalce/libs/hf_tokenizer/target/debug/deps/libonig-fd2145423ab86601.rmeta: /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/lib.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/buffers.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/find.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/flags.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/match_param.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/names.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/region.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/replace.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/syntax.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/tree.rs /home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/utils.rs
+
+/home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/lib.rs:
+/home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/buffers.rs:
+/home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/find.rs:
+/home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/flags.rs:
+/home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/match_param.rs:
+/home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/names.rs:
+/home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/region.rs:
+/home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/replace.rs:
+/home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/syntax.rs:
+/home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/tree.rs:
+/home/adam/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/onig-6.5.3/src/utils.rs:

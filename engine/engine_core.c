@@ -1,8 +1,8 @@
-#include "sf_buffer.h"
 #include "./engine_core.h"
+#include "../lang/runtime/ylc_stdlib.h"
 #include "./audio_loop.h"
 #include "./scheduling.h"
-#include "../lang/runtime/ylc_stdlib.h"
+#include "sf_buffer.h"
 #include <math.h>
 #include <pthread.h>
 #include <sndfile.h>
@@ -968,9 +968,7 @@ void *sf_buffer(int index) {
 }
 
 /* References remain valid while the engine registry is alive. */
-void *sf_ref_load(_String path) {
-  return load_sf_buffer_path(path);
-}
+void *sf_ref_load(_String path) { return load_sf_buffer_path(path); }
 
 bool sf_ref_valid(void *raw) {
   SfBuffer *buffer = raw;

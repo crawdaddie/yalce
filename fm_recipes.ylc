@@ -39,7 +39,7 @@ let epiano = @Audio fn freq duration ->
 let stack_bass = @Audio fn freq duration ->
   let t = trig 0;
 
-  let a = fm_op (freq * 4.) 0.
+  fm_op (freq * 4.) 0.
     |> (*) (0.15 * decay 0.04 t)
     |> fm_op (freq * 2.)
 
@@ -48,9 +48,8 @@ let stack_bass = @Audio fn freq duration ->
 
     |> (*) (0.3 * decay 0.3 t)
     |> fm_op freq
-    ;
 
-  a |> finish t duration
+    |> finish t duration
 ;;
 
 # B, C, D -> A -> output: noninteger ratios give independently fading partials.

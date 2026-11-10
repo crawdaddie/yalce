@@ -1,0 +1,201 @@
+
+open libs/audio_jit/DSP;
+import std/Math;
+# Fade the attack and release, then free the whole voice.
+let finish = @Audio fn trigger duration sound ->
+  let envelope = trigger
+    |> rect duration
+    |> adsr 0.002 0. 1. 0.05
+    |> kill_on_end;
+  sound
+  |> (*) envelope
+  |> (*) 0.2
+;;
+
+# B -> A --+
+# D -> C --+-> output: body plus a short metallic attack.
+let epiano = @Audio fn freq tined tine_amt body_amt duration ->
+  let t = trig 0;
+  let body = freq * (~[1., 1.01]) * (lfnoise 1. 0.98 1.02)
+    |> pm_osc body_amt (decay 1. t)
+    |> sum 
+    ;
+
+  let bdist = body
+    |> (*) (lfnoise 2. 0. 100.)
+    |> Math.tanh
+    # |> (*) (sin_osc (lfnoise 1. 10. 40.))
+    ;
+
+  let tine = freq * (~[2., 2.01, 2.05])
+    |> pm_osc tine_amt (decay tined t)
+    |> sum
+    ;
+
+  body + tine
+  |> (*) (decay duration t)
+  |> Filter.lpf 8000. 0.1
+  |> finish t duration
+  |> pan 2 (lfnoise0 0. 0. 1.)
+;;
+
+let acid = @Audio fn freq fdec duration ->
+  let t = trig 0;
+  let body = freq * (~[1., 1.01]) * (lfnoise 1. 0.98 1.02)
+    |> saw_osc
+    |> sum 
+    |> Filter.moogff (decay fdec t |> scale (freq * 0.5) 8000.) 3. 0. 
+    |> finish t duration
+
+
+  # let bdist = body
+  #   |> (*) (lfnoise 2. 0. 100.)
+  #   |> Math.tanh
+  #   # |> (*) (sin_osc (lfnoise 1. 10. 40.))
+  #   ;
+
+  # let tine = freq * (~[2., 2.01])
+  #   |> pm_osc tine_amt (decay tined t)
+  #   |> (*) 0.5
+  #   |> sum
+  #   ;
+  #
+  # 0.5 * (body + bdist) + tine
+  # |> (*) (decay duration t)
+  # |> finish t duration
+  # |> pan 2 (lfnoise0 0. 0. 1.)
+;;
+
+let notes = [|
+  60., 63., 67., 65., 72., 68., 62., 63.,
+  58., 60., 65., 70., 68., 62., 58., 72.,
+|];
+
+let durations = [|
+  0.5, 0.25, 0.75, 0.375, 0.625, 0.25, 0.5, 0.375,
+  0.75, 0.25, 0.5, 0.625, 0.375, 0.5, 0.25, 1.
+|];
+
+# Every row sums to 1. Columns are destination-note probabilities.
+let markov = [|
+  [| 0., .35, .2, 0., .2, 0., 0., 0., 0., .1, 0., 0., 0., 0., 0., .15 |],
+  [| .15, 0., .35, .2, 0., 0., .15, 0., 0., 0., .15, 0., 0., 0., 0., 0. |],
+  [| .1, .2, 0., .25, .2, 0., 0., .15, 0., 0., 0., .1, 0., 0., 0., 0. |],
+  [| .15, 0., .2, 0., .25, .2, 0., 0., 0., 0., .1, 0., .1, 0., 0., 0. |],
+  [| 0., 0., .15, .2, 0., .35, 0., 0., 0., .15, .15, 0., 0., 0., 0., 0. |],
+  [| 0., .1, 0., .2, .25, 0., .2, 0., 0., 0., .1, 0., .15, 0., 0., 0. |],
+  [| 0., 0., 0., .1, 0., .2, 0., .3, 0., 0., 0., .2, 0., 0., 0., .2 |],
+  [| 0., 0., .15, 0., 0., .15, .3, 0., .2, 0., 0., 0., .2, 0., 0., 0. |],
+  [| 0., 0., 0., 0., .15, 0., 0., .2, 0., .3, 0., 0., 0., .2, .15, 0. |],
+  [| .2, 0., 0., 0., 0., .15, 0., 0., .2, 0., .25, 0., 0., 0., .2, 0. |],
+  [| 0., 0., .1, 0., 0., .15, 0., 0., 0., .2, 0., .3, 0., 0., 0., .25 |],
+  [| 0., .15, 0., 0., 0., 0., .15, 0., 0., .2, .2, 0., .3, 0., 0., 0. |],
+  [| .15, 0., .1, 0., 0., .2, 0., .1, 0., 0., .15, .2, 0., .1, 0., 0. |],
+  [| 0., 0., .15, .1, 0., 0., .1, 0., .15, 0., 0., .2, .15, 0., 0., .15 |],
+  [| 0., .2, 0., 0., .15, 0., 0., 0., .15, .15, 0., 0., 0., 0., 0., .35 |],
+  [| .1, 0., 0., .2, 0., 0., 0., .15, 0., 0., .15, 0., .2, 0., .2, 0. |]
+|];
+
+let pick_state = fn row i chance ->
+  if i >= array_size row - 1 then i else
+    let weight = row[i] in
+    if chance <= weight then i
+    else pick_state row (i + 1) (chance - weight)
+;;
+
+
+let rs = @Audio fn inp -> 
+  inp
+  |> Filter.lpf 8000. 1.
+  # |> comb 0.25 0.25 0.3
+  |> Reverb.cathedral
+;;
+let r = rs 0. |> play_node;
+
+let history_len = 8;
+
+let play_note = fn nt tined tine_amt body_amt d ->
+  # print "play note epiano\n";
+  let ntt = (Math.array_choose [|0.125, 0.25, 0.5, 1., 2.|]) * midi_freq nt;
+  epiano ntt tined tine_amt body_amt d ~> r
+;;
+
+
+let play_note_acid = fn nt d ->
+  let ntt = (Math.array_choose [|0.125, 0.25, 0.25, 0.25, 0.5, 1., 2.|]) * midi_freq nt;
+
+  # match nt > 68. with
+  # | true -> epiano ntt 1. 2. 1. d ~> r
+  # | _ -> acid ntt (Math.rrand 0.01 0.2) d ~> r
+  acid ntt (Math.rrand 0.001 0.07) d ~> r
+;;
+let replay = fn acc i left ->
+  let (state, d) = acc[i];
+  let nt = notes[state];
+  play_note nt 1. (Math.rrand 0. 5.) 1. d;
+  yield (d, nt);
+  match left with
+    | 0 -> ()
+    | _ -> (
+      let next = (i + 1) % array_size acc;
+      yield replay acc next (left - 1);
+      ()
+    )
+;;
+
+let replay_window = fn acc i count ->
+  if count <= 0 then () else (
+    yield replay acc i history_len;
+    match count with
+    | 0 -> ()
+    | _ -> (
+      yield replay_window acc i (count - 1);
+      ()
+    )
+  )
+;;
+
+let pattern = fn acc id i index ->
+  let filled = index >= history_len;
+  let repeats = if filled then Math.array_choose [|0, 0, 0, 0, 0, 1, 2, 3|] else 0;
+  let source = if repeats > 0 then (
+    let last = (id + history_len - 1) % array_size acc;
+    let (state, _) = acc[last];
+    yield replay_window acc id repeats;
+    state
+  ) else i;
+
+  let i = if repeats > 0 then
+    pick_state (markov[source]) 0 (Math.rand_double ())
+  else i;
+  let d = Math.array_choose [|0.75, 0.5, 0.25|];
+  let nt = notes[i];
+  acc[id] := (i, d);
+  let next = pick_state (markov[i]) 0 (Math.rand_double ());
+  yield (d, nt); 
+  yield pattern acc ((id + 1) % (array_size acc)) next (index + 1)
+;;
+
+let x = fn d nt n ->
+  # play_note nt 1. 2. (1. + ((5. - (n + 1)) * 0.125))
+  play_note_acid nt (match n with
+    | 0 -> d
+    | _ -> 0.125
+    )
+    ;
+
+  match n with
+  | 0 -> (yield 0.125)
+  | _ -> (
+    yield 0.125;
+    yield x d nt (n - 1)
+  )
+;;
+
+pattern (array_fill_const history_len (0, 0.)) 0 0 0
+  |> cor_map (fn (d, nt) ->
+    x d nt (Math.array_choose [|0,0,0,1,2,3,4|]) |> play_pattern 0.;
+    # x d nt 0 |> play_pattern 0.;
+    d
+  )
+  |> play_pattern 0.

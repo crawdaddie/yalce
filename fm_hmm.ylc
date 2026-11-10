@@ -1,0 +1,136 @@
+open libs/audio_jit/DSP;
+import std/Math;
+
+# Fade the attack and release, then free the whole voice.
+let finish = @Audio fn trigger duration sound ->
+  let envelope = trigger
+    |> rect duration
+    |> adsr 0.002 0. 1. 0.05
+    |> kill_on_end;
+  sound
+  |> (*) envelope
+  |> (*) 0.2
+;;
+
+# B -> A --+
+# D -> C --+-> output: body plus a short metallic attack.
+let epiano = @Audio fn freq tined tine_amt body_amt duration ->
+  let t = trig 0;
+  let body = freq * (~[1., 1.01]) * (lfnoise 1. 0.98 1.02)
+    |> pm_osc body_amt (decay 1. t)
+    |> sum;
+
+  let tine = freq * (~[2., 2.01, 2.05])
+    |> pm_osc tine_amt (decay tined t)
+    |> sum;
+
+  body + tine
+  |> (*) (decay duration t)
+  |> finish t duration
+  |> pan 2 (lfnoise0 0. 0. 1.)
+;;
+
+let acid = @Audio fn freq fdec duration ->
+  let t = trig 0;
+  freq * (~[1., 1.01]) * (lfnoise 1. 0.98 1.02)
+    |> saw_osc
+    |> sum
+    |> Filter.moogff (decay fdec t |> scale (freq * 0.5) 8000.) 3. 0.
+    |> finish t duration
+;;
+
+let notes = [|
+  60., 63., 67., 65., 72., 68., 62., 63.,
+  58., 60., 65., 70., 68., 62., 58., 72.
+|];
+
+let durations = [|
+  0.5, 0.25, 0.75, 0.375, 0.625, 0.25, 0.5, 0.375,
+  0.75, 0.25, 0.5, 0.625, 0.375, 0.5, 0.25, 1.
+|];
+
+# Every row sums to 1. Columns are destination hidden states.
+let hidden_transitions = [|
+  [| .35, .3, .15, .1, .05, .05, 0., 0. |],
+  [| .15, .35, .25, .1, .05, .05, .05, 0. |],
+  [| .1, .2, .35, .15, .05, .05, .05, .05 |],
+  [| .05, .1, .2, .35, .1, .05, .1, .05 |],
+  [| .05, .05, .1, .2, .35, .1, .1, .05 |],
+  [| .05, .05, .05, .15, .2, .35, .1, .05 |],
+  [| .05, .05, .05, .1, .15, .2, .35, .1 |],
+  [| .1, .05, .05, .1, .1, .15, .2, .25 |]
+|];
+
+# Every row sums to 1. Columns are observable note states.
+let emissions = [|
+  [| .3, .15, .15, .05, .05, .1, .05, .05, .05, .05, 0., 0., 0., 0., 0., 0. |],
+  [| .05, .1, .2, .1, .05, .05, .05, .15, .05, .05, .1, .05, 0., 0., 0., 0. |],
+  [| .05, .05, .1, .15, .2, .1, .05, .05, .05, .05, .05, .05, .05, 0., 0., 0. |],
+  [| .05, .05, .05, .05, .05, .1, .15, .2, .05, .05, .05, .05, .05, .05, 0., 0. |],
+  [| 0., 0., .15, .15, .2, 0., .15, 0., .1, 0., 0., .1, .1, 0., .05, 0. |],
+  [| 0., 0., 0., .1, 0., .1, 0., .15, 0., .15, 0., 0., .2, .15, .1, .05 |],
+  [| .15, .1, .1, 0., 0., .1, 0., .05, 0., .1, 0., .1, .1, 0., .1, .1 |],
+  [| 0., 0., 0., 0., 0., 0., .05, .05, .05, .1, .1, .1, .1, .1, .15, .2 |]
+|];
+
+let pick_state = fn row i chance ->
+  if i >= array_size row - 1 then i else
+    let weight = row[i] in
+    if chance <= weight then i
+    else pick_state row (i + 1) (chance - weight)
+;;
+
+let rs = @Audio fn inp ->
+  inp
+  |> Filter.lpf 8000. 1.
+  |> Reverb.cathedral
+;;
+let r = rs 0. |> play_node;
+
+let play_note = fn nt tined tine_amt body_amt d ->
+  let ntt = (Math.array_choose [|0.125, 0.25, 0.5, 1., 2.|]) * midi_freq nt;
+  epiano ntt tined tine_amt body_amt d ~> r
+;;
+
+let play_note_acid = fn nt d ->
+  let ntt = (Math.array_choose [|0.125, 0.25, 0.25, 0.25, 0.5, 1., 2.|]) * midi_freq nt;
+  acid ntt (Math.rrand 0.001 0.07) d ~> r
+;;
+
+let hmm = fn state ->
+  let note_state = pick_state (emissions[state]) 0 (Math.rand_double ());
+  let nt = notes[note_state];
+  let d = Math.array_choose durations;
+  let next_state = pick_state (hidden_transitions[state]) 0 (Math.rand_double ());
+  yield (d, nt);
+  yield hmm next_state
+;;
+
+let x = fn d nt n ->
+  match n with
+  | 0 -> play_note_acid nt d
+  # | _ -> play_note nt 1. (Math.rrand 0. 5.) 1. 0.125
+  | _ -> play_note nt 1. 5. 1. 0.125
+  # | _ -> play_note nt 1. 2. 1. 0.125
+  ;
+  match n with
+  | 0 -> (yield 0.125)
+  | _ -> (
+    yield 0.125;
+    yield x d nt (n - 1)
+  )
+;;
+
+hmm 0
+  |> cor_map (fn (d, nt) ->
+    x d nt (Math.array_choose [|0, 0, 0, 1, 2, 3, 4|]) |> play_pattern 0.;
+    d
+  )
+  |> play_pattern 0.
+
+;
+# let record_start = extern fn String -> Double -> Int;
+# let record_stop = extern fn () -> ();
+#
+# record_start "fm_hmm.wav" 240. ;
+
