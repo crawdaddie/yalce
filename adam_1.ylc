@@ -163,7 +163,7 @@ let rim3 = @Audio fn freq duration velocity ->
   let filtered = shaped
     |> Filter.lpf 3000. 0.707
     |> Filter.hpf 200. 0.707
-    |> (*) (Math.db_amp (-20.))
+    |> gaindb (-20.)
   ;
   shaped
   |> (+) (delay 0.031 0.031 filtered)
@@ -299,10 +299,10 @@ let clap2 = @Audio fn duration ->
   let trigger = trig 0 ;
   let snd = decay 0.1 trigger
     * (hasher (sweep 1. trigger) |> Filter.bpf 1600. 0.5)
-    |> (*) (Math.db_amp 14.)
+    |> gaindb 14.
     |> Math.tanh
   ;
-  let wet = snd |> Reverb.reverb 60. 1. |> (*) (Math.db_amp (-30.)) ;
+  let wet = snd |> Reverb.reverb 60. 1. |> gaindb -30. ;
   let snd = snd + wet ;
   snd
   |> (*) (rect (duration + 0.03) trigger |> kill_on_end)
@@ -435,11 +435,11 @@ let _bass = @Audio fn freq duration ->
 
   let snd = saw_osc (freq * ~[1., 1.02])
     |> sum
-    |> (*) (Math.db_amp (-8.))
+    |> gaindb -8.
     |> Filter.moogff cutoff1 2. 0.
     |> (*) (Math.db_amp 20.)
     |> Filter.moogff cutoff2 3. 0.
-    |> (*) (Math.db_amp 5.)
+    |> gaindb 5.
   ;
   # SC skipped: snd = snd + LFPulse.ar(...) ! 2;
   # SC skipped: snd = Splay.ar(snd);

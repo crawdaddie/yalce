@@ -1,0 +1,77 @@
+open libs/audio_jit/DSP;
+import std/Math;
+
+let Kick = module () -> 
+  let kicks = @Audio fn freq dur ->
+    let trigger = trig 0;
+    let body = trigger
+      |> decay 0.01
+      |> scale freq 6000
+      |> sin_osc
+      ;
+
+    let click = white () * decay 0.2 trigger
+      |> Filter.lpf 1000. 1.
+      ;
+
+    body + click 
+      |> (*) (rect dur trigger |> adsr 0. 0. 1. 0.1 |> kill_on_end)
+  ;;
+  let node = synth_default [| 60., 0.1 |] kicks;
+  let play = fn pl -> node pl |> play_node;;
+;
+#
+# let Cymbal = module () -> 
+#   let cyms = @Audio fn dur ->
+#     let trigger = trig 0;
+#     white ()
+#       |> Filter.hpf 10000. 1.
+#       # |> (+) (0.1 * (sin_osc (800. + (50. * sin_osc 1001.))))
+#       |> (*) (rect dur trigger |> asr 0. 1. 0.2
+#         |> kill_on_end
+#       )
+#   ;;
+#
+#   let defs = [|0.1|];
+#   let node = synth_default defs cyms;
+#   let play = fn pl -> node pl |> play_node;;
+# ;
+#
+let Cymbal = module () -> 
+  let cyms = @Audio fn dur ->
+    let trigger = trig 0;
+
+    let noise =
+      white ()
+        |> Filter.hpf 10000. 1.
+      ;
+
+    let metal = ~[313., 467., 701., 1039.]
+      |> sin_osc
+      |> (*) (~[0.18, 0.14, 0.10, 0.07])
+      |> sum
+      |> gaindb 10.
+      |> (*) (decay 0.25 trigger)
+      |> Filter.hpf 3000. 1.
+      ;
+
+    noise + metal
+      |> (*) (rect dur trigger |> asr 0. 1. 0.2 |> kill_on_end)
+
+    # metal
+    #   |> (*) (rect dur trigger |> asr 0. 1. 0.2 |> kill_on_end)
+  ;;
+
+  let defs = [| 0.1 |];
+  let node = synth_default defs cyms;
+  let play = fn pl -> node pl |> play_node;;
+;
+
+
+let x = fn () ->
+  Cymbal.play [("dur", 0.001),];
+  yield 0.125;
+  yield x ()
+;;
+
+x () |> play_pattern 0.

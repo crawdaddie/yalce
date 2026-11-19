@@ -176,6 +176,30 @@ Node *ylc_create_audio_frame_node(frame_perform_func_t frame_perform,
   return node;
 }
 
+#define PMAP_SEPARATOR '\x1f'
+
+/* Name -> ctor-input-index lookup over a separator-delimited name table. */
+int ylc_pmap_lookup(const char *joined_names, int count, _String name) {
+  if (!joined_names || !name.chars || name.size < 0) {
+    return -1;
+  }
+
+  const char *entry = joined_names;
+  for (int i = 0; i < count; i++) {
+    const char *separator = strchr(entry, PMAP_SEPARATOR);
+    size_t len = separator ? (size_t)(separator - entry) : strlen(entry);
+    if ((int32_t)len == name.size &&
+        memcmp(entry, name.chars + name.offset, (size_t)name.size) == 0) {
+      return i;
+    }
+    if (!separator) {
+      break;
+    }
+    entry = separator + 1;
+  }
+  return -1;
+}
+
 #define MIR_AUDIO_CONTEXT_KIND "Audio"
 
 static const char SF_PLAY2[] = "sf_play2";
@@ -207,6 +231,7 @@ typedef struct MirAudioSynthBuildCtx {
   int num_inputs; /* Source arity, including resources. */
   int signal_count;
   AudioParam *params;
+  const char **param_names;
   Ast **capture_asts;
   size_t capture_count;
   int state_bytes;
@@ -227,12 +252,20 @@ typedef enum AudioSynthScope {
   AUDIO_SYNTH_LOCAL,
 } AudioSynthScope;
 
+typedef struct {
+  uint64_t id;
+  const char **param_names;
+  int count;
+} MirAudioSynthMetadata;
+
 typedef struct MirAudioSynthSymbol {
   const char *name;
   AudioSynthScope scope;
+  MirAudioSynthMetadata metadata;
   int num_inputs; /* Source arity, including resources. */
   int signal_count;
   AudioParam *params;
+  const char **param_names; /* Ctor param names, num_inputs entries. */
   Ast **capture_asts;
   size_t capture_count;
   int state_bytes;
@@ -241,6 +274,8 @@ typedef struct MirAudioSynthSymbol {
   MirFunction *kernel_fn;
   MirFunction *frame_fn;
 } MirAudioSynthSymbol;
+
+static uint64_t next_synth_metadata_id = 1;
 
 static MirValueId
 audio_mir_call_synth_in_audio_context(MirBuilder *builder, Ast *app,
@@ -1313,6 +1348,7 @@ static bool audio_mir_build_synth_functions(MirAudioSynthBuildCtx *ctx) {
                                      ctor_param_origins, num_inputs)) {
     return false;
   }
+  ctx->param_names = ctor_param_names;
 
   /* Keep constructor resources out of the signal graph. */
   ctx->params = num_inputs ? mir_arena_alloc(
@@ -3482,6 +3518,9 @@ static AudioValue audio_builtin_emit_bufsize(const AudioBuiltin *builtin,
 static AudioValue audio_builtin_emit_mix(const AudioBuiltin *builtin,
                                          AudioCompileCtx *audio, Ast *origin,
                                          AudioValue *args, size_t argc);
+static AudioValue audio_builtin_emit_sum(const AudioBuiltin *builtin,
+                                         AudioCompileCtx *audio, Ast *origin,
+                                         AudioValue *args, size_t argc);
 static AudioValue audio_builtin_emit_splay(const AudioBuiltin *builtin,
                                            AudioCompileCtx *audio, Ast *origin,
                                            AudioValue *args, size_t argc);
@@ -4107,6 +4146,18 @@ static const AudioBuiltin audio_builtins[] = {
      .arg_order = NULL,
      .kernel_argc = 0},
 
+    {.name = "asr",
+     .source_argc = 4,
+     .kernel_symbol = "ylc_audio_asr_kernel",
+     .emit = audio_builtin_emit_num_state,
+     .state_size = sizeof(AsrState),
+     .state_align = __alignof__(AsrState),
+     .state_name = "asr.state",
+     .lane_expand_mask = AUDIO_ARG_MASK(0) | AUDIO_ARG_MASK(1) |
+                         AUDIO_ARG_MASK(2) | AUDIO_ARG_MASK(3),
+     .arg_order = NULL,
+     .kernel_argc = 0},
+
     {.name = "adsr_array",
      .source_argc = 2,
      .kernel_symbol = "ylc_audio_adsr_array_kernel",
@@ -4159,6 +4210,18 @@ static const AudioBuiltin audio_builtins[] = {
      .state_align = __alignof__(SahState),
      .state_name = "sah.state",
      .lane_expand_mask = AUDIO_ARG_MASK_ALL(2),
+     .arg_order = NULL,
+     .kernel_argc = 0},
+
+    /* sum: reduce every input lane to one output lane. */
+    {.name = "sum",
+     .source_argc = 1,
+     .kernel_symbol = NULL,
+     .emit = audio_builtin_emit_sum,
+     .state_size = 0,
+     .state_align = 0,
+     .state_name = NULL,
+     .lane_expand_mask = 0,
      .arg_order = NULL,
      .kernel_argc = 0},
 
@@ -6011,6 +6074,22 @@ static AudioValue audio_builtin_emit_mix(const AudioBuiltin *builtin,
                                      n);
 }
 
+static AudioValue audio_builtin_emit_sum(const AudioBuiltin *builtin,
+                                         AudioCompileCtx *audio, Ast *origin,
+                                         AudioValue *args, size_t argc) {
+  (void)builtin;
+  if (!audio || !origin || !args || argc != 1) {
+    return AUDIO_VALUE_NULL;
+  }
+
+  MirValueId count = mir_const_int(audio->kernel_builder, &t_int, origin, 1);
+  AudioValue mix_args[] = {
+      audio_mir_value(&t_int, count, 1),
+      args[0],
+  };
+  return audio_builtin_emit_mix(NULL, audio, origin, mix_args, 2);
+}
+
 /* splay N signal -- distribute every input lane across N output lanes using
    equal-power panning and SC-style level compensation. */
 static AudioValue audio_builtin_emit_splay(const AudioBuiltin *builtin,
@@ -6381,9 +6460,15 @@ audio_mir_make_synth_symbol(MirArena *arena, MirAudioSynthBuildCtx *ctx,
   *synth = (MirAudioSynthSymbol){
       .name = ctx->name,
       .scope = scope,
+      .metadata = {
+          .id = next_synth_metadata_id++,
+          .param_names = ctx->param_names,
+          .count = ctx->num_inputs,
+      },
       .num_inputs = ctx->num_inputs,
       .signal_count = ctx->signal_count,
       .params = ctx->params,
+      .param_names = ctx->param_names,
       .capture_asts = ctx->capture_asts,
       .capture_count = ctx->capture_count,
       .state_bytes = ctx->state_bytes,
@@ -8983,6 +9068,372 @@ static MirValueId MirCompileAudioHandler(MirBuilder *builder, Ast *app,
   return mir_fn_ref(builder, audio_ctx.ctor_fn->type, app, audio_ctx.ctor_fn);
 }
 
+/* `pmap <synth>` -> `String -> Int` mapping ctor param names to their input
+   order (`kick_pmap "freq"` == 0, aligned with set_input_scalar indices).
+   Emits a wrapper fn that calls `ylc_pmap_lookup` with a baked-in name table.
+   Unknown names return -1. */
+static MirValueId MirCompilePmapHandler(MirBuilder *builder, Ast *app,
+                                        MirCtx *ctx,
+                                        MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!builder || !builder->program || !app || app->tag != AST_APPLICATION ||
+      app->data.AST_APPLICATION.len != 1) {
+    return MIR_NO_VALUE;
+  }
+
+  MirAudioSynthSymbol *synth = audio_mir_resolve_synth_symbol_arg(
+      builder, app->data.AST_APPLICATION.args, ctx);
+  if (!synth || !synth->ctor_fn) {
+    return MIR_NO_VALUE;
+  }
+
+  MirArena *arena = audio_mir_bundle_arena(builder);
+  if (!arena) {
+    return MIR_NO_VALUE;
+  }
+
+  int count = synth->metadata.count;
+  size_t table_len = 0;
+  for (int i = 0; i < count; i++) {
+    table_len += strlen(synth->metadata.param_names[i]) + 1;
+  }
+
+  char *table = mir_arena_alloc(arena, table_len + 1, __alignof__(char));
+  if (!table) {
+    return MIR_NO_VALUE;
+  }
+
+  size_t offset = 0;
+  for (int i = 0; i < count; i++) {
+    size_t len = strlen(synth->metadata.param_names[i]);
+    memcpy(table + offset, synth->metadata.param_names[i], len);
+    offset += len;
+    table[offset++] = PMAP_SEPARATOR;
+  }
+  table[offset] = '\0';
+
+  static unsigned pmap_counter = 0;
+  const char *fn_name =
+      mir_arena_printf(arena, "__ylc_pmap_%s_%u",
+                       synth && synth->name ? synth->name : "unknown",
+                       pmap_counter++);
+
+  Type *params[] = {&t_string};
+  Type *callable_type = audio_mir_fn_type(arena, params, 1, &t_int);
+  Type *fn_type = callable_type;
+  bool result_is_closure = app->type && is_closure(app->type);
+  if (result_is_closure) {
+    fn_type = audio_mir_fn_type(arena, NULL, 0, callable_type);
+    if (!fn_type) {
+      return MIR_NO_VALUE;
+    }
+    fn_type->data.T_FN.from = app->type->closure_meta;
+  }
+  if (!fn_type) {
+    return MIR_NO_VALUE;
+  }
+
+  MirFunction *fn = mir_program_add_function_arena(builder->program, fn_name,
+                                                   fn_type, app, arena);
+  MirBlock *entry = fn ? mir_function_add_block(fn, "entry") : NULL;
+  if (!fn || !entry) {
+    return MIR_NO_VALUE;
+  }
+
+  if (result_is_closure &&
+      mir_function_add_param(fn, "$env", app->type->closure_meta, app) ==
+          MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+  MirValueId name = mir_function_add_param(fn, "name", &t_string, app);
+
+  MirBuilder wb;
+  mir_builder_init(&wb, builder->program, fn);
+  mir_builder_position_at_end(&wb, entry);
+
+  MirValueId index;
+  if (name == MIR_NO_VALUE) {
+    index = mir_const_int(&wb, &t_int, app, -1);
+  } else {
+    Type *lookup_params[] = {&t_ptr, &t_int, &t_string};
+    Type *lookup_type = audio_mir_fn_type(arena, lookup_params, 3, &t_int);
+    MirValueId lookup =
+        audio_mir_extern_ref(&wb, "ylc_pmap_lookup", lookup_type, app);
+    MirValueId table_ref = mir_const_string(&wb, &t_ptr, app, table, table_len);
+    MirValueId count_ref = mir_const_int(&wb, &t_int, app, count);
+    index = mir_call_value(&wb, &t_int, app, lookup, lookup_type,
+                           (MirValueId[]){table_ref, count_ref, name}, 3);
+  }
+  if (index == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  mir_builder_set_return(&wb, index);
+  MirValueId fn_ref = mir_fn_ref(builder, fn_type, app, fn);
+  if (!result_is_closure) {
+    app->type = fn_type;
+    return fn_ref;
+  }
+
+  Type *env_type = app->type->closure_meta;
+  if (!env_type || env_type->kind != T_CONS ||
+      env_type->data.T_CONS.num_args < 1) {
+    return MIR_NO_VALUE;
+  }
+  MirValueId synth_value = mir_fn_ref(
+      builder, env_type->data.T_CONS.args[0], app, synth->ctor_fn);
+  MirValueIdVec fields = {0};
+  mir_value_id_vec_push(arena, &fields, synth_value);
+  MirValueId env = mir_emit_construct_items(
+      builder, MIR_CONSTRUCT_CLOSURE_ENV, app->type->closure_meta, app,
+      fields);
+  return mir_emit_closure(builder, app->type, app, fn_ref, env, fn);
+}
+
+static MirValueId audio_mir_array_num_at(MirBuilder *builder, Ast *origin,
+                                         MirValueId array, Type *array_type,
+                                         MirArena *arena, int index) {
+  if (!builder || !origin || array == MIR_NO_VALUE || !array_type || !arena ||
+      !is_array_type(array_type)) {
+    return MIR_NO_VALUE;
+  }
+
+  Type *element_type = audio_mir_array_element_type(array_type);
+  Type *ptr_type = audio_mir_ptr_to(arena, element_type);
+  if (!element_type || !ptr_type) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId offset = mir_tuple_get(builder, &t_int, origin, array, 1);
+  MirValueId data = mir_tuple_get(builder, ptr_type, origin, array, 2);
+  MirValueId position = mir_iadd(
+      builder, &t_int, origin, offset,
+      mir_const_int(builder, &t_int, origin, index));
+  MirValueId element_ptr =
+      mir_ptr_offset(builder, ptr_type, origin, data, position);
+  return mir_ptr_load(builder, element_type, origin, element_ptr);
+}
+
+static MirValueId MirCompileSynthHandler(MirBuilder *builder, Ast *app,
+                                         MirCtx *ctx,
+                                         MirBuiltinSymbol *symbol) {
+  /* shortcut: array length must match synth arity, validate before calling. */
+  (void)symbol;
+  if (!builder || !builder->program || !app ||
+      app->tag != AST_APPLICATION || app->data.AST_APPLICATION.len != 2) {
+    return MIR_NO_VALUE;
+  }
+
+  Ast *args = app->data.AST_APPLICATION.args;
+  MirAudioSynthSymbol *synth =
+      audio_mir_resolve_synth_symbol_arg(builder, args, ctx);
+  MirArena *arena = audio_mir_bundle_arena(builder);
+  if (!synth || !synth->ctor_fn || !arena || !args[1].type ||
+      !is_array_type(args[1].type) ||
+      audio_mir_array_element_type(args[1].type) != &t_num) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId array = mir_expr(builder, args + 1, ctx);
+  if (array == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  int count = synth->metadata.count;
+  MirValueId *values = count
+                           ? mir_arena_alloc(arena, sizeof(MirValueId) * count,
+                                             __alignof__(MirValueId))
+                           : NULL;
+  if (count && !values) {
+    return MIR_NO_VALUE;
+  }
+  for (int i = 0; i < count; i++) {
+    values[i] = audio_mir_array_num_at(builder, app, array, args[1].type,
+                                       arena, i);
+    if (values[i] == MIR_NO_VALUE) {
+      return MIR_NO_VALUE;
+    }
+  }
+
+  MirValueId ctor = mir_fn_ref(builder, synth->ctor_fn->type, app,
+                               synth->ctor_fn);
+  app->type = &t_ptr;
+  return mir_call_value(builder, &t_ptr, app, ctor, synth->ctor_fn->type,
+                        values, (size_t)count);
+}
+
+static MirValueId MirCompileDefaultHandler(MirBuilder *builder, Ast *app,
+                                            MirCtx *ctx,
+                                            MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!builder || !builder->program || !app ||
+      app->tag != AST_APPLICATION || app->data.AST_APPLICATION.len != 2) {
+    return MIR_NO_VALUE;
+  }
+
+  Ast *args = app->data.AST_APPLICATION.args;
+  MirAudioSynthSymbol *synth =
+      audio_mir_resolve_synth_symbol_arg(builder, args + 1, ctx);
+  MirArena *arena = audio_mir_bundle_arena(builder);
+  /* shortcut: defaults length must match synth arity; caller supplies it. */
+  if (!synth || !synth->ctor_fn || !arena || !app->type ||
+      !is_closure(app->type) || !app->type->closure_meta) {
+    return MIR_NO_VALUE;
+  }
+
+  Type **pair_items = mir_arena_alloc(arena, sizeof(Type *) * 2,
+                                      __alignof__(Type *));
+  if (!pair_items) {
+    return MIR_NO_VALUE;
+  }
+  pair_items[0] = &t_string;
+  pair_items[1] = &t_num;
+  Type *pair_type = create_tuple_type(2, pair_items);
+  Type *plist_type = create_list_type_of_type(pair_type);
+  Type *array_type = create_array_type(&t_num);
+  Type *callable_params[] = {plist_type};
+  Type *callable_type = audio_mir_fn_type(arena, callable_params, 1, &t_ptr);
+  Type *fn_type = audio_mir_fn_type(arena, NULL, 0, callable_type);
+  if (!pair_type || !plist_type || !array_type || !callable_type ||
+      !fn_type) {
+    return MIR_NO_VALUE;
+  }
+  fn_type->data.T_FN.from = app->type->closure_meta;
+
+  static unsigned default_node_counter = 0;
+  char *fn_name = mir_arena_printf(arena, "__ylc_default_node_%u",
+                                   default_node_counter++);
+  MirFunction *fn = mir_program_add_function_arena(
+      builder->program, fn_name, fn_type, app, arena);
+  MirBlock *entry = fn ? mir_function_add_block(fn, "entry") : NULL;
+  MirBlock *cond = fn ? mir_function_add_block(fn, "cond") : NULL;
+  MirBlock *body = fn ? mir_function_add_block(fn, "body") : NULL;
+  MirBlock *set = fn ? mir_function_add_block(fn, "set") : NULL;
+  MirBlock *skip = fn ? mir_function_add_block(fn, "skip") : NULL;
+  MirBlock *after = fn ? mir_function_add_block(fn, "after") : NULL;
+  if (!fn || !entry || !cond || !body || !set || !skip || !after) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId env = mir_function_add_param(fn, "$env", app->type->closure_meta,
+                                          app);
+  MirValueId plist = mir_function_add_param(fn, "plist", plist_type, app);
+  if (env == MIR_NO_VALUE || plist == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+
+  MirBuilder wb;
+  mir_builder_init(&wb, builder->program, fn);
+  mir_builder_position_at_end(&wb, entry);
+  MirValueId initial_values = mir_tuple_get(&wb, array_type, app, env, 0);
+  mir_builder_set_br(&wb, cond->id);
+
+  /* array_set mutates in place; keep the captured array borrowed. */
+  mir_builder_position_at_end(&wb, cond);
+  MirPhiIncomingVec plist_incoming = {0};
+  mir_phi_incoming_vec_push(
+      arena, &plist_incoming,
+      (MirPhiIncoming){.block = entry->id, .value = plist});
+  MirValueId current_plist = mir_phi(&wb, plist_type, app, plist_incoming);
+  MirValueId empty_test = mir_list_is_empty(&wb, app, current_plist);
+  mir_builder_set_cond(&wb, empty_test, after->id, body->id);
+
+  mir_builder_position_at_end(&wb, after);
+  MirValueId *defaults = synth->metadata.count
+                             ? mir_arena_alloc(
+                                   arena,
+                                   sizeof(MirValueId) * synth->metadata.count,
+                                   __alignof__(MirValueId))
+                             : NULL;
+  if (synth->metadata.count && !defaults) {
+    return MIR_NO_VALUE;
+  }
+  for (int i = 0; i < synth->metadata.count; i++) {
+    defaults[i] = audio_mir_array_num_at(&wb, app, initial_values, array_type,
+                                         arena, i);
+  }
+  MirValueId ctor = mir_fn_ref(&wb, synth->ctor_fn->type, app, synth->ctor_fn);
+  MirValueId result = mir_call_value(&wb, &t_ptr, app, ctor,
+                                     synth->ctor_fn->type, defaults,
+                                     (size_t)synth->metadata.count);
+  mir_builder_set_return(&wb, result);
+
+  mir_builder_position_at_end(&wb, body);
+  MirValueId head = mir_list_head(&wb, pair_type, app, current_plist);
+  MirValueId tail = mir_list_tail(&wb, plist_type, app, current_plist);
+  MirValueId name = mir_tuple_get(&wb, &t_string, app, head, 0);
+  MirValueId value = mir_tuple_get(&wb, &t_num, app, head, 1);
+
+  size_t table_len = 0;
+  for (int i = 0; i < synth->metadata.count; i++) {
+    table_len += strlen(synth->metadata.param_names[i]) + 1;
+  }
+  char *table = mir_arena_alloc(arena, table_len + 1, __alignof__(char));
+  if (!table) {
+    return MIR_NO_VALUE;
+  }
+  size_t offset = 0;
+  for (int i = 0; i < synth->metadata.count; i++) {
+    size_t len = strlen(synth->metadata.param_names[i]);
+    memcpy(table + offset, synth->metadata.param_names[i], len);
+    offset += len;
+    table[offset++] = PMAP_SEPARATOR;
+  }
+  table[offset] = '\0';
+
+  Type *lookup_params[] = {&t_ptr, &t_int, &t_string};
+  Type *lookup_type = audio_mir_fn_type(arena, lookup_params, 3, &t_int);
+  MirValueId lookup = audio_mir_extern_ref(&wb, "ylc_pmap_lookup", lookup_type,
+                                           app);
+  MirValueId index = mir_call_value(
+      &wb, &t_int, app, lookup, lookup_type,
+      (MirValueId[]){mir_const_string(&wb, &t_ptr, app, table, table_len),
+                     mir_const_int(&wb, &t_int, app, synth->metadata.count),
+                     name},
+      3);
+  MirValueId unknown = mir_ieq(&wb, app, index,
+                               mir_const_int(&wb, &t_int, app, -1));
+  mir_builder_set_cond(&wb, unknown, skip->id, set->id);
+
+  mir_builder_position_at_end(&wb, set);
+  if (mir_emit_op3(&wb, MIR_OP_KIND_ARRAY_SET, array_type, app, initial_values,
+                   index, value) == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+  mir_builder_set_br(&wb, cond->id);
+  MirInstr *plist_phi = mir_function_find_def_instr(fn, current_plist);
+  if (!plist_phi) {
+    return MIR_NO_VALUE;
+  }
+  mir_phi_incoming_vec_push(
+      arena, &plist_phi->data.phi.incoming,
+      (MirPhiIncoming){.block = set->id, .value = tail});
+
+  mir_builder_position_at_end(&wb, skip);
+  mir_builder_set_br(&wb, cond->id);
+  mir_phi_incoming_vec_push(
+      arena, &plist_phi->data.phi.incoming,
+      (MirPhiIncoming){.block = skip->id, .value = tail});
+
+  MirValueId defaults_value = mir_expr(builder, args, ctx);
+  if (defaults_value == MIR_NO_VALUE) {
+    return MIR_NO_VALUE;
+  }
+  MirValueIdVec fields = {0};
+  mir_value_id_vec_push(arena, &fields, defaults_value);
+  for (int i = 1; i < app->type->closure_meta->data.T_CONS.num_args; i++) {
+    Type *field_type = app->type->closure_meta->data.T_CONS.args[i];
+    mir_value_id_vec_push(arena, &fields,
+                          mir_fn_ref(builder, field_type, app,
+                                     synth->ctor_fn));
+  }
+  MirValueId env_value = mir_emit_construct_items(
+      builder, MIR_CONSTRUCT_CLOSURE_ENV, app->type->closure_meta, app,
+      fields);
+  MirValueId fn_ref = mir_fn_ref(builder, fn_type, app, fn);
+  return mir_emit_closure(builder, app->type, app, fn_ref, env_value, fn);
+}
+
 static void audio_jit_init_wavetables(void) {
   static bool initialized = false;
   if (initialized) {
@@ -9224,6 +9675,20 @@ void ylc_audio_jit_register_current_program(const char *osc_bitcode_path) {
   mir_register_builtin(ylc_mir_program, &play_tenv,
                        MirStandalonePlayPatternHandler,
                        MIR_BUILTIN_SYMBOL_EXTENSION, NULL, 0, MIR_RESULT_OWNED);
+
+  TypeEnv pmap_tenv = {.name = "pmap"};
+  mir_register_builtin(ylc_mir_program, &pmap_tenv, MirCompilePmapHandler,
+                       MIR_BUILTIN_SYMBOL_EXTENSION, NULL, 0, MIR_RESULT_NONE);
+
+  TypeEnv synth_tenv = {.name = "synth"};
+  mir_register_builtin(ylc_mir_program, &synth_tenv, MirCompileSynthHandler,
+                       MIR_BUILTIN_SYMBOL_EXTENSION, NULL, 0, MIR_RESULT_NONE);
+
+  TypeEnv default_tenv = {.name = "synth_default"};
+  mir_register_builtin(ylc_mir_program, &default_tenv,
+                       MirCompileDefaultHandler,
+                       MIR_BUILTIN_SYMBOL_EXTENSION, NULL, 0,
+                       MIR_RESULT_NONE);
 }
 
 static void ylc_audio_jit_register_program(MirProgram *program, MirCtx *ctx) {

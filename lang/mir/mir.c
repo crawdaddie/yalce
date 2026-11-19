@@ -2687,9 +2687,9 @@ static MirValueId mir_closure_env(MirBuilder *builder, Type *type, Ast *origin,
                                   origin, fields);
 }
 
-static MirValueId mir_closure(MirBuilder *builder, Type *type, Ast *origin,
-                              MirValueId fn, MirValueId env,
-                              MirFunction *impl_fn) {
+MirValueId mir_emit_closure(MirBuilder *builder, Type *type, Ast *origin,
+                            MirValueId fn, MirValueId env,
+                            MirFunction *impl_fn) {
   if (!builder || !type || fn == MIR_NO_VALUE || env == MIR_NO_VALUE ||
       !impl_fn) {
     return MIR_NO_VALUE;
@@ -5257,7 +5257,7 @@ static MirValueId mir_partial_application(MirBuilder *builder, Type *type,
 
   MirValueId fn = mir_fn_ref(builder, impl_type, app, wrapper);
   MirValueId env = mir_closure_env(builder, type->closure_meta, app, fields);
-  return mir_closure(builder, type, app, fn, env, wrapper);
+  return mir_emit_closure(builder, type, app, fn, env, wrapper);
 }
 
 MirValueId mir_application(MirBuilder *builder, Type *type, Ast *ast,
@@ -5996,7 +5996,7 @@ static MirValueId mir_lambda_value(MirBuilder *builder, Ast *expr, MirCtx *ctx,
   if (env == MIR_NO_VALUE) {
     return MIR_NO_VALUE;
   }
-  return mir_closure(builder, expr->type, expr, fn_ref, env, fn);
+  return mir_emit_closure(builder, expr->type, expr, fn_ref, env, fn);
 }
 
 static MirValueId mir_extern_fn_value(MirBuilder *builder, Ast *expr,

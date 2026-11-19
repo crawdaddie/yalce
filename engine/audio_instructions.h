@@ -1,6 +1,7 @@
 #ifndef _ENGINE_AUDIO_INSTRUCTIONS_QUEUE_H
 #define _ENGINE_AUDIO_INSTRUCTIONS_QUEUE_H
 #include "node.h"
+#include <stdatomic.h>
 #include <stdint.h>
 typedef struct {
   enum {
@@ -73,9 +74,9 @@ typedef struct {
 // Scheduler thread = sole writer, audio thread = sole reader.
 typedef struct {
   audio_instruction buffer[MSG_QUEUE_MAX_SIZE];
-  int read_ptr;
-  int write_ptr;
-  int num_msgs;
+  atomic_int read_ptr;
+  atomic_int write_ptr;
+  atomic_int num_msgs;
 } audio_instructions_queue;
 
 void push_msg(audio_instructions_queue *queue, audio_instruction msg);

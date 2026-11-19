@@ -306,7 +306,7 @@ void process_audio_events_pre(uint64_t current_tick, int frame_count,
                               audio_instructions_queue *queue) {
   active_event_count = 0;
 
-  while (queue->num_msgs > 0) {
+  while (atomic_load_explicit(&queue->num_msgs, memory_order_acquire) > 0) {
     if (!heap_push(pop_msg(queue))) {
       fprintf(stderr, "Audio event heap full\n");
       break;
@@ -397,7 +397,8 @@ void print_msg(audio_instruction *msg) {
 }
 
 void push_msg(audio_instructions_queue *queue, audio_instruction msg) {
-  if (queue->num_msgs == MSG_QUEUE_MAX_SIZE) {
+  if (atomic_load_explicit(&queue->num_msgs, memory_order_relaxed) ==
+      MSG_QUEUE_MAX_SIZE) {
     fprintf(stderr, "Audio Instruction Error: Command FIFO full\n");
     return;
   }
@@ -406,9 +407,12 @@ void push_msg(audio_instructions_queue *queue, audio_instruction msg) {
     msg.task = get_current_task_token();
   }
 
-  *(queue->buffer + queue->write_ptr) = msg;
-  queue->write_ptr = (queue->write_ptr + 1) % MSG_QUEUE_MAX_SIZE;
-  queue->num_msgs++;
+  int write_ptr = atomic_load_explicit(&queue->write_ptr, memory_order_relaxed);
+  *(queue->buffer + write_ptr) = msg;
+  atomic_store_explicit(&queue->write_ptr,
+                        (write_ptr + 1) % MSG_QUEUE_MAX_SIZE,
+                        memory_order_release);
+  atomic_fetch_add_explicit(&queue->num_msgs, 1, memory_order_release);
 }
 
 void cancel_audio_task(audio_instructions_queue *queue, void *task,
@@ -424,9 +428,12 @@ void cancel_audio_task(audio_instructions_queue *queue, void *task,
 }
 
 audio_instruction pop_msg(audio_instructions_queue *queue) {
-  audio_instruction msg = *(queue->buffer + queue->read_ptr);
-  queue->read_ptr = (queue->read_ptr + 1) % MSG_QUEUE_MAX_SIZE;
-  queue->num_msgs--;
+  int read_ptr = atomic_load_explicit(&queue->read_ptr, memory_order_relaxed);
+  audio_instruction msg = *(queue->buffer + read_ptr);
+  atomic_store_explicit(&queue->read_ptr,
+                        (read_ptr + 1) % MSG_QUEUE_MAX_SIZE,
+                        memory_order_release);
+  atomic_fetch_sub_explicit(&queue->num_msgs, 1, memory_order_release);
   return msg;
 }
 
@@ -458,10 +465,11 @@ int process_msg_queue_pre(uint64_t current_tick, int frame_count,
   num_deferred = still_deferred;
 
   // Drain the ring buffer
-  int read_ptr = queue->read_ptr;
+  int read_ptr = atomic_load_explicit(&queue->read_ptr, memory_order_relaxed);
+  int write_ptr = atomic_load_explicit(&queue->write_ptr, memory_order_acquire);
   audio_instruction *msg;
   int consumed = 0;
-  while (read_ptr != queue->write_ptr) {
+  while (read_ptr != write_ptr) {
     msg = queue->buffer + read_ptr;
 
     if (msg->tick < current_tick) {

@@ -223,7 +223,7 @@ let mels = module () ->
     |> sum
     |> Filter.lpf (freq * 4.) 1.
     |> (*) (t |> rect 0.5 |> adsr 0. 0.1 0.2 1. |> kill_on_end)
-    |> (*) (Math.db_amp -10.)
+    |> gaindb -10.
   ;;
   let r = Reverb.cathedral 0. |> play_node;
 

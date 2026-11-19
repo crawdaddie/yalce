@@ -9,9 +9,11 @@
  */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdatomic.h>
 
 /* ── Headers (types only) ─────────────────────────────────── */
 
@@ -385,6 +387,54 @@ static void test_queue_num_msgs_tracking(void) {
     pop_msg(q);
     assert(q->num_msgs == i);
   }
+}
+
+enum { QUEUE_THREAD_MESSAGES = 100000 };
+
+typedef struct {
+  audio_instructions_queue queue;
+  atomic_bool producer_done;
+  int consumed;
+} QueueThreadTest;
+
+static void *queue_producer(void *raw) {
+  QueueThreadTest *test = raw;
+  for (int i = 0; i < QUEUE_THREAD_MESSAGES; i++) {
+    while (test->queue.num_msgs == MSG_QUEUE_MAX_SIZE) {
+      sched_yield();
+    }
+    push_msg(&test->queue,
+             (audio_instruction){.type = NODE_ADD, .tick = (uint64_t)i});
+  }
+  atomic_store(&test->producer_done, true);
+  return NULL;
+}
+
+static void *queue_consumer(void *raw) {
+  QueueThreadTest *test = raw;
+  int expected = 0;
+  while (!atomic_load(&test->producer_done) || test->queue.num_msgs > 0) {
+    if (test->queue.num_msgs == 0) {
+      sched_yield();
+      continue;
+    }
+    audio_instruction msg = pop_msg(&test->queue);
+    assert(msg.tick == (uint64_t)expected++);
+  }
+  test->consumed = expected;
+  return NULL;
+}
+
+static void test_queue_thread_safety(void) {
+  QueueThreadTest test = {0};
+  pthread_t producer;
+  pthread_t consumer;
+
+  assert(pthread_create(&producer, NULL, queue_producer, &test) == 0);
+  assert(pthread_create(&consumer, NULL, queue_consumer, &test) == 0);
+  assert(pthread_join(producer, NULL) == 0);
+  assert(pthread_join(consumer, NULL) == 0);
+  assert(test.consumed == QUEUE_THREAD_MESSAGES);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1073,6 +1123,7 @@ int main(void) {
   RUN_TEST(test_queue_fill_to_capacity);
   RUN_TEST(test_queue_wraparound);
   RUN_TEST(test_queue_num_msgs_tracking);
+  RUN_TEST(test_queue_thread_safety);
 
   printf("\n=== Layer 1.5: Scheduler Logic ===\n");
   RUN_TEST(test_scheduler_fds_init);

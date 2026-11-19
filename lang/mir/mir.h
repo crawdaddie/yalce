@@ -689,6 +689,9 @@ MirValueId mir_emit_construct_items(MirBuilder *builder, MirConstructKind kind,
 MirValueId mir_emit_construct_ops2(MirBuilder *builder, MirConstructKind kind,
                                    Type *type, Ast *origin, MirValueId a,
                                    MirValueId b);
+MirValueId mir_emit_closure(MirBuilder *builder, Type *type, Ast *origin,
+                            MirValueId fn, MirValueId env,
+                            MirFunction *impl_fn);
 // Fills the common call-shaped payload (callee, builtin, callee_type,
 // specialized_fn) shared by MIR_CALL/MIR_CORO_NEW/MIR_CORO_NEXT/MIR_CORO_RESET
 // on an instr already produced by mir_make_instr.

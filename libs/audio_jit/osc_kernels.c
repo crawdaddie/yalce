@@ -1354,6 +1354,55 @@ ylc_audio_adsr_kernel(AdsrState *state, double spf, double attack, double decay,
 }
 
 __attribute__((always_inline)) double
+ylc_audio_asr_kernel(AsrState *state, double spf, double attack,
+                     double sustain, double release, double trig) {
+  double value = state->value;
+  double phase = state->phase;
+  int gate = trig >= 0.5;
+
+  if (gate && (audio_jit_rising_edge(trig, state->prev_trig) ||
+               phase == 0.0 || phase == 3.0)) {
+    if (attack <= 0.0) {
+      value = sustain;
+      phase = 2.0;
+    } else {
+      state->slope = (sustain - value) / attack;
+      phase = 1.0;
+    }
+  } else if (!gate && phase != 0.0 && phase != 3.0) {
+    state->slope = release > 0.0 ? value / release : 1e6;
+    phase = 3.0;
+  }
+
+  if (phase == 1.0) {
+    value += state->slope * spf;
+    if ((state->slope >= 0.0 && value >= sustain) ||
+        (state->slope < 0.0 && value <= sustain)) {
+      value = sustain;
+      phase = gate ? 2.0 : 3.0;
+      if (phase == 3.0) {
+        state->slope = release > 0.0 ? value / release : 1e6;
+      }
+    }
+  } else if (phase == 2.0) {
+    value = sustain;
+  } else if (phase == 3.0) {
+    value -= state->slope * spf;
+    if (value <= 0.0) {
+      value = 0.0;
+      phase = 0.0;
+    }
+  } else {
+    value = 0.0;
+  }
+
+  state->value = value;
+  state->phase = phase;
+  state->prev_trig = trig;
+  return value;
+}
+
+__attribute__((always_inline)) double
 ylc_audio_adsr_array_kernel(AdsrState *state, double spf, int32_t size,
                             int32_t offset, double *data, double trig) {
   double *values = audio_jit_array_data(offset, data);

@@ -112,6 +112,13 @@ typedef struct AdsrState {
   double prev_trig;
 } AdsrState;
 
+typedef struct AsrState {
+  double value;
+  double slope;
+  double phase;
+  double prev_trig;
+} AsrState;
+
 typedef struct ArrayEnvState {
   double phase;
   double prev_trig;

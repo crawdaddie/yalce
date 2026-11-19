@@ -16,7 +16,7 @@ let finish = @Audio fn trigger duration sound ->
 # D -> C --+-> output: body plus a short metallic attack.
 let epiano = @Audio fn freq tined tine_amt body_amt duration ->
   let t = trig 0;
-  let body = freq * (~[1., 1.01]) * (lfnoise 1. 0.98 1.02)
+  let body = freq * (lfnoise (~[1., 1.]) 0.98 1.02)
     |> pm_osc body_amt (decay 1. t)
     |> sum;
 
