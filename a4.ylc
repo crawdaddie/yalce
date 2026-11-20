@@ -14,45 +14,41 @@ let A4 = module () ->
   ;;
   let pwm = @Audio fn pw rate depth -> Math.clamp -1. 1. (pw + depth * sin_osc rate);;
 
-  # PW is -1..1. Frequency selects the table bandwidth; phase supplies sync/PWM.
-  let saw_shape = @Audio fn freq phase pw ->
+  # PW is -1..1. Phase inputs let sync and free-running oscillators share shapes.
+  let saw_shape = @Audio fn phase pw ->
     let width = magnitude (Math.clamp -1. 1. pw);
     let shift = 2. * width * (1. - width);
-    let first = saw_at freq phase;
-    let second = saw_at freq (phase + shift);
+    let first = 2. * wrap phase - 1.;
+    let second = 2. * wrap (phase + shift) - 1.;
     (first + second) * 0.5
   ;;
-  let pulse_shape = @Audio fn freq phase pw ->
+  let pulse_shape = @Audio fn phase pw ->
     let duty = (Math.clamp -1. 1. pw + 1.) * 0.5;
-    # Subtract shifted saws: variable width without discontinuous comparisons or DC.
     if duty <= 0. || duty >= 1. then 0.
-    else saw_at freq (phase - duty) - saw_at freq phase
+    else if wrap phase < duty then 1. else -1.
   ;;
-  let transistor_shape = @Audio fn freq phase pw ->
+  let transistor_shape = @Audio fn phase pw ->
     let duty = (Math.clamp -1. 1. pw + 1.) * 0.5;
-    # Multiplication doubles bandwidth, so each factor gets half the bandwidth.
-    let bandwidth_freq = freq * 2.;
-    let pulse = pulse_shape bandwidth_freq phase pw;
-    let gate = pulse * 0.5 + duty;
-    let ramp = (saw_at bandwidth_freq phase + 1.) * 0.5;
+    let p = wrap phase;
     # Audio branches may evaluate both sides, including muted endpoints.
     let min_duty = 0.000001;
     if duty <= 0. || duty >= 1. then 0.
-    else pulse + 2. * duty - 1. - gate * ramp / Math.max min_duty duty
+    else if p < duty then 1. - p / Math.max min_duty duty else -1.
   ;;
-  let triangle_shape = @Audio fn freq phase pw ->
+  let triangle_shape = @Audio fn phase pw ->
+    let p = wrap phase;
     let edge = magnitude (Math.clamp -1. 1. pw);
-    let triangle = triangle_at freq phase;
-    let reverse_saw = 0. - saw_at freq phase;
+    let triangle = 1. - 4. * magnitude (p - 0.5);
+    let reverse_saw = 1. - 2. * p;
     triangle * (1. - edge) + reverse_saw * edge
   ;;
 
-  let saw = @Audio fn freq pw -> saw_shape freq (phasor (Math.max 0. freq)) pw;;
-  let pulse = @Audio fn freq pw -> pulse_shape freq (phasor (Math.max 0. freq)) pw;;
+  let saw = @Audio fn freq pw -> saw_shape (phasor (Math.max 0. freq)) pw;;
+  let pulse = @Audio fn freq pw -> pulse_shape (phasor (Math.max 0. freq)) pw;;
   let transistor = @Audio fn freq pw ->
-    transistor_shape freq (phasor (Math.max 0. freq)) pw
+    transistor_shape (phasor (Math.max 0. freq)) pw
   ;;
-  let triangle = @Audio fn freq pw -> triangle_shape freq (phasor (Math.max 0. freq)) pw;;
+  let triangle = @Audio fn freq pw -> triangle_shape (phasor (Math.max 0. freq)) pw;;
 
   # Subs ignore the main oscillator's PW/PWM. Their pitch follows its tuning.
   let sub_oct = @Audio fn freq -> pulse (freq * 0.5) 0.;;
@@ -76,10 +72,10 @@ let A4 = module () ->
     output
   ;;
   let sync_saw = @Audio fn master slave amount pw ->
-    saw_shape (Math.max master slave) (sync_phase master slave amount) pw
+    saw_shape (sync_phase master slave amount) pw
   ;;
   let sync_pulse = @Audio fn master slave amount pw ->
-    pulse_shape (Math.max master slave) (sync_phase master slave amount) pw
+    pulse_shape (sync_phase master slave amount) pw
   ;;
 
   # A4 AM switches a source on/off with the other oscillator's pulse, not bipolar RM.
@@ -200,5 +196,5 @@ let A4 = module () ->
 # A4.sync_lead 110. 4. 19. 1. 4000. |> play_node;
 A4.am_bell 220. 2. 2.73 1. |> play_node;
 # Use any input signal in the filters/AM for external or neighbor-style routing.
-# shortcut: hard-sync resets and fast PWM still alias; add BLEP/oversampling for those.
+# shortcut: naive wave edges/sync alias; add oversampling before hardware matching.
 # Transistor pulse, PW laws, noise color and filter responses are approximations.
