@@ -1,0 +1,120 @@
+open libs/audio_jit/DSP;
+import std/Math;
+
+# Read the previous sample before writing: feedback needs an explicit delay.
+let fb_op = @Audio fn freq amount ->
+  let previous = [| 0. |];
+  let output = previous[0]
+    |> (*) amount
+    |> fm_op freq;
+  previous[0] := output;
+  output
+;;
+# FM TONE routing, manual p.107 (algorithms numbered left to right).
+# https://www.elektron.se/media/2026/10/Digitone-2-User-Manual_ENG_OS1.12_261008.pdf
+let Digitone = module () ->
+  # mix: 0 = X, 1 = Y. Sum carriers before mixing; these are not stereo lanes.
+  let blend = @Audio fn mix x y ->
+    let position = Math.max 0. (Math.min 1. mix);
+    x * (1. - position) + y * position
+  ;;
+
+  # Operator frequencies in Hz; a/b1/b2 and feedback are phase depths in cycles.
+  # Direct carrier taps bypass operator levels; solid taps retain them.
+  # Supply envelopes/LFOs as depths; add an amplitude envelope around the result.
+  # 1: B2 -> B1; (A + B1) -> C. X=C, Y=B1; feedback A.
+  let algo1 = @Audio fn fc fa f1 f2 a b1 b2 feedback mix ->
+    let a_out = fb_op fa feedback;
+    let b2_out = fm_op f2 0.;
+    let b1_out = fm_op f1 (b2_out * b2);
+    let c_out = fm_op fc (a_out * a + b1_out * b1);
+    blend mix c_out b1_out
+  ;;
+
+  # 2: A -> C; B2 -> B1. X=C, Y=B1; feedback B2.
+  let algo2 = @Audio fn fc fa f1 f2 a b1 b2 feedback mix ->
+    let a_out = fm_op fa 0.;
+    let b2_out = fb_op f2 feedback;
+    let b1_out = fm_op f1 (b2_out * b2);
+    let c_out = fm_op fc (a_out * a);
+    blend mix c_out b1_out
+  ;;
+
+  # 3: A -> (C, B2, B1). X=C+B2, Y=B1; feedback A.
+  let algo3 = @Audio fn fc fa f1 f2 a b1 b2 feedback mix ->
+    let a_out = fb_op fa feedback;
+    let c_out = fm_op fc (a_out * a);
+    let b2_out = fm_op f2 (a_out * a);
+    let b1_out = fm_op f1 (a_out * a);
+    blend mix (c_out + b2_out) b1_out
+  ;;
+
+  # 4: B2 -> B1 -> A -> C. X=C, Y=B1; feedback B2.
+  let algo4 = @Audio fn fc fa f1 f2 a b1 b2 feedback mix ->
+    let b2_out = fb_op f2 feedback;
+    let b1_out = fm_op f1 (b2_out * b2);
+    let a_out = fm_op fa (b1_out * b1);
+    let c_out = fm_op fc (a_out * a);
+    blend mix c_out b1_out
+  ;;
+
+  # 5: B1 -> B2; (B1 + B2) -> A -> C. X=C, Y=A; feedback B1.
+  let algo5 = @Audio fn fc fa f1 f2 a b1 b2 feedback mix ->
+    let b1_out = fb_op f1 feedback;
+    let b2_out = fm_op f2 (b1_out * b1);
+    let a_out = fm_op fa (b1_out * b1 + b2_out * b2);
+    let c_out = fm_op fc (a_out * a);
+    blend mix c_out a_out
+  ;;
+
+  # 6: (A + B2) -> (C, B1). X=C, Y=B1; feedback A.
+  let algo6 = @Audio fn fc fa f1 f2 a b1 b2 feedback mix ->
+    let a_out = fb_op fa feedback;
+    let b2_out = fm_op f2 0.;
+    let modulation = a_out * a + b2_out * b2;
+    let c_out = fm_op fc modulation;
+    let b1_out = fm_op f1 modulation;
+    blend mix c_out b1_out
+  ;;
+
+  # 7: A -> C; B2 -> B1. X=C+A*level, Y=B1*level+B2*level; feedback A.
+  let algo7 = @Audio fn fc fa f1 f2 a b1 b2 feedback mix ->
+    let a_out = fb_op fa feedback;
+    let b2_out = fm_op f2 0.;
+    let c_out = fm_op fc (a_out * a);
+    let b1_out = fm_op f1 (b2_out * b2);
+    blend mix (c_out + a_out * a) (b1_out * b1 + b2_out * b2)
+  ;;
+
+  # 8: A -> C; B2 and B1 are additive. X=C+B2*level, Y=B1*level; feedback B1.
+  let algo8 = @Audio fn fc fa f1 f2 a b1 b2 feedback mix ->
+    let a_out = fm_op fa 0.;
+    let c_out = fm_op fc (a_out * a);
+    let b2_out = fm_op f2 0.;
+    let b1_out = fb_op f1 feedback;
+    blend mix (c_out + b2_out * b2) (b1_out * b1)
+  ;;
+
+;
+
+# Compose a voice from any routing; durations, envelopes and gain belong here.
+let pluck = @Audio fn freq dur ->
+  let trigger = trig 0;
+  let env_a = decay 0.4 trigger;
+  let env_b = decay 0.2 trigger;
+  let amplitude = trigger |> rect dur |> asr 0.002 1. 0.8 |> kill_on_end;
+  Digitone.algo4
+    freq
+    (0.75 * freq)
+    (freq * 1.7)
+    (freq * 3.01)
+    (0.2 * env_a)
+    (0.15 * env_b)
+    (0.1 * env_b + lfnoise 1. 0. 1.)
+    0.5
+    (lfnoise 5. 0. 1.)
+  |> (*) (amplitude * 0.2)
+;;
+
+pluck 200. 2. |> play_node;
+# shortcut: one-sample feedback without oversampling can alias at high depths.
