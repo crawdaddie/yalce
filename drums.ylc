@@ -20,58 +20,339 @@ let Kick = module () ->
   let node = synth_default [| 60., 0.1 |] kicks;
   let play = fn pl -> node pl |> play_node;;
 ;
-#
-# let Cymbal = module () -> 
-#   let cyms = @Audio fn dur ->
-#     let trigger = trig 0;
-#     white ()
-#       |> Filter.hpf 10000. 1.
-#       # |> (+) (0.1 * (sin_osc (800. + (50. * sin_osc 1001.))))
-#       |> (*) (rect dur trigger |> asr 0. 1. 0.2
-#         |> kill_on_end
-#       )
-#   ;;
-#
-#   let defs = [|0.1|];
-#   let node = synth_default defs cyms;
-#   let play = fn pl -> node pl |> play_node;;
-# ;
-#
+
+# Adapted from https://www.soundonsound.com/techniques/synthesizing-drums-bass-drum
+let Kick2 = module () ->
+  let bass_drum = @Audio fn freq dur ->
+    let trigger = trig 0;
+    let filter_q = 0.707;
+    let envelope = array_env [|0., 0.001, 0., 1., 1., -1., 0.|] dur trigger
+      |> kill_on_end;
+
+    # A shared contour ties the small pitch drop to the loss of energy.
+    let pitch_ratio = scale 1. 1.1 envelope;
+    let body = tri_osc (freq * pitch_ratio)
+      |> Filter.lpf 250. filter_q;
+
+    # Inharmonic FM supplies the denser midrange modes of the drum.
+    let carrier_hz = 500.;
+    let mod_hz = 317.;
+    let fm_index = 4.;
+    let modes = fm_op (carrier_hz * pitch_ratio)
+      (fm_index * sin_osc (mod_hz * pitch_ratio));
+
+    # Briefly open the low-pass filter for the beater's bright transient.
+    let click_time = 0.08;
+    let click_env = array_env [|1., click_time, -1., 0.|] 1. trigger;
+    let upper_hz = scale 1000. 6000. click_env;
+    let attack = modes
+      |> Filter.hpf 250. filter_q
+      |> Filter.lpf upper_hz filter_q;
+
+    (body + 0.25 * attack) * envelope * 0.5
+  ;;
+
+  let defs = [| 60., 0.45 |];
+  let node = synth_default defs bass_drum;
+  let play = fn pl -> node pl |> play_node;;
+;
+
+# Adapted from https://www.soundonsound.com/techniques/synthesizing-realistic-cymbals
 let Cymbal = module () -> 
   let cyms = @Audio fn dur ->
     let trigger = trig 0;
+    let filter_q = 0.707;
 
-    let noise =
-      white ()
-        |> Filter.hpf 10000. 1.
+    # Pulse-driven linear and exponential FM spreads the metallic partials.
+    let mod_hz = 997.;
+    let carrier_hz = 2509.;
+    let pulse_width = 0.37;
+    let fm_hz = 700.;
+    let fm_octaves = 1.5;
+    let modulator = match (phasor mod_hz < pulse_width) with
+      | true -> 1.
+      | false -> -1.
+      ;
+    let metal = sq_osc (
+      carrier_hz * Math.pow 2. (fm_octaves * modulator) + fm_hz * modulator
+    );
+
+    # The impact loses its midrange as the bright tail develops.
+    let ping_env = array_env [|1., 0.2, -4., 0.|] 1. trigger;
+    let ping_hz = scale 1000. 6000. ping_env;
+    let ping = metal
+      |> Filter.bpf ping_hz filter_q
+      |> Filter.bpf ping_hz filter_q
+      |> (*) ping_env
       ;
 
-    let metal = ~[313., 467., 701., 1039.]
-      |> sin_osc
-      |> (*) (~[0.18, 0.14, 0.10, 0.07])
-      |> sum
-      |> gaindb 10.
-      |> (*) (decay 0.25 trigger)
-      |> Filter.hpf 3000. 1.
+    let tail = metal
+      |> Filter.hpf
+        (trigger |> array_env [|0., 0.2, 0., 1., 3.7, -4., 0.|] 1. |> scale 2640. 14000.)
+        filter_q
       ;
 
-    noise + metal
-      |> (*) (rect dur trigger |> asr 0. 1. 0.2 |> kill_on_end)
+    # Filtered noise keeps a diffuse wash behind the metallic attack.
+    let noise_gain = 0.5;
+    let noise = white ()
+      |> Filter.hpf 4500. filter_q
+      |> Filter.lpf 12000. filter_q;
 
-    # metal
-    #   |> (*) (rect dur trigger |> asr 0. 1. 0.2 |> kill_on_end)
+    let amplitude = array_env [|0., 0.001, 0., 1., 1., -3., 0.|] dur trigger
+      |> kill_on_end;
+    ((0.3 * ping) + (0.4 *tail) + (noise_gain * noise)) * amplitude * 0.2
   ;;
 
-  let defs = [| 0.1 |];
+  let defs = [| 1.5 |];
   let node = synth_default defs cyms;
   let play = fn pl -> node pl |> play_node;;
 ;
 
 
+# Multiple FM pairs: https://www.soundonsound.com/techniques/practical-cymbal-synthesis
+let Cymbal2 = module () ->
+  let fm_pairs = @Audio fn dur ->
+    let trigger = trig 0;
+    let filter_q = 0.707;
+
+    # Detuned square-wave pairs fill the gaps in a single pair's spectrum.
+    let mod_hz = ~[811., 1049., 1433.];
+    let carrier_hz = ~[2179., 3011., 4217.];
+    let fm_hz = ~[1800., 2400., 3000.];
+    let metal = carrier_hz + fm_hz * sq_osc mod_hz
+      |> sq_osc
+      |> sum
+      |> (*) (1. / 3.);
+
+    let ping_env = array_env [|1., 0.2, -1., 0.|] 1. trigger;
+    let ping_hz = scale 1000. 6000. ping_env;
+    let ping = metal
+      |> Filter.bpf ping_hz filter_q
+      |> Filter.bpf ping_hz filter_q
+      |> (*) ping_env;
+
+    # The tail brightens after impact, then settles as it fades.
+    let brightness = array_env [|0., 0.2, 0., 1., 3.7, -1., 0.|] 1. trigger;
+    let tail = metal |> Filter.hpf (scale 2640. 12000. brightness) filter_q;
+    let amplitude = array_env [|0., 0.001, 0., 1., 1., -1., 0.|] dur trigger
+      |> kill_on_end;
+    (0.3 * ping + tail) * amplitude * 0.3
+  ;;
+
+  let defs = [| 1.5 |];
+  let node = synth_default defs fm_pairs;
+  let play = fn pl -> node pl |> play_node;;
+;
+
+# Adapted from https://www.soundonsound.com/techniques/synthesizing-drums-snare-drum
+let Snare = module () ->
+  let snare_hit = @Audio fn dur vel ->
+    let trigger = trig 0;
+    let velocity = Math.max 0. (Math.min 1. vel);
+    let filter_q = 0.707;
+
+    # The two lowest head modes lose energy faster than the upper modes.
+    let head_hz = ~[180., 330.];
+    let head_gain = ~[0.65, 0.35];
+    let heads = sin_osc head_hz * head_gain
+      |> sum
+      |> (*) (array_env [|0., 0.001, 0., 1., 0.4, -1., 0.|] dur trigger);
+
+    # Additive approximation of the article's two shifted 111 Hz series.
+    let mode_hz = ~[286., 397., 508., 619., 335., 446., 557.];
+    let mode_gain = ~[0.18, 0.14, 0.10, 0.07, 0.16, 0.12, 0.08];
+    let modes = sin_osc mode_hz * mode_gain
+      |> sum
+      |> (*) (array_env [|0., 0.001, 0., 1., 0.8, -1., 0.|] dur trigger);
+
+    # Harder strikes excite brighter wires and mask the pitched drum modes.
+    let noise_hz = scale 2500. 11000. velocity;
+    let wires = white ()
+      |> Filter.hpf 700. filter_q
+      |> Filter.lpf noise_hz filter_q
+      |> Filter.notch 2200. 1.5
+      |> Filter.notch 4500. 2.;
+    let wire_env = array_env [|0., 0.001, 0., 1., 1., -1., 0.|] dur trigger
+      |> kill_on_end;
+    let wire_gain = scale 0.15 1.2 velocity;
+    let body_gain = scale 0.8 0.4 velocity;
+    (body_gain * (heads + modes) + wire_gain * wires * wire_env) * velocity * 0.4
+  ;;
+
+  let defs = [| 0.3, 0.8 |];
+  let node = synth_default defs snare_hit;
+  let play = fn pl -> node pl |> play_node;;
+;
+
+# SH-101 approach: https://www.soundonsound.com/techniques/practical-snare-drum-synthesis
+let Snare2 = module () ->
+  let sh101_snare = @Audio fn dur vel ->
+    let trigger = trig 0;
+    let velocity = Math.max 0. (Math.min 1. vel);
+    let filter_q = 0.707;
+
+    # Slow FM roughens the pulse's harmonics into a drum-like body.
+    let carrier_hz = 200.;
+    let mod_hz = 30.;
+    let fm_hz = 35.;
+    let pulse_width = 0.25;
+    let phase = phasor (carrier_hz + fm_hz * tri_osc mod_hz);
+    let pulse = match (phase < pulse_width) with
+      | true -> 1.
+      | false -> -1.
+      ;
+
+    # One contour shapes both the noise and tone, as on the SH-101.
+    let envelope = array_env [|0., 0.001, 0., 1., 1., -1., 0.|] dur trigger
+      |> kill_on_end;
+    let cutoff_hz = scale 8000. 14000. envelope;
+    let pulse_gain = 0.35;
+    let drive = 1.5;
+    white () + pulse_gain * pulse
+      |> (*) drive
+      |> Math.tanh
+      |> Filter.hpf 30. filter_q # Remove the asymmetric pulse's DC offset.
+      |> Filter.lpf cutoff_hz filter_q
+      |> Filter.lpf cutoff_hz filter_q
+      |> (*) (envelope * velocity * 0.4)
+  ;;
+
+  let defs = [| 0.25, 0.8 |];
+  let node = synth_default defs sh101_snare;
+  let play = fn pl -> node pl |> play_node;;
+;
+
+# Adapted from https://www.soundonsound.com/techniques/synthesizing-bells
+let Bell = module () ->
+  let bell_modes = @Audio fn freq dur ->
+    let trigger = trig 0;
+
+    # Stretched partials imply the strike pitch; slow beating adds warble.
+    let ratios = ~[2., 3., 4.07, 5.19, 6.31, 8.2];
+    let gains = ~[0.30, 0.23, 0.18, 0.12, 0.10, 0.07];
+    let warble_hz = 2.3;
+    let body_env = array_env [|0., 0.001, 0., 1., 0.15, -1., 0.35, 0.5, -1., 0.|] dur trigger;
+    let body = sin_osc (freq * ratios) * gains
+      |> sum
+      |> (*) (body_env * scale_bp 0.8 1. (sin_osc warble_hz));
+
+    # A short inharmonic clapper gives way to the octave-below hum.
+    let clapper = fm_op (freq * 3.7) (2.5 * sin_osc (freq * 5.13))
+      |> (*) (array_env [|1., 0.03, -1., 0.|] dur trigger);
+    let hum_ratios = ~[0.5, 0.5015];
+    let hum_env = array_env [|0., 0.02, 0., 1., 0.98, -1., 0.|] dur trigger
+      |> kill_on_end;
+    let hum = sin_osc (freq * hum_ratios) |> sum |> (*) (0.5 * hum_env);
+
+    (0.6 * body + 0.15 * clapper + 0.25 * hum) * 0.4
+  ;;
+
+  let defs = [| 261.63, 4. |];
+  let node = synth_default defs bell_modes;
+  let play = fn pl -> node pl |> play_node;;
+;
+
+# Six-oscillator hi-hat from the bell article's TR808 discussion.
+let Hihat = module () ->
+  let hat_hit = @Audio fn dur vel ->
+    let trigger = trig 0;
+    let velocity = Math.max 0. (Math.min 1. vel);
+    let filter_q = 0.707;
+    let metal_hz = ~[211., 317., 421., 503., 631., 809.];
+    let metal = sq_osc metal_hz |> sum |> (*) (1. / 6.);
+    let envelope = array_env [|0., 0.001, 0., 1., 1., -1., 0.|] dur trigger
+      |> kill_on_end;
+
+    # Remove the pitched fundamentals, leaving the metallic upper partials.
+    metal
+      |> Filter.bpf 8500. filter_q
+      |> Filter.hpf 6500. filter_q
+      |> (*) (envelope * velocity)
+  ;;
+
+  # shortcut: hits overlap; use a shared voice when pedal choking is needed.
+  let defs = [| 0.08, 0.8 |];
+  let node = synth_default defs hat_hit;
+  let play = fn pl -> node pl |> play_node;;
+;
+
+# Adapted from https://www.soundonsound.com/techniques/synthesizing-cowbells-claves
+let Cowbell = module () ->
+  let cowbell_pair = @Audio fn dur ->
+    let trigger = trig 0;
+    let tones_hz = ~[587., 845.];
+    let tone_gains = ~[0.4, 0.6];
+    let tones = tri_osc tones_hz * tone_gains |> sum;
+    let noise_gain = 0.08;
+    let filter_hz = 2640.;
+
+    # A sharp impact drops into a quieter tail, with a faint noise halo.
+    let envelope = array_env [|0., 0.001, 0., 1., 0.08, -1., 0.25, 0.92, -1., 0.|] dur trigger
+      |> kill_on_end;
+    tones + noise_gain * pink ()
+      |> Filter.bpf filter_hz 1.
+      |> (*) (envelope * 0.8)
+  ;;
+
+  let defs = [| 0.25 |];
+  let node = synth_default defs cowbell_pair;
+  let play = fn pl -> node pl |> play_node;;
+;
+
+let Cowbell2 = module () ->
+  let cowbell_resonant = @Audio fn dur ->
+    let trigger = trig 0;
+    let tone_hz = 587.;
+    let resonance_hz = 845.;
+    let resonance = 4.;
+
+    # The resonating filter supplies the second tone; gate its output too.
+    let envelope = array_env [|0., 0.001, 0., 1., 0.08, -1., 0.25, 0.92, -1., 0.|] dur trigger
+      |> kill_on_end;
+    tri_osc tone_hz
+      |> Filter.moogff resonance_hz resonance 0.
+      |> (*) (envelope * 0.8)
+  ;;
+
+  let defs = [| 0.25 |];
+  let node = synth_default defs cowbell_resonant;
+  let play = fn pl -> node pl |> play_node;;
+;
+
 let x = fn () ->
-  Cymbal.play [("dur", 0.001),];
-  yield 0.125;
+  let step = Math.array_choose [|0.125, 0.25|];
+  Math.chance2 0.5 (
+    \Cymbal2.play [("dur", step * 1.5),]
+  )
+  (
+    \Cymbal.play [("dur", step * 1.5),]
+  );
+
+  yield step;
   yield x ()
 ;;
 
-x () |> play_pattern 0.
+let s = fn () ->
+  # Bell.play [("freq", Math.array_choose [|150., 60., 600., 800., 900.|]),];
+  Kick.play [];
+  yield 0.5;
+  Snare.play [];
+  yield 0.5;
+  Cowbell2.play [];
+  yield 0.25;
+  Kick.play [];
+  yield 0.125;
+  Cowbell.play [];
+  yield 0.125;
+  Snare2.play [];
+  yield 0.125;
+  Kick.play [];
+  yield 0.375;
+  yield s ()
+;;
+
+[0.125] |> iter |> cor_loop |> cor_map (fn d -> Hihat.play [("vel", 1.),]; d) |> play_pattern 0.; 
+s () |> play_pattern 0.;
+x () |> play_pattern 0.;
+
+

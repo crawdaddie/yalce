@@ -1,0 +1,116 @@
+open libs/audio_jit/DSP;
+import std/Math;
+
+# Part 52: tuned breath and a short chiff precede the mellow pipe tone.
+# shortcut: six resonators approximate the pipe; add breath control for performance.
+let pan_pipe = @Audio fn freq duration ->
+  let t = trig 0;
+  let gate = rect duration t;
+  let filter_q = 0.707;
+  let breath = white () |> Filter.hpf 500. filter_q;
+  let resonances = ~[1., 2., 3., 4., 6., 8.];
+  let tuned = breath
+    |> Filter.bpf (Math.min (0.4 / spf) (freq * resonances)) 12.
+    |> mix 1
+    |> (*) 0.4;
+  let chiff = breath |> Filter.lpf 6000. filter_q |> (*) (decay 0.025 t);
+  let tone = sq_osc freq
+    |> Filter.lpf (Math.min (0.4 / spf) (freq * 2.)) filter_q
+    |> (*) (asr 0.05 1. 0.08 gate);
+  let envelope = asr 0.003 1. 0.12 gate |> kill_on_end;
+
+  tone + tuned + chiff * 0.3
+  |> (*) (envelope * 0.15)
+;;
+
+# Part 54: breath pressure moves brightness, not oscillator pitch.
+let flute = @Audio fn freq duration ->
+  let t = trig 0;
+  let gate = rect duration t;
+  let filter_q = 0.707;
+  let spectral_limit = 2000.;
+  let pressure = 1. + 0.1 * sin_osc 5.5 * (1. - decay 0.2 t);
+  let cutoff = Math.min (0.4 / spf) ((spectral_limit + freq * 0.05) * pressure);
+  let envelope = asr 0.03 1. 0.15 gate |> kill_on_end;
+
+  saw_osc freq
+  |> Filter.hpf 300. filter_q
+  |> Filter.lpf cutoff filter_q
+  |> Filter.lpf cutoff filter_q
+  |> (*) (envelope * 0.25)
+;;
+
+# Part 53: brightness peaks before loudness, letting a small breath transient through.
+# shortcut: triangle approximates the recorder spectrum; add stretched partials for realism.
+let recorder = @Audio fn freq duration ->
+  let gate = trig 0 |> rect duration;
+  let brightness = adsr 0.005 0.08 0.5 0.08 gate;
+  let tracking = Math.pow (freq / 440.) 0.65;
+  let pressure = lfnoise 2. 0.97 1.03;
+  let cutoff = Math.min (0.4 / spf) ((500. + 2200. * brightness) * tracking * pressure);
+  let envelope = asr 0.03 1. 0.12 gate |> kill_on_end;
+
+  tri_osc freq + white () * 0.015
+  |> Filter.lpf cutoff 0.9
+  |> (*) (envelope * 0.2)
+;;
+
+# Part 24: a closed cylindrical bore favours odd harmonics.
+# shortcut: this models the low register; add register-dependent spectra for overblowing.
+let clarinet = @Audio fn freq duration ->
+  let gate = trig 0 |> rect duration;
+  let envelope = adsr 0.025 0.08 0.85 0.12 gate |> kill_on_end;
+  let cutoff = Math.min (0.4 / spf) (1800. + freq);
+
+  sq_osc freq
+  |> Filter.lpf cutoff 0.707
+  |> (*) (envelope * 0.2)
+;;
+
+# Parts 49-50: fixed body resonances colour a bowed saw; vibrato arrives later.
+# shortcut: envelopes replace bow gestures; use continuous controls for legato playing.
+let violin = @Audio fn freq duration ->
+  let t = trig 0;
+  let gate = rect duration t;
+  let vibrato_gate = gate * (1. - rect 0.15 t);
+  let vibrato = sin_osc 6. * asr 0.2 1. 0.1 vibrato_gate;
+  let source = saw_osc (freq * (1. + 0.004 * vibrato))
+    |> Filter.hpf 150. 0.707
+    |> Filter.lpf 5000. 0.707;
+  let body_hz = ~[300., 700., 3000.];
+  let body_q = ~[4., 4., 1.];
+  let body_gain = ~[0.4, 0.35, 0.25];
+  let envelope = asr 0.06 1. 0.12 gate |> kill_on_end;
+
+  source
+  |> Filter.bpf body_hz body_q
+  |> (*) body_gain
+  |> mix 1
+  |> (*) (envelope * 0.35)
+;;
+
+# Leave one second of silence after each tail: demo () |> play_pattern 0.;
+let demo = fn () ->
+  let sound_time = 2.0;
+  let gap = 1.;
+
+  print "pan_pipe\n";
+  pan_pipe 440. 1.5 |> play_node;
+  yield (sound_time + gap);
+
+  print "flute\n";
+  flute 440. 1.5 |> play_node;
+  yield (sound_time + gap);
+
+  print "recorder\n";
+  recorder 523.25 1.5 |> play_node;
+  yield (sound_time + gap);
+
+  print "clarinet\n";
+  clarinet 220. 1.5 |> play_node;
+  yield (sound_time + gap);
+
+  print "violin\n";
+  violin 440. 1.5 |> play_node;
+  yield (sound_time + gap)
+;;

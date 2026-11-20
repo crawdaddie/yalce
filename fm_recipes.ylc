@@ -77,6 +77,114 @@ let fb_op = @Audio fn freq amount ->
   output
 ;;
 
+# FM TONE routing, manual p.107 (algorithms numbered left to right).
+# https://www.elektron.se/media/2026/10/Digitone-2-User-Manual_ENG_OS1.12_261008.pdf
+let Digitone = module () ->
+  # mix: 0 = X, 1 = Y. Sum carriers before mixing; these are not stereo lanes.
+  let blend = @Audio fn mix x y ->
+    let position = Math.max 0. (Math.min 1. mix);
+    x * (1. - position) + y * position
+  ;;
+
+  # Operator frequencies in Hz; a/b1/b2 and feedback are phase depths in cycles.
+  # Direct carrier taps bypass operator levels; solid taps retain them.
+  let routing = @Audio fn algorithm fc fa f1 f2 a b1 b2 feedback mix ->
+    if algorithm < 1.5 then (
+      # 1: B2 -> B1; (A + B1) -> C. X=C, Y=B1; feedback A.
+      let a_out = fb_op fa feedback;
+      let b2_out = fm_op f2 0.;
+      let b1_out = fm_op f1 (b2_out * b2);
+      let c_out = fm_op fc (a_out * a + b1_out * b1);
+      blend mix c_out b1_out
+    ) else if algorithm < 2.5 then (
+      # 2: A -> C; B2 -> B1. X=C, Y=B1; feedback B2.
+      let a_out = fm_op fa 0.;
+      let b2_out = fb_op f2 feedback;
+      let b1_out = fm_op f1 (b2_out * b2);
+      let c_out = fm_op fc (a_out * a);
+      blend mix c_out b1_out
+    ) else if algorithm < 3.5 then (
+      # 3: A -> (C, B2, B1). X=C+B2, Y=B1; feedback A.
+      let a_out = fb_op fa feedback;
+      let c_out = fm_op fc (a_out * a);
+      let b2_out = fm_op f2 (a_out * a);
+      let b1_out = fm_op f1 (a_out * a);
+      blend mix (c_out + b2_out) b1_out
+    ) else if algorithm < 4.5 then (
+      # 4: B2 -> B1 -> A -> C. X=C, Y=B1; feedback B2.
+      let b2_out = fb_op f2 feedback;
+      let b1_out = fm_op f1 (b2_out * b2);
+      let a_out = fm_op fa (b1_out * b1);
+      let c_out = fm_op fc (a_out * a);
+      blend mix c_out b1_out
+    ) else if algorithm < 5.5 then (
+      # 5: B1 -> B2; (B1 + B2) -> A -> C. X=C, Y=A; feedback B1.
+      let b1_out = fb_op f1 feedback;
+      let b2_out = fm_op f2 (b1_out * b1);
+      let a_out = fm_op fa (b1_out * b1 + b2_out * b2);
+      let c_out = fm_op fc (a_out * a);
+      blend mix c_out a_out
+    ) else if algorithm < 6.5 then (
+      # 6: (A + B2) -> (C, B1). X=C, Y=B1; feedback A.
+      let a_out = fb_op fa feedback;
+      let b2_out = fm_op f2 0.;
+      let modulation = a_out * a + b2_out * b2;
+      let c_out = fm_op fc modulation;
+      let b1_out = fm_op f1 modulation;
+      blend mix c_out b1_out
+    ) else if algorithm < 7.5 then (
+      # 7: A -> C; B2 -> B1. X=C+A*level, Y=B1*level+B2*level; feedback A.
+      let a_out = fb_op fa feedback;
+      let b2_out = fm_op f2 0.;
+      let c_out = fm_op fc (a_out * a);
+      let b1_out = fm_op f1 (b2_out * b2);
+      blend mix (c_out + a_out * a) (b1_out * b1 + b2_out * b2)
+    ) else (
+      # 8: A -> C; B2 and B1 are additive. X=C+B2*level, Y=B1*level; feedback B1.
+      let a_out = fm_op fa 0.;
+      let c_out = fm_op fc (a_out * a);
+      let b2_out = fm_op f2 0.;
+      let b1_out = fb_op f1 feedback;
+      blend mix (c_out + b2_out * b2) (b1_out * b1)
+    )
+  ;;
+
+  # Triggered attack/decay/end envelopes; B1 and B2 share the B envelope.
+  let mod_env = @Audio fn trigger attack decay_time end_level ->
+    adsr attack decay_time end_level 0. trigger
+  ;;
+
+  let tone = @Audio fn freq dur algorithm ratio_c ratio_a ratio_b1 ratio_b2
+      level_a level_b1 level_b2 feedback mix
+      attack_a decay_a end_a attack_b decay_b end_b release ->
+    let gate = trig 0 |> rect dur;
+    let env_a = mod_env 1. attack_a decay_a end_a;
+    let env_b = mod_env 1. attack_b decay_b end_b;
+    let fb_env = if algorithm < 1.5 then env_a
+      else if algorithm < 2.5 then env_b
+      else if algorithm < 3.5 then env_a
+      else if algorithm < 5.5 then env_b
+      else if algorithm < 7.5 then env_a else env_b;
+    let amplitude = gate |> asr 0.002 1. release |> kill_on_end;
+    routing algorithm (freq * ratio_c) (freq * ratio_a)
+      (freq * ratio_b1) (freq * ratio_b2)
+      (level_a * env_a) (level_b1 * env_b) (level_b2 * env_b)
+      (feedback * fb_env) mix
+    |> (*) (amplitude * voice_gain)
+  ;;
+
+  # Raw ratios and depths, not Elektron's knob scales or HARM waveforms.
+  # shortcut: one-sample feedback and no oversampling; add it for cleaner high notes.
+  let defs = [| 220., 1., 1., 1., 1., 2., 3.,
+                0.2, 0.15, 0.1, 0.05, 0.5,
+                0.002, 0.4, 0.15, 0.002, 0.2, 0.05, 0.2 |];
+  let node = synth_default defs tone;
+  let play = fn params -> node params |> play_node;;
+;
+
+# Digitone.play [("algorithm", 4.), ("freq", 110.), ("level_b1", 0.3)];
+# Digitone.play [("algorithm", 2.), ("mix", 1.), ("ratio_b1", 2.01)];
+
 # B feeds itself and A. Start feedback around 0.02-0.1 cycles.
 let feedback_bass = @Audio fn freq duration feedback ->
   let t = trig 0;

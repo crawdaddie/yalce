@@ -1,0 +1,132 @@
+open libs/audio_jit/DSP;
+
+# Part 14: higher partials decay sooner, without a subtractive filter.
+let additive_pluck = @Audio fn freq duration ->
+  let t = trig 0;
+  let harmonic = ~[1., 2., 3., 4., 5., 6., 7., 8.];
+  let partials = sin_osc (freq * harmonic)
+    * decay (0.8 / harmonic) t / harmonic |> sum;
+  let amp = rect duration t |> adsr 0.002 0. 1. 0.08 |> kill_on_end;
+
+  partials * amp * 0.12
+;;
+
+# Part 23: fixed formants shape different harmonics as pitch changes.
+let vowel_ee = @Audio fn freq duration ->
+  let t = trig 0;
+  let formant_hz = ~[270., 2300., 3000.];
+  let formant_q = ~[5., 20., 50.];
+  let formant_db = ~[0., -15., -9.];
+  let amp = rect duration t |> adsr 0.03 0.1 0.8 0.12 |> kill_on_end;
+
+  saw_osc freq
+  |> Filter.bpf formant_hz formant_q
+  |> (*) (Math.db_amp formant_db)
+  |> sum
+  |> (*) (amp * 0.4)
+;;
+
+# Part 16: clocked random values move the filter, with a short slew.
+let sample_hold = @Audio fn freq duration ->
+  let t = trig 0;
+  let cutoff = rand_trig 350. 3500. (trig 8.) |> lag 0.003;
+  let amp = rect duration t |> adsr 0.01 0.1 0.8 0.08 |> kill_on_end;
+
+  saw_osc freq |> Filter.lpf cutoff 1.2 |> (*) (amp * 0.18)
+;;
+
+# Part 22: fixed short delays color the string before the final envelope.
+# shortcut: three ideal combs approximate a cavity; fit measured modes for realism.
+let body_pluck = @Audio fn freq duration ->
+  let t = trig 0;
+  let string = saw_osc freq * decay 0.4 t;
+  let body_hz = ~[500., 730., 1100.];
+  let body = comb (1. / body_hz) 0.01 0.65 string |> sum;
+  let amp = rect duration t |> adsr 0.002 0. 1. 0.12 |> kill_on_end;
+
+  (string + body * 0.15) * amp * 0.15
+;;
+
+# Part 8: spit, dip and swell require more than a single ADSR contour.
+let spit_brass = @Audio fn freq duration ->
+  let t = trig 0;
+  let contour = array_env [|0., 0.02, 0., 0.7, 0.06, 0., 0.2,
+    0.3, 0., 1., duration, 0., 1.|] 1. t;
+  let amp = rect duration t |> adsr 0.003 0. 1. 0.12 |> kill_on_end;
+  let cutoff = 300. + 3500. * contour;
+
+  saw_osc freq |> Filter.lpf cutoff 0.707
+  |> (*) (contour * amp * 0.2)
+;;
+
+# Part 10: subtract a delayed saw to vary pulse width without a hard comparator.
+# shortcut: table oscillators and delay interpolation are not oversampled PWM.
+let pwm_pad = @Audio fn freq duration ->
+  let t = trig 0;
+  let width = sin_osc 0.7 |> scale_bp 0.2 0.8;
+  let saw = saw_osc freq;
+  let pulse = saw - delay (width / freq) 0.03 saw;
+  let amp = rect duration t |> adsr 0.08 0.1 0.8 0.2 |> kill_on_end;
+
+  pulse |> Filter.hpf 30. 0.707 |> Filter.lpf 6000. 0.707
+  |> (*) (amp * 0.12)
+;;
+
+# Part 15: matching analysis/carrier bands transfer the modulator's spectrum.
+# shortcut: eight broad bands and one noise band; add bands for clearer speech.
+let vocoder = @Audio fn carrier modulator ->
+  let band_hz = ~[150., 250., 400., 650., 1000., 1600., 2500., 4000.];
+  let band_q = 2.;
+  let analysis = modulator |> Filter.bpf band_hz band_q;
+  let envelope = Math.sqrt (analysis * analysis) |> lag 0.008;
+  let voiced = carrier |> Filter.bpf band_hz band_q
+    |> (*) envelope |> sum;
+  let high = modulator |> Filter.hpf 5000. 0.707;
+  let sibilant = Math.sqrt (high * high) |> lag 0.003;
+  let noise = white () |> Filter.hpf 5000. 0.707;
+
+  (voiced * 2. + noise * sibilant * 0.2) |> Math.tanh |> (*) 0.4
+;;
+
+# Supply a moving modulator so the vocoder can be heard without a microphone.
+let vocoder_demo = @Audio fn () ->
+  let gate = trig 0 |> rect 1.5;
+  let modulator = saw_osc 110. |> Filter.lpf (scale_bp 400. 3000. (sin_osc 2.)) 1.;
+  vocoder (saw_osc 220.) modulator
+  |> (*) (asr 0.01 1. 0.1 gate |> kill_on_end)
+;;
+
+# Leave one second of silence after each tail: demo () |> play_pattern 0.;
+let demo = fn () ->
+  let sound_time = 2.0;
+  let gap = 1.;
+
+  print "additive_pluck\n";
+  additive_pluck 220. 1.5 |> play_node;
+  yield (sound_time + gap);
+
+  print "vowel_ee\n";
+  vowel_ee 220. 1.5 |> play_node;
+  yield (sound_time + gap);
+
+  print "sample_hold\n";
+  sample_hold 220. 1.5 |> play_node;
+  yield (sound_time + gap);
+
+  print "body_pluck\n";
+  body_pluck 220. 1.5 |> play_node;
+  yield (sound_time + gap);
+
+  print "spit_brass\n";
+  spit_brass 220. 1.5 |> play_node;
+  yield (sound_time + gap);
+
+  print "pwm_pad\n";
+  pwm_pad 220. 1.5 |> play_node;
+  yield (sound_time + gap);
+
+  print "vocoder\n";
+  vocoder_demo () |> play_node;
+  yield (sound_time + gap)
+;;
+demo () |> play_pattern 0.;

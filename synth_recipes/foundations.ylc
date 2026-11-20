@@ -1,0 +1,56 @@
+open libs/audio_jit/DSP;
+
+# Parts 1, 3, 6-9: separate brightness and loudness contours.
+let subtractive_pluck = @Audio fn freq duration ->
+  let start = trig 0;
+  let gate = rect duration start;
+  let cutoff = decay 0.18 start |> scale (freq * 1.5) (freq * 8.);
+  let amplitude = adsr 0.002 0.2 0.15 0.08 gate |> kill_on_end;
+
+  saw_osc freq
+  |> Filter.lpf cutoff 0.8
+  |> (*) (0.2 * amplitude)
+;;
+
+# Parts 2, 11: bipolar multiplication leaves sum/difference sidebands.
+let ring_chime = @Audio fn freq duration ->
+  let start = trig 0;
+  let gate = rect duration start;
+  let metal_ratio = 1.4142135623730951;
+  let amplitude = adsr 0.002 0.6 0. 0.12 gate |> kill_on_end;
+
+  sin_osc freq * sin_osc (freq * metal_ratio)
+  |> (*) (0.25 * amplitude)
+;;
+
+# Parts 12-13: true frequency modulation; deviation scales with pitch.
+let fm_tone = @Audio fn freq duration ->
+  let start = trig 0;
+  let gate = rect duration start;
+  let mod_ratio = 2.;
+  let peak_index = 0.4;
+  let mod_freq = freq * mod_ratio;
+  let deviation = mod_freq * peak_index * decay 0.25 start;
+  let amplitude = adsr 0.003 0.2 0.25 0.1 gate |> kill_on_end;
+
+  sin_osc (freq + deviation * sin_osc mod_freq)
+  |> (*) (0.25 * amplitude)
+;;
+
+# Leave one second of silence after each tail: demo () |> play_pattern 0.;
+let demo = fn () ->
+  let sound_time = 1.0;
+  let gap = 1.;
+
+  print "subtractive_pluck\n";
+  subtractive_pluck 220. 0.6 |> play_node;
+  yield (sound_time + gap);
+
+  print "ring_chime\n";
+  ring_chime 440. 0.6 |> play_node;
+  yield (sound_time + gap);
+
+  print "fm_tone\n";
+  fm_tone 220. 0.6 |> play_node;
+  yield (sound_time + gap)
+;;

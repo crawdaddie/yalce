@@ -1,0 +1,159 @@
+open libs/audio_jit/DSP;
+import std/Math;
+
+let percussion_q = 0.707;
+
+# Parts 31–32: radial modes outlast the inharmonic strike.
+let timpani = @Audio fn freq duration ->
+  let trigger = trig 0;
+  let mode_ratios = ~[1., 1.5, 1.99, 2.44];
+  let mode_gains = ~[5., 4., 3., 1.];
+  let decay_ratios = ~[0.45, 0.73, 0.91, 0.84];
+  let modes = sin_osc (freq * mode_ratios) * mode_gains
+    * decay (duration * decay_ratios) trigger
+    |> sum |> (*) (1. / 13.);
+  let strike = saw_osc (freq * 0.667) * saw_osc (freq * 0.58)
+    |> Filter.hpf freq percussion_q
+    |> (*) (decay (duration * 0.08) trigger);
+  let envelope = array_env [|0., 0.001, 0., 1., 0.999, -1., 0.|] duration trigger
+    |> kill_on_end;
+
+  (modes + 0.2 * strike) * envelope * 0.4
+;;
+
+# Parts 37–39: adapt drums.ylc's Cymbal2 metallic pairs and moving filter paths.
+let cymbal = @Audio fn duration ->
+  let trigger = trig 0;
+  let mod_hz = ~[811., 1049., 1433.];
+  let carrier_hz = ~[2179., 3011., 4217.];
+  let fm_hz = ~[1800., 2400., 3000.];
+  let metal = carrier_hz + fm_hz * sq_osc mod_hz
+    |> sq_osc |> sum |> (*) (1. / 3.);
+  let ping_env = array_env [|1., 0.2, -1., 0.|] 1. trigger;
+  let ping_hz = scale 1000. 6000. ping_env;
+  let ping = metal |> Filter.bpf ping_hz percussion_q
+    |> Filter.bpf ping_hz percussion_q |> (*) ping_env;
+
+  # The tail brightens after impact, then loses its high modes.
+  let brightness = array_env [|0., 0.2, 0., 1., 3.7, -1., 0.|] 1. trigger;
+  let tail = metal |> Filter.hpf (scale 2640. 12000. brightness) percussion_q;
+  let envelope = array_env [|0., 0.001, 0., 1., 0.999, -1., 0.|] duration trigger
+    |> kill_on_end;
+
+  (0.3 * ping + tail) * envelope * 0.3
+;;
+
+# Part 40: adapt drums.ylc's Bell strike, stretched modes and beating hum.
+let bell = @Audio fn freq duration ->
+  let trigger = trig 0;
+  let ratios = ~[2., 3., 4.07, 5.19, 6.31, 8.2];
+  let gains = ~[0.30, 0.23, 0.18, 0.12, 0.10, 0.07];
+  let body_env = array_env [|0., 0.001, 0., 1., 0.15, -1., 0.35, 0.5, -1., 0.|] duration trigger;
+  let body = sin_osc (freq * ratios) * gains |> sum
+    |> (*) (body_env * scale_bp 0.8 1. (sin_osc 2.3));
+  let clapper = fm_op (freq * 3.7) (2.5 * sin_osc (freq * 5.13))
+    |> (*) (array_env [|1., 0.03, -1., 0.|] duration trigger);
+  let hum_ratios = ~[0.5, 0.5015];
+  let hum_env = array_env [|0., 0.02, 0., 1., 0.98, -1., 0.|] duration trigger
+    |> kill_on_end;
+  let hum = sin_osc (freq * hum_ratios) |> sum |> (*) (0.5 * hum_env);
+
+  (0.6 * body + 0.15 * clapper + 0.25 * hum) * 0.4
+;;
+
+# Part 40: drums.ylc's six square sources retain only metallic upper partials.
+# shortcut: separate hits overlap; use a shared voice for pedal choking.
+let hihat = @Audio fn duration ->
+  let trigger = trig 0;
+  let metal_hz = ~[211., 317., 421., 503., 631., 809.];
+  let metal = sq_osc metal_hz |> sum |> (*) (1. / 6.);
+  let envelope = array_env [|0., 0.001, 0., 1., 0.999, -1., 0.|] duration trigger
+    |> kill_on_end;
+
+  metal |> Filter.bpf 8500. percussion_q
+    |> Filter.hpf 6500. percussion_q
+    |> (*) (envelope * 0.5)
+;;
+
+# Part 41: adapt drums.ylc's Cowbell two-tone attack and quieter tail.
+let cowbell = @Audio fn duration ->
+  let trigger = trig 0;
+  let tone_hz = ~[587., 845.];
+  let tone_gains = ~[0.4, 0.6];
+  let tones = tri_osc tone_hz * tone_gains |> sum;
+  let filter_hz = 2640.;
+  let envelope = array_env [|0., 0.001, 0., 1., 0.08, -1., 0.25, 0.919, -1., 0.|] duration trigger
+    |> kill_on_end;
+
+  tones + 0.08 * pink ()
+    |> Filter.bpf filter_hz 1.
+    |> (*) (envelope * 0.8)
+;;
+
+# Part 41: a rapidly damped tone stands in for the struck bridged-T circuit.
+let clave = @Audio fn duration ->
+  let trigger = trig 0;
+  let tone_hz = 2500.;
+  let envelope = array_env [|0., 0.001, 0., 1., 0.999, -4., 0.|] duration trigger
+    |> kill_on_end;
+
+  tri_osc tone_hz |> Filter.lpf 4500. percussion_q
+    |> (*) (envelope * 0.5)
+;;
+
+# Parts 42–44: the sync sweep changes hammer timbre before a darker decay.
+# shortcut: fixed playing velocity and no soundboard; extend for piano performance.
+let acoustic_piano = @Audio fn freq duration ->
+  let trigger = trig 0;
+  let gate = rect duration trigger;
+  let release = 0.08;
+  let pitch_tracking = Math.sqrt (220. / freq);
+  let pitch_env = adsr 0.001 (0.04 * pitch_tracking) 0.06 release gate;
+  let semitones_per_octave = 12.;
+  let slave_offset = 14.1;
+  let slave_hz = freq * Math.pow 2.
+    ((slave_offset + 24. * pitch_env) / semitones_per_octave);
+  let slave = phasor_sinc slave_hz (trig freq) |> scale (-1.) 1.;
+  let decay_env = decay (1.5 * pitch_tracking) trigger;
+  let tone = 0.25 * sq_osc freq + slave * decay_env;
+  let cutoff = Math.min (0.4 / spf) (freq * 2. + 4500. * decay_env);
+  let envelope = adsr 0.001 0. 1. release gate |> kill_on_end;
+
+  tone |> Filter.hpf 25. percussion_q
+    |> Filter.lpf cutoff percussion_q
+    |> Filter.lpf cutoff percussion_q
+    |> (*) (decay_env * envelope * 0.2)
+;;
+
+# Leave one second of silence after each tail: demo () |> play_pattern 0.;
+let demo = fn () ->
+  let gap = 1.;
+
+  print "timpani\n";
+  timpani 110. 1.5 |> play_node;
+  yield (2.0 + gap);
+
+  print "bell\n";
+  bell 220. 3. |> play_node;
+  yield (3.5 + gap);
+
+  print "cymbal\n";
+  cymbal 1.5 |> play_node;
+  yield (2.0 + gap);
+
+  print "hihat\n";
+  hihat 0.15 |> play_node;
+  yield (0.5 + gap);
+
+  print "cowbell\n";
+  cowbell 0.4 |> play_node;
+  yield (0.75 + gap);
+
+  print "clave\n";
+  clave 0.2 |> play_node;
+  yield (0.5 + gap);
+
+  print "acoustic_piano\n";
+  acoustic_piano 261.63 1.5 |> play_node;
+  yield (2.0 + gap)
+;;

@@ -1,0 +1,57 @@
+open libs/audio_jit/DSP;
+
+import std/Math;
+
+# Parts 46-47: adapt strings.ylc's independently modulated stereo saw layers.
+let string_pad = @Audio fn freq duration ->
+  let gate = trig 0 |> rect duration;
+  let cents_per_octave = 1200.;
+  let layer_cents = ~[-2., 2.];
+  let detune_cents = ~[-4., 4.];
+  let mod_hz = ~[5.1, 6.3];
+  let mod_cents = ~[2.5, 3.2];
+  let layer_hz = freq * Math.pow 2. (layer_cents / cents_per_octave);
+  let pitch_mod = detune_cents + mod_cents * sq_osc mod_hz;
+  let moving_hz = layer_hz * Math.pow 2. (pitch_mod / cents_per_octave);
+  let layers = (saw_osc layer_hz + saw_osc moving_hz) * 0.5;
+
+  # Track pitch moderately and keep cutoff below Nyquist at either sample rate.
+  let reference_hz = 220.;
+  let cutoff = Math.min (0.4 / spf) (1800. * Math.sqrt (freq / reference_hz));
+  let warmth = Math.min 1. (Math.pow (reference_hz / freq) 0.15);
+  let filter_q = 0.707;
+  let envelope = asr 0.08 1. 0.3 gate |> kill_on_end;
+
+  layers
+  |> Filter.lpf cutoff filter_q
+  |> Filter.lpf cutoff filter_q
+  |> splay 2
+  |> (*) (envelope * warmth * 0.15)
+;;
+
+# Parts 55-56: the first three drawbars at equal levels, referenced to 8' pitch.
+# shortcut: independent sine voices omit shared wheels and leakage; add a shared bank for organ emulation.
+let tonewheel = @Audio fn freq duration ->
+  let gate = trig 0 |> rect duration;
+  let sub_octave = 0.5;
+  let quint = 1.5;
+  let envelope = adsr 0.003 0. 1. 0.015 gate |> kill_on_end;
+
+  sin_osc (freq * sub_octave) + sin_osc freq + sin_osc (freq * quint)
+  |> (*) envelope
+  |> (*) 0.1
+;;
+
+# Leave one second of silence after each tail: demo () |> play_pattern 0.;
+let demo = fn () ->
+  let sound_time = 2.0;
+  let gap = 1.;
+
+  print "string_pad\n";
+  string_pad 220. 1.5 |> play_node;
+  yield (sound_time + gap);
+
+  print "tonewheel\n";
+  tonewheel 220. 1.5 |> play_node;
+  yield (sound_time + gap)
+;;

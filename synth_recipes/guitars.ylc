@@ -1,0 +1,58 @@
+open libs/audio_jit/DSP;
+import std/Math;
+
+# Parts 28-29: plucking position weights partials; upper modes lose energy first.
+# shortcut: fixed body bands omit coupled strings; use a coupled model for realism.
+let acoustic_guitar = @Audio fn freq duration ->
+  let trigger = trig 0;
+  let partial = ~[1., 2., 3., 4., 5., 6., 7., 8.];
+  let pluck_position = 0.23;
+  let gain = Math.sin (Math.PI * partial * pluck_position) / (partial * partial);
+  let string = sin_osc (freq * partial) * gain
+    * decay (1.5 / Math.sqrt partial) trigger
+    |> sum;
+
+  # Fixed resonances stay put when the played string changes pitch.
+  let body = 0.3 * Filter.bpf 110. 2. string
+    + 0.2 * Filter.bpf 220. 2.5 string
+    + 0.1 * Filter.bpf 440. 3. string;
+  let cutoff = Math.min (0.4 / spf) (freq * (2. + 12. * decay 0.2 trigger));
+  let envelope = trigger |> rect duration |> asr 0.001 1. 0.08 |> kill_on_end;
+
+  string + body
+  |> Filter.lpf cutoff 0.707
+  |> (*) (0.3 * envelope)
+;;
+
+# Part 30: an envelope moves pulse width to imitate changing pickup cancellations.
+# shortcut: a narrow pulse approximates pickup response; no amplifier/cabinet model.
+let electric_guitar = @Audio fn freq duration ->
+  let trigger = trig 0;
+  let brightness = decay 0.18 trigger;
+  let pulse_width = scale 0.25 0.35 brightness;
+  let pulse = match (phasor freq < pulse_width) with
+    | true -> 1.
+    | false -> -1.
+    ;
+  let cutoff = Math.min (0.4 / spf) (freq * (2. + 10. * brightness));
+  let envelope = trigger |> rect duration |> asr 0.001 1. 0.06 |> kill_on_end;
+
+  pulse
+  |> Filter.hpf 30. 0.707
+  |> Filter.lpf cutoff 0.707
+  |> (*) (decay 0.8 trigger * envelope * 0.25)
+;;
+
+# Leave one second of silence after each tail: demo () |> play_pattern 0.;
+let demo = fn () ->
+  let sound_time = 2.0;
+  let gap = 1.;
+
+  print "acoustic_guitar\n";
+  acoustic_guitar 164.81 1.5 |> play_node;
+  yield (sound_time + gap);
+
+  print "electric_guitar\n";
+  electric_guitar 164.81 1.5 |> play_node;
+  yield (sound_time + gap)
+;;

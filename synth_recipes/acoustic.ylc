@@ -1,0 +1,107 @@
+open libs/audio_jit/DSP;
+
+let acoustic_gain = 0.2;
+let acoustic_q = 0.707;
+let acoustic_release = 0.04;
+
+# Parts 25–27: brightness rises after loudness; a brief filter rasp adds attack.
+let brass = @Audio fn freq duration ->
+  let t = trig 0;
+  let gate = rect duration t;
+  let release = 0.08;
+  let settling = 0.12;
+  let tone = adsr 0.035 settling 0.65 release gate;
+  let rasp = 1. + 0.15 * tri_osc 80. * decay 0.06 t;
+  let cutoff = (freq * 2. + 2400. * tone) * rasp;
+  let amp = adsr 0.01 settling 0.8 release gate |> kill_on_end;
+
+  saw_osc freq
+  |> Filter.lpf cutoff acoustic_q
+  |> Filter.lpf cutoff acoustic_q
+  |> (*) amp
+  |> (*) acoustic_gain
+;;
+
+# Parts 28–30: high harmonics fade before the string's amplitude.
+# shortcut: no body or pickup model; add resonances for a guitar-specific voice.
+let pluck = @Audio fn freq duration ->
+  let t = trig 0;
+  let cutoff = freq * (1.5 + 10. * decay 0.15 t);
+  let amp = t |> rect duration
+    |> adsr 0.001 0. 1. acoustic_release |> kill_on_end;
+
+  (saw_osc freq + 0.5 * sq_osc freq)
+  |> Filter.lpf cutoff acoustic_q
+  |> (*) (decay 0.6 t)
+  |> (*) amp
+  |> (*) acoustic_gain
+;;
+
+# Parts 33–34: adapt drums.ylc's Kick2 body, FM modes and beater contour.
+let kick = @Audio fn () ->
+  let t = trig 0;
+  let duration = 0.65;
+  let envelope = array_env [|0., 0.001, 0., 1., 1., -1., 0.|] duration t
+    |> kill_on_end;
+  let pitch_ratio = scale 1. 1.1 envelope;
+  let body = tri_osc (48. * pitch_ratio) |> Filter.lpf 250. acoustic_q;
+  let carrier_hz = 500.;
+  let mod_hz = 317.;
+  let phase_depth = 4.;
+  let modes = fm_op (carrier_hz * pitch_ratio)
+    (phase_depth * sin_osc (mod_hz * pitch_ratio));
+
+  # The beater briefly exposes the upper inharmonic modes.
+  let click_env = array_env [|1., 0.08, -1., 0.|] 1. t;
+  let attack = modes
+    |> Filter.hpf 250. acoustic_q
+    |> Filter.lpf (scale 1000. 6000. click_env) acoustic_q;
+
+  (body + 0.25 * attack) * envelope * acoustic_gain
+;;
+
+# Parts 35–36: adapt drums.ylc's Snare oscillator bank and wire filtering.
+let snare = @Audio fn () ->
+  let t = trig 0;
+  let duration = 0.4;
+  let head_hz = ~[180., 330.];
+  let head_gain = ~[0.65, 0.35];
+  let heads = sin_osc head_hz * head_gain |> sum
+    |> (*) (array_env [|0., 0.001, 0., 1., 0.4, -1., 0.|] duration t);
+  let mode_hz = ~[286., 397., 508., 619., 335., 446., 557.];
+  let mode_gain = ~[0.18, 0.14, 0.10, 0.07, 0.16, 0.12, 0.08];
+  let modes = sin_osc mode_hz * mode_gain |> sum
+    |> (*) (array_env [|0., 0.001, 0., 1., 0.8, -1., 0.|] duration t);
+
+  # Spectral holes separate the wires from a plain noise burst.
+  let wires = white () |> Filter.hpf 700. acoustic_q
+    |> Filter.lpf 9000. acoustic_q
+    |> Filter.notch 2200. 1.5
+    |> Filter.notch 4500. 2.;
+  let wire_env = array_env [|0., 0.001, 0., 1., 1., -1., 0.|] duration t
+    |> kill_on_end;
+
+  (0.6 * (heads + modes) + wires * wire_env) * acoustic_gain
+;;
+
+# Leave one second of silence after each tail: demo () |> play_pattern 0.;
+let demo = fn () ->
+  let sound_time = 1.0;
+  let gap = 1.;
+
+  print "brass\n";
+  brass 220. 0.6 |> play_node;
+  yield (sound_time + gap);
+
+  print "pluck\n";
+  pluck 330. 0.6 |> play_node;
+  yield (sound_time + gap);
+
+  print "kick\n";
+  kick () |> play_node;
+  yield (sound_time + gap);
+
+  print "snare\n";
+  snare () |> play_node;
+  yield (sound_time + gap)
+;;
