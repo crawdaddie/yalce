@@ -423,21 +423,22 @@ let hpf1p = @Audio fn freq x ->
 
 let ladder = @Audio fn cutoff res drive x ->
   let Z = [| 0., 0., 0., 0. |];  # z1..z4
-  let g = 2.0 * Math.PI * cutoff * spf in
-  let g1 = _min 0.99 g in
+  let g = 2.0 * Math.PI * cutoff * spf;
+  let g1 = _min 0.99 g;
 
   # input drive + feedback
-  let u = Math.tanh (drive * x - (res * (Z[3]))) in
+  let u = Math.tanh (drive * x - (res * (Z[3])));
 
-  let y1 = Z[0] |> pole g1 u in
-  let y2 = Z[1] |> pole g1 y1 in
-  let y3 = Z[2] |> pole g1 y2 in
-  let y4 = Z[3] |> pole g1 y3 in
+  let y1 = Z[0] |> pole g1 u;
+  let y2 = Z[1] |> pole g1 y1;
+  let y3 = Z[2] |> pole g1 y2;
+  let y4 = Z[3] |> pole g1 y3;
 
-  Z[0] := y1 in
-  Z[1] := y2 in
-  Z[2] := y3 in
-  Z[3] := y4 in
+  # Sequence every state update so all four poles retain their history.
+  Z[0] := y1;
+  Z[1] := y2;
+  Z[2] := y3;
+  Z[3] := y4;
 
   y4
 ;;
@@ -726,6 +727,7 @@ let parse_note = fn s ->
 let midi_freq = fn n ->
   440. * (Math.pow 2. ((n - 69.)/12.))
 ;;
+let midicps = midi_freq;
 
 # let get_tl_tick = extern fn () -> Uint64;
 # let ctx_spf = extern fn () -> Double;

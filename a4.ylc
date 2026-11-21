@@ -161,7 +161,7 @@ let A4 = module () ->
   ;;
 
   # Compose two oscillators, then Filter 1 -> Filter 2 -> amplitude envelope.
-  let bass = @Audio fn freq dur pw detune_hz cutoff resonance drive ->
+  let s_bass = @Audio fn freq dur pw detune_hz cutoff resonance drive ->
     let trigger = trig 0;
     let gate = rect dur trigger;
     let f2 = tune freq 0. detune_hz;
@@ -173,28 +173,62 @@ let A4 = module () ->
       |> hp2 30. 0.707
       |> amp gate 0.003 0.15 1.
   ;;
-  let sync_lead = @Audio fn freq dur interval amount cutoff ->
+
+  let bass_node = synth_default [|(41. |> midicps), 4., 0., 0.6, 700., 0.4, -0.2|] s_bass;
+  let bass = fn pl -> bass_node pl |> play_node;;
+
+  let s_sync_lead = @Audio fn freq dur interval amount cutoff ->
     let trigger = trig 0;
     let slave = tune freq (interval + 12. * decay 0.2 trigger) 0.;
     sync_saw freq slave amount (pwm 0. 0.4 0.2)
       |> filter1 cutoff 0.2 0.1
-      |> lp2 (cutoff * 1.5) 0.707
-      |> amp (rect dur trigger) 0.003 0.2 0.2
+      |> lp2 (cutoff * 1.5 * lfnoise 1 0.1 1.5) 2.
+      |> amp (rect dur trigger) 0.003 1. 0.2
   ;;
-  let am_bell = @Audio fn freq dur ratio depth ->
+
+  let s_am_bell = @Audio fn freq dur ratio depth ->
     let trigger = trig 0;
     let source = triangle freq 0.2;
     am source (pulse (freq * ratio) 0.) depth
       |> (*) (decay dur trigger)
       |> filter1 9000. 0.1 0.
       |> pk 1800. 1.2
-      |> amp (rect dur trigger) 0.002 0.3 0.2
+      |> amp (rect dur trigger) 0.002 1. 0.2
   ;;
 ;
 
-# A4.bass 55. 4. 0. 0.6 700. 0.4 -0.2 |> play_node;
-# A4.sync_lead 110. 4. 19. 1. 4000. |> play_node;
-A4.am_bell 220. 2. 2.73 1. |> play_node;
+let rs = @Audio fn inp -> inp |> comb 0.25 0.25 0.9 |> Reverb.cathedral;;
+let r = rs 0. |> play_node;
+# let |> play_node = play_node;
+
+let x = fn () ->
+  A4.bass [("freq", 34. |> midicps),];
+  A4.s_sync_lead (66. |> midicps) 2. 19. 1. 4000. ~> r;
+  yield 4.;
+  A4.bass [("freq", 41. |> midicps),];
+  A4.s_sync_lead (66. |> midicps) 4. 19. 1. 4000. ~> r;
+  yield 2.;
+  A4.s_sync_lead (63. |> midicps) 4. 19. 1. 4000. ~> r;
+  A4.s_sync_lead (65. |> midicps) 4. 19. 1. 4000. ~> r;
+  yield 2.;
+  A4.bass [("freq", 42. |> midicps), ("dur", 3.)];
+  A4.s_sync_lead (65. |> midicps) 4. 19. 1. 4000. ~> r;
+  yield 3.;
+  A4.bass [("freq", 39. |> midicps), ("dur", 1.)];
+  A4.s_sync_lead (63. |> midicps) 2. 19. 1. 4000. ~> r;
+  yield 1.;
+  A4.bass [("freq", 46. |> midicps),];
+  A4.s_sync_lead (70. |> midicps) 4. 19. 1. 4000. ~> r;
+  A4.s_sync_lead (65. |> midicps) 2. 19. 1. 4000. ~> r;
+  yield 2.;
+  A4.s_sync_lead (63. |> midicps) 4. 19. 1. 4000. ~> r;
+  A4.s_sync_lead (65. |> midicps) 4. 19. 1. 4000. ~> r;
+  yield 2.;
+
+  yield x ()
+;;
+x () |> play_pattern 0.;
+# A4.am_bell 220. 2. 2.73 1. |> play_node;
 # Use any input signal in the filters/AM for external or neighbor-style routing.
 # shortcut: naive wave edges/sync alias; add oversampling before hardware matching.
 # Transistor pulse, PW laws, noise color and filter responses are approximations.
