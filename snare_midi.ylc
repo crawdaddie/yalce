@@ -1,0 +1,50 @@
+open libs/audio_jit/DSP;
+import std/Math;
+import engine/bindings/MIDI;
+
+let digitone = MIDI.midi_open "Elektron Digitone II MIDI 1";
+let bpm = 120.;
+let seconds_per_minute = 60.;
+let beat = seconds_per_minute / bpm;
+let snare_channel = 3; # DN2 track 4 must receive MIDI channel 4.
+let snare_note = 60.;
+let midi_velocity = 100;
+let midi_gate = 0.1;
+
+# Adapted from https://www.soundonsound.com/techniques/synthesizing-drums-snare-drum
+let Snare = module () ->
+  let snare_hit = @Audio fn dur vel ->
+    let trigger = trig 0;
+    sin_osc 800. |> (*) (decay 0.1 trigger |> kill_on_end)
+  ;;
+
+  let defs = [| 0.3, 0.8 |];
+  let node = synth_default defs snare_hit;
+  let play = fn pl -> node pl |> play_node;;
+;
+
+# Both calls inherit the same scheduler tick; MIDI also queues a note-off.
+let hit = fn () ->
+  print "ylc-snare\n";
+  Snare.play [];
+  let status = MIDI.midi_note digitone snare_channel snare_note midi_velocity midi_gate;
+  if status < 0 then print "MIDI snare submission failed\n" else ()
+;;
+
+# Four beats per bar: rest, paired hit, rest, paired hit.
+let backbeat = fn () ->
+  yield beat;
+  hit ();
+  yield (2. * beat);
+  hit ();
+  yield beat;
+  yield backbeat ()
+;;
+
+let run = fn () ->
+  if digitone == 0 then (print "Digitone MIDI port unavailable\n"; 0.)
+  else yield backbeat ()
+;;
+
+let performance = run () |> play_pattern 0.;
+let stop = fn () -> cancel_task performance;;

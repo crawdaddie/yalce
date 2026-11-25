@@ -1,0 +1,139 @@
+open libs/audio_jit/DSP;
+import std/Math;
+
+import engine/bindings/MIDI;
+
+# Set these to the port listing and the Digitone track receive channels.
+MIDI.list_destinations ();
+let digitone = MIDI.midi_open "Elektron Digitone II MIDI 1";
+let acid_channel = 0; # MIDI channel 1; API channels are zero-based.
+let piano_channel = 1; # MIDI channel 2.
+let velocity = 100;
+let repeat_gate = 0.1;
+let bpm = 120.;
+let seconds_per_minute = 60.;
+let clocks_per_beat = 24.;
+let clock_interval = seconds_per_minute / (bpm * clocks_per_beat);
+
+# DN2: MIDI CONFIG > SYNC > CLOCK RECEIVE and TRANSPORT RECEIVE enabled.
+let clock = fn () ->
+  let status = MIDI.send_midi_clock_ts digitone (MIDI.get_tl_tick ());
+  if status < 0 then (
+    MIDI.send_midi_stop digitone;
+    print "MIDI clock submission failed\n";
+    0.
+  ) else (
+    yield clock_interval;
+    yield clock ()
+  )
+;;
+
+let send_note = fn channel nt duration ->
+  print `[MIDI] {channel} {nt} {duration}\n`;
+  let status = MIDI.midi_note digitone channel nt velocity duration;
+  if status < 0 then print "MIDI note submission failed\n" else ()
+;;
+
+let notes = [|
+  60., 63., 67., 65., 72., 68., 62., 63.,
+  58., 60., 65., 70., 68., 62., 58., 72.
+|];
+
+let durations = [|
+  0.5, 0.25, 0.75, 0.375, 0.625, 0.25, 0.5, 0.375,
+  0.75, 0.25, 0.5, 0.625, 0.375, 0.5, 0.25, 1.
+|];
+
+# Every row sums to 1. Columns are destination hidden states.
+let hidden_transitions = [|
+  [| .35, .3, .15, .1, .05, .05, 0., 0. |],
+  [| .15, .35, .25, .1, .05, .05, .05, 0. |],
+  [| .1, .2, .35, .15, .05, .05, .05, .05 |],
+  [| .05, .1, .2, .35, .1, .05, .1, .05 |],
+  [| .05, .05, .1, .2, .35, .1, .1, .05 |],
+  [| .05, .05, .05, .15, .2, .35, .1, .05 |],
+  [| .05, .05, .05, .1, .15, .2, .35, .1 |],
+  [| .1, .05, .05, .1, .1, .15, .2, .25 |]
+|];
+
+# Every row sums to 1. Columns are observable note states.
+let emissions = [|
+  [| .3, .15, .15, .05, .05, .1, .05, .05, .05, .05, 0., 0., 0., 0., 0., 0. |],
+  [| .05, .1, .2, .1, .05, .05, .05, .15, .05, .05, .1, .05, 0., 0., 0., 0. |],
+  [| .05, .05, .1, .15, .2, .1, .05, .05, .05, .05, .05, .05, .05, 0., 0., 0. |],
+  [| .05, .05, .05, .05, .05, .1, .15, .2, .05, .05, .05, .05, .05, .05, 0., 0. |],
+  [| 0., 0., .15, .15, .2, 0., .15, 0., .1, 0., 0., .1, .1, 0., .05, 0. |],
+  [| 0., 0., 0., .1, 0., .1, 0., .15, 0., .15, 0., 0., .2, .15, .1, .05 |],
+  [| .15, .1, .1, 0., 0., .1, 0., .05, 0., .1, 0., .1, .1, 0., .1, .1 |],
+  [| 0., 0., 0., 0., 0., 0., .05, .05, .05, .1, .1, .1, .1, .1, .15, .2 |]
+|];
+
+let pick_state = fn row i chance ->
+  if i >= array_size row - 1 then i else
+    let weight = row[i] in
+    if chance <= weight then i
+    else pick_state row (i + 1) (chance - weight)
+;;
+
+let play_note = fn nt ->
+  let pitch = nt + Math.array_choose [| -36., -24., -12., 0., 12.|];
+  send_note piano_channel pitch repeat_gate
+;;
+
+let play_note_acid = fn nt d ->
+  let pitch = nt + Math.array_choose [| -36., -24., -24., -24., -12., 0., 12.|];
+  send_note acid_channel pitch d
+;;
+
+let hmm = fn state ->
+  let note_state = pick_state (emissions[state]) 0 (Math.rand_double ());
+  let nt = notes[note_state];
+  let d = Math.array_choose durations;
+  let next_state = pick_state (hidden_transitions[state]) 0 (Math.rand_double ());
+  yield (d, nt);
+  yield hmm next_state
+;;
+
+let x = fn d nt n ->
+  match n with
+  | 0 -> play_note_acid nt d
+  | _ -> play_note nt
+  ;
+  match n with
+  | 0 -> (yield 0.125)
+  | _ -> (
+    yield 0.125;
+    yield x d nt (n - 1)
+  )
+;;
+
+# Notes within one callback share the scheduler sample timestamp.
+let start = fn () ->
+  hmm 0
+    |> cor_map (fn (d, nt) ->
+      x d nt (Math.array_choose [|0, 0, 0, 1, 2, 3, 4|]) |> play_pattern 0.;
+      d
+    )
+    |> play_pattern 0.;
+  ()
+;;
+
+# Start, first clock and notes inherit this coroutine's logical tick.
+let run = fn () ->
+  if digitone == 0 then (print "Digitone II unavailable; check the MIDI port listing\n"; 0.)
+  else if bpm > 0. then (
+    let status = MIDI.send_midi_start_ts digitone (MIDI.get_tl_tick ());
+    if status < 0 then (print "MIDI start submission failed\n"; 0.) else (
+      start ();
+      yield clock ()
+    )
+  ) else (print "BPM must be positive\n"; 0.)
+;;
+
+let performance = run () |> play_pattern 0.;
+
+# Call stop () in the REPL to cancel the clock and child note patterns.
+let stop = fn () ->
+  cancel_task performance;
+  MIDI.send_midi_stop digitone
+;;
