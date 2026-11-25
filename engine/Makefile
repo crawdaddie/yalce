@@ -71,6 +71,8 @@ ifeq ($(shell uname -s),Darwin)
 endif
 
 test: | $(BUILD_DIR)
+	$(CC) -g -I. -o $(BUILD_DIR)/test_audio_clock test/test_audio_clock.c -lpthread -lm
+	$(BUILD_DIR)/test_audio_clock
 	$(CC) -g -I. -I../lang/ -o $(BUILD_DIR)/test_scheduling test/test_scheduling.c -lm -lpthread
 	$(BUILD_DIR)/test_scheduling
 	$(CC) -g -I. -o $(BUILD_DIR)/test_audio_loop_utils \
@@ -83,7 +85,7 @@ test: test_midi
 .PHONY: test_midi test_midi_live
 test_midi_live: | $(BUILD_DIR)
 	$(CC) -g -I. -I../lang/ -o $(BUILD_DIR)/test_midi_live \
-		test/test_midi_live.c -lasound -lpthread -lm
+		test/test_midi_live.c audio_clock.c -lasound -lpthread -lm
 	$(BUILD_DIR)/test_midi_live
 
 test_midi: | $(BUILD_DIR)

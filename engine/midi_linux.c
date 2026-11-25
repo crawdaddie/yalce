@@ -1,6 +1,7 @@
 #include "common.h"
 #ifndef __APPLE__
 #include "midi.h"
+#include "audio_clock.h"
 #include "ctx.h"
 #include "scheduling.h"
 #include <inttypes.h>
@@ -47,7 +48,9 @@ static snd_seq_t *seq_handle = NULL;
 static int client_id;
 static int output_port_id = -1;
 static int output_queue = -1;
-static uint64_t queue_sample;
+static AudioClock midi_clock;
+static double queue_offset;
+static int clock_mapped;
 static int queue_rate;
 enum { MIDI_PORT_SHIFT = 16, MIDI_ADDR_MASK = 255, NS_PER_SECOND = 1000000000 };
 static int input_port_id;
@@ -249,7 +252,7 @@ void midi_out_setup() {
 
   output_queue = snd_seq_alloc_named_queue(seq_handle, "ylc sample timeline");
   queue_rate = ctx_sample_rate();
-  queue_sample = get_current_sample();
+  clock_mapped = 0;
   if (output_queue < 0 || queue_rate <= 0 ||
       snd_seq_start_queue(seq_handle, output_queue, NULL) < 0 ||
       snd_seq_drain_output(seq_handle) < 0) {
@@ -281,20 +284,50 @@ int midi_connect_output(midi_endpoint_t destination) {
   return 0;
 }
 
-// Keep one mapping so equal sample ticks always produce equal deadlines.
-static int schedule_midi(snd_seq_event_t *event, uint64_t tick) {
-  if (output_queue < 0 || queue_rate <= 0 || tick < queue_sample) {
+// Calibrate against the running queue, rather than assuming when it started.
+static int map_midi_clock(AudioClock snapshot) {
+  snd_seq_queue_status_t *status;
+  snd_seq_queue_status_alloca(&status);
+  double before = audio_clock_now();
+  int result = snd_seq_get_queue_status(seq_handle, output_queue, status);
+  double after = audio_clock_now();
+  if (result < 0 || !isfinite(before) || !isfinite(after) || after < before) {
     return -1;
   }
-  // shortcut: nominal audio rate; presentation-clock drift needs calibration.
-  uint64_t samples = tick - queue_sample;
-  uint64_t seconds = samples / queue_rate;
-  if (seconds > UINT32_MAX) {
+  const snd_seq_real_time_t *time = snd_seq_queue_status_get_real_time(status);
+  queue_offset = time->tv_sec + (double)time->tv_nsec / NS_PER_SECOND -
+                 (before + (after - before) / 2.);
+  midi_clock = snapshot;
+  clock_mapped = 1;
+  return 0;
+}
+
+static int schedule_midi(snd_seq_event_t *event, uint64_t tick) {
+  AudioClock snapshot;
+  if (output_queue < 0 || queue_rate <= 0 || audio_clock_read(&snapshot) < 0 ||
+      snapshot.sample_rate != queue_rate) {
+    return -1;
+  }
+  if (!clock_mapped && map_midi_clock(snapshot) < 0) {
+    return -1;
+  }
+  // An underrun invalidates queued timing. Require a restart, never silently jump.
+  if (snapshot.generation != midi_clock.generation) {
+    return -1;
+  }
+  // shortcut: fixed initial calibration; add slew correction for long-run drift.
+  long double seconds = (long double)midi_clock.time + queue_offset +
+      ((long double)tick - midi_clock.sample) / midi_clock.sample_rate;
+  if (seconds < 0. || seconds >= (long double)UINT32_MAX + 1.) {
+    return -1;
+  }
+  uint64_t ns = (uint64_t)llroundl(seconds * NS_PER_SECOND);
+  if (ns / NS_PER_SECOND > UINT32_MAX) {
     return -1;
   }
   snd_seq_real_time_t time = {
-      .tv_sec = seconds,
-      .tv_nsec = (samples % queue_rate) * NS_PER_SECOND / queue_rate};
+      .tv_sec = ns / NS_PER_SECOND,
+      .tv_nsec = ns % NS_PER_SECOND};
   snd_seq_ev_schedule_real(event, output_queue, 0, &time);
   return 0;
 }

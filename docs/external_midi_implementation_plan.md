@@ -3,6 +3,51 @@
 Status: proposed. Initial target: Linux/ALSA, Digitone 2, one fixed audio
 interface for capture and playback.
 
+## Available MIDI output
+
+`fm_hmm_midi.ylc` now targets `Elektron Digitone II MIDI 1`, channels 1 and 2.
+`bpm` defaults to 120. The parent coroutine sends timestamped MIDI Start,
+then 24 MIDI clocks per quarter note while the note pattern runs. Enable
+`MIDI CONFIG > SYNC > CLOCK RECEIVE` and `TRANSPORT RECEIVE` on the Digitone.
+Call `stop ()` in the REPL to cancel both patterns and send MIDI Stop. Existing
+note durations remain seconds; changing BPM changes the external tempo.
+No `aconnect` output connection is required. The Digitone supplies the sounds;
+this example does not capture its audio.
+
+```ylc
+let port = MIDI.midi_open "Elektron Digitone II MIDI 1";
+# Inside play_pattern: both attacks use the same logical sample tick.
+MIDI.midi_note port 0 60. 100 0.25;
+MIDI.midi_note port 1 67. 100 0.25;
+```
+
+Channels are zero-based; pitch is an integer-valued Double, velocity is 1–127,
+and duration is seconds. `midi_open` returns zero for a missing destination.
+Note calls return zero on submission success or -1 on failure. `midi_note_at`
+adds an explicit Uint64 sample tick as its final argument.
+
+Linux queues real-time ALSA events using one sample-to-queue mapping. Equal
+ticks produce equal queue deadlines; MIDI 1.0 does not transmit those timestamps
+to the device. Late events can be delivered immediately.
+
+The initial Linux mapping now uses a coherent audio frame/presentation-time
+snapshot, including SoundIo's reported output latency, and the running ALSA
+queue's time measured against CLOCK_MONOTONIC. Calibration occurs on the first
+scheduled send and stays fixed so queued timestamps do not change. Scheduled
+sends fail until an audio snapshot is available. An underrun or invalid latency
+reading invalidates calibration; restart the process before resuming scheduled
+MIDI. Immediate MIDI sends remain available.
+
+This compensates the reported audio output latency, not synth response, USB/DIN
+latency, or long-term clock drift. It does not establish the sample-accuracy
+requirement below. macOS retains its previous timing mapping.
+
+Note-offs are submitted with each note. Cancelling a pattern leaves already
+queued MIDI events intact. Stop patterns and allow their gates to finish before
+calling `midi_panic port channel`, which sends All Sound Off. Process termination
+can discard pending releases; overlapping notes of the same pitch/channel share
+MIDI 1.0 note-off semantics. macOS changes have not been hardware-tested.
+
 ## Sample accuracy requirement
 
 Sample accuracy is required. Musically tight playback or compensation of the

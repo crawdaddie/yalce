@@ -1,4 +1,5 @@
 #include "audio_loop.h"
+#include "audio_clock.h"
 #include "../lang/config.h"
 #include "../lang/ylc_datatypes.h"
 #include "audio_loop_utils.h"
@@ -243,11 +244,26 @@ static void write_callback(struct SoundIoOutStream *outstream,
     }
 
     if ((err = soundio_outstream_end_write(outstream))) {
-      if (err == SoundIoErrorUnderflow)
+      if (err == SoundIoErrorUnderflow) {
+        audio_clock_invalidate();
         return;
+      }
       printf("unrecoverable stream error end write: %s\n",
              soundio_strerror(err));
       exit(1);
+    }
+
+    // Latency refers to the next frame after end_write, not the render cursor.
+    double before = audio_clock_now();
+    double latency;
+    int latency_error = soundio_outstream_get_latency(outstream, &latency);
+    double after = audio_clock_now();
+    if (latency_error || !isfinite(latency) || latency < 0.) {
+      audio_clock_invalidate();
+    } else {
+      audio_clock_publish(buffer_start_sample + frame_count,
+                          before + (after - before) / 2. + latency,
+                          outstream->sample_rate);
     }
 
     frames_left -= frame_count;
@@ -269,6 +285,7 @@ static void write_callback(struct SoundIoOutStream *outstream,
 }
 
 static void underflow_callback(struct SoundIoOutStream *outstream) {
+  audio_clock_invalidate();
   static int count = 0;
   fprintf(stderr, "underflow %d\n", ++count);
 }
@@ -500,6 +517,7 @@ int start_audio() {
   if (!outstream)
     panic("out of memory");
 
+  audio_clock_invalidate();
   init_ctx();
   outstream->userdata = &ctx;
   outstream->format = fmt;

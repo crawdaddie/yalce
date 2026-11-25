@@ -17,6 +17,8 @@ int main(void) {
       SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE,
       SND_SEQ_PORT_TYPE_APPLICATION);
   assert(port >= 0);
+  // Supply a presentation clock without opening audio hardware.
+  audio_clock_publish(0, audio_clock_now(), ctx_sample_rate());
   int dest = midi_open("ylc test receiver");
   assert(dest != 0);
   assert(midi_note(dest, 0, 60., 100, 0.1) == 0);
@@ -25,7 +27,8 @@ int main(void) {
   assert(snd_seq_poll_descriptors(receiver, &fd, 1, POLLIN) == 1);
   int attacks = 0;
   int releases = 0;
-  for (int i = 0; i < 4; i++) {
+  // Subscribing also produces a port notification; count only MIDI notes.
+  while (attacks + releases < 4) {
     if (snd_seq_event_input_pending(receiver, 0) == 0) {
       assert(poll(&fd, 1, 1000) > 0);
     }
