@@ -77,6 +77,21 @@ test: | $(BUILD_DIR)
 		test/test_audio_loop_utils.c audio_loop_utils.c -lsoundio -lm
 	$(BUILD_DIR)/test_audio_loop_utils
 
+ifneq ($(shell uname -s),Darwin)
+test: test_midi
+
+.PHONY: test_midi test_midi_live
+test_midi_live: | $(BUILD_DIR)
+	$(CC) -g -I. -I../lang/ -o $(BUILD_DIR)/test_midi_live \
+		test/test_midi_live.c -lasound -lpthread -lm
+	$(BUILD_DIR)/test_midi_live
+
+test_midi: | $(BUILD_DIR)
+	$(CC) -g -I. -I../lang/ -o $(BUILD_DIR)/test_midi_linux \
+		test/test_midi_linux.c -lasound -lpthread -lm
+	$(BUILD_DIR)/test_midi_linux
+endif
+
 audio_test: $(OBJS)
 	$(CC) $(LDFLAGS) $(FRAMEWORKS) $(OBJS) -o $(BUILD_DIR)/engine_test
 	$(BUILD_DIR)/engine_test

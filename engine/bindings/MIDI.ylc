@@ -16,8 +16,8 @@ let send_cc = extern fn Int -> Char -> Char -> Char -> Int;
 let send_midi_continue = extern fn Int -> Int;
 let send_midi_stop = extern fn Int -> Int;
 let send_midi_start = extern fn Int -> Int;
-let send_midi_program_change_ts = extern fn Int -> Char -> Char -> Uint64 -> Int;
-let send_midi_program_change = extern fn Int -> Char -> Char -> Int;
+let send_program_change_ts = extern fn Int -> Char -> Char -> Uint64 -> Int;
+let send_program_change = extern fn Int -> Char -> Char -> Int;
 let send_ccs = extern fn Int -> Int -> Ptr -> Int;
 let get_destination = extern fn Int -> Int;
 let get_destination_by_name = extern fn Ptr -> Int;
@@ -37,3 +37,19 @@ let REC_127 = 0.007874015748031496;
 let midi_setup = extern fn () -> () in
   midi_setup ()
 ;
+
+# Exact port name; use list_destinations to discover it. Zero means unavailable.
+let midi_open = fn name ->
+  let midi_open = extern fn Ptr -> Int in
+  midi_open (cstr name)
+;;
+# Sample ticks share the play_pattern timeline; duration is in seconds.
+let get_tl_tick = extern fn () -> Uint64;
+let midi_note_at = extern fn Int -> Int -> Double -> Int -> Double -> Uint64 -> Int;
+let midi_note = extern fn Int -> Int -> Double -> Int -> Double -> Int;
+# Stop patterns before panic: it silences voices, not queued future attacks.
+let midi_panic = extern fn Int -> Int -> Int;
+
+# MIDI tempo requires 24 clock messages per quarter note.
+let send_midi_start_ts = extern fn Int -> Uint64 -> Int;
+let send_midi_clock_ts = extern fn Int -> Uint64 -> Int;

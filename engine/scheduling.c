@@ -461,10 +461,12 @@ void push_event(void (*callback)(void *, uint64_t), void *userdata,
   }
 }
 static _Thread_local uint64_t sched_now = 0;
-static uint64_t cur_tick = 0;
+static _Thread_local uint64_t cur_tick = 0;
+static _Thread_local bool in_callback = false;
 
 uint64_t get_tl_tick() {
-  return cur_tick == 0 ? get_current_sample() : cur_tick;
+  // Tick zero is a valid event time, even while the audio thread advances.
+  return in_callback ? cur_tick : get_current_sample();
 }
 uint64_t get_sched_tick() { return sched_now; }
 
@@ -538,17 +540,19 @@ static void fire_events(int count) {
       }
     }
 
+    cur_tick = event.tick;
+    in_callback = true;
     if (event.userdata == NULL) {
       current_task = NULL;
       void (*cb)(uint64_t) = (void (*)(uint64_t))event.callback;
       cb(event.tick);
     } else {
-      cur_tick = event.tick;
       current_task = event.task;
       event.callback(event.userdata, cur_tick);
       current_task = NULL;
     }
   }
+  in_callback = false;
   cur_tick = 0;
 }
 

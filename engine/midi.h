@@ -50,6 +50,14 @@ int send_note_off_ts(midi_endpoint_t destination, uint8_t channel, uint8_t note,
 int send_note_on_dur_ts(midi_endpoint_t destination, char channel, char note,
                         char velocity, double dur, uint64_t ts);
 
+// Pattern API: sample ticks, seconds, zero-based channels, MIDI velocity 1..127.
+int midi_open(const char *name);
+int midi_note_at(int destination, int channel, double pitch, int velocity,
+                 double duration, uint64_t tick);
+int midi_note(int destination, int channel, double pitch, int velocity,
+              double duration);
+int midi_panic(int destination, int channel);
+
 // Bulk MIDI functions
 int send_note_ons(midi_endpoint_t destination, int size, char *note_data_ptr);
 int send_note_offs(midi_endpoint_t destination, int size, char *note_data_ptr);
@@ -66,12 +74,15 @@ int send_program_change_ts(midi_endpoint_t destination, uint8_t channel,
                            uint8_t program, uint64_t ts);
 
 // Transport functions
+int send_midi_start_ts(midi_endpoint_t destination, uint64_t tick);
+int send_midi_clock_ts(midi_endpoint_t destination, uint64_t tick);
 int send_midi_start(midi_endpoint_t destination);
 int send_midi_stop(midi_endpoint_t destination);
 int send_midi_continue(midi_endpoint_t destination);
 int send_midi_clock(midi_endpoint_t destination);
 
 // Device management
+int midi_connect_output(midi_endpoint_t destination);
 midi_endpoint_t get_destination(midi_count_t index);
 midi_endpoint_t get_destination_by_name(const char *name);
 void list_destinations();

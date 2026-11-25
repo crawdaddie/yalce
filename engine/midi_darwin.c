@@ -92,7 +92,7 @@ uint64_t timespec_to_mach_time(struct timespec ts) {
 
 void init_midi_timing(struct timespec audio_start_time) {
   mach_timebase_info(&timebase_info);
-  sample_to_ns_ratio = 1000000000.0 / 48000;
+  sample_to_ns_ratio = 1000000000.0 / ctx_sample_rate();
   audio_start_mach_time = timespec_to_mach_time(audio_start_time);
 }
 
@@ -265,6 +265,11 @@ void midi_out_setup() {
   MIDIOutputPortCreate(client, CFSTR("Output port"), &output_port);
 }
 
+int midi_connect_output(midi_endpoint_t destination) {
+  // CoreMIDI sends directly to endpoints without ALSA-style subscriptions.
+  return destination && output_port ? 0 : -1;
+}
+
 // MIDI output functions
 int send_note_on(midi_endpoint_t destination, char channel, char note,
                  char velocity) {
@@ -324,7 +329,7 @@ int send_note_on_ts(midi_endpoint_t destination, char channel, char note,
 
 int send_note_off_ts(midi_endpoint_t destination, uint8_t channel, uint8_t note,
                      uint8_t velocity, uint64_t ts) {
-  MIDITimeStamp t = sample_to_midi_timestamp(ts - BUF_SIZE);
+  MIDITimeStamp t = sample_to_midi_timestamp(ts);
   Byte buffer[1024];
   MIDIPacketList *packet_list = (MIDIPacketList *)buffer;
   MIDIPacket *current_packet = MIDIPacketListInit(packet_list);
@@ -339,22 +344,18 @@ int send_note_off_ts(midi_endpoint_t destination, uint8_t channel, uint8_t note,
 
 int send_note_on_dur_ts(midi_endpoint_t destination, char channel, char note,
                         char velocity, double dur, uint64_t ts) {
-  MIDITimeStamp t = sample_to_midi_timestamp(ts - BUF_SIZE);
-  Byte buffer[1024];
-  MIDIPacketList *packetList = (MIDIPacketList *)buffer;
-  MIDIPacket *currentPacket = MIDIPacketListInit(packetList);
-
-  Byte midi_data[3] = {NOTE_ON | (channel & CHAN_MASK), note, velocity};
-  currentPacket = MIDIPacketListAdd(packetList, sizeof(buffer), currentPacket,
-                                    t, 3, midi_data);
-
-  if (debug) {
-    printf("Sending note on: ch=%u note=%u vel=%u %llu\n", channel, note,
-           velocity, t);
+  int rate = ctx_sample_rate();
+  if (!isfinite(dur) || dur <= 0. || rate <= 0 || dur * rate < 1. ||
+      dur * rate >= (double)(UINT64_MAX - ts)) {
+    return -1;
   }
-
-  OSStatus result = MIDISend(output_port, destination, packetList);
-  return result == noErr ? 0 : -1;
+  // Queue the release before the attack to avoid an unpaired successful attack.
+  int result = send_note_off_ts(destination, channel, note, 0,
+                                ts + (uint64_t)(dur * rate));
+  if (result < 0) {
+    return result;
+  }
+  return send_note_on_ts(destination, channel, note, velocity, ts);
 }
 
 int send_cc(midi_endpoint_t destination, char channel, char control_number,
@@ -476,6 +477,29 @@ int send_ccs(midi_endpoint_t destination, int size, char *cc_data_ptr) {
 
   OSStatus result = MIDISend(output_port, destination, packet_list);
   return result == noErr ? 0 : -1;
+}
+
+static int send_transport_ts(midi_endpoint_t destination, Byte status,
+                              uint64_t tick) {
+  if (!destination || !output_port) {
+    return -1;
+  }
+  Byte buffer[1024];
+  MIDIPacketList *packets = (MIDIPacketList *)buffer;
+  MIDIPacket *packet = MIDIPacketListInit(packets);
+  if (!MIDIPacketListAdd(packets, sizeof(buffer), packet,
+                         sample_to_midi_timestamp(tick), 1, &status)) {
+    return -1;
+  }
+  return MIDISend(output_port, destination, packets) == noErr ? 0 : -1;
+}
+
+int send_midi_start_ts(midi_endpoint_t destination, uint64_t tick) {
+  return send_transport_ts(destination, MIDI_START, tick);
+}
+
+int send_midi_clock_ts(midi_endpoint_t destination, uint64_t tick) {
+  return send_transport_ts(destination, MIDI_CLOCK, tick);
 }
 
 // Transport functions

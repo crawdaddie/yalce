@@ -1,7 +1,10 @@
 #include "common.h"
 #ifndef __APPLE__
 #include "midi.h"
+#include "ctx.h"
+#include "scheduling.h"
 #include <inttypes.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,7 +45,11 @@ static TransportCallback midi_stop_handler;
 // ALSA-specific variables
 static snd_seq_t *seq_handle = NULL;
 static int client_id;
-static int output_port_id;
+static int output_port_id = -1;
+static int output_queue = -1;
+static uint64_t queue_sample;
+static int queue_rate;
+enum { MIDI_PORT_SHIFT = 16, MIDI_ADDR_MASK = 255, NS_PER_SECOND = 1000000000 };
 static int input_port_id;
 static pthread_t midi_thread;
 static int running = 0;
@@ -176,6 +183,10 @@ static void *midi_input_thread(void *arg) {
 
 // Setup functions
 void midi_setup() {
+  if (seq_handle != NULL) {
+    return;
+  }
+
   // Initialize handler arrays
   memset(cc_handlers, 0, sizeof(cc_handlers));
   memset(note_on_handlers, 0, sizeof(note_on_handlers));
@@ -209,13 +220,21 @@ void midi_setup() {
 
   printf("ALSA MIDI client created with ID %d\n", client_id);
   printf("MIDI input port created with ID %d\n", input_port_id);
-  printf("To connect MIDI devices, use: aconnect <source_client:port> %d:%d\n",
+  printf("For MIDI input only: aconnect <source_client:port> %d:%d\n",
          client_id, input_port_id);
 }
 
 void midi_out_setup() {
+  if (output_port_id >= 0) {
+    return;
+  }
+
   if (seq_handle == NULL) {
     midi_setup();
+  }
+
+  if (seq_handle == NULL) {
+    return;
   }
 
   output_port_id = snd_seq_create_simple_port(seq_handle, "Output Port",
@@ -228,21 +247,75 @@ void midi_out_setup() {
     return;
   }
 
+  output_queue = snd_seq_alloc_named_queue(seq_handle, "ylc sample timeline");
+  queue_rate = ctx_sample_rate();
+  queue_sample = get_current_sample();
+  if (output_queue < 0 || queue_rate <= 0 ||
+      snd_seq_start_queue(seq_handle, output_queue, NULL) < 0 ||
+      snd_seq_drain_output(seq_handle) < 0) {
+    if (output_queue >= 0) {
+      snd_seq_free_queue(seq_handle, output_queue);
+    }
+    snd_seq_delete_simple_port(seq_handle, output_port_id);
+    output_queue = -1;
+    output_port_id = -1;
+    fprintf(stderr, "Cannot start MIDI output queue\n");
+    return;
+  }
+
   printf("MIDI output port created with ID %d\n", output_port_id);
-  printf("To connect to MIDI devices, use: aconnect %d:%d <dest_client:port>\n",
-         client_id, output_port_id);
+}
+
+int midi_connect_output(midi_endpoint_t destination) {
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
+    return -1;
+  }
+  // ALSA hardware ports open their raw MIDI stream on subscription.
+  uintptr_t address = (uintptr_t)destination;
+  int result = snd_seq_connect_to(seq_handle, output_port_id,
+      (address >> MIDI_PORT_SHIFT) & MIDI_ADDR_MASK, address & MIDI_ADDR_MASK);
+  if (result < 0 && result != -EBUSY) {
+    fprintf(stderr, "Cannot connect MIDI output: %s\n", snd_strerror(result));
+    return -1;
+  }
+  return 0;
+}
+
+// Keep one mapping so equal sample ticks always produce equal deadlines.
+static int schedule_midi(snd_seq_event_t *event, uint64_t tick) {
+  if (output_queue < 0 || queue_rate <= 0 || tick < queue_sample) {
+    return -1;
+  }
+  // shortcut: nominal audio rate; presentation-clock drift needs calibration.
+  uint64_t samples = tick - queue_sample;
+  uint64_t seconds = samples / queue_rate;
+  if (seconds > UINT32_MAX) {
+    return -1;
+  }
+  snd_seq_real_time_t time = {
+      .tv_sec = seconds,
+      .tv_nsec = (samples % queue_rate) * NS_PER_SECOND / queue_rate};
+  snd_seq_ev_schedule_real(event, output_queue, 0, &time);
+  return 0;
+}
+
+static void route_midi(snd_seq_event_t *event, midi_endpoint_t destination) {
+  uintptr_t address = (uintptr_t)destination;
+  snd_seq_ev_set_dest(event, (address >> MIDI_PORT_SHIFT) & MIDI_ADDR_MASK,
+                      address & MIDI_ADDR_MASK);
 }
 
 // MIDI output functions
 int send_note_on(midi_endpoint_t destination, char channel, char note,
                  char velocity) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   snd_seq_event_t ev;
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_source(&ev, output_port_id);
-  snd_seq_ev_set_subs(&ev);
+  route_midi(&ev, destination);
   snd_seq_ev_set_direct(&ev);
   snd_seq_ev_set_noteon(&ev, channel, note, velocity);
 
@@ -251,19 +324,20 @@ int send_note_on(midi_endpoint_t destination, char channel, char note,
   }
 
   int result = snd_seq_event_output(seq_handle, &ev);
-  snd_seq_drain_output(seq_handle);
-  return result < 0 ? -1 : 0;
+  int drained = snd_seq_drain_output(seq_handle);
+  return result < 0 || drained < 0 ? -1 : 0;
 }
 
 int send_note_off(midi_endpoint_t destination, uint8_t channel, uint8_t note,
                   uint8_t velocity) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   snd_seq_event_t ev;
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_source(&ev, output_port_id);
-  snd_seq_ev_set_subs(&ev);
+  route_midi(&ev, destination);
   snd_seq_ev_set_direct(&ev);
   snd_seq_ev_set_noteoff(&ev, channel, note, velocity);
 
@@ -272,20 +346,23 @@ int send_note_off(midi_endpoint_t destination, uint8_t channel, uint8_t note,
   }
 
   int result = snd_seq_event_output(seq_handle, &ev);
-  snd_seq_drain_output(seq_handle);
-  return result < 0 ? -1 : 0;
+  int drained = snd_seq_drain_output(seq_handle);
+  return result < 0 || drained < 0 ? -1 : 0;
 }
 
 int send_note_on_ts(midi_endpoint_t destination, char channel, char note,
                     char velocity, uint64_t ts) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   snd_seq_event_t ev;
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_source(&ev, output_port_id);
-  snd_seq_ev_set_subs(&ev);
-  snd_seq_ev_schedule_tick(&ev, SND_SEQ_QUEUE_DIRECT, 0, ts);
+  route_midi(&ev, destination);
+  if (schedule_midi(&ev, ts) < 0) {
+    return -1;
+  }
   snd_seq_ev_set_noteon(&ev, channel, note, velocity);
 
   if (debug) {
@@ -294,49 +371,55 @@ int send_note_on_ts(midi_endpoint_t destination, char channel, char note,
   }
 
   int result = snd_seq_event_output(seq_handle, &ev);
-  snd_seq_drain_output(seq_handle);
-  return result < 0 ? -1 : 0;
+  int drained = snd_seq_drain_output(seq_handle);
+  return result < 0 || drained < 0 ? -1 : 0;
 }
 
 int send_note_off_ts(midi_endpoint_t destination, uint8_t channel, uint8_t note,
                      uint8_t velocity, uint64_t ts) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   snd_seq_event_t ev;
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_source(&ev, output_port_id);
-  snd_seq_ev_set_subs(&ev);
-  snd_seq_ev_schedule_tick(&ev, SND_SEQ_QUEUE_DIRECT, 0, ts - BUF_SIZE);
+  route_midi(&ev, destination);
+  if (schedule_midi(&ev, ts) < 0) {
+    return -1;
+  }
   snd_seq_ev_set_noteoff(&ev, channel, note, velocity);
 
   int result = snd_seq_event_output(seq_handle, &ev);
-  snd_seq_drain_output(seq_handle);
-  return result < 0 ? -1 : 0;
+  int drained = snd_seq_drain_output(seq_handle);
+  return result < 0 || drained < 0 ? -1 : 0;
 }
 
 int send_note_on_dur_ts(midi_endpoint_t destination, char channel, char note,
                         char velocity, double dur, uint64_t ts) {
-  // Send note on, then schedule note off after duration
-  int result = send_note_on_ts(destination, channel, note, velocity, ts);
-  if (result == 0) {
-    uint64_t note_off_time =
-        ts + (uint64_t)(dur * 48000.0); // Assuming 48kHz sample rate
-    result =
-        send_note_off_ts(destination, channel, note, velocity, note_off_time);
+  if (!isfinite(dur) || dur <= 0. || queue_rate <= 0 ||
+      dur * queue_rate < 1. || dur * queue_rate >= (double)(UINT64_MAX - ts)) {
+    return -1;
   }
-  return result;
+  // Submit the release first: a failed attack cannot leave a stuck note.
+  int result = send_note_off_ts(destination, channel, note, 0,
+                                ts + (uint64_t)(dur * queue_rate));
+  if (result < 0) {
+    return result;
+  }
+  return send_note_on_ts(destination, channel, note, velocity, ts);
 }
 
 int send_cc(midi_endpoint_t destination, char channel, char control_number,
             char value) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   snd_seq_event_t ev;
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_source(&ev, output_port_id);
-  snd_seq_ev_set_subs(&ev);
+  route_midi(&ev, destination);
   snd_seq_ev_set_direct(&ev);
   snd_seq_ev_set_controller(&ev, channel, control_number, value);
 
@@ -345,19 +428,20 @@ int send_cc(midi_endpoint_t destination, char channel, char control_number,
   }
 
   int result = snd_seq_event_output(seq_handle, &ev);
-  snd_seq_drain_output(seq_handle);
-  return result < 0 ? -1 : 0;
+  int drained = snd_seq_drain_output(seq_handle);
+  return result < 0 || drained < 0 ? -1 : 0;
 }
 
 int send_program_change(midi_endpoint_t destination, uint8_t channel,
                         uint8_t program) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   snd_seq_event_t ev;
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_source(&ev, output_port_id);
-  snd_seq_ev_set_subs(&ev);
+  route_midi(&ev, destination);
   snd_seq_ev_set_direct(&ev);
   snd_seq_ev_set_pgmchange(&ev, channel, program);
 
@@ -366,20 +450,23 @@ int send_program_change(midi_endpoint_t destination, uint8_t channel,
   }
 
   int result = snd_seq_event_output(seq_handle, &ev);
-  snd_seq_drain_output(seq_handle);
-  return result < 0 ? -1 : 0;
+  int drained = snd_seq_drain_output(seq_handle);
+  return result < 0 || drained < 0 ? -1 : 0;
 }
 
 int send_program_change_ts(midi_endpoint_t destination, uint8_t channel,
                            uint8_t program, uint64_t ts) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   snd_seq_event_t ev;
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_source(&ev, output_port_id);
-  snd_seq_ev_set_subs(&ev);
-  snd_seq_ev_schedule_tick(&ev, SND_SEQ_QUEUE_DIRECT, 0, ts);
+  route_midi(&ev, destination);
+  if (schedule_midi(&ev, ts) < 0) {
+    return -1;
+  }
   snd_seq_ev_set_pgmchange(&ev, channel, program);
 
   if (debug) {
@@ -387,14 +474,15 @@ int send_program_change_ts(midi_endpoint_t destination, uint8_t channel,
   }
 
   int result = snd_seq_event_output(seq_handle, &ev);
-  snd_seq_drain_output(seq_handle);
-  return result < 0 ? -1 : 0;
+  int drained = snd_seq_drain_output(seq_handle);
+  return result < 0 || drained < 0 ? -1 : 0;
 }
 
 // Bulk sending functions
 int send_note_ons(midi_endpoint_t destination, int size, char *note_data_ptr) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   for (int i = 0; i < size / 3; i++) {
     uint8_t channel = *(note_data_ptr + (i * 3));
@@ -404,7 +492,7 @@ int send_note_ons(midi_endpoint_t destination, int size, char *note_data_ptr) {
     snd_seq_event_t ev;
     snd_seq_ev_clear(&ev);
     snd_seq_ev_set_source(&ev, output_port_id);
-    snd_seq_ev_set_subs(&ev);
+    route_midi(&ev, destination);
     snd_seq_ev_set_direct(&ev);
     snd_seq_ev_set_noteon(&ev, channel, note, velocity);
 
@@ -421,8 +509,9 @@ int send_note_ons(midi_endpoint_t destination, int size, char *note_data_ptr) {
 }
 
 int send_note_offs(midi_endpoint_t destination, int size, char *note_data_ptr) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   for (int i = 0; i < size / 3; i++) {
     uint8_t channel = *(note_data_ptr + (i * 3));
@@ -432,7 +521,7 @@ int send_note_offs(midi_endpoint_t destination, int size, char *note_data_ptr) {
     snd_seq_event_t ev;
     snd_seq_ev_clear(&ev);
     snd_seq_ev_set_source(&ev, output_port_id);
-    snd_seq_ev_set_subs(&ev);
+    route_midi(&ev, destination);
     snd_seq_ev_set_direct(&ev);
     snd_seq_ev_set_noteoff(&ev, channel, note, velocity);
 
@@ -444,8 +533,9 @@ int send_note_offs(midi_endpoint_t destination, int size, char *note_data_ptr) {
 }
 
 int send_ccs(midi_endpoint_t destination, int size, char *cc_data_ptr) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   for (int i = 0; i < size / 3; i++) {
     uint8_t channel = *(cc_data_ptr + (i * 3));
@@ -455,7 +545,7 @@ int send_ccs(midi_endpoint_t destination, int size, char *cc_data_ptr) {
     snd_seq_event_t ev;
     snd_seq_ev_clear(&ev);
     snd_seq_ev_set_source(&ev, output_port_id);
-    snd_seq_ev_set_subs(&ev);
+    route_midi(&ev, destination);
     snd_seq_ev_set_direct(&ev);
     snd_seq_ev_set_controller(&ev, channel, control_number, value);
 
@@ -466,15 +556,43 @@ int send_ccs(midi_endpoint_t destination, int size, char *cc_data_ptr) {
   return 0;
 }
 
+// Queue transport beside notes so scheduler lookahead cannot send it early.
+static int send_transport_ts(midi_endpoint_t destination, int type,
+                              uint64_t tick) {
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
+    return -1;
+  }
+  snd_seq_event_t event;
+  snd_seq_ev_clear(&event);
+  snd_seq_ev_set_source(&event, output_port_id);
+  route_midi(&event, destination);
+  if (schedule_midi(&event, tick) < 0) {
+    return -1;
+  }
+  event.type = type;
+  int result = snd_seq_event_output(seq_handle, &event);
+  int drained = snd_seq_drain_output(seq_handle);
+  return result < 0 || drained < 0 ? -1 : 0;
+}
+
+int send_midi_start_ts(midi_endpoint_t destination, uint64_t tick) {
+  return send_transport_ts(destination, SND_SEQ_EVENT_START, tick);
+}
+
+int send_midi_clock_ts(midi_endpoint_t destination, uint64_t tick) {
+  return send_transport_ts(destination, SND_SEQ_EVENT_CLOCK, tick);
+}
+
 // Transport functions
 int send_midi_start(midi_endpoint_t destination) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   snd_seq_event_t ev;
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_source(&ev, output_port_id);
-  snd_seq_ev_set_subs(&ev);
+  route_midi(&ev, destination);
   snd_seq_ev_set_direct(&ev);
   ev.type = SND_SEQ_EVENT_START;
 
@@ -482,18 +600,19 @@ int send_midi_start(midi_endpoint_t destination) {
     printf("Sending MIDI start\n");
 
   int result = snd_seq_event_output(seq_handle, &ev);
-  snd_seq_drain_output(seq_handle);
-  return result < 0 ? -1 : 0;
+  int drained = snd_seq_drain_output(seq_handle);
+  return result < 0 || drained < 0 ? -1 : 0;
 }
 
 int send_midi_stop(midi_endpoint_t destination) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   snd_seq_event_t ev;
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_source(&ev, output_port_id);
-  snd_seq_ev_set_subs(&ev);
+  route_midi(&ev, destination);
   snd_seq_ev_set_direct(&ev);
   ev.type = SND_SEQ_EVENT_STOP;
 
@@ -501,18 +620,19 @@ int send_midi_stop(midi_endpoint_t destination) {
     printf("Sending MIDI stop\n");
 
   int result = snd_seq_event_output(seq_handle, &ev);
-  snd_seq_drain_output(seq_handle);
-  return result < 0 ? -1 : 0;
+  int drained = snd_seq_drain_output(seq_handle);
+  return result < 0 || drained < 0 ? -1 : 0;
 }
 
 int send_midi_continue(midi_endpoint_t destination) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   snd_seq_event_t ev;
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_source(&ev, output_port_id);
-  snd_seq_ev_set_subs(&ev);
+  route_midi(&ev, destination);
   snd_seq_ev_set_direct(&ev);
   ev.type = SND_SEQ_EVENT_CONTINUE;
 
@@ -520,36 +640,32 @@ int send_midi_continue(midi_endpoint_t destination) {
     printf("Sending MIDI continue\n");
 
   int result = snd_seq_event_output(seq_handle, &ev);
-  snd_seq_drain_output(seq_handle);
-  return result < 0 ? -1 : 0;
+  int drained = snd_seq_drain_output(seq_handle);
+  return result < 0 || drained < 0 ? -1 : 0;
 }
 
 int send_midi_clock(midi_endpoint_t destination) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return -1;
+  }
 
   snd_seq_event_t ev;
   snd_seq_ev_clear(&ev);
   snd_seq_ev_set_source(&ev, output_port_id);
-  snd_seq_ev_set_subs(&ev);
+  route_midi(&ev, destination);
   snd_seq_ev_set_direct(&ev);
   ev.type = SND_SEQ_EVENT_CLOCK;
 
   int result = snd_seq_event_output(seq_handle, &ev);
-  snd_seq_drain_output(seq_handle);
-  return result < 0 ? -1 : 0;
+  int drained = snd_seq_drain_output(seq_handle);
+  return result < 0 || drained < 0 ? -1 : 0;
 }
 
 // Device management functions
-midi_endpoint_t get_destination(midi_count_t index) {
-  // For ALSA, return a simple index-based reference
-  // In a real implementation, you'd enumerate actual ALSA ports
-  return (midi_endpoint_t)(uintptr_t)index;
-}
-
-midi_endpoint_t get_destination_by_name(const char *name) {
-  if (seq_handle == NULL)
+static midi_endpoint_t find_destination(midi_count_t index, const char *name) {
+  if (seq_handle == NULL) {
     return NULL;
+  }
 
   snd_seq_client_info_t *cinfo;
   snd_seq_port_info_t *pinfo;
@@ -565,8 +681,12 @@ midi_endpoint_t get_destination_by_name(const char *name) {
     snd_seq_port_info_set_port(pinfo, -1);
     while (snd_seq_query_next_port(seq_handle, pinfo) >= 0) {
       const char *port_name = snd_seq_port_info_get_name(pinfo);
-      if (strcmp(port_name, name) == 0) {
-        printf("found destination: %s\n", name);
+      unsigned int caps = snd_seq_port_info_get_capability(pinfo);
+      if (client == client_id || !(caps & SND_SEQ_PORT_CAP_WRITE) ||
+          !(caps & SND_SEQ_PORT_CAP_SUBS_WRITE)) {
+        continue;
+      }
+      if (name ? strcmp(port_name, name) == 0 : index-- == 0) {
         // Return a composite value encoding client:port
         int port = snd_seq_port_info_get_port(pinfo);
         return (midi_endpoint_t)(uintptr_t)((client << 16) | port);
@@ -574,6 +694,17 @@ midi_endpoint_t get_destination_by_name(const char *name) {
     }
   }
   return NULL;
+}
+
+midi_endpoint_t get_destination(midi_count_t index) {
+  return find_destination(index, NULL);
+}
+
+midi_endpoint_t get_destination_by_name(const char *name) {
+  if (name == NULL) {
+    return NULL;
+  }
+  return find_destination(0, name);
 }
 
 void list_destinations() {
@@ -624,8 +755,9 @@ void list_destinations() {
 
 // Raw data sending
 void send_data(midi_endpoint_t destination, size_t size, char *data) {
-  if (seq_handle == NULL)
+  if (seq_handle == NULL || output_port_id < 0 || destination == NULL) {
     return;
+  }
 
   // For ALSA, parse the raw data and send appropriate events
   for (int i = 0; i < size; i += 3) {
@@ -637,7 +769,7 @@ void send_data(midi_endpoint_t destination, size_t size, char *data) {
       snd_seq_event_t ev;
       snd_seq_ev_clear(&ev);
       snd_seq_ev_set_source(&ev, output_port_id);
-      snd_seq_ev_set_subs(&ev);
+      route_midi(&ev, destination);
       snd_seq_ev_set_direct(&ev);
 
       // Parse MIDI message type and set appropriate event

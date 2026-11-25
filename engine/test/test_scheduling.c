@@ -607,6 +607,22 @@ static void test_task_lookahead_tick(void) {
   cancel_task(handle);
 }
 
+static void zero_tick_cb(void *userdata, uint64_t tick) {
+  assert(tick == 0);
+  assert(get_tl_tick() == tick);
+  atomic_store(&global_sample_position, 256);
+  assert(get_tl_tick() == tick);
+  ylc_complete_current_task();
+}
+
+static void test_zero_tick_stays_fixed(void) {
+  reset_all();
+  int userdata = 0;
+  ylc_play_pattern_start(0., zero_tick_cb, &userdata);
+  process_scheduler_events(0);
+  assert(get_tl_tick() == 256);
+}
+
 static void complete_only_cb(void *userdata, uint64_t tick);
 static int future_parent_steps;
 static uint64_t future_child_tick;
@@ -1134,6 +1150,7 @@ int main(void) {
   RUN_TEST(test_schedule_event_conversion);
   RUN_TEST(test_fractional_task_delay);
   RUN_TEST(test_task_lookahead_tick);
+  RUN_TEST(test_zero_tick_stays_fixed);
   RUN_TEST(test_fork_uses_logical_tick);
   RUN_TEST(test_play_pattern_cancel_returned_handle);
   RUN_TEST(test_play_pattern_cancel_parent_cancels_child);
