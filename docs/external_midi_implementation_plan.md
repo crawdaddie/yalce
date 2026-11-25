@@ -3,6 +3,67 @@
 Status: proposed. Initial target: Linux/ALSA, Digitone 2, one fixed audio
 interface for capture and playback.
 
+## Sample accuracy requirement
+
+Sample accuracy is required. Musically tight playback or compensation of the
+average offset does not satisfy this requirement. The ALSA plan below is a
+candidate implementation, not evidence that the complete hardware path meets it.
+
+Use an intended output sample as the reference. After one fixed calibration,
+the measured external onset must remain within one output sample of its target
+under the supported workload, without per-note correction. At 48 kHz, one
+sample is approximately 20.83 microseconds. Define the onset detector and its
+measurement uncertainty before accepting hardware results.
+
+Distinguish three boundaries:
+
+| Boundary | Requirement |
+| --- | --- |
+| ylc event and internal audio activation | Exact target sample in deterministic tests. |
+| MIDI delivery to the synth | Verify physical delivery timing relative to the audio clock; kernel timestamps alone are insufficient evidence. |
+| Synth audio returned to the output | Verify the complete path within one sample after fixed calibration. Accurate MIDI output alone does not establish this. |
+
+DAW external-instrument routing and delay compensation do not establish a
+sample-accurate external onset guarantee. Ableton documents timing variation
+outside its control in its [MIDI fact sheet](https://www.ableton.com/en/manual/midi-fact-sheet/).
+Its published tests are examples, not measurements of the proposed setup.
+
+Audio-clocked MIDI hardware is a separate candidate. Expert Sleepers describes
+[USAMO](https://www.expert-sleepers.co.uk/usamo.html) as generating MIDI from an
+audio output, with sample-accurate MIDI timing. That claim concerns MIDI output,
+not the receiving synth's audio onset. Its supplied software lists Mac and
+Windows support; Linux/ylc integration must be established before choosing it.
+
+[Elektron Overbridge](https://www.elektron.se/support-downloads/overbridge)
+supports Digitone II. Investigate its timing contract and platform integration
+as another candidate; support for the instrument does not prove a sample-accurate
+onset guarantee. It is no longer excluded from feasibility research.
+
+## Feasibility gate before implementation
+
+Run this gate before building the broad scheduling API:
+
+1. Fix the intended monitoring route, interface, MIDI transport, sample rate,
+   buffer settings, and a reproducible sharp-transient Digitone patch.
+2. Record repeated external transients and an internal sample-timed reference
+   into a common measurement clock. Include the actual monitored output path.
+3. Measure individual onset errors after a single fixed offset. Report maximum
+   absolute error as well as median and percentiles. A passing average is not
+   sufficient.
+4. Repeat across callback phases, simultaneous notes, sustained traffic, CPU
+   load, and long sessions. Separate clock drift from delivery jitter and synth
+   response variation. Account for measurement error.
+5. If ordinary MIDI fails the one-sample requirement, evaluate an audio-clocked
+   MIDI transport and Overbridge before committing to the ALSA-only design.
+6. If no live path passes, mark the live requirement unmet. Capturing and
+   aligning audio for later sample-timed playback is a different workflow and
+   requires user acceptance; it is not a substitute hidden behind this API.
+
+Finite measurements establish performance within tested conditions, not an
+unconditional hardware guarantee. Identify which timing bounds the selected
+transport and device actually document. Delay general API work until the live
+path has enough evidence to justify it.
+
 ## Required behavior
 
 Inside a coroutine scheduled with `play_pattern`:
@@ -283,8 +344,8 @@ reuse; it does not justify a universal hard-coded offset.
 
 Internal activation can be sample accurate. External onset remains limited by
 driver reporting, MIDI delivery, synth response, and measurement uncertainty.
-Set the hardware tolerance from recorded results rather than claiming a
-sample-accurate Digitone path before measurement.
+The hardware tolerance is the one-sample requirement above. Measurements decide
+whether the path passes; they must not be used to relax the requirement.
 
 ## Boundaries and remaining setup
 
@@ -292,10 +353,11 @@ Initial scope is one configured instrument port, the fixed duplex interface,
 scheduled notes, manual measured compensation, and an optional audio_jit return.
 MIDI clock synchronization is not required when ylc sends individual notes.
 
-Defer MPE, fractional pitch, Overbridge integration, automatic instrument
+Defer MPE, fractional pitch, production Overbridge integration, automatic instrument
 discovery, multiple audio interfaces, general graph-wide delay compensation,
 and faster-than-real-time rendering of external hardware. macOS scheduling
 requires a separate CoreMIDI implementation of the same timing contract.
+Overbridge feasibility research remains part of the sample-accuracy gate.
 
 Before hardware verification, identify USB MIDI versus DIN, the interface name,
 input channels, and the Digitone receive channel. These determine routing and
