@@ -5,7 +5,7 @@ let Kick = module () ->
   let kicks = @Audio fn freq dur ->
     let trigger = trig 0;
     let body = trigger
-      |> decay 0.01
+      |> decay 0.005
       |> scale freq 6000
       |> sin_osc
       ;
@@ -176,7 +176,7 @@ let Snare = module () ->
       |> kill_on_end;
     let wire_gain = scale 0.15 1.2 velocity;
     let body_gain = scale 0.8 0.4 velocity;
-    (body_gain * (heads + modes) + wire_gain * wires * wire_env) * velocity * 0.4
+    (body_gain * (heads + modes) + wire_gain * wires * wire_env) * velocity
   ;;
 
   let defs = [| 0.3, 0.8 |];
@@ -214,7 +214,7 @@ let Snare2 = module () ->
       |> Filter.hpf 30. filter_q # Remove the asymmetric pulse's DC offset.
       |> Filter.lpf cutoff_hz filter_q
       |> Filter.lpf cutoff_hz filter_q
-      |> (*) (envelope * velocity * 0.4)
+      |> (*) (envelope * velocity)
   ;;
 
   let defs = [| 0.25, 0.8 |];
@@ -351,7 +351,7 @@ let s = fn () ->
   yield s ()
 ;;
 
-[0.125] |> iter |> cor_loop |> cor_map (fn d -> Hihat.play [("vel", 1.),]; d) |> play_pattern 0.; 
+[0.125, 0.125, 0.25] |> iter |> cor_loop |> cor_map (fn d -> Hihat.play [("vel", 1.),]; d) |> play_pattern 0.; 
 s () |> play_pattern 0.;
 x () |> play_pattern 0.;
 

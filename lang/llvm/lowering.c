@@ -2334,6 +2334,11 @@ static LLVMValueRef lower_mir_array_range(MirFunction *fn, MirInstr *instr,
   return LLVMBuildInsertValue(builder, result, new_data_ptr, 2, "array.data");
 }
 
+static void lower_mir_emit_value_rc_marker(LLVMBuilderRef builder,
+                                           LLVMValueRef value, Type *type,
+                                           LLVMModuleRef module,
+                                           JITLangCtx *ctx, bool is_dup);
+
 static LLVMValueRef
 lower_mir_array_fill_data(MirFunction *fn, MirInstr *instr,
                           MirLlvmValueMap *values, LLVMModuleRef module,
@@ -2408,18 +2413,28 @@ lower_mir_array_fill_data(MirFunction *fn, MirInstr *instr,
     return NULL;
   }
 
+  /* Each filled slot owns its copy, including references inside tuples. */
+  if (fill_type) {
+    lower_mir_emit_value_rc_marker(builder, element, fill_type, module, ctx,
+                                   true);
+  }
   LLVMValueRef element_ptr = LLVMBuildGEP2(builder, element_type, data_ptr,
                                            &index, 1, "array.fill.ptr");
   LLVMBuildStore(builder, element, element_ptr);
 
   LLVMValueRef one = LLVMConstInt(i32, 1, false);
   LLVMValueRef next = LLVMBuildAdd(builder, index, one, "array.fill.next");
-  LLVMAddIncoming(index, &next, &loop_block, 1);
+  LLVMBasicBlockRef backedge = LLVMGetInsertBlock(builder);
+  LLVMAddIncoming(index, &next, &backedge, 1);
   LLVMValueRef more =
       LLVMBuildICmp(builder, LLVMIntULT, next, size, "array.fill.more");
   LLVMBuildCondBr(builder, more, loop_block, after_block);
 
   LLVMPositionBuilderAtEnd(builder, after_block);
+  if (fill_type) {
+    lower_mir_emit_value_rc_marker(builder, fill_source, fill_type, module,
+                                   ctx, false);
+  }
   LLVMValueRef result = LLVMGetUndef(codegen_array_type(element_type));
   result = LLVMBuildInsertValue(builder, result, size, 0, "array.size");
   result = LLVMBuildInsertValue(builder, result, zero, 1, "array.offset");
@@ -4017,11 +4032,6 @@ static MirFunction *lower_mir_call_fn_ref_target(MirLlvmCtx *lctx,
 
   return target;
 }
-
-static void lower_mir_emit_value_rc_marker(LLVMBuilderRef builder,
-                                           LLVMValueRef value, Type *type,
-                                           LLVMModuleRef module,
-                                           JITLangCtx *ctx, bool is_dup);
 
 static LLVMValueRef lower_mir_emit_coro_reset_handle(Type *yield_type,
                                                      LLVMValueRef handle,
@@ -6557,6 +6567,95 @@ static LLVMValueRef lower_mir_rc_drop_reuse(MirFunction *fn, MirInstr *instr,
   return phi;
 }
 
+static LLVMValueRef lower_list_reverse(MirFunction *fn, MirInstr *instr,
+                                       MirLlvmValueMap *values,
+                                       LLVMModuleRef module,
+                                       LLVMBuilderRef builder, JITLangCtx *ctx) {
+  Type *element = type_of_list(instr->type);
+  LLVMTypeRef stored = lower_mir_value_storage_type(element, ctx, module);
+  LLVMValueRef input = mir_llvm_value_get_rvalue(
+      values, instr->data.op.operands[0], builder);
+  if (!stored || !input) {
+    return NULL;
+  }
+
+  LLVMContextRef context = LLVMGetModuleContext(module);
+  LLVMTypeRef pointer = lower_mir_generic_ptr_type(module);
+  LLVMTypeRef node_type = llnode_type(stored);
+  LLVMTypeRef header_type = lower_mir_rc_header_type(module);
+  LLVMTypeRef i32 = LLVMInt32TypeInContext(context);
+  LLVMValueRef nil = LLVMConstNull(pointer);
+  LLVMBasicBlockRef entry = LLVMGetInsertBlock(builder);
+  LLVMValueRef parent = LLVMGetBasicBlockParent(entry);
+  LLVMBasicBlockRef loop =
+      LLVMAppendBasicBlockInContext(context, parent, "reverse.loop");
+  LLVMBasicBlockRef check =
+      LLVMAppendBasicBlockInContext(context, parent, "reverse.check");
+  LLVMBasicBlockRef copy =
+      LLVMAppendBasicBlockInContext(context, parent, "reverse.copy");
+  LLVMBasicBlockRef link =
+      LLVMAppendBasicBlockInContext(context, parent, "reverse.link");
+  LLVMBasicBlockRef done =
+      LLVMAppendBasicBlockInContext(context, parent, "reverse.done");
+  LLVMBuildBr(builder, loop);
+
+  LLVMPositionBuilderAtEnd(builder, loop);
+  LLVMValueRef current = LLVMBuildPhi(builder, pointer, "reverse.current");
+  LLVMValueRef previous = LLVMBuildPhi(builder, pointer, "reverse.previous");
+  LLVMAddIncoming(current, &input, &entry, 1);
+  LLVMAddIncoming(previous, &nil, &entry, 1);
+  LLVMValueRef nonempty =
+      LLVMBuildICmp(builder, LLVMIntNE, current, nil, "reverse.nonempty");
+  LLVMBuildCondBr(builder, nonempty, check, done);
+
+  LLVMPositionBuilderAtEnd(builder, check);
+  LLVMValueRef tail_ptr =
+      LLVMBuildStructGEP2(builder, node_type, current, 1, "reverse.tail.ptr");
+  LLVMValueRef next = LLVMBuildLoad2(builder, pointer, tail_ptr, "reverse.next");
+  LLVMValueRef minus_one = LLVMConstInt(i32, -1, true);
+  LLVMValueRef header = LLVMBuildGEP2(builder, header_type, current, &minus_one,
+                                     1, "reverse.header");
+  LLVMValueRef rc_ptr =
+      LLVMBuildStructGEP2(builder, header_type, header, 0, "reverse.rc.ptr");
+  LLVMValueRef rc = LLVMBuildLoad2(builder, i32, rc_ptr, "reverse.rc");
+  LLVMValueRef unique = LLVMBuildICmp(builder, LLVMIntEQ, rc,
+                                     LLVMConstInt(i32, 1, false),
+                                     "reverse.unique");
+  LLVMBuildCondBr(builder, unique, link, copy);
+
+  /* Shared (or static) nodes stay intact; acquire their head and tail first. */
+  LLVMPositionBuilderAtEnd(builder, copy);
+  LLVMValueRef fresh =
+      lower_mir_heap_alloc_payload(module, builder, node_type, 0, "reverse.copy");
+  LLVMValueRef head_ptr =
+      LLVMBuildStructGEP2(builder, node_type, current, 0, "reverse.head.ptr");
+  LLVMValueRef head = LLVMBuildLoad2(builder, stored, head_ptr, "reverse.head");
+  lower_mir_emit_value_rc_marker(builder, head, element, module, ctx, true);
+  lower_mir_emit_value_rc_marker(builder, next, instr->type, module, ctx, true);
+  lower_mir_emit_value_rc_marker(builder, current, instr->type, module, ctx,
+                                 false);
+  LLVMValueRef fresh_head =
+      LLVMBuildStructGEP2(builder, node_type, fresh, 0, "reverse.copy.head");
+  LLVMBuildStore(builder, head, fresh_head);
+  LLVMBasicBlockRef copied = LLVMGetInsertBlock(builder);
+  LLVMBuildBr(builder, link);
+
+  /* A unique node transfers its existing tail ownership into the next step. */
+  LLVMPositionBuilderAtEnd(builder, link);
+  LLVMValueRef node = LLVMBuildPhi(builder, pointer, "reverse.node");
+  LLVMAddIncoming(node, &current, &check, 1);
+  LLVMAddIncoming(node, &fresh, &copied, 1);
+  LLVMValueRef node_tail =
+      LLVMBuildStructGEP2(builder, node_type, node, 1, "reverse.node.tail");
+  LLVMBuildStore(builder, previous, node_tail);
+  LLVMAddIncoming(current, &next, &link, 1);
+  LLVMAddIncoming(previous, &node, &link, 1);
+  LLVMBuildBr(builder, loop);
+
+  LLVMPositionBuilderAtEnd(builder, done);
+  return previous;
+}
+
 static LLVMValueRef lower_mir_print(MirFunction *fn, MirInstr *instr,
                                     MirLlvmValueMap *values,
                                     LLVMModuleRef module,
@@ -6937,6 +7036,8 @@ static LLVMValueRef lower_mir_op(MirFunction *fn, MirInstr *instr,
     return lower_mir_sizeof(instr, module, ctx);
   case MIR_OP_KIND_LIST_IS_EMPTY:
     return lower_mir_list_is_empty(fn, instr, values, builder);
+  case MIR_OP_KIND_LIST_REVERSE:
+    return lower_list_reverse(fn, instr, values, module, builder, ctx);
   case MIR_OP_KIND_TAG_EQ:
     return lower_mir_tag_eq(instr, values, builder);
   case MIR_OP_KIND_STR:

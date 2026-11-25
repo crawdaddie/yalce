@@ -69,6 +69,7 @@ typedef struct BuiltinEnvRefs {
   TypeEnv *logical_and;
   TypeEnv *logical_or;
   TypeEnv *logical_not;
+  TypeEnv *list_reverse;
 } BuiltinEnvRefs;
 
 extern BuiltinEnvRefs builtin_envs;

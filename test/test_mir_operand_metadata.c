@@ -247,6 +247,17 @@ static bool test_coro_reset(void) {
 int main(void) {
   bool ok = true;
 
+  MirInstr reverse = {
+      .kind = MIR_OP,
+      .data.op = {.kind = MIR_OP_KIND_LIST_REVERSE,
+                  .argc = 1,
+                  .operands = {30}},
+  };
+  ExpectedOperand reverse_arg[] = {
+      {30, MIR_OPERAND_ROLE_CONTAINER, MIR_OPERAND_USE_CONSUME, 0},
+  };
+  ok &= check_operands("list.reverse", &reverse, reverse_arg, 1);
+
   ok &= test_construct_items("construct.tuple", MIR_CONSTRUCT_TUPLE,
                              MIR_OPERAND_ROLE_FIELD,
                              MIR_OPERAND_USE_CONSUME);

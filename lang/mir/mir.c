@@ -1573,6 +1573,7 @@ static MirOperandRole mir_op_operand_role(const MirInstr *instr, size_t index) {
   case MIR_OP_KIND_TAG_EQ:
     return MIR_OPERAND_ROLE_TAG;
   case MIR_OP_KIND_LIST_IS_EMPTY:
+  case MIR_OP_KIND_LIST_REVERSE:
   case MIR_OP_KIND_ARRAY_SIZE:
     return MIR_OPERAND_ROLE_CONTAINER;
   case MIR_OP_KIND_ARRAY_SET:
@@ -1602,7 +1603,8 @@ static MirOperandUse mir_op_operand_use(const MirInstr *instr, size_t index) {
     return MIR_OPERAND_USE_BORROW;
   }
 
-  return ((instr->data.op.kind == MIR_OP_KIND_ARRAY_SET && index == 2) ||
+  return ((instr->data.op.kind == MIR_OP_KIND_LIST_REVERSE && index == 0) ||
+          (instr->data.op.kind == MIR_OP_KIND_ARRAY_SET && index == 2) ||
           (instr->data.op.kind == MIR_OP_KIND_STORE && index == 1) ||
           (instr->data.op.kind == MIR_OP_KIND_GLOBAL_STORE && index == 0))
              ? MIR_OPERAND_USE_CONSUME
@@ -8834,6 +8836,8 @@ static const char *mir_op_kind_name(MirOpKind kind) {
     return "tag_eq";
   case MIR_OP_KIND_LIST_IS_EMPTY:
     return "list_is_empty";
+  case MIR_OP_KIND_LIST_REVERSE:
+    return "list_reverse";
   case MIR_OP_KIND_ARRAY_SIZE:
     return "array_size";
   case MIR_OP_KIND_ARRAY_SET:

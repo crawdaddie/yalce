@@ -186,6 +186,11 @@ let A4 = module () ->
       |> amp (rect dur trigger) 0.003 1. 0.2
   ;;
 
+  let sync_lead_node = synth_default [|(65. |> midicps), 4., 19., 1., 4000.|] s_sync_lead;
+  let rs = @Audio fn inp -> inp |> comb 0.25 0.25 0.9 |> Reverb.cathedral;;
+  let r = rs 0. |> play_node;
+  let sync_lead = fn pl -> sync_lead_node pl ~> r;
+
   let s_am_bell = @Audio fn freq dur ratio depth ->
     let trigger = trig 0;
     let source = triangle freq 0.2;
@@ -197,37 +202,79 @@ let A4 = module () ->
   ;;
 ;
 
-let rs = @Audio fn inp -> inp |> comb 0.25 0.25 0.9 |> Reverb.cathedral;;
-let r = rs 0. |> play_node;
 # let |> play_node = play_node;
 
-let x = fn () ->
-  A4.bass [("freq", 34. |> midicps),];
-  A4.s_sync_lead (66. |> midicps) 2. 19. 1. 4000. ~> r;
-  yield 4.;
-  A4.bass [("freq", 41. |> midicps),];
-  A4.s_sync_lead (66. |> midicps) 4. 19. 1. 4000. ~> r;
-  yield 2.;
-  A4.s_sync_lead (63. |> midicps) 4. 19. 1. 4000. ~> r;
-  A4.s_sync_lead (65. |> midicps) 4. 19. 1. 4000. ~> r;
-  yield 2.;
-  A4.bass [("freq", 42. |> midicps), ("dur", 3.)];
-  A4.s_sync_lead (65. |> midicps) 4. 19. 1. 4000. ~> r;
-  yield 3.;
-  A4.bass [("freq", 39. |> midicps), ("dur", 1.)];
-  A4.s_sync_lead (63. |> midicps) 2. 19. 1. 4000. ~> r;
-  yield 1.;
-  A4.bass [("freq", 46. |> midicps),];
-  A4.s_sync_lead (70. |> midicps) 4. 19. 1. 4000. ~> r;
-  A4.s_sync_lead (65. |> midicps) 2. 19. 1. 4000. ~> r;
-  yield 2.;
-  A4.s_sync_lead (63. |> midicps) 4. 19. 1. 4000. ~> r;
-  A4.s_sync_lead (65. |> midicps) 4. 19. 1. 4000. ~> r;
-  yield 2.;
+# let x = fn () ->
+#   A4.bass [("freq", 34. |> midicps),];
+#   A4.s_sync_lead (66. |> midicps) 2. 19. 1. 4000. ~> r;
+#   yield 4.;
+#   A4.bass [("freq", 41. |> midicps),];
+#   A4.s_sync_lead (66. |> midicps) 4. 19. 1. 4000. ~> r;
+#   yield 2.;
+#   A4.s_sync_lead (63. |> midicps) 4. 19. 1. 4000. ~> r;
+#   A4.s_sync_lead (65. |> midicps) 4. 19. 1. 4000. ~> r;
+#   yield 2.;
+#   A4.bass [("freq", 42. |> midicps), ("dur", 3.)];
+#   A4.s_sync_lead (65. |> midicps) 4. 19. 1. 4000. ~> r;
+#   yield 3.;
+#   A4.bass [("freq", 39. |> midicps), ("dur", 1.)];
+#   A4.s_sync_lead (63. |> midicps) 2. 19. 1. 4000. ~> r;
+#   yield 1.;
+#   A4.bass [("freq", 46. |> midicps),];
+#   A4.s_sync_lead (70. |> midicps) 4. 19. 1. 4000. ~> r;
+#   A4.s_sync_lead (65. |> midicps) 2. 19. 1. 4000. ~> r;
+#   yield 2.;
+#   A4.s_sync_lead (63. |> midicps) 4. 19. 1. 4000. ~> r;
+#   A4.s_sync_lead (65. |> midicps) 4. 19. 1. 4000. ~> r;
+#   yield 2.;
+#
+#   yield x ()
+# ;;
+import Tracker;
+let beat = 1.;
+import std/Lists;
+import std/Arrays;
 
-  yield x ()
+let plist_conv = fn parr ->
+  Arrays.fold (fn params (c, i) -> match c with
+  | 'r' -> ("repeat", Double i)::params
+  | _ -> params
+  ) [] parr
 ;;
-x () |> play_pattern 0.;
+
+let handle_pat_ev = fn ctx note_dur note instr plist ->
+  match instr with
+  | 0 -> (A4.bass [("freq", Double note |> midicps), ("dur", note_dur)]; ())
+  | 1 -> (A4.sync_lead (("freq", Double note |> midicps)::("dur", note_dur)::(plist_conv plist)); ())
+  | _ -> ()
+;;
+
+let pat = `
+00a#1 ;01f#5
+
+
+
+00f2  ;01f#5
+
+      ;01d#5  ;01f5;
+
+00f#2 ;01f5   ;
+
+
+00d#2 ;01d#5  ;
+00a#2 ;01f5   ;01a#5
+
+      ;01f#5  ;01d#5
+
+`; 
+
+pat |> Tracker.parse_pattern
+    |> Tracker.pattern_cor_ctx (bpm: 120., spl: beat, logical_time: 0. ) 0
+    |> cor_map (Tracker.handle_ev_ctx handle_pat_ev)
+    |> cor_loop 
+    |> play_pattern 0.
+    ;
+# x () |> play_pattern 0.;
 # A4.am_bell 220. 2. 2.73 1. |> play_node;
 # Use any input signal in the filters/AM for external or neighbor-style routing.
 # shortcut: naive wave edges/sync alias; add oversampling before hardware matching.

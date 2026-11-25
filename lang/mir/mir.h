@@ -180,6 +180,7 @@ typedef enum {
   MIR_OP_KIND_DUP,
   MIR_OP_KIND_DROP,
   MIR_OP_KIND_DROP_REUSE,
+  MIR_OP_KIND_LIST_REVERSE,
 } MirOpKind;
 
 typedef enum {

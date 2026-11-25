@@ -135,7 +135,7 @@ static bool type_contains_unwrapped_recursive_ref_name(Type *type,
 }
 
 static bool type_uses_named_recursive_storage(Type *type) {
-  if (!type || type->kind != T_CONS || !type->alias) {
+  if (!type || (type->kind != T_CONS && type->kind != T_SUM)) {
     return false;
   }
 
@@ -144,7 +144,8 @@ static bool type_uses_named_recursive_storage(Type *type) {
     return false;
   }
 
-  return type_contains_recursive_ref_name(type, type->alias);
+  const char *name = type->kind == T_SUM ? type_codegen_name(type) : type->alias;
+  return name && type_contains_recursive_ref_name(type, name);
 }
 
 bool type_uses_boxed_recursive_storage(Type *type) {
@@ -409,6 +410,10 @@ LLVMTypeRef type_to_llvm_type(Type *type, JITLangCtx *ctx,
       return LLVMInt8TypeInContext(module_context(module));
     }
 
+    /* Recursive sums and their back-references must use one LLVM type. */
+    if (type_uses_named_recursive_storage(type)) {
+      return recursive_ref_aggregate_type(type, ctx, module);
+    }
     return codegen_adt_type(type, ctx, module);
   }
 

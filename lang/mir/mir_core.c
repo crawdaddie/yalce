@@ -706,6 +706,17 @@ static MirValueId MirConstructorHandler(MirBuilder *builder, Ast *app,
                               app->data.AST_APPLICATION.len, ctx);
 }
 
+static MirValueId MirListReverseHandler(MirBuilder *builder, Ast *app,
+                                       MirCtx *ctx, MirBuiltinSymbol *symbol) {
+  (void)symbol;
+  if (!mir_builtin_arity(app, 1) || !is_list_type(app->type)) {
+    return MIR_NO_VALUE;
+  }
+
+  MirValueId list = mir_expr(builder, app->data.AST_APPLICATION.args, ctx);
+  return mir_emit_op1(builder, MIR_OP_KIND_LIST_REVERSE, app->type, app, list);
+}
+
 static MirValueId MirListPrependHandler(MirBuilder *builder, Ast *app,
                                         MirCtx *ctx, MirBuiltinSymbol *symbol) {
   (void)symbol;
@@ -2636,6 +2647,11 @@ void mir_register_core_builtins(MirProgram *program) {
       MIR_BUILTIN_SYMBOL_CORE,
       (const MirOperandUse[]){MIR_OPERAND_USE_CONSUME, MIR_OPERAND_USE_CONSUME},
       2, MIR_RESULT_OWNED);
+
+  mir_register_builtin(program, builtin_envs.list_reverse, MirListReverseHandler,
+                       MIR_BUILTIN_SYMBOL_CORE,
+                       (const MirOperandUse[]){MIR_OPERAND_USE_CONSUME}, 1,
+                       MIR_RESULT_OWNED);
 
   mir_register_builtin(program, lookup_builtin_env(TYPE_NAME_DOUBLE),
                        MirDoubleConstructorHandler, MIR_BUILTIN_SYMBOL_CORE,

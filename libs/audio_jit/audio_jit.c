@@ -877,13 +877,7 @@ static bool audio_mir_set_fn_return_type(MirArena *arena, MirFunction *fn,
   }
 
   size_t params_len = fn->params.len;
-  Type **params = params_len
-                      ? mir_arena_alloc(arena, sizeof(Type *) * params_len,
-                                        __alignof__(Type *))
-                      : NULL;
-  if (params_len && !params) {
-    return false;
-  }
+  Type *params[params_len ? params_len : 1];
 
   for (size_t i = 0; i < params_len; i++) {
     params[i] = fn->params.items[i].type ? fn->params.items[i].type : &t_void;
@@ -927,21 +921,9 @@ static MirFunction *audio_mir_build_kernel_fn(MirAudioSynthBuildCtx *ctx,
 
   MirArena *arena = ctx->arena ? ctx->arena : ctx->program->arena;
   size_t params_len = input_params_len + 4;
-  Type **params = params_len
-                      ? mir_arena_alloc(arena, sizeof(Type *) * params_len,
-                                        __alignof__(Type *))
-                      : NULL;
-  const char **names = params_len
-                           ? mir_arena_alloc(arena, sizeof(char *) * params_len,
-                                             __alignof__(char *))
-                           : NULL;
-  Ast **origins = params_len
-                      ? mir_arena_alloc(arena, sizeof(Ast *) * params_len,
-                                        __alignof__(Ast *))
-                      : NULL;
-  if (!params || !names || !origins) {
-    return NULL;
-  }
+  Type *params[params_len];
+  const char *names[params_len];
+  Ast *origins[params_len];
 
   params[0] = &t_ptr;
   names[0] = "node";
@@ -3150,13 +3132,7 @@ static AudioValue audio_mir_call_application(AudioCompileCtx *audio, Ast *app) {
   }
 
   for (int lane = 0; lane < lanes; lane++) {
-    MirValueId *call_args =
-        argc ? mir_arena_alloc(audio->arena, sizeof(MirValueId) * argc,
-                               __alignof__(MirValueId))
-             : NULL;
-    if (argc && !call_args) {
-      return AUDIO_VALUE_NULL;
-    }
+    MirValueId call_args[argc ? argc : 1];
 
     for (size_t i = 0; i < argc; i++) {
       call_args[i] = audio_mir_lane_as_formal(
@@ -3260,11 +3236,7 @@ static AudioValue audio_mir_emit_kernel_call_lanes(
       state_ptr = shared_state;
     }
 
-    MirValueId *call_args = mir_arena_alloc(
-        audio->arena, sizeof(MirValueId) * params_len, __alignof__(MirValueId));
-    if (!call_args) {
-      return AUDIO_VALUE_NULL;
-    }
+    MirValueId call_args[params_len];
     call_args[0] = state_ptr;
     call_args[1] = audio->spf_param;
     for (size_t i = 0; i < argc; i++) {
@@ -5042,12 +5014,7 @@ static AudioValue audio_mir_emit_array_control_values(
       return AUDIO_VALUE_NULL;
     }
 
-    MirValueId *call_args =
-        mir_arena_alloc(audio->arena, sizeof(*call_args) * param_count,
-                        __alignof__(MirValueId));
-    if (!call_args) {
-      return AUDIO_VALUE_NULL;
-    }
+    MirValueId call_args[param_count];
     call_args[0] = state_ptr;
     call_args[1] = audio->spf_param;
     call_args[2] = parts.size;
@@ -8034,8 +8001,7 @@ static void audio_mir_emit_frame_adapter(AudioCompileCtx *audio) {
 
   size_t input_count = audio->bundle ? (size_t)audio->bundle->num_inputs : 0;
   size_t kernel_argc = input_count + 4;
-  MirValueId *kernel_args = mir_arena_alloc(
-      audio->arena, sizeof(MirValueId) * kernel_argc, __alignof__(MirValueId));
+  MirValueId kernel_args[kernel_argc];
 
   kernel_args[0] = audio->node_param;
   kernel_args[1] = audio->state_param;
@@ -9121,10 +9087,7 @@ static MirValueId MirCompilePmapHandler(MirBuilder *builder, Ast *app,
     table_len += strlen(synth->metadata.param_names[i]) + 1;
   }
 
-  char *table = mir_arena_alloc(arena, table_len + 1, __alignof__(char));
-  if (!table) {
-    return MIR_NO_VALUE;
-  }
+  char table[table_len + 1];
 
   size_t offset = 0;
   for (int i = 0; i < count; i++) {
@@ -9260,13 +9223,7 @@ static MirValueId MirCompileSynthHandler(MirBuilder *builder, Ast *app,
   }
 
   int count = synth->metadata.count;
-  MirValueId *values = count
-                           ? mir_arena_alloc(arena, sizeof(MirValueId) * count,
-                                             __alignof__(MirValueId))
-                           : NULL;
-  if (count && !values) {
-    return MIR_NO_VALUE;
-  }
+  MirValueId values[count ? count : 1];
   for (int i = 0; i < count; i++) {
     values[i] =
         audio_mir_array_num_at(builder, app, array, args[1].type, arena, i);
@@ -9334,14 +9291,7 @@ static MirValueId MirCompileDefaultHandler(MirBuilder *builder, Ast *app,
   mir_builder_init(&wb, builder->program, fn);
   mir_builder_position_at_end(&wb, entry);
   MirValueId initial_values = mir_tuple_get(&wb, array_type, app, env, 0);
-  MirValueId *defaults =
-      synth->metadata.count
-          ? mir_arena_alloc(arena, sizeof(MirValueId) * synth->metadata.count,
-                            __alignof__(MirValueId))
-          : NULL;
-  if (synth->metadata.count && !defaults) {
-    return MIR_NO_VALUE;
-  }
+  MirValueId defaults[synth->metadata.count ? synth->metadata.count : 1];
   for (int i = 0; i < synth->metadata.count; i++) {
     defaults[i] =
         audio_mir_array_num_at(&wb, app, initial_values, array_type, arena, i);

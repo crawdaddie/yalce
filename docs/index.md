@@ -34,6 +34,11 @@ ln -s "$PWD/build/ylc" "$HOME/.local/bin/ylc"
 - [Examples](examples.md) 
 - [Reference](reference.md) - language reference 
 
+## Audio implementation notes
+
+- [Band-limited oscillators for A4 voices](bandlimited_oscillators.md)
+- [Reverb implementation plan](reverb_implementation_plan.md)
+
 
 ## Examples
 

@@ -566,6 +566,52 @@ static void mir_perceus_build_borrow_parents(MirFunction *fn,
       }
     }
   }
+
+  /* A branch selecting slices of one container still borrows that container. */
+  bool changed;
+  do {
+    changed = false;
+    for (size_t i = 0; i < fn->blocks.len; i++) {
+      MirBlock *block = fn->blocks.items[i];
+      if (!block) {
+        continue;
+      }
+      for (size_t j = 0; j < block->instrs.len; j++) {
+        MirInstr *instr = &block->instrs.items[j];
+        if (instr->kind != MIR_PHI ||
+            liveness->borrow_parent[instr->result] != MIR_NO_VALUE) {
+          continue;
+        }
+        MirValueId common = MIR_NO_VALUE;
+        for (size_t k = 0; k < instr->data.phi.incoming.len; k++) {
+          MirValueId value = instr->data.phi.incoming.items[k].value;
+          MirValueId root = liveness->borrow_parent[value];
+          if (root == MIR_NO_VALUE) {
+            common = MIR_NO_VALUE;
+            break;
+          }
+          size_t depth = 0;
+          while (liveness->borrow_parent[root] != MIR_NO_VALUE &&
+                 depth++ < liveness->value_count) {
+            root = liveness->borrow_parent[root];
+          }
+          if (depth >= liveness->value_count || root == instr->result) {
+            common = MIR_NO_VALUE;
+            break;
+          }
+          if (k > 0 && root != common) {
+            common = MIR_NO_VALUE;
+            break;
+          }
+          common = root;
+        }
+        if (common != MIR_NO_VALUE) {
+          liveness->borrow_parent[instr->result] = common;
+          changed = true;
+        }
+      }
+    }
+  } while (changed);
 }
 
 /* Backward dataflow: live_out = union of successors' live_in (plus values used

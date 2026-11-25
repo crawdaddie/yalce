@@ -709,6 +709,16 @@ static TypeEnv *make_array_offset_env(void) {
   return entry;
 }
 
+static TypeEnv *make_list_reverse_env(void) {
+  Type *a = tvar("a");
+  Type *list = create_list_type_of_type(a);
+  TypeEnv *entry = t_alloc(sizeof(TypeEnv));
+  *entry = (TypeEnv){.name = "list_reverse",
+                     .type = type_fn(list, list),
+                     .scheme_vars = vlist_of_typevar(a)};
+  return entry;
+}
+
 static TypeEnv *make_list_prepend_env(void) {
   // (::) : a -> List a -> List a
   Type *a = tvar("a");
@@ -1094,6 +1104,8 @@ void initialize_builtin_types() {
   builtin_envs.array_offset = make_array_offset_env();
   add_builtin_env("array_offset", builtin_envs.array_offset);
   builtin_envs.list_prepend = make_list_prepend_env();
+  builtin_envs.list_reverse = make_list_reverse_env();
+  add_builtin_env("list_reverse", builtin_envs.list_reverse);
   add_builtin_env("::", builtin_envs.list_prepend);
   builtin_envs.cstr = make_cstr_env();
   add_builtin_env("cstr", builtin_envs.cstr);

@@ -1,0 +1,91 @@
+open test/fixtures/audio_jit/DSP_noinit;
+import std/Arrays;
+
+# Queue delayed coroutines so their captures outlive the calling event handler.
+let idle = fn () -> yield 0.;;
+let pending = array_fill_const 2 (idle ());
+let queued = [|0|];
+let probe_queue = fn start: (Double) co ->
+  pending[queued[0]] := co;
+  queued[0] := queued[0] + 1;
+  ()
+;;
+import Tracker;
+
+let _, _, empty = Tracker.parse_chunk_chars "_";
+let saved = array_fill_const 6 empty;
+let calls = [|0|];
+let handle = fn ctx dur note instr params ->
+  saved[calls[0]] := params;
+  calls[0] := calls[0] + 1;
+  ()
+;;
+
+let steps = [|0|];
+let elapsed = [|0.|];
+# Drop the pattern and parent coroutine before resuming queued callbacks.
+let run_pattern = fn () ->
+  let pattern = Tracker.parse_pattern `
+  00c4 r02 r03;
+  01e4 d80 r04;
+  02g4 m00;
+  03c5;
+`;
+  let co = pattern
+    |> Tracker.pattern_cor_ctx (bpm: 120., spl: 1., logical_time: 0.) 0
+    |> cor_map (Tracker.handle_ev_ctx handle)
+    |> cor_repeat 2;
+  for i = 0 .. 9 in (
+    match co () with
+    | Some dur -> (
+      steps[0] := steps[0] + 1;
+      elapsed[0] := elapsed[0] + dur;
+      ()
+    )
+    | None -> ()
+  );
+  ()
+;;
+run_pattern ();
+print `params_immediate={calls[0] == 4 && queued[0] == 2}\n`;
+
+let delays = [|0.|];
+for i = 0 .. queued[0] in (
+  let delayed = pending[i];
+  match delayed () with
+  | Some dur -> (delays[0] := delays[0] + dur; ())
+  | None -> ();
+  let _ = delayed ();
+  ()
+);
+
+# Read retained parameters after both the parent and delayed coroutines finish.
+let checksum = [|0|];
+for i = 0 .. calls[0] in (
+  let total = Arrays.fold (fn sum (name, value) ->
+    if name == 'r' then sum + value else sum
+  ) 0 (saved[i]);
+  checksum[0] := checksum[0] + total
+);
+print `params_retained={calls[0] == 6 && checksum[0] == 18}\n`;
+print `params_timing={steps[0] == 8 && elapsed[0] == 8. && delays[0] == 1.}\n`;
+
+# Repeated copies and scans expose the current array ownership costs in the IR.
+let _, _, seed = Tracker.parse_chunk_chars "00c4 r02 d80 ";
+let copies = [|0|];
+for i = 0 .. 10000 in (
+  let params = Tracker.copy_params seed;
+  match Tracker.scan_for_delay params with
+  | Some value -> (copies[0] := copies[0] + value; ())
+  | None -> ()
+);
+print `params_copies={copies[0] == 1280000}\n`;
+
+let _, _, duplicates = Tracker.parse_chunk_chars "00c4 m00 m80 d10 d80 ";
+let probability = match Tracker.scan_for_maybe duplicates with
+  | Some value -> value == 0
+  | None -> false;
+let delay = match Tracker.scan_for_delay duplicates with
+  | Some value -> value == 16
+  | None -> false;
+print `params_precedence={probability && delay}\n`;

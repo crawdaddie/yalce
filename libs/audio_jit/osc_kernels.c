@@ -681,7 +681,7 @@ ylc_audio_dl_allpass_kernel(DelayLineState *state, double spf,
       audio_jit_delay_line_read(state, max_samples, delay_secs, spf);
   double g = audio_jit_clamp_feedback(feedback);
   double out = delayed - (g * input);
-  audio_jit_delay_line_write(state, input + (g * delayed));
+  audio_jit_delay_line_write(state, input + (g * out));
   return out;
 }
 

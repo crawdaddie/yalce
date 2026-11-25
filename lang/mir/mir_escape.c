@@ -357,7 +357,8 @@ static bool mir_escape_propagate_from_result(MirFunction *fn, MirInstr *instr,
                                  instr->data.op.operands[0]);
       changed |= mir_escape_mark(state->escaped, fn,
                                  instr->data.op.operands[2]);
-    } else if (instr->data.op.kind == MIR_OP_KIND_PTR_OFFSET) {
+    } else if (instr->data.op.kind == MIR_OP_KIND_PTR_OFFSET ||
+               instr->data.op.kind == MIR_OP_KIND_LIST_REVERSE) {
       changed |= mir_escape_mark(state->escaped, fn,
                                  instr->data.op.operands[0]);
     } else if (instr->data.op.kind == MIR_OP_KIND_LOAD ||
